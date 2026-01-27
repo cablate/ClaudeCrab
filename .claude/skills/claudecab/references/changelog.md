@@ -9,7 +9,35 @@
 
 ## 版本歷史
 
-### v1.3.0 - 多機器人架構（當前版本）
+### v1.4.0 - 設計債清理與架構對齊（當前版本）
+
+**發布日期**：2026-01-27
+
+**重大變更**：
+- **移除 Legacy 模式**：SDK 為唯一模式，移除 `USE_CLAUDE_AGENT_SDK` 環境變數、Legacy 執行路徑、直接使用 @anthropic-ai/sdk 的程式碼
+- **移除 CLI**：刪除 `src/cli.ts` 與 `npm run cli` script
+- **SDK 訊息持久化**：SDK query 完成後自動將 user/assistant 訊息存入 ConversationRepository，供 WebUI 查看對話歷史
+- **agent.json 配置生效**：`maxTurns` 等設定值從 agent 配置讀取（原先硬寫為 10）
+- **清理安全框架**：移除未使用的 `ConfirmationManager`、`SensitiveCommandConfig`、`PendingConfirmation`、`DEFAULT_SENSITIVE_COMMANDS`
+- **清理 ConversationRepository**：移除 Legacy 專用方法（`trimConversation`、`bulkInsert`、`cleanupOrphaned`）
+
+**移除檔案**：
+- `src/cli.ts`
+
+**修改檔案**：
+- `src/core/MessageProcessor.ts` — 移除 Legacy 分支、讀取 agent maxTurns、新增 SDK 訊息持久化
+- `src/index.ts` — 移除 Legacy 初始化、連接 conversationRepository 到 MessageProcessor
+- `src/persistence/ConversationRepository.ts` — 移除 Legacy 方法
+- `src/persistence/types.ts` — 移除 `trimConversation` 介面方法
+- `src/utils/security.ts` — 移除 ConfirmationManager 相關程式碼
+- `src/utils/index.ts` — 移除 ConfirmationManager exports
+- `package.json` — 移除 cli script
+
+**測試**：280 tests, 19 files 全部通過
+
+---
+
+### v1.3.0 - 多機器人架構
 
 **發布日期**：2026-01-27
 
@@ -52,7 +80,7 @@
 - Agent 詳情頁顯示 Bot 狀態資訊
 - Agent 重載透過 Orchestrator 同時重啟 config 與 Adapter
 
-**測試**：312 tests, 19 files 全部通過
+**測試**：312 tests, 19 files 全部通過（v1.4.0 後降為 280 tests）
 
 ---
 
@@ -130,7 +158,7 @@
 **重大變更**：
 - 完整的 Telegram Bot 功能
 - 323 個測試，覆蓋率達標
-- CLI 測試工具
+- CLI 測試工具（v1.4.0 移除）
 - Docker 部署支援
 
 **已實作功能**：
@@ -149,7 +177,7 @@
 - 審計日誌模組（src/utils/audit.ts）
 - 訊息長度限制
 - 基本 Prompt Injection 偵測
-- 敏感指令確認機制
+- 敏感指令確認機制（v1.4.0 移除 ConfirmationManager）
 
 ---
 
@@ -289,18 +317,13 @@
 
 ---
 
-### ADR-006: SDK 模式 vs Legacy 模式
+### ADR-006: SDK 模式 vs Legacy 模式（已廢棄）
 
-**背景**：開發過程中先實作了直接使用 @anthropic-ai/sdk 的版本
+**狀態**：已廢棄（v1.4.0 移除 Legacy 模式）
 
-**決策**：保留兩種模式，透過環境變數切換
+**原始決策**：保留 SDK 與 Legacy 兩種模式，透過環境變數切換
 
-**理由**：
-- SDK 模式功能更完整（resume, hooks）
-- Legacy 模式可用於測試或特殊需求
-- 平滑遷移
-
-**環境變數**：`USE_CLAUDE_AGENT_SDK=true|false`
+**廢棄原因**：v1.4.0 移除 Legacy 模式，SDK 為唯一模式。Legacy 模式（直接使用 @anthropic-ai/sdk 手動管理對話歷史）已無使用場景。`USE_CLAUDE_AGENT_SDK` 環境變數已移除。
 
 ---
 

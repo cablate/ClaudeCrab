@@ -8,27 +8,19 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-// Mock Anthropic SDK
-vi.mock('@anthropic-ai/sdk', () => {
+// Mock SDKQueryManager to avoid real API calls
+vi.mock('../../src/core/SDKQueryManager.js', () => {
   return {
-    default: class MockAnthropic {
-      messages = {
-        stream: vi.fn().mockImplementation(() => {
-          // Return an async iterable that yields mock events
-          return {
-            [Symbol.asyncIterator]: async function* () {
-              yield {
-                type: 'content_block_delta',
-                delta: { type: 'text_delta', text: 'Hello! ' },
-              };
-              yield {
-                type: 'content_block_delta',
-                delta: { type: 'text_delta', text: 'How can I help you today?' },
-              };
-            },
-          };
-        }),
-      };
+    SDKQueryManager: class MockSDKQueryManager {
+      async executeQuery() {
+        return {
+          response: 'Hello! How can I help you today?',
+          sdkSessionId: 'mock-sdk-session-id',
+          numTurns: 1,
+          durationMs: 100,
+        };
+      }
+      dispose() {}
     },
   };
 });
@@ -131,8 +123,6 @@ describe('Integration: Conversation Flow', () => {
       getAdapter: (_platform: string, _agentId: string) => mockAdapter,
       sendTypingIndicators: true,
       typingIndicatorIntervalMs: 1000,
-      // Use legacy mode for testing (mocked Anthropic SDK)
-      useClaudeAgentSDK: false,
     });
   });
 

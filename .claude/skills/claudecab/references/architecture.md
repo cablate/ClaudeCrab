@@ -65,18 +65,13 @@ interface IAgentRepository {
 
 ### MessageProcessor (`src/core/MessageProcessor.ts`)
 
-處理訊息流程，支援兩種模式：
-
-**SDK 模式（預設，`USE_CLAUDE_AGENT_SDK=true`）**：
+處理訊息流程（SDK 模式）：
 1. 接收 UnifiedMessage
 2. 取得/建立 Session
 3. SDKQueryManager 呼叫 `query()`
 4. SDK 管理對話歷史（resume option）
-5. 透過 Adapter 發送回應
-
-**Legacy 模式（`USE_CLAUDE_AGENT_SDK=false`）**：
-1. 直接使用 @anthropic-ai/sdk
-2. 手動管理對話歷史（conversations Map + SQLite）
+5. 持久化訊息到資料庫（供 WebUI 查看）
+6. 透過 Adapter 發送回應
 
 ### EventBus (`src/core/EventBus.ts`)
 
@@ -117,7 +112,7 @@ Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 SQLite 持久化：
 - `DatabaseManager.ts` - 連線管理、Schema 初始化（v2）、WAL 模式
 - `SessionRepository.ts` - Session CRUD、過期清理、`sdkSessionId` 存儲（UNIQUE: platform + agent_id + user_id）
-- `ConversationRepository.ts` - 對話歷史 CRUD（僅 Legacy 模式使用）
+- `ConversationRepository.ts` - 對話歷史 CRUD（SDK 訊息持久化，供 WebUI 查看）
 
 ---
 
@@ -205,6 +200,7 @@ SDK 會自動載入此檔案作為系統提示（透過 SDKQueryManager 明確�
 │  4. 處理回應                                  │
 │     - 擷取 session_id 存入 SessionManager    │
 │     - 收集 assistant 回應文字                 │
+│     - 持久化 user/assistant 訊息到 DB        │
 │     - 更新 Session 狀態為 'idle'              │
 └───────────────────┬─────────────────────────┘
                     │

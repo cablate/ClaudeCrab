@@ -8,28 +8,21 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-// Mock Anthropic SDK with delay to simulate real API calls
-vi.mock('@anthropic-ai/sdk', () => {
+// Mock SDKQueryManager to avoid real API calls
+vi.mock('../../src/core/SDKQueryManager.js', () => {
   return {
-    default: class MockAnthropic {
-      messages = {
-        stream: vi.fn().mockImplementation(() => {
-          // Return an async iterable with small delay
-          return {
-            [Symbol.asyncIterator]: async function* () {
-              await new Promise((resolve) => setTimeout(resolve, 10));
-              yield {
-                type: 'content_block_delta',
-                delta: { type: 'text_delta', text: 'Response ' },
-              };
-              yield {
-                type: 'content_block_delta',
-                delta: { type: 'text_delta', text: 'from Claude' },
-              };
-            },
-          };
-        }),
-      };
+    SDKQueryManager: class MockSDKQueryManager {
+      async executeQuery() {
+        // Small delay to simulate real API calls
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return {
+          response: 'Response from Claude',
+          sdkSessionId: 'mock-sdk-session-id',
+          numTurns: 1,
+          durationMs: 100,
+        };
+      }
+      dispose() {}
     },
   };
 });
@@ -139,8 +132,6 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
       sessionManager,
       getAdapter: (_platform: string, _agentId: string) => mockAdapter,
       sendTypingIndicators: false,
-      // Use legacy mode for testing (mocked Anthropic SDK)
-      useClaudeAgentSDK: false,
     });
   });
 

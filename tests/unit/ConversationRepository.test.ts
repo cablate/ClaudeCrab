@@ -137,46 +137,6 @@ describe('ConversationRepository', () => {
     });
   });
 
-  describe('trimConversation', () => {
-    it('should keep only last N messages', () => {
-      for (let i = 1; i <= 10; i++) {
-        conversationRepo.appendMessage('session-1', i % 2 === 1 ? 'user' : 'assistant', `Message ${i}`);
-      }
-
-      conversationRepo.trimConversation('session-1', 5);
-
-      const messages = conversationRepo.findBySessionId('session-1');
-      expect(messages).toHaveLength(5);
-      // Should keep messages 6-10 (the last 5)
-      expect(messages[0]?.content).toBe('Message 6');
-      expect(messages[4]?.content).toBe('Message 10');
-    });
-
-    it('should not trim if message count is within limit', () => {
-      conversationRepo.appendMessage('session-1', 'user', 'Hello');
-      conversationRepo.appendMessage('session-1', 'assistant', 'Hi');
-
-      conversationRepo.trimConversation('session-1', 10);
-
-      const messages = conversationRepo.findBySessionId('session-1');
-      expect(messages).toHaveLength(2);
-    });
-
-    it('should handle keepCount equal to message count', () => {
-      conversationRepo.appendMessage('session-1', 'user', 'Hello');
-      conversationRepo.appendMessage('session-1', 'assistant', 'Hi');
-
-      conversationRepo.trimConversation('session-1', 2);
-
-      const messages = conversationRepo.findBySessionId('session-1');
-      expect(messages).toHaveLength(2);
-    });
-
-    it('should handle empty conversation', () => {
-      expect(() => conversationRepo.trimConversation('session-1', 5)).not.toThrow();
-    });
-  });
-
   describe('getMessageCount', () => {
     it('should return correct message count', () => {
       expect(conversationRepo.getMessageCount('session-1')).toBe(0);
@@ -218,47 +178,6 @@ describe('ConversationRepository', () => {
     it('should return empty array for non-existent session', () => {
       const messages = conversationRepo.getLastMessages('nonexistent', 5);
       expect(messages).toHaveLength(0);
-    });
-  });
-
-  describe('bulkInsert', () => {
-    it('should insert multiple messages at once', () => {
-      const messages = [
-        { role: 'user' as const, content: 'Hello' },
-        { role: 'assistant' as const, content: 'Hi there!' },
-        { role: 'user' as const, content: 'How are you?' },
-      ];
-
-      conversationRepo.bulkInsert('session-1', messages);
-
-      const stored = conversationRepo.findBySessionId('session-1');
-      expect(stored).toHaveLength(3);
-      expect(stored[0]?.content).toBe('Hello');
-      expect(stored[0]?.sequence_number).toBe(1);
-      expect(stored[1]?.content).toBe('Hi there!');
-      expect(stored[1]?.sequence_number).toBe(2);
-      expect(stored[2]?.content).toBe('How are you?');
-      expect(stored[2]?.sequence_number).toBe(3);
-    });
-
-    it('should handle empty array', () => {
-      expect(() => conversationRepo.bulkInsert('session-1', [])).not.toThrow();
-      expect(conversationRepo.getMessageCount('session-1')).toBe(0);
-    });
-  });
-
-  describe('cleanupOrphaned', () => {
-    it('should delete conversations for deleted sessions', () => {
-      conversationRepo.appendMessage('session-1', 'user', 'Hello');
-
-      // Delete the session (foreign key constraint should handle this via CASCADE,
-      // but cleanupOrphaned is for manual cleanup if needed)
-      sessionRepo.delete('session-1');
-
-      // The CASCADE should have already deleted the conversation
-      // But let's test cleanupOrphaned as well
-      const deleted = conversationRepo.cleanupOrphaned();
-      expect(deleted).toBeGreaterThanOrEqual(0);
     });
   });
 

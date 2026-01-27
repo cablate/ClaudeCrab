@@ -105,11 +105,6 @@ export interface IConversationRepository {
    * Clear all messages for a session
    */
   clearConversation(sessionId: string): void;
-
-  /**
-   * Trim conversation to keep only the last N messages
-   */
-  trimConversation(sessionId: string, keepCount: number): void;
 }
 
 /**

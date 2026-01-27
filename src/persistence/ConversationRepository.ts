@@ -73,41 +73,6 @@ export class ConversationRepository implements IConversationRepository {
   }
 
   /**
-   * Trim conversation to keep only the last N messages
-   */
-  trimConversation(sessionId: string, keepCount: number): void {
-    // Get total message count
-    const countStmt = this.db.prepare(`
-      SELECT COUNT(*) as count FROM conversations WHERE session_id = ?
-    `);
-    const countResult = countStmt.get(sessionId) as { count: number };
-
-    if (countResult.count <= keepCount) {
-      return; // No trimming needed
-    }
-
-    // Delete older messages, keeping only the last N by sequence number
-    const deleteStmt = this.db.prepare(`
-      DELETE FROM conversations
-      WHERE session_id = ?
-      AND id NOT IN (
-        SELECT id FROM conversations
-        WHERE session_id = ?
-        ORDER BY sequence_number DESC
-        LIMIT ?
-      )
-    `);
-    const result = deleteStmt.run(sessionId, sessionId, keepCount);
-
-    if (result.changes > 0) {
-      logger.debug(
-        { sessionId, trimmedCount: result.changes, keepCount },
-        'Conversation trimmed in database'
-      );
-    }
-  }
-
-  /**
    * Get message count for a session
    */
   getMessageCount(sessionId: string): number {
@@ -133,54 +98,4 @@ export class ConversationRepository implements IConversationRepository {
     return stmt.all(sessionId, count) as ConversationRow[];
   }
 
-  /**
-   * Delete all conversations for sessions that no longer exist
-   * (This is normally handled by CASCADE, but can be used for cleanup)
-   */
-  cleanupOrphaned(): number {
-    const stmt = this.db.prepare(`
-      DELETE FROM conversations
-      WHERE session_id NOT IN (SELECT session_id FROM sessions)
-    `);
-    const result = stmt.run();
-
-    if (result.changes > 0) {
-      logger.debug(
-        { deletedCount: result.changes },
-        'Orphaned conversations cleaned up'
-      );
-    }
-    return result.changes;
-  }
-
-  /**
-   * Bulk insert messages (useful for restoration)
-   */
-  bulkInsert(
-    sessionId: string,
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>
-  ): void {
-    const insertStmt = this.db.prepare(`
-      INSERT INTO conversations (session_id, role, content, created_at, sequence_number)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    const insertMany = this.db.transaction(
-      (msgs: Array<{ role: 'user' | 'assistant'; content: string }>) => {
-        const now = dateToString(new Date());
-        for (let i = 0; i < msgs.length; i++) {
-          const msg = msgs[i];
-          if (msg !== undefined) {
-            insertStmt.run(sessionId, msg.role, msg.content, now, i + 1);
-          }
-        }
-      }
-    );
-
-    insertMany(messages);
-    logger.debug(
-      { sessionId, messageCount: messages.length },
-      'Bulk inserted messages to database'
-    );
-  }
 }

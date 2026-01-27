@@ -17,12 +17,8 @@ export {
   detectPromptInjection,
   validateMessage,
   getSecurityErrorMessage,
-  ConfirmationManager,
-  DEFAULT_SENSITIVE_COMMANDS,
   type SecurityConfig,
   type ValidationResult,
-  type SensitiveCommandConfig,
-  type PendingConfirmation,
 } from './security.js';
 export {
   auditLogger,

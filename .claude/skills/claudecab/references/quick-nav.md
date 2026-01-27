@@ -94,7 +94,6 @@
 | 用途 | 檔案 |
 |------|------|
 | Telegram Bot + WebUI 主程式 | `src/index.ts` |
-| CLI 測試工具 | `src/cli.ts` |
 | WebUI 伺服器 | `src/webui/WebUIServer.ts` |
 
 ---

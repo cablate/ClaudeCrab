@@ -91,16 +91,8 @@ const main = async (): Promise<void> => {
     getAdapter: (platform, agentId) => orchestrator?.getRegistry().get(platform, agentId),
     sendTypingIndicators: true,
     typingIndicatorIntervalMs: 5000,
-    apiKey: process.env.ANTHROPIC_API_KEY ?? '',
-    conversationRepository,
+    ...(conversationRepository !== undefined ? { conversationRepository } : {}),
   });
-
-  // Restore conversations for existing sessions (if persistence is enabled)
-  if (enablePersistence && conversationRepository !== undefined) {
-    const sessionIds = sessionManager.getAllSessions().map((s) => s.sessionId);
-    const restoredConversations = messageProcessor.restoreConversations(sessionIds);
-    logger.info({ restoredConversations }, 'Conversation restoration complete');
-  }
 
   // Initialize PlatformOrchestrator
   logger.info('Initializing PlatformOrchestrator...');
