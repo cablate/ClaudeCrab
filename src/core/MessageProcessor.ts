@@ -30,6 +30,14 @@ export interface MessageProcessorOptions {
 
   /** Conversation repository for persisting SDK messages to database */
   conversationRepository?: IConversationRepository;
+
+  /**
+   * Read the current system prompt from disk for the given agent.
+   * When provided, this is called on every query to get the latest systemPrompt,
+   * allowing agents that self-update their CLAUDE.md to see changes reflected immediately.
+   * Falls back to the cached agent.systemPrompt if not provided.
+   */
+  getSystemPrompt?: (agentId: string) => Promise<string>;
 }
 
 /**
@@ -64,6 +72,7 @@ export class MessageProcessor {
   private readonly typingIndicatorIntervalMs: number;
   private readonly sdkQueryManager: SDKQueryManager;
   private readonly conversationRepository: IConversationRepository | undefined;
+  private readonly getSystemPrompt: ((agentId: string) => Promise<string>) | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -72,6 +81,7 @@ export class MessageProcessor {
     this.typingIndicatorIntervalMs = options.typingIndicatorIntervalMs ?? 5000;
     this.sdkQueryManager = new SDKQueryManager();
     this.conversationRepository = options.conversationRepository;
+    this.getSystemPrompt = options.getSystemPrompt;
 
     logger.info('MessageProcessor initialized');
   }
@@ -201,6 +211,11 @@ export class MessageProcessor {
 
     const agent = internalSession.agent;
 
+    // Read fresh system prompt from disk (agent may have updated CLAUDE.md at runtime)
+    const systemPrompt = this.getSystemPrompt !== undefined
+      ? await this.getSystemPrompt(agent.id)
+      : agent.systemPrompt;
+
     // Start typing indicator
     let typingInterval: ReturnType<typeof setInterval> | null = null;
     if (this.sendTypingIndicators) {
@@ -221,7 +236,7 @@ export class MessageProcessor {
               agent,
               {
                 cwd: agent.path,
-                systemPrompt: agent.systemPrompt,
+                systemPrompt,
                 maxTurns: agent.config.settings?.maxTurns ?? 10,
                 resume: resumeId,
               }

@@ -510,6 +510,19 @@ export class AgentLoader implements IAgentRepository {
   }
 
   /**
+   * Read the current system prompt from disk for the given agent.
+   * Unlike the cached `systemPrompt` on LoadedAgent, this always reads fresh from the filesystem.
+   * Useful when the agent may have updated its own CLAUDE.md during runtime.
+   */
+  async readSystemPrompt(agentId: string): Promise<string> {
+    const agent = this.cache.get(agentId);
+    if (agent === undefined) {
+      throw new AgentLoadError(agentId, new Error('Agent not loaded'));
+    }
+    return this.loadSystemPrompt(agent.path, agent.config);
+  }
+
+  /**
    * Get agent path by ID
    */
   getAgentPath(agentId: string): string {

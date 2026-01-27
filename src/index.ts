@@ -90,6 +90,7 @@ const main = async (): Promise<void> => {
   const messageProcessor = new MessageProcessor({
     sessionManager,
     getAdapter: (platform, agentId) => orchestrator?.getRegistry().get(platform, agentId),
+    getSystemPrompt: (agentId) => agentLoader.readSystemPrompt(agentId),
     sendTypingIndicators: true,
     typingIndicatorIntervalMs: 5000,
     ...(conversationRepository !== undefined ? { conversationRepository } : {}),

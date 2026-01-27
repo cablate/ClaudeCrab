@@ -5,8 +5,9 @@
 1. [設計原則](#設計原則)
 2. [核心模組](#核心模組)
 3. [Agent 配置結構](#agent-配置結構)
-4. [資料流](#資料流)
-5. [核心型別定義](#核心型別定義)
+4. [Agent 記憶運作機制](#agent-記憶運作機制)
+5. [資料流](#資料流)
+6. [核心型別定義](#核心型別定義)
 
 ---
 
@@ -17,6 +18,8 @@
 - **配置驅動**：透過 JSON 配置 Agent，降低使用門檻
 - **模組化設計**：便於擴充與測試
 - **依賴反轉**：介面優先
+- **SDKQueryManager 可獨立抽離**：SDKQueryManager 只負責接收 `systemPrompt` 字串 + `cwd` 路徑並呼叫 SDK `query()`，不注入任何業務邏輯（如記憶系統）。設計目標是可以從 ClaudeCab 中整個帶走到其他專案使用
+- **Agent 自主管理**：記憶、人格等進階功能完全由 Agent 透過 CLAUDE.md 指令自行操作，引擎層（`src/`）零感知。不建立「組裝層」注入記憶內容到 systemPrompt
 
 ---
 
@@ -30,6 +33,7 @@
 - 載入 `CLAUDE.md` 系統提示詞
 - 支援代理繼承（extends）
 - Zod 驗證配置結構
+- **動態 SystemPrompt 讀取**（v1.5.1）：`readSystemPrompt(agentId)` 每次從磁碟重新讀取 CLAUDE.md，支援 Agent 在 runtime 自主更新系統提示詞
 
 ```typescript
 interface IAgentRepository {
@@ -70,11 +74,12 @@ interface IAgentRepository {
 處理訊息流程（SDK 模式）：
 1. 接收 UnifiedMessage
 2. 取得/建立 Session
-3. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId`）
-4. SDK 管理對話歷史（resume option）
-5. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
-6. 持久化訊息到資料庫（供 WebUI 查看）
-7. 透過 Adapter 發送回應
+3. **動態讀取 systemPrompt**（v1.5.1）：透過 `getSystemPrompt(agentId)` 函數注入，每次查詢前從磁碟重新讀取 CLAUDE.md，確保 Agent 自主更新的內容即時生效
+4. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId`）
+5. SDK 管理對話歷史（resume option）
+6. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
+7. 持久化訊息到資料庫（供 WebUI 查看）
+8. 透過 Adapter 發送回應
 
 ### EventBus (`src/core/EventBus.ts`)
 
@@ -166,6 +171,66 @@ agents/general/
 
 SDK 會自動載入此檔案作為系統提示（透過 SDKQueryManager 明確傳遞）。
 
+### Agent Workspace 檔案（記憶系統）
+
+Agent 可擁有額外的 workspace 檔案，由 CLAUDE.md 中的指令驅動 agent 自行讀寫：
+
+```
+agents/general/
+├── .claude/
+│   └── settings.local.json   # Agent 權限配置
+├── agent.json                 # ClaudeCab 元資料
+├── CLAUDE.md                  # 系統提示詞（含記憶協議）
+├── SOUL.md                    # 人格定義（穩定，緩慢演化）
+├── USER.md                    # 使用者檔案（身份、偏好）
+├── IDENTITY.md                # AI 身份（名字、風格）
+├── MEMORY.md                  # 長期記憶（篩選過的持久事實）
+└── memory/                    # 每日日誌
+    └── YYYY-MM-DD.md
+```
+
+> **重要**：這些檔案不由引擎層管理。Agent 在 session 啟動時依 CLAUDE.md 指示自行讀取，對話中自行寫入。SDKQueryManager 完全不知道這些檔案的存在。
+
+---
+
+## Agent 記憶運作機制
+
+Agent 的記憶系統採用「零程式碼」設計 — 完全透過 CLAUDE.md 指令驅動，不修改引擎任何一行程式碼。
+
+### 運作原理
+
+```
+AgentLoader 讀取 CLAUDE.md（啟動時快取 + 每次查詢時從磁碟重新讀取）
+       │
+       ▼
+作為 systemPrompt 字串傳入 SDKQueryManager
+       │
+       ▼
+SDK 以 cwd=agents/<name>/ 執行 agent
+       │
+       ▼
+Agent 看到 systemPrompt 裡的記憶協議
+       │
+       ▼
+Agent 用 Read/Write 工具自行讀寫 workspace 檔案
+```
+
+### 為什麼不在引擎層注入記憶
+
+- **SDKQueryManager 可獨立抽離**：設計目標是可以把 SDKQueryManager 整個帶走到其他專案使用，因此不在此層注入記憶、人格等業務邏輯
+- **不需要「組裝層」**：不在 MessageProcessor 或任何中間層把記憶內容拼接進 systemPrompt
+- **Agent 自主管理**：Agent 本身就有 Read/Write 工具能力，CLAUDE.md 告訴它要讀什麼寫什麼，它自己操作
+
+### 分層邊界
+
+| 層級 | 職責 | 知道記憶系統？ |
+|------|------|:---:|
+| `SDKQueryManager` | 接收 systemPrompt + cwd，呼叫 SDK query() | ✗ |
+| `MessageProcessor` | 管理訊息處理流程、Session 狀態；透過函數注入取得即時 systemPrompt | ✗ |
+| `AgentLoader` | 讀取 CLAUDE.md 內容（啟動時快取 + `readSystemPrompt()` 即時讀取） | ✗（只是讀檔案）|
+| `CLAUDE.md`（agent 層）| 定義記憶協議、啟動讀取順序、寫入規則 | ✓ |
+| Agent（runtime）| 執行 CLAUDE.md 指令，讀寫 workspace 檔案 | ✓ |
+
 ---
 
 ## 資料流
@@ -194,7 +259,7 @@ SDK 會自動載入此檔案作為系統提示（透過 SDKQueryManager 明確�
 │  3. SDKQueryManager 執行查詢                  │
 │     - cwd = agent 目錄                        │
 │     - settingSources: ['local']              │
-│     - systemPrompt = agent 的 CLAUDE.md      │
+│     - systemPrompt = 從磁碟重新讀取的 CLAUDE.md│
 │     - resume = sdkSessionId（如有）           │
 └───────────────────┬─────────────────────────┘
                     │

@@ -9,7 +9,75 @@
 
 ## 版本歷史
 
-### v1.4.1 - 對話連續性修復（當前版本）
+### v1.5.1 - Dynamic SystemPrompt（當前版本）
+
+**發布日期**：2026-01-28
+
+**問題**：AgentLoader 在啟動時讀取 CLAUDE.md 並快取為 `LoadedAgent.systemPrompt` 靜態字串。Agent 若在對話中透過 Write 工具自主更新 CLAUDE.md（記憶協議允許），後續 query 仍使用舊的快取值。
+
+**修復**：
+- **AgentLoader.readSystemPrompt(agentId)** — 新增方法，每次從磁碟重新讀取 CLAUDE.md（保持原有優先序：config.systemPrompt > systemPromptFile > CLAUDE.md）
+- **MessageProcessorOptions.getSystemPrompt** — 新增可選的函式注入點，每次 query 前呼叫以取得最新 systemPrompt
+- **MessageProcessor.executeQueryWithSDK()** — 使用注入的 `getSystemPrompt(agent.id)` 取代快取的 `agent.systemPrompt`
+- **index.ts** — 連接 `agentLoader.readSystemPrompt()` 到 MessageProcessor
+
+**設計原則維持**：
+- SDKQueryManager 零改動 — 仍然只接收 systemPrompt 字串
+- 依賴注入 — MessageProcessor 透過函式接收，不直接依賴 AgentLoader
+- 向下相容 — `getSystemPrompt` 為 optional，未提供時 fallback 到 `agent.systemPrompt` 快取值
+
+**修改檔案**：
+- `src/core/AgentLoader.ts` — 新增 `readSystemPrompt()` 方法
+- `src/core/MessageProcessor.ts` — 新增 `getSystemPrompt` 注入、每次 query 前讀取最新
+- `src/index.ts` — 連接 agentLoader 到 messageProcessor
+
+**測試**：284 tests, 19 files 全部通過
+
+---
+
+### v1.5.0 - Agent 記憶系統
+
+**發布日期**：2026-01-28
+
+**重大變更**：
+- **Moltbot 風格記憶系統**：`agents/general/` 整合自主記憶能力，採用 Moltbot 純檔案記憶架構
+- **零程式碼改動**：不動 `src/` 任何一行，記憶邏輯完全由 Agent 透過 CLAUDE.md 指令自行管理
+- **SDKQueryManager 完全解耦**：記憶系統不污染 SDK 整合層，SDKQueryManager 可獨立抽離做其他開發
+
+**設計原則**：
+- Agent 自主管理 — CLAUDE.md 定義記憶協議，Agent 用 Read/Write 工具自行讀寫 workspace 檔案
+- 不建立「組裝層」— 不在 MessageProcessor 或任何中間層把記憶內容注入 systemPrompt
+- SDKQueryManager 只接收 systemPrompt 字串 + cwd 路徑，完全不知道記憶系統的存在
+
+**新增檔案**（`agents/general/`）：
+- `CLAUDE.md`（改寫）— 從 9 行簡單提示改為完整記憶協議（Startup Protocol + Memory System + Safety）
+- `SOUL.md` — 人格定義（Core Truths、Boundaries、Vibe、Continuity、Voice Guide）
+- `USER.md` — 使用者檔案模板
+- `IDENTITY.md` — AI 身份模板
+- `MEMORY.md` — 長期記憶空結構
+- `memory/.gitkeep` — 每日日誌目錄
+
+**Agent 啟動協議**（CLAUDE.md 定義）：
+1. 讀 SOUL.md — 知道自己是誰
+2. 讀 USER.md — 知道對面是誰
+3. 讀 IDENTITY.md — 知道自己的名字和風格
+4. 讀 MEMORY.md — 知道過去的重要事實
+5. 讀 memory/今天.md — 知道今天發生了什麼
+6. 讀 memory/昨天.md — 知道昨天的 context
+
+**記憶寫入規則**：
+| 內容 | 寫到哪裡 |
+|------|----------|
+| 決定、偏好、持久事實 | MEMORY.md |
+| 日常筆記、進行中 context | memory/YYYY-MM-DD.md |
+| 學到的教訓、犯的錯 | SOUL.md |
+| 人格上的自我發現 | SOUL.md（修改必須通知使用者）|
+
+**參考設計**：[Moltbot 純檔案記憶架構](../../docs/moltbot-blueprint.md)（Phase 0）
+
+---
+
+### v1.4.1 - 對話連續性修復
 
 **發布日期**：2026-01-27
 
@@ -384,3 +452,32 @@
 - `src/core/AdapterRegistry.ts`（修改為複合鍵）
 - `src/adapters/TelegramAdapter.ts`（綁定 agentId）
 - `src/index.ts`（使用 Orchestrator 啟動）
+
+---
+
+### ADR-008: Agent 記憶系統 — 零程式碼、Agent 自主管理
+
+**背景**：需要讓 Agent 擁有跨 session 記憶能力（參考 Moltbot 純檔案記憶架構），同時保持 SDKQueryManager 可獨立抽離
+
+**決策**：
+1. 記憶邏輯完全寫在 CLAUDE.md（systemPrompt）中，由 Agent 自行操作
+2. 不在 SDKQueryManager 或 MessageProcessor 注入任何記憶內容
+3. 不建立「組裝層」拼接記憶到 systemPrompt
+4. Agent 透過 Read/Write 工具讀寫 workspace 檔案（SOUL.md、USER.md、MEMORY.md 等）
+
+**理由**：
+- SDKQueryManager 設計目標是可以整個帶走到其他專案使用，不應包含業務邏輯
+- Agent 本身已有 Read/Write 工具能力，SDK 以 `cwd=agents/<name>/` 執行，可直接存取 workspace 檔案
+- 零程式碼改動 = 零風險引入新 bug，也不需要寫新測試
+- CLAUDE.md 即控制點：修改記憶行為只需調整 CLAUDE.md，不需重新部署
+
+**取捨**：
+- Agent 是否遵守記憶協議取決於 LLM 的指令遵從能力（無法程式化保證）
+- 記憶寫入時機依賴 Agent 判斷，可能偶爾漏記
+- 可接受：Moltbot 官方也承認此機制 "is still evolving"，漏記比記太多好
+
+**參考**：`docs/moltbot-blueprint.md`（Phase 0 純檔案記憶架構）
+
+**實作位置**：
+- `agents/general/CLAUDE.md`（記憶協議定義）
+- `agents/general/SOUL.md`、`USER.md`、`IDENTITY.md`、`MEMORY.md`、`memory/`（workspace 檔案）

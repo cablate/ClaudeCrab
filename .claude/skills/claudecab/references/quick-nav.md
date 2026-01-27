@@ -42,6 +42,22 @@
 
 ---
 
+## Agent 記憶系統
+
+| 要做什麼 | 主要檔案 | 相關檔案 |
+|----------|----------|----------|
+| 修改 Agent 記憶協議 | `agents/general/CLAUDE.md` | Startup Protocol、Memory System 區段 |
+| 修改 Agent 人格 | `agents/general/SOUL.md` | Core Truths、Boundaries、Vibe、Voice Guide |
+| 修改使用者檔案 | `agents/general/USER.md` | — |
+| 修改 AI 身份 | `agents/general/IDENTITY.md` | — |
+| 查看/修改長期記憶 | `agents/general/MEMORY.md` | Agent 自行維護 |
+| 查看每日日誌 | `agents/general/memory/YYYY-MM-DD.md` | Agent 自行產生 |
+| 理解記憶設計原理 | `docs/moltbot-blueprint.md` | Moltbot Phase 0 純檔案架構 |
+
+> **注意**：記憶系統不涉及 `src/` 任何程式碼。修改只需調整 agent workspace 檔案。
+
+---
+
 ## 持久化相關
 
 | 要做什麼 | 主要檔案 | 相關檔案 |
