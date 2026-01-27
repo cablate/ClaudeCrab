@@ -1,0 +1,10 @@
+{
+  "name": "Code Assistant",
+  "description": "A specialized coding assistant that helps with programming tasks",
+  "version": "1.0.0",
+  "extends": "general",
+  "allowedTools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+  "settings": {
+    "maxTurns": 30
+  }
+}

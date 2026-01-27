@@ -1,0 +1,176 @@
+<%- include('../partials/start', { title }) %>
+
+<!-- Filters -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+  <form method="GET" class="flex flex-wrap items-center gap-4">
+    <!-- Platform Filter -->
+    <div>
+      <label class="block text-xs font-medium text-gray-500 mb-1">Platform</label>
+      <select name="platform" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+        <option value="">All Platforms</option>
+        <% options.platforms.forEach(p => { %>
+          <option value="<%= p %>" <%= filters.platform === p ? 'selected' : '' %>><%= p %></option>
+        <% }) %>
+      </select>
+    </div>
+
+    <!-- Agent Filter -->
+    <div>
+      <label class="block text-xs font-medium text-gray-500 mb-1">Agent</label>
+      <select name="agentId" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+        <option value="">All Agents</option>
+        <% options.agents.forEach(a => { %>
+          <option value="<%= a.id %>" <%= filters.agentId === a.id ? 'selected' : '' %>><%= a.name %></option>
+        <% }) %>
+      </select>
+    </div>
+
+    <!-- State Filter -->
+    <div>
+      <label class="block text-xs font-medium text-gray-500 mb-1">State</label>
+      <select name="state" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+        <option value="">All States</option>
+        <% options.states.forEach(s => { %>
+          <option value="<%= s %>" <%= filters.state === s ? 'selected' : '' %>><%= s %></option>
+        <% }) %>
+      </select>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-end gap-2">
+      <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors">
+        Filter
+      </button>
+      <a href="/sessions" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg text-sm transition-colors">
+        Reset
+      </a>
+    </div>
+
+    <!-- Cleanup Button -->
+    <div class="ml-auto">
+      <button
+        type="button"
+        onclick="cleanupSessions()"
+        class="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg text-sm transition-colors"
+      >
+        Cleanup Expired
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Sessions Table -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200">
+  <div class="px-6 py-4 border-b border-gray-200">
+    <p class="text-sm text-gray-500">
+      Showing <%= filteredCount %> of <%= totalCount %> sessions
+    </p>
+  </div>
+
+  <% if (sessions.length === 0) { %>
+    <div class="p-6">
+      <%- include('../components/empty-state', {
+        title: 'No sessions found',
+        message: filters.platform || filters.agentId || filters.state ? 'Try adjusting your filters' : 'Sessions will appear when users start chatting'
+      }) %>
+    </div>
+  <% } else { %>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Session</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agent</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Messages</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          <% sessions.forEach(session => { %>
+            <tr class="hover:bg-gray-50 transition-colors">
+              <td class="px-6 py-4">
+                <span class="font-mono text-sm text-gray-900"><%= session.sessionId.slice(0, 8) %>...</span>
+              </td>
+              <td class="px-6 py-4">
+                <div>
+                  <p class="font-mono text-sm text-gray-900"><%= session.userId %></p>
+                  <p class="text-xs text-gray-500 capitalize"><%= session.platform %></p>
+                </div>
+              </td>
+              <td class="px-6 py-4">
+                <a href="/agents/<%= session.agentId %>" class="text-blue-600 hover:text-blue-800 text-sm">
+                  <%= session.agentName %>
+                </a>
+              </td>
+              <td class="px-6 py-4">
+                <%- include('../components/status-badge', { status: session.state, size: 'sm' }) %>
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-900">
+                <%= session.messageCount %>
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-500">
+                <%= new Date(session.lastActiveAt).toLocaleString('zh-TW') %>
+              </td>
+              <td class="px-6 py-4 text-right">
+                <div class="flex items-center justify-end gap-3">
+                  <a href="/sessions/<%= session.sessionId %>" class="text-blue-600 hover:text-blue-800 text-sm">
+                    View
+                  </a>
+                  <button
+                    onclick="closeSession('<%= session.sessionId %>')"
+                    class="text-red-600 hover:text-red-800 text-sm"
+                  >
+                    Close
+                  </button>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<script>
+async function closeSession(sessionId) {
+  if (!confirm('Close this session? The user will need to start a new conversation.')) return;
+
+  try {
+    const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(data.message);
+      location.reload();
+    } else {
+      alert(`Error: ${data.error}`);
+    }
+  } catch (error) {
+    alert(`Error: ${error.message}`);
+  }
+}
+
+async function cleanupSessions() {
+  if (!confirm('Clean up all expired sessions?')) return;
+
+  try {
+    const response = await fetch('/api/sessions/cleanup', { method: 'POST' });
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(`${data.message}\nCleaned: ${data.cleaned}\nRemaining: ${data.remaining}`);
+      location.reload();
+    } else {
+      alert(`Error: ${data.error}`);
+    }
+  } catch (error) {
+    alert(`Error: ${error.message}`);
+  }
+}
+</script>
+
+<%- include('../partials/end') %>

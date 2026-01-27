@@ -1,0 +1,94 @@
+/**
+ * Session state machine states
+ */
+export type SessionState = 'idle' | 'processing' | 'error';
+
+/**
+ * User session representing an active conversation
+ */
+export interface UserSession {
+  /** Unique session identifier */
+  sessionId: string;
+
+  /** Associated agent identifier */
+  agentId: string;
+
+  /** Platform identifier (e.g., 'telegram', 'discord') */
+  platform: string;
+
+  /** User identifier on the platform */
+  userId: string;
+
+  /** Current session state */
+  state: SessionState;
+
+  /** Session creation timestamp */
+  createdAt: Date;
+
+  /** Last activity timestamp */
+  lastActiveAt: Date;
+
+  /** Set of processed message IDs for idempotency */
+  processedMessageIds: Set<string>;
+
+  /** Optional SDK session reference for resumption */
+  sdkSessionId?: string;
+}
+
+/**
+ * Options for creating a new session
+ */
+export interface CreateSessionOptions {
+  platform: string;
+  userId: string;
+  agentId: string;
+  chatId?: string;
+}
+
+/**
+ * Session store configuration
+ */
+export interface SessionStoreConfig {
+  /** Session timeout in milliseconds (default: 1 hour) */
+  sessionTimeoutMs: number;
+
+  /** Cleanup interval in milliseconds (default: 1 minute) */
+  cleanupIntervalMs: number;
+
+  /** Maximum number of concurrent sessions */
+  maxSessions: number;
+
+  /** Maximum processed message IDs to track per session */
+  maxProcessedMessageIds: number;
+}
+
+/**
+ * Default session store configuration
+ */
+export const DEFAULT_SESSION_CONFIG: SessionStoreConfig = {
+  sessionTimeoutMs: 60 * 60 * 1000, // 1 hour
+  cleanupIntervalMs: 60 * 1000, // 1 minute
+  maxSessions: 1000,
+  maxProcessedMessageIds: 100,
+};
+
+/**
+ * Generate a session key from platform and userId
+ * Uses double colon to avoid collision
+ */
+export function getSessionKey(platform: string, userId: string): string {
+  return `${platform}::${userId}`;
+}
+
+/**
+ * Parse a session key back to platform and userId
+ */
+export function parseSessionKey(
+  key: string
+): { platform: string; userId: string } | null {
+  const parts = key.split('::');
+  if (parts.length !== 2 || parts[0] === undefined || parts[1] === undefined) {
+    return null;
+  }
+  return { platform: parts[0], userId: parts[1] };
+}

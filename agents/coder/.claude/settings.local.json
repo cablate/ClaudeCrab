@@ -1,0 +1,14 @@
+{
+  "model": "opus",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Glob",
+      "Grep"
+    ],
+    "deny": []
+  }
+}

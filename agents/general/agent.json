@@ -1,0 +1,10 @@
+{
+  "name": "General Assistant",
+  "description": "A helpful general-purpose AI assistant",
+  "version": "1.0.0",
+  "model": "sonnet",
+  "settings": {
+    "permissionMode": "default",
+    "maxTurns": 20
+  }
+}

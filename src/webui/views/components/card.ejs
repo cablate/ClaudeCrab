@@ -1,0 +1,39 @@
+<%#
+  Card Component
+  Props:
+    - title: string
+    - value: string | number
+    - icon: string (optional, SVG path)
+    - color: string (optional, default: 'blue')
+    - subtitle: string (optional)
+%>
+<%
+  const cardColor = typeof color !== 'undefined' ? color : 'blue';
+  const colorClasses = {
+    blue: 'bg-blue-500',
+    green: 'bg-green-500',
+    yellow: 'bg-yellow-500',
+    red: 'bg-red-500',
+    purple: 'bg-purple-500',
+    gray: 'bg-gray-500',
+  };
+  const bgClass = colorClasses[cardColor] || colorClasses.blue;
+%>
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <p class="text-sm font-medium text-gray-500"><%= title %></p>
+      <p class="text-3xl font-bold text-gray-900 mt-1"><%= value %></p>
+      <% if (typeof subtitle !== 'undefined' && subtitle) { %>
+        <p class="text-sm text-gray-500 mt-1"><%= subtitle %></p>
+      <% } %>
+    </div>
+    <% if (typeof icon !== 'undefined' && icon) { %>
+      <div class="<%= bgClass %> p-3 rounded-lg">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<%= icon %>"/>
+        </svg>
+      </div>
+    <% } %>
+  </div>
+</div>

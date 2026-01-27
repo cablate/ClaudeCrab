@@ -1,0 +1,33 @@
+<%#
+  Status Badge Component
+  Props:
+    - status: 'idle' | 'processing' | 'error' | 'running' | 'stopped'
+    - size: 'sm' | 'md' (optional, default: 'md')
+%>
+<%
+  const badgeSize = typeof size !== 'undefined' ? size : 'md';
+  const sizeClasses = badgeSize === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm';
+
+  const statusConfig = {
+    idle: { bg: 'bg-green-100', text: 'text-green-800', label: 'Idle' },
+    processing: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Processing' },
+    error: { bg: 'bg-red-100', text: 'text-red-800', label: 'Error' },
+    running: { bg: 'bg-green-100', text: 'text-green-800', label: 'Running' },
+    stopped: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Stopped' },
+    healthy: { bg: 'bg-green-100', text: 'text-green-800', label: 'Healthy' },
+    degraded: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Degraded' },
+  };
+
+  const config = statusConfig[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status };
+%>
+<span class="inline-flex items-center rounded-full font-medium <%= config.bg %> <%= config.text %> <%= sizeClasses %>">
+  <% if (status === 'processing') { %>
+    <svg class="animate-spin -ml-0.5 mr-1.5 h-3 w-3" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+  <% } else { %>
+    <span class="w-1.5 h-1.5 mr-1.5 rounded-full <%= config.bg.replace('100', '500') %>"></span>
+  <% } %>
+  <%= config.label %>
+</span>

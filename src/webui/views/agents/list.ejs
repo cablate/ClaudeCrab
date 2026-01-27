@@ -1,0 +1,92 @@
+<%- include('../partials/start', { title }) %>
+
+<!-- Agents List -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200">
+  <div class="px-6 py-4 border-b border-gray-200">
+    <div class="flex items-center justify-between">
+      <p class="text-sm text-gray-500"><%= agents.length %> agents found</p>
+    </div>
+  </div>
+
+  <% if (agents.length === 0) { %>
+    <div class="p-6">
+      <%- include('../components/empty-state', {
+        title: 'No agents found',
+        message: 'Create an agent by adding a folder with agent.json in the agents/ directory',
+        icon: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z'
+      }) %>
+    </div>
+  <% } else { %>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sessions</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          <% agents.forEach(agent => { %>
+            <tr class="hover:bg-gray-50 transition-colors">
+              <td class="px-6 py-4">
+                <div>
+                  <p class="font-medium text-gray-900"><%= agent.name %></p>
+                  <p class="text-sm text-gray-500"><%= agent.description || agent.id %></p>
+                </div>
+              </td>
+              <td class="px-6 py-4">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <%= agent.model %>
+                </span>
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-500">
+                v<%= agent.version %>
+              </td>
+              <td class="px-6 py-4">
+                <span class="text-sm font-medium text-gray-900"><%= agent.sessionCount %></span>
+              </td>
+              <td class="px-6 py-4 text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <a href="/agents/<%= agent.id %>" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                    View
+                  </a>
+                  <button
+                    onclick="reloadAgent('<%= agent.id %>')"
+                    class="text-gray-600 hover:text-gray-800 text-sm font-medium"
+                  >
+                    Reload
+                  </button>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<script>
+async function reloadAgent(agentId) {
+  if (!confirm(`Reload agent "${agentId}"?`)) return;
+
+  try {
+    const response = await fetch(`/api/agents/${agentId}/reload`, { method: 'POST' });
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(data.message);
+      location.reload();
+    } else {
+      alert(`Error: ${data.error}`);
+    }
+  } catch (error) {
+    alert(`Error: ${error.message}`);
+  }
+}
+</script>
+
+<%- include('../partials/end') %>
