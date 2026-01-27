@@ -110,6 +110,9 @@ export interface AdapterConfig {
   /** Platform identifier */
   platform: string;
 
+  /** Agent identifier this adapter is bound to */
+  agentId: string;
+
   /** Whether to enable debug logging */
   debug?: boolean;
 

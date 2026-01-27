@@ -19,17 +19,21 @@ export function createAgentsApiRouter(): Router {
    * GET /api/agents - List all agents
    */
   router.get('/', (req, res) => {
-    const { agentLoader } = getDeps(req);
+    const { agentLoader, platformOrchestrator } = getDeps(req);
 
     const agentIds = agentLoader.list();
+    const runningAdapters = platformOrchestrator?.getRunningAdapters() ?? [];
+
     const agents = agentIds.map((id) => {
       const agent = agentLoader.get(id);
+      const adapters = runningAdapters.filter((a) => a.agentId === id);
       return {
         id,
         name: agent?.config.name ?? id,
         description: agent?.config.description ?? '',
         version: agent?.config.version ?? '1.0.0',
         model: agent?.config.model ?? 'sonnet',
+        botStatus: adapters.map((a) => ({ platform: a.platform, status: a.status })),
       };
     });
 
@@ -61,10 +65,10 @@ export function createAgentsApiRouter(): Router {
   });
 
   /**
-   * POST /api/agents/:id/reload - Reload agent configuration
+   * POST /api/agents/:id/reload - Reload agent configuration and restart adapters
    */
   router.post('/:id/reload', async (req, res) => {
-    const { agentLoader } = getDeps(req);
+    const { agentLoader, platformOrchestrator } = getDeps(req);
     const { id } = req.params;
 
     try {
@@ -75,8 +79,12 @@ export function createAgentsApiRouter(): Router {
         return;
       }
 
-      // Reload agent
-      await agentLoader.loadAgent(id);
+      // Reload agent via orchestrator (config + adapter restart) or just config
+      if (platformOrchestrator !== undefined) {
+        await platformOrchestrator.reloadAgent(id);
+      } else {
+        await agentLoader.loadAgent(id);
+      }
 
       const reloaded = agentLoader.get(id);
       res.json({

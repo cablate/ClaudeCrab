@@ -41,8 +41,8 @@ interface IAgentRepository {
 ### SessionManager (`src/core/SessionManager.ts`)
 
 管理用戶會話狀態：
-- 會話建立與查詢（`platform::userId` 作為 key）
-- 代理切換
+- 會話建立與查詢（`platform::agentId::userId` 作為 key）
+- 每個 Agent + 用戶 + 平台的組合擁有獨立 Session
 - 訊息去重（idempotency）
 - 分散式鎖（async-mutex，防止並發處理）
 - 自動清理過期會話
@@ -82,24 +82,41 @@ interface IAgentRepository {
 
 類型安全的事件發布訂閱機制：
 - `message:received` / `message:sent`
-- `session:created` / `session:closed` / `session:switched`
+- `session:created` / `session:closed`
 - `agent:loaded` / `agent:reloaded`
 - `error`
 
+### PlatformOrchestrator (`src/core/PlatformOrchestrator.ts`)
+
+管理所有平台 Adapter 的生命週期：
+- 掃描 Agent 配置中的平台 token（如 `telegramBotToken`）
+- 為每個有 token 的 Agent 建立獨立的 Adapter 實例
+- 單一 Agent 啟動失敗不影響其他 Agent
+- 支援 `reloadAgent(agentId)` — 重載 Agent 配置並重啟其 Adapter
+- 提供 `getRunningAdapters()` 供 WebUI 監控
+- 通用設計，未來可擴展到 Slack、Discord 等平台
+
+### AdapterRegistry (`src/core/AdapterRegistry.ts`)
+
+管理 Adapter 實例註冊：
+- Key 為 `platform::agentId` 複合鍵
+- 支援按平台+Agent 查詢 Adapter
+
 ### TelegramAdapter (`src/adapters/TelegramAdapter.ts`)
 
-Telegram 平台整合：
+Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 - grammy Bot 封裝
+- 建構時綁定 `agentId`
 - 訊息分割（超過 4096 字元）
 - 打字指示器
 - 速率限制（35ms 最小間隔）
-- 指令處理：`/start`, `/help`, `/list`, `/switch`, `/reset`
+- 指令處理：`/start`, `/help`, `/reset`
 
 ### Persistence 層 (`src/persistence/`)
 
 SQLite 持久化：
-- `DatabaseManager.ts` - 連線管理、Schema 初始化、WAL 模式
-- `SessionRepository.ts` - Session CRUD、過期清理、`sdkSessionId` 存儲
+- `DatabaseManager.ts` - 連線管理、Schema 初始化（v2）、WAL 模式
+- `SessionRepository.ts` - Session CRUD、過期清理、`sdkSessionId` 存儲（UNIQUE: platform + agent_id + user_id）
 - `ConversationRepository.ts` - 對話歷史 CRUD（僅 Legacy 模式使用）
 
 ---
@@ -138,6 +155,7 @@ agents/general/
   "description": "通用助手",
   "version": "1.0.0",
   "model": "sonnet",
+  "telegramBotToken": "123456:ABC-DEF...",
   "extends": "general",
   "settings": {
     "permissionMode": "default",
@@ -212,6 +230,7 @@ interface AgentConfig {
   extends?: string;
   model?: 'sonnet' | 'opus' | 'haiku';
   maxTokens?: number;
+  telegramBotToken?: string;  // 每個 Agent 獨立的 Telegram Bot Token
   systemPrompt?: string;
   systemPromptFile?: string;
   allowedTools?: string[];

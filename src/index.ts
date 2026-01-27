@@ -3,8 +3,7 @@ import { logger } from './utils/logger.js';
 import { AgentLoader } from './core/AgentLoader.js';
 import { SessionManager } from './core/SessionManager.js';
 import { MessageProcessor } from './core/MessageProcessor.js';
-import { TelegramAdapter } from './adapters/TelegramAdapter.js';
-import { AdapterRegistry } from './core/AdapterRegistry.js';
+import { PlatformOrchestrator } from './core/PlatformOrchestrator.js';
 import { loadSecurityConfig } from './utils/security.js';
 import { DatabaseManager } from './persistence/DatabaseManager.js';
 import { SessionRepository } from './persistence/SessionRepository.js';
@@ -12,7 +11,7 @@ import { ConversationRepository } from './persistence/ConversationRepository.js'
 import { WebUIServer } from './webui/index.js';
 
 // Global references for cleanup
-let adapterRegistry: AdapterRegistry | null = null;
+let orchestrator: PlatformOrchestrator | null = null;
 let sessionManager: SessionManager | null = null;
 let databaseManager: DatabaseManager | null = null;
 let webUIServer: WebUIServer | null = null;
@@ -21,19 +20,8 @@ const main = async (): Promise<void> => {
   logger.info('ClaudeCab v1.0.0 starting...');
   logger.info({ nodeVersion: process.version }, 'Environment info');
 
-  // Validate required environment variables
-  const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
-  const anthropicKey = process.env.ANTHROPIC_API_KEY ?? '';
-
-  if (telegramToken === undefined || telegramToken === '') {
-    throw new Error('TELEGRAM_BOT_TOKEN environment variable is required');
-  }
-
-  // Load security configuration
+  // Load security configuration (from env vars, applies to all adapters)
   const securityConfig = loadSecurityConfig();
-
-  // Get default agent from environment or use 'general'
-  const defaultAgentIdEnv = process.env.DEFAULT_AGENT ?? 'general';
 
   // Initialize AgentLoader
   logger.info('Initializing AgentLoader...');
@@ -47,26 +35,17 @@ const main = async (): Promise<void> => {
 
   logger.info({ agentCount: agentIds.length, agentIds }, 'Available agents');
 
-  // Verify default agent exists
-  if (!agentIds.includes(defaultAgentIdEnv)) {
-    logger.warn(
-      { defaultAgentId: defaultAgentIdEnv, availableAgents: agentIds },
-      'Default agent not found, using first available'
-    );
-  }
-
-  // Ensure we have a valid default agent
-  const firstAgent = agentIds[0];
-  if (firstAgent === undefined) {
-    throw new Error('No agents available');
-  }
-  const actualDefaultAgent: string = agentIds.includes(defaultAgentIdEnv)
-    ? defaultAgentIdEnv
-    : firstAgent;
-
-  // Pre-load all agents (so they appear in WebUI and can be switched to)
+  // Pre-load all agents
   await agentLoader.loadAllAgents();
   logger.info({ loadedCount: agentLoader.list().length }, 'Agents loaded');
+
+  // Check for agents with platform tokens
+  const agentsWithTokens = agentLoader.getAgentsWithPlatformTokens();
+  if (agentsWithTokens.length === 0) {
+    logger.warn(
+      'No agents have platform bot tokens configured. Add telegramBotToken to agent.json files.'
+    );
+  }
 
   // Initialize persistence (if enabled)
   const enablePersistence = process.env.ENABLE_PERSISTENCE === 'true';
@@ -90,7 +69,6 @@ const main = async (): Promise<void> => {
   logger.info('Initializing SessionManager...');
   sessionManager = new SessionManager({
     agentLoader,
-    defaultAgentId: actualDefaultAgent,
     config: {
       sessionTimeoutMs: parseInt(process.env.SESSION_TIMEOUT_MS ?? '3600000', 10),
       cleanupIntervalMs: parseInt(process.env.CLEANUP_INTERVAL_MS ?? '60000', 10),
@@ -106,35 +84,15 @@ const main = async (): Promise<void> => {
     logger.info({ restoredSessions }, 'Session restoration complete');
   }
 
-  // Initialize AdapterRegistry
-  adapterRegistry = new AdapterRegistry();
-
-  // Initialize TelegramAdapter (without command dependencies - set later)
-  logger.info('Initializing TelegramAdapter...');
-  const telegramAdapter = new TelegramAdapter({
-    platform: 'telegram',
-    token: telegramToken,
-    securityConfig,
-  });
-
   // Create message processor
+  // Note: getAdapter uses orchestrator's registry, resolved lazily via closure
   const messageProcessor = new MessageProcessor({
     sessionManager,
-    defaultAgentId: actualDefaultAgent,
-    getAdapter: () => telegramAdapter,
+    getAdapter: (platform, agentId) => orchestrator?.getRegistry().get(platform, agentId),
     sendTypingIndicators: true,
     typingIndicatorIntervalMs: 5000,
-    apiKey: anthropicKey,
+    apiKey: process.env.ANTHROPIC_API_KEY ?? '',
     conversationRepository,
-  });
-
-  // Set command dependencies now that all components are created
-  // This is the proper decoupled architecture: pass actual instances directly
-  telegramAdapter.setCommandDependencies({
-    agentLoader,
-    sessionManager,
-    messageProcessor,
-    defaultAgentId: actualDefaultAgent,
   });
 
   // Restore conversations for existing sessions (if persistence is enabled)
@@ -144,18 +102,17 @@ const main = async (): Promise<void> => {
     logger.info({ restoredConversations }, 'Conversation restoration complete');
   }
 
-  // Set up message handling
-  telegramAdapter.onMessage(async (message) => {
-    await messageProcessor.processMessage(message);
+  // Initialize PlatformOrchestrator
+  logger.info('Initializing PlatformOrchestrator...');
+  orchestrator = new PlatformOrchestrator({
+    agentLoader,
+    sessionManager,
+    messageProcessor,
+    securityConfig,
   });
 
-  // Register adapter
-  adapterRegistry.register(telegramAdapter);
-
-  // Initialize and start all adapters
-  logger.info('Starting adapters...');
-  await adapterRegistry.initializeAll();
-  await adapterRegistry.startAll();
+  // Start all platform adapters (one per agent with a platform token)
+  await orchestrator.startAll();
 
   // Initialize WebUI (if enabled)
   const webUIEnabled = process.env.WEBUI_ENABLED === 'true';
@@ -167,6 +124,7 @@ const main = async (): Promise<void> => {
       port: webUIPort,
       agentLoader,
       sessionManager,
+      platformOrchestrator: orchestrator ?? undefined,
       databaseManager: databaseManager ?? undefined,
       sessionRepository,
       conversationRepository,
@@ -176,11 +134,12 @@ const main = async (): Promise<void> => {
     logger.info({ port: webUIPort, url: `http://localhost:${webUIPort}` }, 'WebUI started');
   }
 
+  const runningAdapters = orchestrator.getRunningAdapters();
   logger.info(
     {
-      defaultAgent: actualDefaultAgent,
       agentCount: agentIds.length,
-      platform: 'telegram',
+      runningAdapters: runningAdapters.length,
+      adapters: runningAdapters.map((a) => `${a.platform}::${a.agentId}`),
       persistenceEnabled: enablePersistence,
       webUIEnabled,
     },
@@ -198,10 +157,9 @@ const shutdown = async (signal: string): Promise<void> => {
       await webUIServer.stop();
     }
 
-    // Stop all adapters
-    if (adapterRegistry !== null) {
-      await adapterRegistry.stopAll();
-      await adapterRegistry.disposeAll();
+    // Stop all platform adapters
+    if (orchestrator !== null) {
+      await orchestrator.stopAll();
     }
 
     // Dispose session manager

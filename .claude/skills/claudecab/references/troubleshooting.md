@@ -138,10 +138,11 @@ const hooksModule = await import(pathToFileURL(hooksPath).href);
 **症狀**：發送訊息後沒有任何回應
 
 **檢查項目**：
-1. `TELEGRAM_BOT_TOKEN` 是否正確
-2. Bot 是否已啟動（檢查日誌）
+1. Agent 的 `agent.json` 中 `telegramBotToken` 是否正確設定
+2. Bot 是否已啟動（檢查日誌，PlatformOrchestrator 會輸出各 Bot 啟動狀態）
 3. 是否在白名單中（如啟用 ALLOWED_USERS）
 4. Session 是否卡在 `processing` 狀態
+5. WebUI Agents 頁面查看 Bot Status 是否為 `running`
 
 ---
 

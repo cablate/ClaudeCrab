@@ -36,9 +36,9 @@ export interface ConversationRow {
  */
 export interface ISessionRepository {
   /**
-   * Find session by platform and user ID
+   * Find session by platform, agent ID, and user ID
    */
-  findByPlatformAndUser(platform: string, userId: string): SessionRow | undefined;
+  findByPlatformAgentAndUser(platform: string, agentId: string, userId: string): SessionRow | undefined;
 
   /**
    * Find session by session ID

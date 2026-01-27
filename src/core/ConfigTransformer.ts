@@ -143,53 +143,6 @@ export class ConfigTransformer {
   }
 
   /**
-   * Merge two agent configs (used for inheritance)
-   * Child properties override parent properties
-   */
-  static mergeConfigs(parent: AgentConfig, child: AgentConfig): AgentConfig {
-    return {
-      name: child.name,
-      description: child.description ?? parent.description,
-      version: child.version ?? parent.version,
-      model: child.model ?? parent.model,
-      maxTokens: child.maxTokens ?? parent.maxTokens,
-      maxThinkingTokens: child.maxThinkingTokens ?? parent.maxThinkingTokens,
-      systemPrompt: child.systemPrompt ?? parent.systemPrompt,
-      systemPromptFile: child.systemPromptFile ?? parent.systemPromptFile,
-      allowedTools: ConfigTransformer.mergeArrays(
-        parent.allowedTools,
-        child.allowedTools
-      ),
-      disallowedTools: ConfigTransformer.mergeArrays(
-        parent.disallowedTools,
-        child.disallowedTools
-      ),
-      mcpConfigFile: child.mcpConfigFile ?? parent.mcpConfigFile,
-      settings:
-        child.settings !== undefined || parent.settings !== undefined
-          ? {
-              ...parent.settings,
-              ...child.settings,
-            }
-          : undefined,
-    };
-  }
-
-  /**
-   * Merge two optional arrays, removing duplicates
-   */
-  private static mergeArrays(
-    parent: string[] | undefined,
-    child: string[] | undefined
-  ): string[] | undefined {
-    if (parent === undefined && child === undefined) {
-      return undefined;
-    }
-    const combined = [...(parent ?? []), ...(child ?? [])];
-    return Array.from(new Set(combined));
-  }
-
-  /**
    * Validate SDK options before use
    */
   static validateSDKOptions(options: SDKOptions): string[] {

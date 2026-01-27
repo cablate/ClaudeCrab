@@ -141,63 +141,6 @@ describe('AgentLoader', () => {
     });
   });
 
-  describe('inheritance', () => {
-    it('should support agent inheritance via extends', async () => {
-      // Create parent agent
-      await fs.mkdir(path.join(tempDir, 'parent'));
-      await fs.writeFile(
-        path.join(tempDir, 'parent', 'agent.json'),
-        JSON.stringify({
-          name: 'Parent Agent',
-          model: 'sonnet',
-          settings: { maxTurns: 10 },
-        })
-      );
-
-      // Create child agent
-      await fs.mkdir(path.join(tempDir, 'child'));
-      await fs.writeFile(
-        path.join(tempDir, 'child', 'agent.json'),
-        JSON.stringify({
-          name: 'Child Agent',
-          extends: 'parent',
-          settings: { maxTurns: 20 },
-        })
-      );
-
-      const child = await loader.loadAgent('child');
-
-      expect(child.config.name).toBe('Child Agent');
-      expect(child.config.model).toBe('sonnet'); // Inherited
-      expect(child.config.settings?.maxTurns).toBe(20); // Overridden
-    });
-
-    it('should detect circular inheritance', async () => {
-      // Create agents with circular dependency
-      await fs.mkdir(path.join(tempDir, 'agent-a'));
-      await fs.writeFile(
-        path.join(tempDir, 'agent-a', 'agent.json'),
-        JSON.stringify({
-          name: 'Agent A',
-          extends: 'agent-b',
-        })
-      );
-
-      await fs.mkdir(path.join(tempDir, 'agent-b'));
-      await fs.writeFile(
-        path.join(tempDir, 'agent-b', 'agent.json'),
-        JSON.stringify({
-          name: 'Agent B',
-          extends: 'agent-a',
-        })
-      );
-
-      await expect(loader.loadAgent('agent-a')).rejects.toThrow(
-        /[Cc]ircular inheritance/
-      );
-    });
-  });
-
   describe('cache', () => {
     it('should cache loaded agents', async () => {
       await fs.mkdir(path.join(tempDir, 'test-agent'));

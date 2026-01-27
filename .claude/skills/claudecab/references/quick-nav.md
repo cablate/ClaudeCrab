@@ -13,6 +13,7 @@
 | 修改 SDK 呼叫方式 | `src/core/SDKQueryManager.ts` | - |
 | 修改訊息處理流程 | `src/core/MessageProcessor.ts` | `SDKQueryManager.ts`, `SessionManager.ts` |
 | 修改 Session 管理 | `src/core/SessionManager.ts` | `src/types/session.ts` |
+| 管理平台 Adapter 生命週期 | `src/core/PlatformOrchestrator.ts` | `src/core/AdapterRegistry.ts`, `src/adapters/TelegramAdapter.ts` |
 
 ---
 

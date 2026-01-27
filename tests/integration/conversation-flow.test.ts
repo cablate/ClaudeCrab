@@ -55,7 +55,7 @@ class MockAdapter extends BaseAdapter {
   readonly typingIndicators: string[] = [];
 
   constructor() {
-    super({ platform: 'mock' });
+    super({ platform: 'mock', agentId: 'test-agent' });
   }
 
   protected override async doInitialize(): Promise<void> {
@@ -120,7 +120,6 @@ describe('Integration: Conversation Flow', () => {
     agentLoader = new AgentLoader({ agentsDir: tempDir });
     sessionManager = new SessionManager({
       agentLoader,
-      defaultAgentId: 'test-agent',
     });
     sessionManager.start();
 
@@ -129,8 +128,7 @@ describe('Integration: Conversation Flow', () => {
 
     messageProcessor = new MessageProcessor({
       sessionManager,
-      defaultAgentId: 'test-agent',
-      getAdapter: () => mockAdapter,
+      getAdapter: (_platform: string, _agentId: string) => mockAdapter,
       sendTypingIndicators: true,
       typingIndicatorIntervalMs: 1000,
       // Use legacy mode for testing (mocked Anthropic SDK)
@@ -160,7 +158,7 @@ describe('Integration: Conversation Flow', () => {
         timestamp: new Date(),
       };
 
-      const result = await messageProcessor.processMessage(message);
+      const result = await messageProcessor.processMessage(message, 'test-agent');
 
       expect(result.success).toBe(true);
       expect(result.skipped).toBeUndefined();
@@ -183,7 +181,7 @@ describe('Integration: Conversation Flow', () => {
         timestamp: new Date(),
       };
 
-      const result1 = await messageProcessor.processMessage(message1);
+      const result1 = await messageProcessor.processMessage(message1, 'test-agent');
       expect(result1.success).toBe(true);
 
       // Second message (should have context from first)
@@ -196,7 +194,7 @@ describe('Integration: Conversation Flow', () => {
         timestamp: new Date(),
       };
 
-      const result2 = await messageProcessor.processMessage(message2);
+      const result2 = await messageProcessor.processMessage(message2, 'test-agent');
       expect(result2.success).toBe(true);
       expect(result2.sessionId).toBe(result1.sessionId);
     });
@@ -212,14 +210,14 @@ describe('Integration: Conversation Flow', () => {
       };
 
       // First processing
-      const result1 = await messageProcessor.processMessage(message);
+      const result1 = await messageProcessor.processMessage(message, 'test-agent');
       expect(result1.success).toBe(true);
       expect(result1.skipped).toBeUndefined();
 
       const sentCount = mockAdapter.sentMessages.length;
 
       // Second processing (same message ID)
-      const result2 = await messageProcessor.processMessage(message);
+      const result2 = await messageProcessor.processMessage(message, 'test-agent');
       expect(result2.success).toBe(true);
       expect(result2.skipped).toBe(true);
 
@@ -237,14 +235,14 @@ describe('Integration: Conversation Flow', () => {
         timestamp: new Date(),
       };
 
-      await messageProcessor.processMessage(message);
+      await messageProcessor.processMessage(message, 'test-agent');
 
       // Should have sent at least one typing indicator
       expect(mockAdapter.typingIndicators).toContain('chat-typing');
     });
   });
 
-  describe('Task 7.4: Agent Switching', () => {
+  describe('Task 7.4: Multi-Agent Independent Sessions', () => {
     beforeEach(async () => {
       // Create a second test agent
       const agent2Dir = path.join(tempDir, 'test-agent-2');
@@ -265,9 +263,9 @@ describe('Integration: Conversation Flow', () => {
       );
     });
 
-    it('should switch agents for a session', async () => {
+    it('should create independent sessions for different agents', async () => {
       const platform = 'mock';
-      const userId = 'user-switch';
+      const userId = 'user-multi';
 
       // Create session with first agent
       const session1 = await sessionManager.createSession({
@@ -276,65 +274,26 @@ describe('Integration: Conversation Flow', () => {
         agentId: 'test-agent',
       });
 
+      // Create session with second agent (same user, different agent)
+      const session2 = await sessionManager.createSession({
+        platform,
+        userId,
+        agentId: 'test-agent-2',
+      });
+
       expect(session1.agentId).toBe('test-agent');
-
-      // Switch to second agent
-      const session2 = await sessionManager.switchAgent(
-        platform,
-        userId,
-        'test-agent-2'
-      );
-
       expect(session2.agentId).toBe('test-agent-2');
-      expect(session2.sessionId).toBe(session1.sessionId);
+      // Different sessions for different agents
+      expect(session1.sessionId).not.toBe(session2.sessionId);
     });
 
-    it('should clear conversation history on agent switch', async () => {
-      const platform = 'mock';
-      const userId = 'user-switch-clear';
-      const chatId = 'chat-switch-clear';
-
-      // Create session and send message
-      await sessionManager.createSession({
-        platform,
-        userId,
-        agentId: 'test-agent',
-      });
-
-      const message: UnifiedMessage = {
-        id: 'msg-before-switch',
-        platform,
-        userId,
-        chatId,
-        text: 'Hello before switch!',
-        timestamp: new Date(),
-      };
-
-      await messageProcessor.processMessage(message);
-
-      // Switch agent (this should trigger conversation reset internally)
-      const session = await sessionManager.switchAgent(
-        platform,
-        userId,
-        'test-agent-2'
-      );
-
-      // sdkSessionId should be cleared
-      expect(session.agentId).toBe('test-agent-2');
-    });
-
-    it('should fail to switch to non-existent agent', async () => {
-      const platform = 'mock';
-      const userId = 'user-switch-fail';
-
-      await sessionManager.createSession({
-        platform,
-        userId,
-        agentId: 'test-agent',
-      });
-
+    it('should fail to create session with non-existent agent', async () => {
       await expect(
-        sessionManager.switchAgent(platform, userId, 'non-existent-agent')
+        sessionManager.createSession({
+          platform: 'mock',
+          userId: 'user-fail',
+          agentId: 'non-existent-agent',
+        })
       ).rejects.toThrow();
     });
   });
@@ -343,8 +302,7 @@ describe('Integration: Conversation Flow', () => {
     it('should handle missing adapter gracefully', async () => {
       const processorWithNoAdapter = new MessageProcessor({
         sessionManager,
-        defaultAgentId: 'test-agent',
-        getAdapter: () => undefined, // No adapter
+        getAdapter: (_platform: string, _agentId: string) => undefined, // No adapter
         sendTypingIndicators: false,
       });
 
@@ -357,7 +315,7 @@ describe('Integration: Conversation Flow', () => {
         timestamp: new Date(),
       };
 
-      const result = await processorWithNoAdapter.processMessage(message);
+      const result = await processorWithNoAdapter.processMessage(message, 'test-agent');
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('No adapter');
@@ -367,7 +325,6 @@ describe('Integration: Conversation Flow', () => {
       // Fill up to max sessions
       const maxSessionManager = new SessionManager({
         agentLoader,
-        defaultAgentId: 'test-agent',
         config: { maxSessions: 1 },
       });
       maxSessionManager.start();
@@ -406,14 +363,12 @@ describe('Integration: Conversation Flow', () => {
       const badProcessor = new MessageProcessor({
         sessionManager: new SessionManager({
           agentLoader,
-          defaultAgentId: 'non-existent-agent',
         }),
-        defaultAgentId: 'non-existent-agent',
-        getAdapter: () => mockAdapter,
+        getAdapter: (_platform: string, _agentId: string) => mockAdapter,
         sendTypingIndicators: false,
       });
 
-      const result = await badProcessor.processMessage(message);
+      const result = await badProcessor.processMessage(message, 'non-existent-agent');
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();

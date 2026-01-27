@@ -44,7 +44,6 @@ Edit `.env` file with your credentials:
 
 ```env
 # Required
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 ANTHROPIC_API_KEY=your_anthropic_api_key
 
 # Optional - Security
@@ -57,6 +56,8 @@ SESSION_TIMEOUT_MS=3600000
 CLEANUP_INTERVAL_MS=60000
 MAX_SESSIONS=1000
 ```
+
+> **Note**: Telegram Bot Token 已改為在各 Agent 的 `agent.json` 中設定 `telegramBotToken` 欄位，不再使用環境變數。
 
 ### Running
 

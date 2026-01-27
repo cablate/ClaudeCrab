@@ -73,22 +73,22 @@ export const DEFAULT_SESSION_CONFIG: SessionStoreConfig = {
 };
 
 /**
- * Generate a session key from platform and userId
+ * Generate a session key from platform, agentId, and userId
  * Uses double colon to avoid collision
  */
-export function getSessionKey(platform: string, userId: string): string {
-  return `${platform}::${userId}`;
+export function getSessionKey(platform: string, agentId: string, userId: string): string {
+  return `${platform}::${agentId}::${userId}`;
 }
 
 /**
- * Parse a session key back to platform and userId
+ * Parse a session key back to platform, agentId, and userId
  */
 export function parseSessionKey(
   key: string
-): { platform: string; userId: string } | null {
+): { platform: string; agentId: string; userId: string } | null {
   const parts = key.split('::');
-  if (parts.length !== 2 || parts[0] === undefined || parts[1] === undefined) {
+  if (parts.length !== 3 || parts[0] === undefined || parts[1] === undefined || parts[2] === undefined) {
     return null;
   }
-  return { platform: parts[0], userId: parts[1] };
+  return { platform: parts[0], agentId: parts[1], userId: parts[2] };
 }

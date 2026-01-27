@@ -2,8 +2,15 @@ import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import { logger } from '../utils/logger.js';
 
 /**
+ * Generate adapter registry key from platform and agentId
+ */
+function adapterKey(platform: string, agentId: string): string {
+  return `${platform}::${agentId}`;
+}
+
+/**
  * Registry for managing platform adapters
- * Provides centralized control for adapter lifecycle
+ * Uses composite key (platform::agentId) to support multiple adapters per platform
  */
 export class AdapterRegistry {
   private readonly adapters: Map<string, BaseAdapter> = new Map();
@@ -12,44 +19,46 @@ export class AdapterRegistry {
    * Register an adapter
    */
   register(adapter: BaseAdapter): void {
-    if (this.adapters.has(adapter.platform)) {
-      throw new Error(`Adapter already registered for platform: ${adapter.platform}`);
+    const key = adapterKey(adapter.platform, adapter.agentId);
+    if (this.adapters.has(key)) {
+      throw new Error(`Adapter already registered for ${key}`);
     }
 
-    this.adapters.set(adapter.platform, adapter);
-    logger.info({ platform: adapter.platform }, 'Adapter registered');
+    this.adapters.set(key, adapter);
+    logger.info({ platform: adapter.platform, agentId: adapter.agentId }, 'Adapter registered');
   }
 
   /**
    * Unregister an adapter
    */
-  unregister(platform: string): boolean {
-    const adapter = this.adapters.get(platform);
+  unregister(platform: string, agentId: string): boolean {
+    const key = adapterKey(platform, agentId);
+    const adapter = this.adapters.get(key);
     if (adapter === undefined) {
       return false;
     }
 
-    this.adapters.delete(platform);
-    logger.info({ platform }, 'Adapter unregistered');
+    this.adapters.delete(key);
+    logger.info({ platform, agentId }, 'Adapter unregistered');
     return true;
   }
 
   /**
-   * Get an adapter by platform
+   * Get an adapter by platform and agentId
    */
-  get(platform: string): BaseAdapter | undefined {
-    return this.adapters.get(platform);
+  get(platform: string, agentId: string): BaseAdapter | undefined {
+    return this.adapters.get(adapterKey(platform, agentId));
   }
 
   /**
    * Check if an adapter is registered
    */
-  has(platform: string): boolean {
-    return this.adapters.has(platform);
+  has(platform: string, agentId: string): boolean {
+    return this.adapters.has(adapterKey(platform, agentId));
   }
 
   /**
-   * Get all registered platforms
+   * Get all registered keys (platform::agentId)
    */
   list(): string[] {
     return Array.from(this.adapters.keys());

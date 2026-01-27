@@ -17,6 +17,9 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   /** Platform identifier */
   readonly platform: string;
 
+  /** Agent identifier this adapter is bound to */
+  readonly agentId: string;
+
   /** Current adapter state */
   protected _state: AdapterState = 'uninitialized';
 
@@ -32,7 +35,8 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   constructor(config: TConfig) {
     this.config = config;
     this.platform = config.platform;
-    this.log = logger.child({ adapter: this.platform });
+    this.agentId = config.agentId;
+    this.log = logger.child({ adapter: this.platform, agentId: this.agentId });
   }
 
   /**

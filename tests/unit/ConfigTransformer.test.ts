@@ -152,52 +152,6 @@ describe('ConfigTransformer', () => {
     });
   });
 
-  describe('mergeConfigs', () => {
-    it('should merge parent and child configs', () => {
-      const parent: AgentConfig = {
-        name: 'Parent',
-        description: 'Parent description',
-        model: 'sonnet',
-        allowedTools: ['Read'],
-        settings: {
-          maxTurns: 10,
-        },
-      };
-
-      const child: AgentConfig = {
-        name: 'Child',
-        allowedTools: ['Write'],
-        settings: {
-          maxTurns: 20,
-        },
-      };
-
-      const merged = ConfigTransformer.mergeConfigs(parent, child);
-
-      expect(merged.name).toBe('Child');
-      expect(merged.description).toBe('Parent description');
-      expect(merged.model).toBe('sonnet');
-      expect(merged.allowedTools).toEqual(['Read', 'Write']);
-      expect(merged.settings?.maxTurns).toBe(20);
-    });
-
-    it('should deduplicate merged arrays', () => {
-      const parent: AgentConfig = {
-        name: 'Parent',
-        allowedTools: ['Read', 'Write'],
-      };
-
-      const child: AgentConfig = {
-        name: 'Child',
-        allowedTools: ['Write', 'Bash'],
-      };
-
-      const merged = ConfigTransformer.mergeConfigs(parent, child);
-
-      expect(merged.allowedTools).toEqual(['Read', 'Write', 'Bash']);
-    });
-  });
-
   describe('validateSDKOptions', () => {
     it('should return empty array for valid options', () => {
       const options = {

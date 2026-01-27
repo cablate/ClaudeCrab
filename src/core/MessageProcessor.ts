@@ -28,11 +28,8 @@ export interface MessageProcessorOptions {
   /** Session manager instance */
   sessionManager: SessionManager;
 
-  /** Default agent ID for new sessions */
-  defaultAgentId: string;
-
   /** Adapter registry to get adapters for sending responses */
-  getAdapter: (platform: string) => BaseAdapter | undefined;
+  getAdapter: (platform: string, agentId: string) => BaseAdapter | undefined;
 
   /** Whether to send typing indicators */
   sendTypingIndicators?: boolean;
@@ -95,8 +92,7 @@ interface SessionConversation {
  */
 export class MessageProcessor {
   private readonly sessionManager: SessionManager;
-  private readonly defaultAgentId: string;
-  private readonly getAdapter: (platform: string) => BaseAdapter | undefined;
+  private readonly getAdapter: (platform: string, agentId: string) => BaseAdapter | undefined;
   private readonly sendTypingIndicators: boolean;
   private readonly typingIndicatorIntervalMs: number;
   private readonly useClaudeAgentSDK: boolean;
@@ -112,7 +108,6 @@ export class MessageProcessor {
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
-    this.defaultAgentId = options.defaultAgentId;
     this.getAdapter = options.getAdapter;
     this.sendTypingIndicators = options.sendTypingIndicators ?? true;
     this.typingIndicatorIntervalMs = options.typingIndicatorIntervalMs ?? 5000;
@@ -144,16 +139,16 @@ export class MessageProcessor {
   /**
    * Process an incoming message
    */
-  async processMessage(message: UnifiedMessage): Promise<ProcessingResult> {
+  async processMessage(message: UnifiedMessage, agentId: string): Promise<ProcessingResult> {
     const { platform, userId, chatId, text, id: messageId } = message;
 
     logger.debug(
-      { platform, userId, messageId },
+      { platform, userId, agentId, messageId },
       'Processing message'
     );
 
     // Check for duplicate message (idempotency)
-    if (this.sessionManager.isMessageProcessed(platform, userId, messageId)) {
+    if (this.sessionManager.isMessageProcessed(platform, agentId, userId, messageId)) {
       logger.debug({ messageId }, 'Skipping duplicate message');
       return { success: true, skipped: true };
     }
@@ -164,10 +159,10 @@ export class MessageProcessor {
       session = await this.sessionManager.getOrCreateSession({
         platform,
         userId,
-        agentId: this.defaultAgentId,
+        agentId,
       });
     } catch (error) {
-      logger.error({ error, platform, userId }, 'Failed to get/create session');
+      logger.error({ error, platform, userId, agentId }, 'Failed to get/create session');
       return {
         success: false,
         error: `Failed to create session: ${(error as Error).message}`,
@@ -175,32 +170,33 @@ export class MessageProcessor {
     }
 
     // Get adapter for sending response
-    const adapter = this.getAdapter(platform);
+    const adapter = this.getAdapter(platform, agentId);
     if (adapter === undefined) {
-      logger.error({ platform }, 'No adapter found for platform');
-      return { success: false, error: `No adapter for platform: ${platform}` };
+      logger.error({ platform, agentId }, 'No adapter found for platform and agent');
+      return { success: false, error: `No adapter for platform: ${platform}, agent: ${agentId}` };
     }
 
     // Process with lock to prevent concurrent processing
     try {
       const result = await this.sessionManager.withLock(
         platform,
+        agentId,
         userId,
         async () => {
           // Mark message as processed (before processing to prevent duplicates)
-          this.sessionManager.markMessageProcessed(platform, userId, messageId);
+          this.sessionManager.markMessageProcessed(platform, agentId, userId, messageId);
 
           // Update session state
-          this.sessionManager.updateState(platform, userId, 'processing');
+          this.sessionManager.updateState(platform, agentId, userId, 'processing');
 
           try {
             // Process the message using appropriate mode
             const response = this.useClaudeAgentSDK
-              ? await this.executeQueryWithSDK(session.sessionId, text, adapter, chatId, platform, userId)
+              ? await this.executeQueryWithSDK(session.sessionId, text, adapter, chatId, platform, agentId, userId)
               : await this.executeQueryLegacy(session.sessionId, text, adapter, chatId);
 
             // Update session state back to idle
-            this.sessionManager.updateState(platform, userId, 'idle');
+            this.sessionManager.updateState(platform, agentId, userId, 'idle');
 
             return {
               success: true,
@@ -209,7 +205,7 @@ export class MessageProcessor {
             };
           } catch (error) {
             // Update session state to error
-            this.sessionManager.updateState(platform, userId, 'error');
+            this.sessionManager.updateState(platform, agentId, userId, 'error');
             throw error;
           }
         }
@@ -231,7 +227,7 @@ export class MessageProcessor {
           : {}),
       };
 
-      logger.error({ err: errorDetails, platform, userId }, 'Failed to process message');
+      logger.error({ err: errorDetails, platform, userId, agentId }, 'Failed to process message');
 
       // Send error message to user
       await this.sendErrorToUser(adapter, chatId, err);
@@ -253,6 +249,7 @@ export class MessageProcessor {
     adapter: BaseAdapter,
     chatId: string,
     platform: string,
+    agentId: string,
     userId: string
   ): Promise<string> {
     if (!this.sdkQueryManager) {
@@ -260,7 +257,7 @@ export class MessageProcessor {
     }
 
     // Get internal session for agent info
-    const internalSession = this.sessionManager.getInternalSession(platform, userId);
+    const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
 
     if (internalSession === undefined || internalSession.agent === undefined) {
       throw new ProcessingError('PROCESSING_FAILED', 'Session or agent not found');
@@ -317,7 +314,7 @@ export class MessageProcessor {
 
       // Save SDK session ID for future resume
       if (result.sdkSessionId && result.sdkSessionId !== internalSession.sdkSessionId) {
-        this.sessionManager.setSdkSessionId(platform, userId, result.sdkSessionId);
+        this.sessionManager.setSdkSessionId(platform, agentId, userId, result.sdkSessionId);
         logger.debug(
           { sessionId, sdkSessionId: result.sdkSessionId },
           'Updated SDK session ID'
@@ -361,9 +358,11 @@ export class MessageProcessor {
     }
 
     // Get internal session for SDK options
+    const ids = this.getSessionIdentifiers(sessionId);
     const internalSession = this.sessionManager.getInternalSession(
-      this.getSessionPlatformUserId(sessionId).platform,
-      this.getSessionPlatformUserId(sessionId).userId
+      ids.platform,
+      ids.agentId,
+      ids.userId
     );
 
     if (internalSession === undefined) {
@@ -493,10 +492,11 @@ export class MessageProcessor {
   }
 
   /**
-   * Get platform and userId from sessionId
+   * Get platform, agentId, and userId from sessionId
    */
-  private getSessionPlatformUserId(sessionId: string): {
+  private getSessionIdentifiers(sessionId: string): {
     platform: string;
+    agentId: string;
     userId: string;
   } {
     // Find session in all sessions
@@ -507,7 +507,7 @@ export class MessageProcessor {
       throw new ProcessingError('PROCESSING_FAILED', 'Session not found');
     }
 
-    return { platform: session.platform, userId: session.userId };
+    return { platform: session.platform, agentId: session.agentId, userId: session.userId };
   }
 
   /**
@@ -597,8 +597,8 @@ export class MessageProcessor {
     if (this.useClaudeAgentSDK) {
       // In SDK mode, clear the SDK session ID
       // This will cause a new session to be created on the next message
-      const { platform, userId } = this.getSessionPlatformUserId(sessionId);
-      this.sessionManager.setSdkSessionId(platform, userId, undefined);
+      const { platform, agentId, userId } = this.getSessionIdentifiers(sessionId);
+      this.sessionManager.setSdkSessionId(platform, agentId, userId, undefined);
       logger.debug({ sessionId }, 'Cleared SDK session ID for conversation reset');
     } else {
       // Legacy mode: clear local conversation

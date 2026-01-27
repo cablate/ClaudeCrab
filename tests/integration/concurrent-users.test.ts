@@ -58,8 +58,8 @@ class ConcurrentMockAdapter extends BaseAdapter {
     timestamp: number;
   }> = [];
 
-  constructor() {
-    super({ platform: 'concurrent-mock' });
+  constructor(agentId = 'test-agent') {
+    super({ platform: 'concurrent-mock', agentId });
   }
 
   protected override async doInitialize(): Promise<void> {
@@ -126,7 +126,6 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
     agentLoader = new AgentLoader({ agentsDir: tempDir });
     sessionManager = new SessionManager({
       agentLoader,
-      defaultAgentId: 'test-agent',
       config: {
         maxSessions: 100, // Allow many sessions for concurrent test
       },
@@ -138,8 +137,7 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
 
     messageProcessor = new MessageProcessor({
       sessionManager,
-      defaultAgentId: 'test-agent',
-      getAdapter: () => mockAdapter,
+      getAdapter: (_platform: string, _agentId: string) => mockAdapter,
       sendTypingIndicators: false,
       // Use legacy mode for testing (mocked Anthropic SDK)
       useClaudeAgentSDK: false,
@@ -178,7 +176,7 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
     // Process all messages concurrently
     const startTime = Date.now();
     const results = await Promise.all(
-      allMessages.map((msg) => messageProcessor.processMessage(msg))
+      allMessages.map((msg) => messageProcessor.processMessage(msg, 'test-agent'))
     );
     const endTime = Date.now();
 
@@ -260,7 +258,7 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
 
     // Process all messages concurrently
     const results = await Promise.all(
-      messages.map((msg) => messageProcessor.processMessage(msg))
+      messages.map((msg) => messageProcessor.processMessage(msg, 'test-agent'))
     );
 
     // All should succeed
@@ -268,13 +266,13 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
     expect(successCount).toBe(messageCount);
 
     // Session should still be in valid state
-    const session = sessionManager.getSession('concurrent-mock', userId);
+    const session = sessionManager.getSession('concurrent-mock', 'test-agent', userId);
     expect(session).toBeDefined();
     expect(session?.state).toBe('idle');
   });
 
-  it('should handle mixed operations (create, switch, close) concurrently', async () => {
-    // Create second agent for switching
+  it('should handle mixed operations (create, close, multi-agent) concurrently', async () => {
+    // Create second agent
     const agent2Dir = path.join(tempDir, 'test-agent-2');
     await fs.mkdir(agent2Dir, { recursive: true });
     await fs.writeFile(
@@ -286,7 +284,7 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
       'Second agent.'
     );
 
-    // Create initial sessions
+    // Create initial sessions with test-agent
     const createPromises = Array.from({ length: 5 }, (_, i) =>
       sessionManager.createSession({
         platform: 'concurrent-mock',
@@ -297,24 +295,16 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
 
     await Promise.all(createPromises);
 
-    // Mixed operations
+    // Mixed operations: close, create with different agents
     const operations = [
-      // Switch some agents
-      sessionManager.switchAgent(
-        'concurrent-mock',
-        'mixed-user-0',
-        'test-agent-2'
-      ),
-      sessionManager.switchAgent(
-        'concurrent-mock',
-        'mixed-user-1',
-        'test-agent-2'
-      ),
       // Close some sessions
       Promise.resolve(
-        sessionManager.closeSession('concurrent-mock', 'mixed-user-2')
+        sessionManager.closeSession('concurrent-mock', 'test-agent', 'mixed-user-2')
       ),
-      // Create new sessions
+      Promise.resolve(
+        sessionManager.closeSession('concurrent-mock', 'test-agent', 'mixed-user-3')
+      ),
+      // Create new sessions with different agent
       sessionManager.createSession({
         platform: 'concurrent-mock',
         userId: 'mixed-user-new-1',
@@ -325,19 +315,31 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
         userId: 'mixed-user-new-2',
         agentId: 'test-agent-2',
       }),
+      // Same user, different agent (independent sessions)
+      sessionManager.createSession({
+        platform: 'concurrent-mock',
+        userId: 'mixed-user-0',
+        agentId: 'test-agent-2',
+      }),
     ];
 
     await Promise.all(operations);
 
     // Verify final state
-    const session0 = sessionManager.getSession('concurrent-mock', 'mixed-user-0');
-    expect(session0?.agentId).toBe('test-agent-2');
+    const session0Agent1 = sessionManager.getSession('concurrent-mock', 'test-agent', 'mixed-user-0');
+    expect(session0Agent1).toBeDefined();
+    expect(session0Agent1?.agentId).toBe('test-agent');
 
-    const session2 = sessionManager.getSession('concurrent-mock', 'mixed-user-2');
+    const session0Agent2 = sessionManager.getSession('concurrent-mock', 'test-agent-2', 'mixed-user-0');
+    expect(session0Agent2).toBeDefined();
+    expect(session0Agent2?.agentId).toBe('test-agent-2');
+
+    const session2 = sessionManager.getSession('concurrent-mock', 'test-agent', 'mixed-user-2');
     expect(session2).toBeUndefined(); // Closed
 
     const sessionNew1 = sessionManager.getSession(
       'concurrent-mock',
+      'test-agent',
       'mixed-user-new-1'
     );
     expect(sessionNew1).toBeDefined();
@@ -347,7 +349,6 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
     // Create manager with very short timeout
     const shortTimeoutManager = new SessionManager({
       agentLoader,
-      defaultAgentId: 'test-agent',
       config: {
         sessionTimeoutMs: 10, // Very short timeout
         cleanupIntervalMs: 5000, // Long interval - we'll manually cleanup
@@ -375,7 +376,7 @@ describe('Integration: Concurrent Users (Task 7.6)', () => {
       // Session should be cleaned up
       expect(cleaned).toBe(1);
       expect(
-        shortTimeoutManager.getSession('concurrent-mock', 'timeout-user')
+        shortTimeoutManager.getSession('concurrent-mock', 'test-agent', 'timeout-user')
       ).toBeUndefined();
     } finally {
       shortTimeoutManager.dispose();

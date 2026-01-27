@@ -95,7 +95,7 @@ describe('DatabaseManager', () => {
       ).get() as { value: string } | undefined;
 
       expect(row).toBeDefined();
-      expect(row?.value).toBe('1');
+      expect(row?.value).toBe('2');
     });
   });
 
@@ -247,7 +247,7 @@ describe('DatabaseManager', () => {
 
       const indexNames = indexes.map((i) => i.name);
       expect(indexNames).toContain('idx_sessions_platform');
-      expect(indexNames).toContain('idx_sessions_platform_user');
+      expect(indexNames).toContain('idx_sessions_platform_agent_user');
       expect(indexNames).toContain('idx_sessions_last_active');
     });
 

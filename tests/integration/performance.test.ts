@@ -67,7 +67,6 @@ describe('Performance Tests (Task 7.7-7.9)', () => {
     agentLoader = new AgentLoader({ agentsDir: tempDir });
     sessionManager = new SessionManager({
       agentLoader,
-      defaultAgentId: 'perf-agent',
       config: {
         maxSessions: 2000,
       },
@@ -157,7 +156,7 @@ describe('Performance Tests (Task 7.7-7.9)', () => {
       });
 
       const startTime = performance.now();
-      const release = await sessionManager.acquireLock('perf-test', 'lock-user');
+      const release = await sessionManager.acquireLock('perf-test', 'perf-agent', 'lock-user');
       const acquireTime = performance.now() - startTime;
 
       const releaseStart = performance.now();
@@ -185,6 +184,7 @@ describe('Performance Tests (Task 7.7-7.9)', () => {
       for (let i = 0; i < iterations; i++) {
         sessionManager.updateState(
           'perf-test',
+          'perf-agent',
           'state-user',
           i % 2 === 0 ? 'processing' : 'idle'
         );
@@ -241,7 +241,6 @@ describe('Performance Tests (Task 7.7-7.9)', () => {
       // Create sessions with short timeout manager
       const shortTimeoutManager = new SessionManager({
         agentLoader,
-        defaultAgentId: 'perf-agent',
         config: {
           sessionTimeoutMs: 10,
           maxSessions: 2000,
@@ -294,7 +293,7 @@ describe('Performance Tests (Task 7.7-7.9)', () => {
           userId: `leak-user-${i}`,
           agentId: 'perf-agent',
         });
-        sessionManager.closeSession('leak-test', `leak-user-${i}`);
+        sessionManager.closeSession('leak-test', 'perf-agent', `leak-user-${i}`);
       }
 
       // Check no sessions remain

@@ -3,8 +3,6 @@ import type { Context } from 'grammy';
 import {
   handleStart,
   handleHelp,
-  handleList,
-  handleSwitch,
   handleReset,
   type CommandDependencies,
 } from '../../src/adapters/commands/TelegramCommands.js';
@@ -65,12 +63,11 @@ describe('TelegramCommands', () => {
           agentId: 'default',
           agent: { config: { name: 'Default Agent' } },
         }),
-        switchAgent: vi.fn().mockResolvedValue(undefined),
       },
       messageProcessor: {
         clearConversation: vi.fn(),
       },
-      defaultAgentId: 'default',
+      agentId: 'default',
     };
   });
 
@@ -119,8 +116,6 @@ describe('TelegramCommands', () => {
       expect(replyMock.mock.calls[0][0]).toContain('幫助訊息');
       expect(replyMock.mock.calls[0][0]).toContain('/start');
       expect(replyMock.mock.calls[0][0]).toContain('/help');
-      expect(replyMock.mock.calls[0][0]).toContain('/list');
-      expect(replyMock.mock.calls[0][0]).toContain('/switch');
       expect(replyMock.mock.calls[0][0]).toContain('/reset');
     });
 
@@ -128,87 +123,6 @@ describe('TelegramCommands', () => {
       await handleHelp(mockContext as Context, mockDeps);
 
       expect(replyMock.mock.calls[0][0]).toContain('Default Agent');
-    });
-  });
-
-  describe('handleList', () => {
-    it('should list all agents', async () => {
-      await handleList(mockContext as Context, mockDeps);
-
-      expect(replyMock).toHaveBeenCalledTimes(1);
-      const message = replyMock.mock.calls[0][0] as string;
-      expect(message).toContain('Default Agent');
-      expect(message).toContain('Code Assistant');
-      expect(message).toContain('Writer');
-    });
-
-    it('should mark current agent', async () => {
-      await handleList(mockContext as Context, mockDeps);
-
-      const message = replyMock.mock.calls[0][0] as string;
-      expect(message).toContain('✅');
-    });
-
-    it('should handle empty agent list', async () => {
-      (mockDeps.agentLoader.scanAgents as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-
-      await handleList(mockContext as Context, mockDeps);
-
-      expect(replyMock).toHaveBeenCalledWith('目前沒有可用的代理。');
-    });
-  });
-
-  describe('handleSwitch', () => {
-    it('should switch to specified agent', async () => {
-      mockContext.message!.text = '/switch coder';
-
-      await handleSwitch(mockContext as Context, mockDeps);
-
-      expect(mockDeps.sessionManager.switchAgent).toHaveBeenCalledWith(
-        'telegram',
-        '12345',
-        'coder'
-      );
-      expect(mockDeps.messageProcessor.clearConversation).toHaveBeenCalled();
-      expect(replyMock.mock.calls[0][0]).toContain('Code Assistant');
-    });
-
-    it('should show error for missing agent argument', async () => {
-      mockContext.message!.text = '/switch';
-
-      await handleSwitch(mockContext as Context, mockDeps);
-
-      expect(replyMock.mock.calls[0][0]).toContain('請指定要切換的代理');
-      expect(mockDeps.sessionManager.switchAgent).not.toHaveBeenCalled();
-    });
-
-    it('should show error for unknown agent', async () => {
-      mockContext.message!.text = '/switch unknown';
-      // scanAgents returns available agents, 'unknown' is not in the list
-
-      await handleSwitch(mockContext as Context, mockDeps);
-
-      expect(replyMock.mock.calls[0][0]).toContain('找不到代理');
-      expect(mockDeps.sessionManager.switchAgent).not.toHaveBeenCalled();
-    });
-
-    it('should handle switch error', async () => {
-      mockContext.message!.text = '/switch coder';
-      (mockDeps.sessionManager.switchAgent as ReturnType<typeof vi.fn>)
-        .mockRejectedValueOnce(new Error('Switch error'));
-
-      await handleSwitch(mockContext as Context, mockDeps);
-
-      expect(replyMock).toHaveBeenCalledWith('抱歉，切換代理失敗。請稍後再試。');
-    });
-
-    it('should handle missing user', async () => {
-      mockContext.from = undefined;
-      mockContext.message!.text = '/switch coder';
-
-      await handleSwitch(mockContext as Context, mockDeps);
-
-      expect(mockDeps.sessionManager.switchAgent).not.toHaveBeenCalled();
     });
   });
 

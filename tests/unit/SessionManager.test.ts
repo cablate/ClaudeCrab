@@ -140,7 +140,7 @@ describe('SessionManager', () => {
 
   describe('getSession', () => {
     it('should return undefined for non-existent session', () => {
-      const session = sessionManager.getSession('telegram', 'unknown');
+      const session = sessionManager.getSession('telegram', 'test-agent', 'unknown');
       expect(session).toBeUndefined();
     });
 
@@ -154,7 +154,7 @@ describe('SessionManager', () => {
       const before = new Date();
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      const session = sessionManager.getSession('telegram', 'user123');
+      const session = sessionManager.getSession('telegram', 'test-agent', 'user123');
 
       expect(session).toBeDefined();
       expect(session!.lastActiveAt.getTime()).toBeGreaterThanOrEqual(
@@ -190,22 +190,7 @@ describe('SessionManager', () => {
       expect(session.sessionId).toBeDefined();
     });
 
-    it('should use default agent if not specified', async () => {
-      const managerWithDefault = new SessionManager({
-        agentLoader,
-        defaultAgentId: 'test-agent',
-      });
-
-      const session = await managerWithDefault.getOrCreateSession({
-        platform: 'telegram',
-        userId: 'user123',
-      });
-
-      expect(session.agentId).toBe('test-agent');
-      managerWithDefault.dispose();
-    });
-
-    it('should throw error if no agent specified and no default', async () => {
+    it('should throw error if no agent specified', async () => {
       await expect(
         sessionManager.getOrCreateSession({
           platform: 'telegram',
@@ -223,9 +208,9 @@ describe('SessionManager', () => {
         agentId: 'test-agent',
       });
 
-      sessionManager.updateState('telegram', 'user123', 'processing');
+      sessionManager.updateState('telegram', 'test-agent', 'user123', 'processing');
 
-      const session = sessionManager.getSession('telegram', 'user123');
+      const session = sessionManager.getSession('telegram', 'test-agent', 'user123');
       expect(session?.state).toBe('processing');
     });
 
@@ -239,7 +224,7 @@ describe('SessionManager', () => {
       const eventHandler = vi.fn();
       getEventBus().on('session:stateChanged', eventHandler);
 
-      sessionManager.updateState('telegram', 'user123', 'processing');
+      sessionManager.updateState('telegram', 'test-agent', 'user123', 'processing');
 
       expect(eventHandler).toHaveBeenCalledWith({
         sessionId: expect.any(String),
@@ -250,66 +235,8 @@ describe('SessionManager', () => {
 
     it('should throw error for non-existent session', () => {
       expect(() =>
-        sessionManager.updateState('telegram', 'unknown', 'processing')
+        sessionManager.updateState('telegram', 'test-agent', 'unknown', 'processing')
       ).toThrow(SessionError);
-    });
-  });
-
-  describe('switchAgent', () => {
-    beforeEach(async () => {
-      // Create another test agent
-      const agentDir = path.join(tempDir, 'another-agent');
-      await fs.mkdir(agentDir);
-      await fs.writeFile(
-        path.join(agentDir, 'agent.json'),
-        JSON.stringify({
-          name: 'Another Agent',
-          model: 'haiku',
-        })
-      );
-    });
-
-    it('should switch session to different agent', async () => {
-      await sessionManager.createSession({
-        platform: 'telegram',
-        userId: 'user123',
-        agentId: 'test-agent',
-      });
-
-      const updated = await sessionManager.switchAgent(
-        'telegram',
-        'user123',
-        'another-agent'
-      );
-
-      expect(updated.agentId).toBe('another-agent');
-    });
-
-    it('should emit session:switched event', async () => {
-      await sessionManager.createSession({
-        platform: 'telegram',
-        userId: 'user123',
-        agentId: 'test-agent',
-      });
-
-      const eventHandler = vi.fn();
-      getEventBus().on('session:switched', eventHandler);
-
-      await sessionManager.switchAgent('telegram', 'user123', 'another-agent');
-
-      expect(eventHandler).toHaveBeenCalledWith({
-        oldAgentId: 'test-agent',
-        newAgentId: 'another-agent',
-        sessionId: expect.any(String),
-        platform: 'telegram',
-        userId: 'user123',
-      });
-    });
-
-    it('should throw error for non-existent session', async () => {
-      await expect(
-        sessionManager.switchAgent('telegram', 'unknown', 'another-agent')
-      ).rejects.toThrow(SessionError);
     });
   });
 
@@ -321,14 +248,14 @@ describe('SessionManager', () => {
         agentId: 'test-agent',
       });
 
-      const result = sessionManager.closeSession('telegram', 'user123');
+      const result = sessionManager.closeSession('telegram', 'test-agent', 'user123');
 
       expect(result).toBe(true);
-      expect(sessionManager.hasSession('telegram', 'user123')).toBe(false);
+      expect(sessionManager.hasSession('telegram', 'test-agent', 'user123')).toBe(false);
     });
 
     it('should return false for non-existent session', () => {
-      const result = sessionManager.closeSession('telegram', 'unknown');
+      const result = sessionManager.closeSession('telegram', 'test-agent', 'unknown');
       expect(result).toBe(false);
     });
 
@@ -342,7 +269,7 @@ describe('SessionManager', () => {
       const eventHandler = vi.fn();
       getEventBus().on('session:closed', eventHandler);
 
-      sessionManager.closeSession('telegram', 'user123', 'user_request');
+      sessionManager.closeSession('telegram', 'test-agent', 'user123', 'user_request');
 
       expect(eventHandler).toHaveBeenCalledWith({
         sessionId: expect.any(String),
@@ -362,13 +289,13 @@ describe('SessionManager', () => {
       });
 
       expect(
-        sessionManager.isMessageProcessed('telegram', 'user123', 'msg1')
+        sessionManager.isMessageProcessed('telegram', 'test-agent', 'user123', 'msg1')
       ).toBe(false);
 
-      sessionManager.markMessageProcessed('telegram', 'user123', 'msg1');
+      sessionManager.markMessageProcessed('telegram', 'test-agent', 'user123', 'msg1');
 
       expect(
-        sessionManager.isMessageProcessed('telegram', 'user123', 'msg1')
+        sessionManager.isMessageProcessed('telegram', 'test-agent', 'user123', 'msg1')
       ).toBe(true);
     });
 
@@ -384,17 +311,17 @@ describe('SessionManager', () => {
         agentId: 'test-agent',
       });
 
-      limitedManager.markMessageProcessed('telegram', 'user123', 'msg1');
-      limitedManager.markMessageProcessed('telegram', 'user123', 'msg2');
-      limitedManager.markMessageProcessed('telegram', 'user123', 'msg3');
-      limitedManager.markMessageProcessed('telegram', 'user123', 'msg4');
+      limitedManager.markMessageProcessed('telegram', 'test-agent', 'user123', 'msg1');
+      limitedManager.markMessageProcessed('telegram', 'test-agent', 'user123', 'msg2');
+      limitedManager.markMessageProcessed('telegram', 'test-agent', 'user123', 'msg3');
+      limitedManager.markMessageProcessed('telegram', 'test-agent', 'user123', 'msg4');
 
       // msg1 should be trimmed
       expect(
-        limitedManager.isMessageProcessed('telegram', 'user123', 'msg1')
+        limitedManager.isMessageProcessed('telegram', 'test-agent', 'user123', 'msg1')
       ).toBe(false);
       expect(
-        limitedManager.isMessageProcessed('telegram', 'user123', 'msg4')
+        limitedManager.isMessageProcessed('telegram', 'test-agent', 'user123', 'msg4')
       ).toBe(true);
 
       limitedManager.dispose();
@@ -409,7 +336,7 @@ describe('SessionManager', () => {
         agentId: 'test-agent',
       });
 
-      const release = await sessionManager.acquireLock('telegram', 'user123');
+      const release = await sessionManager.acquireLock('telegram', 'test-agent', 'user123');
       expect(release).toBeInstanceOf(Function);
       release();
     });
@@ -423,6 +350,7 @@ describe('SessionManager', () => {
 
       const result = await sessionManager.withLock(
         'telegram',
+        'test-agent',
         'user123',
         async () => {
           return 'result';
@@ -434,7 +362,7 @@ describe('SessionManager', () => {
 
     it('should throw error when locking non-existent session', async () => {
       await expect(
-        sessionManager.acquireLock('telegram', 'unknown')
+        sessionManager.acquireLock('telegram', 'test-agent', 'unknown')
       ).rejects.toThrow(SessionError);
     });
   });
@@ -576,13 +504,13 @@ describe('SessionManager Concurrency', () => {
 
     const results: number[] = [];
 
-    const task1 = sessionManager.withLock('telegram', 'user123', async () => {
+    const task1 = sessionManager.withLock('telegram', 'test-agent', 'user123', async () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       results.push(1);
       return 1;
     });
 
-    const task2 = sessionManager.withLock('telegram', 'user123', async () => {
+    const task2 = sessionManager.withLock('telegram', 'test-agent', 'user123', async () => {
       results.push(2);
       return 2;
     });
@@ -610,10 +538,10 @@ describe('SessionManager Concurrency', () => {
     const startTime = Date.now();
 
     await Promise.all([
-      sessionManager.withLock('telegram', 'user1', async () => {
+      sessionManager.withLock('telegram', 'test-agent', 'user1', async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }),
-      sessionManager.withLock('telegram', 'user2', async () => {
+      sessionManager.withLock('telegram', 'test-agent', 'user2', async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }),
     ]);

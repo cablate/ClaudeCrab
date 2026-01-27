@@ -2,9 +2,11 @@
   "name": "Code Assistant",
   "description": "A specialized coding assistant that helps with programming tasks",
   "version": "1.0.0",
-  "extends": "general",
+  "model": "sonnet",
   "allowedTools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+  "telegramBotToken": "8585127707:AAExHiRF4aF7cbyXcyoN7fX4UgTqhU2u-2A",
   "settings": {
+    "permissionMode": "default",
     "maxTurns": 30
   }
 }

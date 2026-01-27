@@ -9,7 +9,54 @@
 
 ## 版本歷史
 
-### v1.2.0 - WebUI 管理介面（當前版本）
+### v1.3.0 - 多機器人架構（當前版本）
+
+**發布日期**：2026-01-27
+
+**重大變更**：
+- **每個 Agent 獨立 Bot**：從「單一 Bot + `/switch` 切換」改為「一個 Agent 一個 Bot」
+- 新增 `PlatformOrchestrator` — 統一管理所有平台 Adapter 的生命週期
+- 新增 `AdapterRegistry` — `platform::agentId` 複合鍵管理 Adapter 實例
+- Session Key 從 `platform::userId` 改為 `platform::agentId::userId`
+- DB Schema v2 — UNIQUE 約束加入 `agent_id`，含自動 migration
+- 移除 `/switch`、`/list` Telegram 指令
+- 移除 `switchAgent()` 方法
+- 移除 `TELEGRAM_BOT_TOKEN` 環境變數
+
+**新增欄位**：
+- `agent.json` 新增 `telegramBotToken` 欄位
+
+**新增檔案**：
+- `src/core/PlatformOrchestrator.ts`
+- `src/core/AdapterRegistry.ts`
+
+**修改檔案**：
+- `src/types/agent.ts` — AgentConfigSchema 新增 telegramBotToken
+- `src/types/session.ts` — getSessionKey 改為三段式
+- `src/persistence/DatabaseManager.ts` — Schema v2 migration
+- `src/persistence/SessionRepository.ts` — 查詢加入 agentId
+- `src/core/SessionManager.ts` — 所有方法加入 agentId 參數
+- `src/core/MessageProcessor.ts` — 接收外部傳入 agentId
+- `src/core/AgentLoader.ts` — 新增 getAgentsWithPlatformTokens()
+- `src/adapters/TelegramAdapter.ts` — 建構綁定 agentId
+- `src/adapters/commands/TelegramCommands.ts` — 移除 switch/list
+- `src/index.ts` — 使用 PlatformOrchestrator 啟動
+- `src/webui/types.ts` — 注入 PlatformOrchestrator
+- `src/webui/routes/agents.ts` — 顯示 Bot 狀態
+- `src/webui/api/agents.api.ts` — Bot 重載使用 Orchestrator
+- `src/webui/views/agents/list.ejs` — Bot Status 欄位
+- `src/webui/views/agents/detail.ejs` — Bot Status 區塊
+
+**WebUI 增強**：
+- Agents 列表頁顯示各 Bot 運行狀態（綠色/黃色 badge）
+- Agent 詳情頁顯示 Bot 狀態資訊
+- Agent 重載透過 Orchestrator 同時重啟 config 與 Adapter
+
+**測試**：312 tests, 19 files 全部通過
+
+---
+
+### v1.2.0 - WebUI 管理介面
 
 **發布日期**：2026-01-27
 
@@ -90,7 +137,7 @@
 - AgentLoader + ConfigTransformer
 - SessionManager（含並發控制、冪等性檢查）
 - TelegramAdapter（含速率限制、長訊息分割）
-- 指令系統（/start, /help, /list, /switch, /reset）
+- 指令系統（/start, /help, /reset）（v1.3.0 移除 /list, /switch）
 - 安全機制（用戶白名單、審計日誌、輸入驗證）
 
 ---
@@ -121,7 +168,7 @@
 
 **新增功能**：
 - 多用戶 Session 管理
-- `platform::userId` 作為 session key
+- `platform::userId` 作為 session key（v1.3.0 改為 `platform::agentId::userId`）
 - 並發控制（async-mutex）
 - 冪等性檢查
 - 自動清理過期 Session
@@ -227,17 +274,18 @@
 
 ---
 
-### ADR-005: Session Key 使用雙冒號
+### ADR-005: Session Key 使用三段式雙冒號
 
-**背景**：需要唯一識別不同平台的用戶
+**背景**：多機器人架構下，需要唯一識別不同平台 + Agent + 用戶的組合
 
-**決策**：使用 `${platform}::${userId}` 作為 session key
+**決策**：使用 `${platform}::${agentId}::${userId}` 作為 session key
 
 **理由**：
-- 單冒號可能出現在 userId 中
-- 雙冒號作為分隔符更安全
+- 單冒號可能出現在 userId 中，雙冒號作為分隔符更安全
+- 加入 `agentId` 確保同一用戶對不同 Agent 有獨立 Session
+- DB UNIQUE 約束對應為 `UNIQUE(platform, agent_id, user_id)`
 
-**實作位置**：`src/core/SessionManager.ts`
+**實作位置**：`src/core/SessionManager.ts`, `src/types/session.ts`
 
 ---
 
@@ -253,3 +301,32 @@
 - 平滑遷移
 
 **環境變數**：`USE_CLAUDE_AGENT_SDK=true|false`
+
+---
+
+### ADR-007: 多機器人架構 — 每個 Agent 獨立 Bot
+
+**背景**：原本使用單一 Telegram Bot + `/switch` 指令切換 Agent，用戶體驗不佳且架構耦合
+
+**決策**：
+1. 每個 Agent 在 `agent.json` 中配置自己的 `telegramBotToken`
+2. 新增 `PlatformOrchestrator` 統一管理所有 Adapter 的生命週期
+3. 移除 `/switch`、`/list` 指令與 `switchAgent()` 方法
+4. Session Key 從 `platform::userId` 改為 `platform::agentId::userId`
+
+**理由**：
+- 一對一綁定更直覺：用戶直接跟特定 Bot 對話
+- 解耦：各 Agent 的 Bot 互不影響，單一 Bot 啟動失敗不影響其他
+- 通用設計：`PlatformOrchestrator` 根據 config 中的 token 欄位自動判斷平台，未來可擴展到 Slack、Discord
+- Token 存放在 `agent.json` 中，與 Agent 配置集中管理
+
+**影響**：
+- 移除環境變數 `TELEGRAM_BOT_TOKEN`
+- DB Schema 升級至 v2（UNIQUE 約束加入 `agent_id`）
+- 舊 Session 不相容（重啟後自動建新 Session）
+
+**實作位置**：
+- `src/core/PlatformOrchestrator.ts`（新增）
+- `src/core/AdapterRegistry.ts`（修改為複合鍵）
+- `src/adapters/TelegramAdapter.ts`（綁定 agentId）
+- `src/index.ts`（使用 Orchestrator 啟動）

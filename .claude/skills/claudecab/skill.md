@@ -35,7 +35,7 @@ claudecab/
 ├── src/
 │   ├── index.ts           # 主入口（Telegram Bot + WebUI）
 │   ├── cli.ts             # CLI 測試工具
-│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus
+│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus, PlatformOrchestrator
 │   ├── persistence/       # SQLite 持久化層
 │   ├── adapters/          # TelegramAdapter, BaseAdapter
 │   ├── webui/             # Express + EJS 管理介面
@@ -50,7 +50,7 @@ claudecab/
 ├── agents/                # Agent 配置（每個子目錄 = 一個代理）
 │   ├── general/           # 通用助手
 │   └── coder/             # 程式碼助手
-├── tests/                 # 323 tests, 19 files
+├── tests/                 # 312 tests, 19 files
 └── data/                  # SQLite 資料庫
 ```
 
@@ -68,7 +68,7 @@ claudecab/
 ```bash
 npm run dev          # 啟動開發伺服器
 npm run cli          # CLI 測試工具
-npm test             # 執行測試 (323 tests)
+npm test             # 執行測試 (312 tests)
 npm run typecheck    # TypeScript 型別檢查
 ```
 
@@ -77,7 +77,6 @@ npm run typecheck    # TypeScript 型別檢查
 | 變數 | 說明 |
 |------|------|
 | `ANTHROPIC_API_KEY` | Anthropic API 金鑰（必填）|
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token（必填）|
 | `USE_CLAUDE_AGENT_SDK` | SDK 模式 (true) 或 Legacy 模式 (false)，預設 true |
 | `ENABLE_PERSISTENCE` | 啟用 SQLite 持久化，預設 false |
 | `DB_PATH` | 資料庫路徑，預設 ./data/claudecab.db |

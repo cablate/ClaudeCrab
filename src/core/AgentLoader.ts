@@ -108,20 +108,8 @@ export class AgentLoader implements IAgentRepository {
   /**
    * Load a single agent by ID
    * @param agentId The agent directory name
-   * @param inheritanceChain For circular inheritance detection
    */
-  async loadAgent(
-    agentId: string,
-    inheritanceChain: string[] = []
-  ): Promise<LoadedAgent> {
-    // Check for circular inheritance
-    if (inheritanceChain.includes(agentId)) {
-      const cycle = [...inheritanceChain, agentId].join(' -> ');
-      throw new AgentConfigError(agentId, [
-        `Circular inheritance detected: ${cycle}`,
-      ]);
-    }
-
+  async loadAgent(agentId: string): Promise<LoadedAgent> {
     const agentPath = path.join(this.agentsDir, agentId);
 
     try {
@@ -132,25 +120,7 @@ export class AgentLoader implements IAgentRepository {
       }
 
       // Load and parse agent.json
-      let config = await this.loadConfig(agentPath, agentId);
-
-      // Handle inheritance
-      if (config.extends !== undefined) {
-        const parentId = config.extends;
-        logger.debug(
-          { agentId, parentId },
-          'Loading parent agent for inheritance'
-        );
-
-        // Load parent agent (with inheritance tracking)
-        const parentAgent = await this.loadAgent(parentId, [
-          ...inheritanceChain,
-          agentId,
-        ]);
-
-        // Merge configs (child overrides parent)
-        config = this.mergeConfigs(parentAgent.config, config);
-      }
+      const config = await this.loadConfig(agentPath, agentId);
 
       // Load system prompt
       const systemPrompt = await this.loadSystemPrompt(agentPath, config);
@@ -190,56 +160,6 @@ export class AgentLoader implements IAgentRepository {
     }
   }
 
-  /**
-   * Merge parent and child configs
-   * Child properties override parent properties
-   */
-  private mergeConfigs(parent: AgentConfig, child: AgentConfig): AgentConfig {
-    return {
-      // Child name is required
-      name: child.name,
-      // Child overrides parent for simple properties
-      description: child.description ?? parent.description,
-      version: child.version ?? parent.version,
-      // Don't inherit extends
-      model: child.model ?? parent.model,
-      maxTokens: child.maxTokens ?? parent.maxTokens,
-      maxThinkingTokens: child.maxThinkingTokens ?? parent.maxThinkingTokens,
-      // systemPrompt: child's system prompt is handled separately
-      systemPrompt: child.systemPrompt ?? parent.systemPrompt,
-      systemPromptFile: child.systemPromptFile ?? parent.systemPromptFile,
-      // Merge arrays (child extends parent)
-      allowedTools: this.mergeArrays(parent.allowedTools, child.allowedTools),
-      disallowedTools: this.mergeArrays(
-        parent.disallowedTools,
-        child.disallowedTools
-      ),
-      // Child MCP config overrides parent
-      mcpConfigFile: child.mcpConfigFile ?? parent.mcpConfigFile,
-      // Merge settings
-      settings:
-        child.settings !== undefined || parent.settings !== undefined
-          ? {
-              ...parent.settings,
-              ...child.settings,
-            }
-          : undefined,
-    };
-  }
-
-  /**
-   * Merge two optional arrays, removing duplicates
-   */
-  private mergeArrays(
-    parent: string[] | undefined,
-    child: string[] | undefined
-  ): string[] | undefined {
-    if (parent === undefined && child === undefined) {
-      return undefined;
-    }
-    const combined = [...(parent ?? []), ...(child ?? [])];
-    return Array.from(new Set(combined));
-  }
 
   /**
    * Load and validate agent.json
@@ -594,5 +514,48 @@ export class AgentLoader implements IAgentRepository {
    */
   getAgentPath(agentId: string): string {
     return path.join(this.agentsDir, agentId);
+  }
+
+  /**
+   * Get all loaded agents that have platform bot tokens configured.
+   * Returns a map of agentId → { telegramBotToken, ... }
+   * Validates that no two agents share the same token on the same platform.
+   */
+  getAgentsWithPlatformTokens(): Array<{
+    agentId: string;
+    agent: LoadedAgent;
+    telegramBotToken?: string;
+  }> {
+    const results: Array<{
+      agentId: string;
+      agent: LoadedAgent;
+      telegramBotToken?: string;
+    }> = [];
+
+    const seenTelegramTokens = new Map<string, string>(); // token → agentId
+
+    for (const [agentId, agent] of this.cache) {
+      const telegramBotToken = agent.config.telegramBotToken;
+
+      // Skip agents without any platform tokens
+      if (telegramBotToken === undefined) {
+        continue;
+      }
+
+      // Validate no duplicate Telegram tokens
+      if (telegramBotToken !== undefined) {
+        const existingAgent = seenTelegramTokens.get(telegramBotToken);
+        if (existingAgent !== undefined) {
+          throw new AgentConfigError(agentId, [
+            `Duplicate Telegram bot token: already used by agent "${existingAgent}"`,
+          ]);
+        }
+        seenTelegramTokens.set(telegramBotToken, agentId);
+      }
+
+      results.push({ agentId, agent, telegramBotToken });
+    }
+
+    return results;
   }
 }

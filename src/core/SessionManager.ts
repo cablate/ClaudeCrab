@@ -42,8 +42,6 @@ export interface SessionManagerOptions {
   agentLoader: AgentLoader;
   /** Session store configuration */
   config?: Partial<SessionStoreConfig>;
-  /** Default agent ID for new sessions */
-  defaultAgentId?: string;
   /** Optional session repository for persistence */
   sessionRepository?: ISessionRepository | undefined;
 }
@@ -55,16 +53,12 @@ export class SessionManager {
   private readonly sessions: Map<string, InternalSession> = new Map();
   private readonly config: SessionStoreConfig;
   private readonly agentLoader: AgentLoader;
-  private readonly defaultAgentId?: string;
   private readonly sessionRepository: ISessionRepository | undefined;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: SessionManagerOptions) {
     this.agentLoader = options.agentLoader;
     this.config = { ...DEFAULT_SESSION_CONFIG, ...options.config };
-    if (options.defaultAgentId !== undefined) {
-      this.defaultAgentId = options.defaultAgentId;
-    }
     this.sessionRepository = options.sessionRepository;
   }
 
@@ -98,10 +92,10 @@ export class SessionManager {
   }
 
   /**
-   * Get a session by platform and userId
+   * Get a session by platform, agentId, and userId
    */
-  getSession(platform: string, userId: string): UserSession | undefined {
-    const key = getSessionKey(platform, userId);
+  getSession(platform: string, agentId: string, userId: string): UserSession | undefined {
+    const key = getSessionKey(platform, agentId, userId);
     const session = this.sessions.get(key);
 
     if (session !== undefined) {
@@ -128,8 +122,8 @@ export class SessionManager {
   /**
    * Check if a session exists
    */
-  hasSession(platform: string, userId: string): boolean {
-    const key = getSessionKey(platform, userId);
+  hasSession(platform: string, agentId: string, userId: string): boolean {
+    const key = getSessionKey(platform, agentId, userId);
     return this.sessions.has(key);
   }
 
@@ -138,7 +132,7 @@ export class SessionManager {
    */
   async createSession(options: CreateSessionOptions): Promise<UserSession> {
     const { platform, userId, agentId } = options;
-    const key = getSessionKey(platform, userId);
+    const key = getSessionKey(platform, agentId, userId);
 
     // Check if session already exists
     const existing = this.sessions.get(key);
@@ -206,24 +200,24 @@ export class SessionManager {
    * Get or create a session
    */
   async getOrCreateSession(options: CreateSessionOptions): Promise<UserSession> {
-    const existing = this.getSession(options.platform, options.userId);
+    const { platform, agentId, userId } = options;
+    if (agentId === undefined) {
+      throw new SessionError('SDK_ERROR', 'No agent ID provided');
+    }
+
+    const existing = this.getSession(platform, agentId, userId);
     if (existing !== undefined) {
       return existing;
     }
 
-    const agentId = options.agentId ?? this.defaultAgentId;
-    if (agentId === undefined) {
-      throw new SessionError('SDK_ERROR', 'No agent ID provided and no default agent configured');
-    }
-
-    return this.createSession({ ...options, agentId });
+    return this.createSession(options);
   }
 
   /**
    * Update session state
    */
-  updateState(platform: string, userId: string, state: SessionState): void {
-    const key = getSessionKey(platform, userId);
+  updateState(platform: string, agentId: string, userId: string, state: SessionState): void {
+    const key = getSessionKey(platform, agentId, userId);
     const session = this.sessions.get(key);
 
     if (session === undefined) {
@@ -252,71 +246,15 @@ export class SessionManager {
   }
 
   /**
-   * Switch a session to a different agent
-   */
-  async switchAgent(
-    platform: string,
-    userId: string,
-    newAgentId: string
-  ): Promise<UserSession> {
-    const key = getSessionKey(platform, userId);
-    const session = this.sessions.get(key);
-
-    if (session === undefined) {
-      throw new SessionError('NOT_FOUND', `Session not found: ${key}`);
-    }
-
-    const oldAgentId = session.agentId;
-
-    // Load new agent
-    let newAgent: LoadedAgent;
-    try {
-      newAgent = this.agentLoader.get(newAgentId) ?? (await this.agentLoader.loadAgent(newAgentId));
-    } catch (error) {
-      throw new SessionError(
-        'SDK_ERROR',
-        `Failed to load agent "${newAgentId}": ${(error as Error).message}`
-      );
-    }
-
-    // Update session
-    session.agentId = newAgentId;
-    session.agent = newAgent;
-    session.sdkOptions = ConfigTransformer.toSDKOptions(newAgent);
-    session.lastActiveAt = new Date();
-    // Clear SDK session ID to start fresh with new agent
-    delete session.sdkSessionId;
-
-    // Persist agent switch
-    if (this.sessionRepository !== undefined) {
-      this.sessionRepository.save(this.toSessionRow(session));
-    }
-
-    logger.info(
-      { sessionId: session.sessionId, oldAgentId, newAgentId },
-      'Agent switched'
-    );
-
-    getEventBus().emitSync('session:switched', {
-      oldAgentId,
-      newAgentId,
-      sessionId: session.sessionId,
-      platform,
-      userId,
-    });
-
-    return this.toPublicSession(session);
-  }
-
-  /**
    * Close a session
    */
   closeSession(
     platform: string,
+    agentId: string,
     userId: string,
-    reason: 'timeout' | 'user_request' | 'error' | 'agent_switch' = 'user_request'
+    reason: 'timeout' | 'user_request' | 'error' = 'user_request'
   ): boolean {
-    const key = getSessionKey(platform, userId);
+    const key = getSessionKey(platform, agentId, userId);
     const session = this.sessions.get(key);
 
     if (session === undefined) {
@@ -348,8 +286,8 @@ export class SessionManager {
   /**
    * Check if a message has already been processed (idempotency)
    */
-  isMessageProcessed(platform: string, userId: string, messageId: string): boolean {
-    const key = getSessionKey(platform, userId);
+  isMessageProcessed(platform: string, agentId: string, userId: string, messageId: string): boolean {
+    const key = getSessionKey(platform, agentId, userId);
     const session = this.sessions.get(key);
 
     if (session === undefined) {
@@ -362,8 +300,8 @@ export class SessionManager {
   /**
    * Mark a message as processed
    */
-  markMessageProcessed(platform: string, userId: string, messageId: string): void {
-    const key = getSessionKey(platform, userId);
+  markMessageProcessed(platform: string, agentId: string, userId: string, messageId: string): void {
+    const key = getSessionKey(platform, agentId, userId);
     const session = this.sessions.get(key);
 
     if (session === undefined) {
@@ -394,8 +332,8 @@ export class SessionManager {
    * Acquire a lock for processing a session
    * Returns a release function
    */
-  async acquireLock(platform: string, userId: string): Promise<() => void> {
-    const key = getSessionKey(platform, userId);
+  async acquireLock(platform: string, agentId: string, userId: string): Promise<() => void> {
+    const key = getSessionKey(platform, agentId, userId);
     const session = this.sessions.get(key);
 
     if (session === undefined) {
@@ -411,10 +349,11 @@ export class SessionManager {
    */
   async withLock<T>(
     platform: string,
+    agentId: string,
     userId: string,
     fn: () => Promise<T>
   ): Promise<T> {
-    const release = await this.acquireLock(platform, userId);
+    const release = await this.acquireLock(platform, agentId, userId);
     try {
       return await fn();
     } finally {
@@ -425,8 +364,8 @@ export class SessionManager {
   /**
    * Get the internal session (for SDK integration)
    */
-  getInternalSession(platform: string, userId: string): InternalSession | undefined {
-    const key = getSessionKey(platform, userId);
+  getInternalSession(platform: string, agentId: string, userId: string): InternalSession | undefined {
+    const key = getSessionKey(platform, agentId, userId);
     return this.sessions.get(key);
   }
 
@@ -434,8 +373,8 @@ export class SessionManager {
    * Update SDK session ID.
    * Pass undefined to clear the SDK session ID (e.g., for conversation reset).
    */
-  setSdkSessionId(platform: string, userId: string, sdkSessionId: string | undefined): void {
-    const key = getSessionKey(platform, userId);
+  setSdkSessionId(platform: string, agentId: string, userId: string, sdkSessionId: string | undefined): void {
+    const key = getSessionKey(platform, agentId, userId);
     const session = this.sessions.get(key);
 
     if (session !== undefined) {
@@ -522,7 +461,7 @@ export class SessionManager {
           (await this.agentLoader.loadAgent(row.agent_id));
 
         const sdkOptions = ConfigTransformer.toSDKOptions(agent);
-        const key = getSessionKey(row.platform, row.user_id);
+        const key = getSessionKey(row.platform, row.agent_id, row.user_id);
 
         // Skip if session already exists in memory
         if (this.sessions.has(key)) {

@@ -101,7 +101,7 @@ export function createSessionsApiRouter(): Router {
     }
 
     try {
-      await sessionManager.closeSession(session.platform, session.userId);
+      await sessionManager.closeSession(session.platform, session.agentId, session.userId);
       res.json({
         success: true,
         message: `Session ${id} closed successfully`,

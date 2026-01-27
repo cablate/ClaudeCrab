@@ -43,6 +43,25 @@
           <dt class="text-sm text-gray-500">Path</dt>
           <dd class="mt-1 font-mono text-xs text-gray-500 break-all"><%= agent.path %></dd>
         </div>
+        <div>
+          <dt class="text-sm text-gray-500">Bot Status</dt>
+          <dd class="mt-1">
+            <% if (botStatus.length === 0) { %>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                No Bot Configured
+              </span>
+            <% } else { %>
+              <div class="flex flex-col gap-1">
+                <% botStatus.forEach(bot => { %>
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium <%= bot.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' %>">
+                    <span class="w-1.5 h-1.5 rounded-full <%= bot.status === 'running' ? 'bg-green-500' : 'bg-yellow-500' %>"></span>
+                    <%= bot.platform %> · <%= bot.status %>
+                  </span>
+                <% }) %>
+              </div>
+            <% } %>
+          </dd>
+        </div>
       </dl>
 
       <div class="mt-6 pt-4 border-t border-gray-200">

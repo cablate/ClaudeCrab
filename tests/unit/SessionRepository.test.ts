@@ -76,18 +76,18 @@ describe('SessionRepository', () => {
     });
   });
 
-  describe('findByPlatformAndUser', () => {
-    it('should find session by platform and user', () => {
+  describe('findByPlatformAgentAndUser', () => {
+    it('should find session by platform, agent, and user', () => {
       const session = createTestSession();
       repository.save(session);
 
-      const found = repository.findByPlatformAndUser('telegram', 'user-123');
+      const found = repository.findByPlatformAgentAndUser('telegram', 'test-agent', 'user-123');
       expect(found).toBeDefined();
       expect(found?.session_id).toBe('session-1');
     });
 
     it('should return undefined for non-existent session', () => {
-      const found = repository.findByPlatformAndUser('telegram', 'nonexistent');
+      const found = repository.findByPlatformAgentAndUser('telegram', 'test-agent', 'nonexistent');
       expect(found).toBeUndefined();
     });
   });
@@ -253,16 +253,13 @@ describe('SessionRepository', () => {
     });
   });
 
-  describe('updateAgentId', () => {
-    it('should update agent ID and clear SDK session ID', () => {
-      const session = createTestSession({ sdk_session_id: 'old-sdk-session' });
+  describe('findByPlatformAgentAndUser edge cases', () => {
+    it('should not find session with wrong agent ID', () => {
+      const session = createTestSession();
       repository.save(session);
 
-      repository.updateAgentId('session-1', 'new-agent');
-
-      const found = repository.findBySessionId('session-1');
-      expect(found?.agent_id).toBe('new-agent');
-      expect(found?.sdk_session_id).toBeNull();
+      const found = repository.findByPlatformAgentAndUser('telegram', 'wrong-agent', 'user-123');
+      expect(found).toBeUndefined();
     });
   });
 
@@ -331,18 +328,17 @@ describe('SessionRepository', () => {
   });
 
   describe('unique constraints', () => {
-    it('should enforce unique platform + user_id constraint', () => {
+    it('should enforce unique platform + agent_id + user_id constraint', () => {
       repository.save(createTestSession());
 
-      // Trying to save another session with same platform + user_id but different session_id
-      // should throw due to UNIQUE(platform, user_id) constraint
+      // Trying to save another session with same platform + agent_id + user_id but different session_id
+      // should throw due to UNIQUE(platform, agent_id, user_id) constraint
       const duplicate = createTestSession({
         session_id: 'different-session-id',
         state: 'processing',
       });
 
-      // This should throw because of the UNIQUE(platform, user_id) constraint
-      // Our save uses ON CONFLICT(session_id), which doesn't handle this case
+      // This should throw because of the UNIQUE(platform, agent_id, user_id) constraint
       expect(() => repository.save(duplicate)).toThrow(/UNIQUE constraint failed/);
     });
 
@@ -356,6 +352,24 @@ describe('SessionRepository', () => {
       repository.save(createTestSession({
         session_id: 'session-discord',
         platform: 'discord',
+        user_id: 'user-123',
+      }));
+
+      expect(repository.count()).toBe(2);
+    });
+
+    it('should allow same user with different agents on same platform', () => {
+      repository.save(createTestSession({
+        session_id: 'session-agent1',
+        platform: 'telegram',
+        agent_id: 'agent-1',
+        user_id: 'user-123',
+      }));
+
+      repository.save(createTestSession({
+        session_id: 'session-agent2',
+        platform: 'telegram',
+        agent_id: 'agent-2',
         user_id: 'user-123',
       }));
 

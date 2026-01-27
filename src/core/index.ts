@@ -12,3 +12,8 @@ export {
   type MessageProcessorOptions,
   type ProcessingResult,
 } from './MessageProcessor.js';
+export {
+  PlatformOrchestrator,
+  type PlatformOrchestratorOptions,
+  type RunningAdapterInfo,
+} from './PlatformOrchestrator.js';

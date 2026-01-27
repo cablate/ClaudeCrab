@@ -27,6 +27,7 @@ export class WebUIServer {
     this.dependencies = {
       agentLoader: options.agentLoader,
       sessionManager: options.sessionManager,
+      platformOrchestrator: options.platformOrchestrator,
       databaseManager: options.databaseManager,
       sessionRepository: options.sessionRepository,
       conversationRepository: options.conversationRepository,

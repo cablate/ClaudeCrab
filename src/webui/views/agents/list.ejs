@@ -23,7 +23,7 @@
           <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bot Status</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sessions</th>
             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
@@ -42,8 +42,21 @@
                   <%= agent.model %>
                 </span>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-500">
-                v<%= agent.version %>
+              <td class="px-6 py-4">
+                <% if (agent.botStatus.length === 0) { %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    No Bot
+                  </span>
+                <% } else { %>
+                  <div class="flex flex-col gap-1">
+                    <% agent.botStatus.forEach(bot => { %>
+                      <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium <%= bot.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800' %>">
+                        <span class="w-1.5 h-1.5 rounded-full <%= bot.status === 'running' ? 'bg-green-500' : 'bg-yellow-500' %>"></span>
+                        <%= bot.platform %> · <%= bot.status %>
+                      </span>
+                    <% }) %>
+                  </div>
+                <% } %>
               </td>
               <td class="px-6 py-4">
                 <span class="text-sm font-medium text-gray-900"><%= agent.sessionCount %></span>

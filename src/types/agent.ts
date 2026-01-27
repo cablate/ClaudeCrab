@@ -40,7 +40,6 @@ export const AgentConfigSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   version: z.string().optional(),
-  extends: z.string().optional(),
 
   // Model configuration
   model: ModelSchema.optional(),
@@ -57,6 +56,9 @@ export const AgentConfigSchema = z.object({
 
   // MCP configuration
   mcpConfigFile: z.string().optional(),
+
+  // Platform bot tokens
+  telegramBotToken: z.string().optional(),
 
   // Additional settings
   settings: AgentSettingsSchema.optional(),

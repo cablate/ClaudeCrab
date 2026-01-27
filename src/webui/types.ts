@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import type { AgentLoader } from '../core/AgentLoader.js';
 import type { SessionManager } from '../core/SessionManager.js';
+import type { PlatformOrchestrator } from '../core/PlatformOrchestrator.js';
 import type { DatabaseManager } from '../persistence/DatabaseManager.js';
 import type { ISessionRepository, IConversationRepository } from '../persistence/types.js';
 
@@ -11,6 +12,7 @@ export interface WebUIServerOptions {
   port: number;
   agentLoader: AgentLoader;
   sessionManager: SessionManager;
+  platformOrchestrator: PlatformOrchestrator | undefined;
   databaseManager: DatabaseManager | undefined;
   sessionRepository: ISessionRepository | undefined;
   conversationRepository: IConversationRepository | undefined;
@@ -22,6 +24,7 @@ export interface WebUIServerOptions {
 export interface WebUIDependencies {
   agentLoader: AgentLoader;
   sessionManager: SessionManager;
+  platformOrchestrator: PlatformOrchestrator | undefined;
   databaseManager: DatabaseManager | undefined;
   sessionRepository: ISessionRepository | undefined;
   conversationRepository: IConversationRepository | undefined;

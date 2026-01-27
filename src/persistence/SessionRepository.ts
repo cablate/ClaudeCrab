@@ -19,13 +19,13 @@ export class SessionRepository implements ISessionRepository {
   }
 
   /**
-   * Find session by platform and user ID
+   * Find session by platform, agent ID, and user ID
    */
-  findByPlatformAndUser(platform: string, userId: string): SessionRow | undefined {
+  findByPlatformAgentAndUser(platform: string, agentId: string, userId: string): SessionRow | undefined {
     const stmt = this.db.prepare(`
-      SELECT * FROM sessions WHERE platform = ? AND user_id = ?
+      SELECT * FROM sessions WHERE platform = ? AND agent_id = ? AND user_id = ?
     `);
-    return stmt.get(platform, userId) as SessionRow | undefined;
+    return stmt.get(platform, agentId, userId) as SessionRow | undefined;
   }
 
   /**
@@ -150,17 +150,6 @@ export class SessionRepository implements ISessionRepository {
       UPDATE sessions SET processed_message_ids = ?, last_active_at = ? WHERE session_id = ?
     `);
     stmt.run(serializeMessageIds(messageIds), dateToString(new Date()), sessionId);
-  }
-
-  /**
-   * Update agent ID (for agent switching)
-   */
-  updateAgentId(sessionId: string, agentId: string): void {
-    const stmt = this.db.prepare(`
-      UPDATE sessions SET agent_id = ?, sdk_session_id = NULL, last_active_at = ? WHERE session_id = ?
-    `);
-    stmt.run(agentId, dateToString(new Date()), sessionId);
-    logger.debug({ sessionId, agentId }, 'Agent ID updated in database');
   }
 
   /**

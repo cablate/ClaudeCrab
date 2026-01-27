@@ -7,41 +7,38 @@ import {
 
 describe('getSessionKey', () => {
   it('should create key with double colon separator', () => {
-    const key = getSessionKey('telegram', '123456');
-    expect(key).toBe('telegram::123456');
+    const key = getSessionKey('telegram', 'general', '123456');
+    expect(key).toBe('telegram::general::123456');
   });
 
   it('should handle special characters in userId', () => {
-    const key = getSessionKey('discord', 'user:with:colons');
-    expect(key).toBe('discord::user:with:colons');
+    const key = getSessionKey('discord', 'agent1', 'user:with:colons');
+    expect(key).toBe('discord::agent1::user:with:colons');
   });
 
   it('should handle empty strings', () => {
-    const key = getSessionKey('', '');
-    expect(key).toBe('::');
+    const key = getSessionKey('', '', '');
+    expect(key).toBe('::::');
   });
 });
 
 describe('parseSessionKey', () => {
   it('should parse valid key', () => {
-    const result = parseSessionKey('telegram::123456');
+    const result = parseSessionKey('telegram::general::123456');
     expect(result).toEqual({
       platform: 'telegram',
+      agentId: 'general',
       userId: '123456',
-    });
-  });
-
-  it('should handle userId with single colon', () => {
-    const result = parseSessionKey('discord::user:id');
-    // Only splits on first ::
-    expect(result).toEqual({
-      platform: 'discord',
-      userId: 'user:id',
     });
   });
 
   it('should return null for invalid key without separator', () => {
     const result = parseSessionKey('invalid-key');
+    expect(result).toBeNull();
+  });
+
+  it('should return null for key with only two parts', () => {
+    const result = parseSessionKey('telegram::123456');
     expect(result).toBeNull();
   });
 

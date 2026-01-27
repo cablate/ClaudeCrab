@@ -70,6 +70,7 @@ describe('TelegramAdapter', () => {
 
     config = {
       platform: 'telegram',
+      agentId: 'test-agent',
       token: 'test-token',
       debug: false,
     };
@@ -122,6 +123,10 @@ describe('TelegramAdapter', () => {
 
     it('should have correct platform', () => {
       expect(adapter.platform).toBe('telegram');
+    });
+
+    it('should have correct agentId', () => {
+      expect(adapter.agentId).toBe('test-agent');
     });
   });
 

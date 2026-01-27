@@ -20,15 +20,17 @@ export function createAgentsRouter(): Router {
    * GET /agents - List all agents
    */
   router.get('/', (req, res) => {
-    const { agentLoader, sessionManager } = getDeps(req);
+    const { agentLoader, sessionManager, platformOrchestrator } = getDeps(req);
 
     const agentIds = agentLoader.list();
     const sessions = sessionManager.getAllSessions();
+    const runningAdapters = platformOrchestrator?.getRunningAdapters() ?? [];
 
-    // Build agent list with session counts
+    // Build agent list with session counts and bot status
     const agents = agentIds.map((id) => {
       const agent = agentLoader.get(id);
       const sessionCount = sessions.filter((s) => s.agentId === id).length;
+      const adapters = runningAdapters.filter((a) => a.agentId === id);
 
       return {
         id,
@@ -38,6 +40,9 @@ export function createAgentsRouter(): Router {
         model: agent?.config.model ?? 'sonnet',
         sessionCount,
         path: agent?.path ?? '',
+        botStatus: adapters.length > 0
+          ? adapters.map((a) => ({ platform: a.platform, status: a.status }))
+          : [],
       };
     });
 
@@ -51,7 +56,7 @@ export function createAgentsRouter(): Router {
    * GET /agents/:id - Show agent details
    */
   router.get('/:id', (req, res, next) => {
-    const { agentLoader, sessionManager } = getDeps(req);
+    const { agentLoader, sessionManager, platformOrchestrator } = getDeps(req);
     const { id } = req.params;
 
     const agent = agentLoader.get(id);
@@ -73,6 +78,12 @@ export function createAgentsRouter(): Router {
         lastActiveAt: s.lastActiveAt,
       }));
 
+    // Get running adapters for this agent
+    const runningAdapters = platformOrchestrator?.getRunningAdapters() ?? [];
+    const botStatus = runningAdapters
+      .filter((a) => a.agentId === id)
+      .map((a) => ({ platform: a.platform, status: a.status }));
+
     res.render('agents/detail', {
       title: agent.config.name ?? id,
       agent: {
@@ -86,6 +97,7 @@ export function createAgentsRouter(): Router {
         config: agent.config,
       },
       sessions,
+      botStatus,
     });
   });
 

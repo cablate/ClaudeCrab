@@ -28,12 +28,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_active_at TEXT NOT NULL,
     sdk_session_id TEXT,
     processed_message_ids TEXT NOT NULL DEFAULT '[]',
-    UNIQUE (platform, user_id)
+    UNIQUE (platform, agent_id, user_id)
 );
 
 -- Sessions indexes
 CREATE INDEX IF NOT EXISTS idx_sessions_platform ON sessions(platform);
-CREATE INDEX IF NOT EXISTS idx_sessions_platform_user ON sessions(platform, user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_platform_agent_user ON sessions(platform, agent_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id);
 
@@ -60,7 +60,40 @@ CREATE TABLE IF NOT EXISTS metadata (
 );
 `;
 
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
+
+/**
+ * Migration SQL from v1 to v2:
+ * Changes UNIQUE constraint from (platform, user_id) to (platform, agent_id, user_id)
+ */
+const MIGRATION_V1_TO_V2 = `
+-- Recreate sessions table with new UNIQUE constraint
+CREATE TABLE IF NOT EXISTS sessions_new (
+    session_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'idle' CHECK (state IN ('idle', 'processing', 'error')),
+    created_at TEXT NOT NULL,
+    last_active_at TEXT NOT NULL,
+    sdk_session_id TEXT,
+    processed_message_ids TEXT NOT NULL DEFAULT '[]',
+    UNIQUE (platform, agent_id, user_id)
+);
+
+-- Copy existing data
+INSERT OR IGNORE INTO sessions_new SELECT * FROM sessions;
+
+-- Drop old table and rename
+DROP TABLE sessions;
+ALTER TABLE sessions_new RENAME TO sessions;
+
+-- Recreate indexes
+CREATE INDEX IF NOT EXISTS idx_sessions_platform ON sessions(platform);
+CREATE INDEX IF NOT EXISTS idx_sessions_platform_agent_user ON sessions(platform, agent_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id);
+`;
 
 /**
  * Database manager options
@@ -149,12 +182,37 @@ export class DatabaseManager {
       insertStmt.run('schema_version', SCHEMA_VERSION, new Date().toISOString());
       logger.debug({ version: SCHEMA_VERSION }, 'Schema version initialized');
     } else if (row.value !== SCHEMA_VERSION) {
-      // Future: handle migrations here
-      logger.warn(
-        { currentVersion: row.value, targetVersion: SCHEMA_VERSION },
-        'Schema version mismatch, migration may be needed'
-      );
+      this.runMigrations(row.value);
     }
+  }
+
+  /**
+   * Run database migrations from currentVersion to SCHEMA_VERSION
+   */
+  private runMigrations(currentVersion: string): void {
+    if (this.db === null) {
+      throw new Error('Database not connected');
+    }
+
+    logger.info(
+      { from: currentVersion, to: SCHEMA_VERSION },
+      'Running database migrations'
+    );
+
+    if (currentVersion === '1') {
+      // Disable foreign keys temporarily for migration
+      this.db.pragma('foreign_keys = OFF');
+      this.db.exec(MIGRATION_V1_TO_V2);
+      this.db.pragma('foreign_keys = ON');
+      logger.info('Migration v1 → v2 completed');
+    }
+
+    // Update schema version
+    const updateStmt = this.db.prepare(
+      'UPDATE metadata SET value = ?, updated_at = ? WHERE key = ?'
+    );
+    updateStmt.run(SCHEMA_VERSION, new Date().toISOString(), 'schema_version');
+    logger.info({ version: SCHEMA_VERSION }, 'Schema version updated');
   }
 
   /**
