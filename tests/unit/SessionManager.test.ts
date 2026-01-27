@@ -6,6 +6,7 @@ import { SessionManager } from '../../src/core/SessionManager.js';
 import { AgentLoader } from '../../src/core/AgentLoader.js';
 import { getEventBus, resetEventBus } from '../../src/core/EventBus.js';
 import { SessionError } from '../../src/types/errors.js';
+import type { ISessionRepository } from '../../src/persistence/types.js';
 
 describe('SessionManager', () => {
   let tempDir: string;
@@ -549,5 +550,154 @@ describe('SessionManager Concurrency', () => {
     const elapsed = Date.now() - startTime;
     // Should run in parallel, so total time should be ~50ms, not ~100ms
     expect(elapsed).toBeLessThan(100);
+  });
+});
+
+describe('SessionManager with persistence (conversation continuity)', () => {
+  let tempDir: string;
+  let agentLoader: AgentLoader;
+  let sessionManager: SessionManager;
+  let mockSessionRepository: ISessionRepository;
+
+  beforeEach(async () => {
+    resetEventBus();
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'claudecab-session-persist-'));
+
+    const agentDir = path.join(tempDir, 'test-agent');
+    await fs.mkdir(agentDir);
+    await fs.writeFile(
+      path.join(agentDir, 'agent.json'),
+      JSON.stringify({ name: 'Test Agent', model: 'sonnet' })
+    );
+    await fs.writeFile(path.join(agentDir, 'CLAUDE.md'), 'You are a test agent.');
+
+    agentLoader = new AgentLoader({ agentsDir: tempDir });
+
+    // Create mock session repository
+    mockSessionRepository = {
+      findByPlatformAgentAndUser: vi.fn().mockReturnValue(undefined),
+      findBySessionId: vi.fn().mockReturnValue(undefined),
+      save: vi.fn(),
+      delete: vi.fn().mockReturnValue(true),
+      findExpired: vi.fn().mockReturnValue([]),
+      findAll: vi.fn().mockReturnValue([]),
+      updateState: vi.fn(),
+      updateLastActive: vi.fn(),
+      updateSdkSessionId: vi.fn(),
+      updateProcessedMessageIds: vi.fn(),
+    };
+
+    sessionManager = new SessionManager({
+      agentLoader,
+      config: {
+        sessionTimeoutMs: 60000,
+        cleanupIntervalMs: 30000,
+        maxSessions: 100,
+        maxProcessedMessageIds: 50,
+        dbRetentionMs: 30 * 24 * 60 * 60 * 1000,
+      },
+      sessionRepository: mockSessionRepository,
+    });
+  });
+
+  afterEach(async () => {
+    sessionManager.dispose();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  describe('createSession — inherits sdkSessionId from DB', () => {
+    it('should inherit sdkSessionId from previous DB session', async () => {
+      vi.mocked(mockSessionRepository.findByPlatformAgentAndUser).mockReturnValue({
+        session_id: 'previous-session-id',
+        agent_id: 'test-agent',
+        platform: 'telegram',
+        user_id: 'user123',
+        state: 'idle',
+        created_at: '2025-01-01T00:00:00.000Z',
+        last_active_at: '2025-01-01T00:00:00.000Z',
+        sdk_session_id: 'sdk-session-abc',
+        processed_message_ids: '[]',
+      });
+
+      const session = await sessionManager.createSession({
+        platform: 'telegram',
+        userId: 'user123',
+        agentId: 'test-agent',
+      });
+
+      // Should reuse previous session ID
+      expect(session.sessionId).toBe('previous-session-id');
+      // Should inherit sdkSessionId
+      expect(session.sdkSessionId).toBe('sdk-session-abc');
+      // Should have called save
+      expect(mockSessionRepository.save).toHaveBeenCalled();
+    });
+
+    it('should create fresh session when no previous DB session exists', async () => {
+      vi.mocked(mockSessionRepository.findByPlatformAgentAndUser).mockReturnValue(undefined);
+
+      const session = await sessionManager.createSession({
+        platform: 'telegram',
+        userId: 'user123',
+        agentId: 'test-agent',
+      });
+
+      // Should generate new UUID (not reuse)
+      expect(session.sessionId).toBeDefined();
+      expect(session.sessionId).not.toBe('previous-session-id');
+      // No sdkSessionId
+      expect(session.sdkSessionId).toBeUndefined();
+    });
+
+    it('should inherit session ID but not sdkSessionId when DB has null sdk_session_id', async () => {
+      vi.mocked(mockSessionRepository.findByPlatformAgentAndUser).mockReturnValue({
+        session_id: 'previous-session-id',
+        agent_id: 'test-agent',
+        platform: 'telegram',
+        user_id: 'user123',
+        state: 'idle',
+        created_at: '2025-01-01T00:00:00.000Z',
+        last_active_at: '2025-01-01T00:00:00.000Z',
+        sdk_session_id: null,
+        processed_message_ids: '[]',
+      });
+
+      const session = await sessionManager.createSession({
+        platform: 'telegram',
+        userId: 'user123',
+        agentId: 'test-agent',
+      });
+
+      // Should reuse previous session ID
+      expect(session.sessionId).toBe('previous-session-id');
+      // Should NOT have sdkSessionId
+      expect(session.sdkSessionId).toBeUndefined();
+    });
+  });
+
+  describe('cleanupExpired — preserves DB rows', () => {
+    it('should remove expired sessions from memory but not from DB', async () => {
+      const shortTimeoutManager = new SessionManager({
+        agentLoader,
+        config: { sessionTimeoutMs: 10 },
+        sessionRepository: mockSessionRepository,
+      });
+
+      await shortTimeoutManager.createSession({
+        platform: 'telegram',
+        userId: 'user123',
+        agentId: 'test-agent',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const cleaned = await shortTimeoutManager.cleanupExpired();
+      expect(cleaned).toBe(1);
+      expect(shortTimeoutManager.getSessionCount()).toBe(0);
+      // DB delete should NOT have been called during cleanup
+      expect(mockSessionRepository.delete).not.toHaveBeenCalled();
+
+      shortTimeoutManager.dispose();
+    });
   });
 });

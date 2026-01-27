@@ -9,7 +9,38 @@
 
 ## 版本歷史
 
-### v1.4.0 - 設計債清理與架構對齊（當前版本）
+### v1.4.1 - 對話連續性修復（當前版本）
+
+**發布日期**：2026-01-27
+
+**問題**：伺服器重啟後對話永遠從零開始，日誌顯示 `resume: "(new session)"`
+
+**根因**：Session 過期→DB 刪除→ON DELETE CASCADE 刪除對話歷史→新 session 無 sdkSessionId→SDK 開啟全新對話
+
+**修復**：
+- **保留 DB 行**：`cleanupExpired()` 只從記憶體移除，DB 行保留供對話延續
+- **restoreSessions()** 僅清理超過 `dbRetentionMs`（預設 30 天）的古老 session，過期 session 不載入記憶體但保留在 DB
+- **createSession() 繼承 sdkSessionId**：建立新 session 前查 DB 取回先前 `session_id` + `sdk_session_id`，重用舊 session ID（保持 conversations FK 關聯）
+- **Resume 失敗自動重試**：`executeQueryWithSDK()` 帶 resume 呼叫 SDK 失敗時，清除 sdkSessionId 並不帶 resume 重試一次（優雅降級）
+- **Server crash 恢復**：`restoreSessions()` 自動重置卡住的 `processing` 狀態為 `idle`
+
+**新增設定**：
+- `SessionStoreConfig.dbRetentionMs` — DB 保留期（預設 30 天），超過此期限的 session 在啟動時清除
+- `DB_RETENTION_MS` 環境變數
+
+**修改檔案**：
+- `src/core/SessionManager.ts` — cleanupExpired、restoreSessions、createSession
+- `src/core/MessageProcessor.ts` — executeQueryWithSDK resume 重試邏輯
+- `src/types/session.ts` — dbRetentionMs 配置
+- `src/persistence/types.ts` — IConversationRepository 補 getLastMessages
+- `src/index.ts` — DB_RETENTION_MS 環境變數
+- `tests/unit/SessionManager.test.ts` — 新增 4 個對話連續性測試
+
+**測試**：284 tests, 19 files 全部通過
+
+---
+
+### v1.4.0 - 設計債清理與架構對齊
 
 **發布日期**：2026-01-27
 

@@ -211,42 +211,61 @@ export class MessageProcessor {
     }
 
     try {
-      // Execute query with SDK
-      // Use resume option if we have a previous SDK session ID
-      const result = await retryAsync(
-        async () => {
-          return await this.sdkQueryManager.executeQuery(
-            sessionId,
-            prompt,
-            agent,
-            {
-              cwd: agent.path,
-              // Pass system prompt explicitly to ensure agent isolation
-              // This prevents SDK from loading parent directory's CLAUDE.md
-              systemPrompt: agent.systemPrompt,
-              // Allow multiple turns for tool usage (agent can use tools and respond)
-              maxTurns: agent.config.settings?.maxTurns ?? 10,
-              resume: internalSession.sdkSessionId,
-            }
-          );
-        },
-        {
-          ...API_RETRY_OPTIONS,
-          isRetryable: (error) =>
-            isRateLimitError(error) || isTransientError(error),
-          onRetry: (attempt, error, delayMs) => {
-            logger.warn(
+      // Helper: execute SDK query with retry for rate limit / transient errors
+      const executeWithRetry = async (resumeId: string | undefined) => {
+        return await retryAsync(
+          async () => {
+            return await this.sdkQueryManager.executeQuery(
+              sessionId,
+              prompt,
+              agent,
               {
-                sessionId,
-                attempt,
-                delayMs,
-                error: error instanceof Error ? error.message : String(error),
-              },
-              'Retrying SDK query'
+                cwd: agent.path,
+                systemPrompt: agent.systemPrompt,
+                maxTurns: agent.config.settings?.maxTurns ?? 10,
+                resume: resumeId,
+              }
             );
           },
+          {
+            ...API_RETRY_OPTIONS,
+            isRetryable: (err) =>
+              isRateLimitError(err) || isTransientError(err),
+            onRetry: (attempt, err, delayMs) => {
+              logger.warn(
+                {
+                  sessionId,
+                  attempt,
+                  delayMs,
+                  error: err instanceof Error ? err.message : String(err),
+                },
+                'Retrying SDK query'
+              );
+            },
+          }
+        );
+      };
+
+      // Execute query — if resume fails, retry without resume (new conversation)
+      let result;
+      try {
+        result = await executeWithRetry(internalSession.sdkSessionId);
+      } catch (error) {
+        if (internalSession.sdkSessionId !== undefined) {
+          logger.warn(
+            {
+              sessionId,
+              sdkSessionId: internalSession.sdkSessionId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            'SDK resume failed, retrying without resume (new conversation)'
+          );
+          this.sessionManager.setSdkSessionId(platform, agentId, userId, undefined);
+          result = await executeWithRetry(undefined);
+        } else {
+          throw error;
         }
-      );
+      }
 
       // Save SDK session ID for future resume
       if (result.sdkSessionId && result.sdkSessionId !== internalSession.sdkSessionId) {

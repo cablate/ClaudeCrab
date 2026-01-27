@@ -73,6 +73,7 @@ const main = async (): Promise<void> => {
       sessionTimeoutMs: parseInt(process.env.SESSION_TIMEOUT_MS ?? '3600000', 10),
       cleanupIntervalMs: parseInt(process.env.CLEANUP_INTERVAL_MS ?? '60000', 10),
       maxSessions: parseInt(process.env.MAX_SESSIONS ?? '1000', 10),
+      dbRetentionMs: parseInt(process.env.DB_RETENTION_MS ?? '2592000000', 10), // 30 days
     },
     sessionRepository,
   });

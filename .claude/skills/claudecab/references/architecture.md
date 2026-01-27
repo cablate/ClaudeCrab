@@ -45,8 +45,10 @@ interface IAgentRepository {
 - 每個 Agent + 用戶 + 平台的組合擁有獨立 Session
 - 訊息去重（idempotency）
 - 分散式鎖（async-mutex，防止並發處理）
-- 自動清理過期會話
+- 自動清理過期會話（僅從記憶體移除，DB 行保留）
 - **SDK Session ID 存儲**：儲存 `sdkSessionId` 供 resume 使用
+- **對話連續性**（v1.4.1）：`createSession()` 建立新 session 前查 DB 取回先前的 `session_id` + `sdk_session_id`，重用舊 session ID（保持 FK 關聯）並繼承 `sdkSessionId`
+- **DB 保留策略**：`cleanupExpired()` 只從記憶體移除，不刪 DB 行。`restoreSessions()` 僅清理超過 `dbRetentionMs`（預設 30 天）的古老 session
 
 ### SDKQueryManager (`src/core/SDKQueryManager.ts`)
 
@@ -68,10 +70,11 @@ interface IAgentRepository {
 處理訊息流程（SDK 模式）：
 1. 接收 UnifiedMessage
 2. 取得/建立 Session
-3. SDKQueryManager 呼叫 `query()`
+3. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId`）
 4. SDK 管理對話歷史（resume option）
-5. 持久化訊息到資料庫（供 WebUI 查看）
-6. 透過 Adapter 發送回應
+5. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
+6. 持久化訊息到資料庫（供 WebUI 查看）
+7. 透過 Adapter 發送回應
 
 ### EventBus (`src/core/EventBus.ts`)
 

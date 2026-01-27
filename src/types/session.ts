@@ -60,6 +60,10 @@ export interface SessionStoreConfig {
 
   /** Maximum processed message IDs to track per session */
   maxProcessedMessageIds: number;
+
+  /** Database retention period in milliseconds (default: 30 days).
+   *  Sessions older than this are purged from DB on startup. */
+  dbRetentionMs: number;
 }
 
 /**
@@ -70,6 +74,7 @@ export const DEFAULT_SESSION_CONFIG: SessionStoreConfig = {
   cleanupIntervalMs: 60 * 1000, // 1 minute
   maxSessions: 1000,
   maxProcessedMessageIds: 100,
+  dbRetentionMs: 30 * 24 * 60 * 60 * 1000, // 30 days
 };
 
 /**

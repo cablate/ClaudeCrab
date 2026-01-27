@@ -89,6 +89,28 @@ const hooksModule = await import(pathToFileURL(hooksPath).href);
 
 ---
 
+### 重啟伺服器後對話從零開始（v1.4.1 已修復）
+
+**症狀**：伺服器重啟後，日誌顯示 `resume: "(new session)"`，對話沒有繼續
+
+**原因**（v1.4.0 及之前）：
+1. Session 過期（1 小時）時，`cleanupExpired()` 從 DB 刪除 session 行
+2. `restoreSessions()` 啟動時也刪除過期 session
+3. DB schema 使用 `ON DELETE CASCADE`，session 刪除後對話歷史也被刪除
+4. 新建 session 取得全新 UUID，無 `sdkSessionId` → SDK 開啟全新對話
+
+**修復**（v1.4.1）：
+1. **保留 DB 行**：`cleanupExpired()` 只從記憶體移除，不刪 DB。`restoreSessions()` 僅清理超過 `dbRetentionMs`（預設 30 天）的古老 session
+2. **繼承 sdkSessionId**：`createSession()` 建立前查 DB 取回先前的 `session_id` + `sdk_session_id`，重用舊 session ID（保持 FK 關聯）
+3. **Resume 失敗自動重試**：`executeQueryWithSDK()` 帶 resume 呼叫失敗時，清除 sdkSessionId 並不帶 resume 重試一次
+
+**相關檔案**：
+- `src/core/SessionManager.ts` — cleanupExpired、restoreSessions、createSession
+- `src/core/MessageProcessor.ts` — executeQueryWithSDK resume 重試
+- `src/types/session.ts` — dbRetentionMs 配置
+
+---
+
 ### SDK init 時 model 不正確
 
 **症狀**：日誌顯示 SDK 使用了非預期的 model

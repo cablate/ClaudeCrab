@@ -163,9 +163,28 @@ export class SessionManager {
     // Transform config to SDK options
     const sdkOptions = ConfigTransformer.toSDKOptions(agent);
 
+    // Check DB for previous session to inherit sdkSessionId for conversation continuity
+    let previousSessionId: string | undefined;
+    let previousSdkSessionId: string | undefined;
+    if (this.sessionRepository !== undefined) {
+      const previousRow = this.sessionRepository.findByPlatformAgentAndUser(platform, agentId, userId);
+      if (previousRow !== undefined) {
+        previousSessionId = previousRow.session_id;
+        previousSdkSessionId = previousRow.sdk_session_id ?? undefined;
+        logger.info(
+          {
+            previousSessionId,
+            hasSdkSessionId: previousSdkSessionId !== undefined,
+          },
+          'Inheriting session from database for conversation continuity'
+        );
+      }
+    }
+
     const now = new Date();
     const session: InternalSession = {
-      sessionId: uuidv4(),
+      // Reuse previous session ID to maintain DB FK linkage (conversations table)
+      sessionId: previousSessionId ?? uuidv4(),
       agentId,
       platform,
       userId,
@@ -176,17 +195,26 @@ export class SessionManager {
       mutex: new Mutex(),
       agent,
       sdkOptions,
+      // Inherit sdkSessionId for SDK resume (conversation continuity)
+      ...(previousSdkSessionId !== undefined ? { sdkSessionId: previousSdkSessionId } : {}),
     };
 
     this.sessions.set(key, session);
 
-    // Persist to database if repository is available
+    // Persist to database (ON CONFLICT updates existing row, preserving FK linkage)
     if (this.sessionRepository !== undefined) {
       this.sessionRepository.save(this.toSessionRow(session));
     }
 
     logger.info(
-      { sessionId: session.sessionId, platform, userId, agentId },
+      {
+        sessionId: session.sessionId,
+        platform,
+        userId,
+        agentId,
+        inherited: previousSessionId !== undefined,
+        hasSdkSessionId: session.sdkSessionId !== undefined,
+      },
       'Session created'
     );
 
@@ -410,10 +438,8 @@ export class SessionManager {
       if (session !== undefined) {
         this.sessions.delete(key);
 
-        // Remove from database
-        if (this.sessionRepository !== undefined) {
-          this.sessionRepository.delete(session.sessionId);
-        }
+        // NOTE: Do NOT delete from database — DB row preserves sdkSessionId
+        // for conversation continuity when the user returns.
 
         getEventBus().emitSync('session:closed', {
           sessionId: session.sessionId,
@@ -443,18 +469,35 @@ export class SessionManager {
       return 0;
     }
 
-    // First, clean up expired sessions in database
-    const expiredRows = this.sessionRepository.findExpired(this.config.sessionTimeoutMs);
-    for (const row of expiredRows) {
+    // Purge truly ancient sessions (beyond DB retention period)
+    const ancientRows = this.sessionRepository.findExpired(this.config.dbRetentionMs);
+    for (const row of ancientRows) {
       this.sessionRepository.delete(row.session_id);
-      logger.debug({ sessionId: row.session_id }, 'Deleted expired session from database');
+    }
+    if (ancientRows.length > 0) {
+      logger.info({ count: ancientRows.length }, 'Purged ancient sessions from database');
     }
 
-    // Now restore valid sessions
+    // Identify expired sessions (beyond active timeout) — skip loading but keep in DB
+    const expiredRows = this.sessionRepository.findExpired(this.config.sessionTimeoutMs);
+    const expiredIds = new Set(expiredRows.map((r) => r.session_id));
+    if (expiredRows.length > 0) {
+      logger.info(
+        { count: expiredRows.length },
+        'Skipped expired sessions (kept in DB for continuity)'
+      );
+    }
+
+    // Restore active sessions into memory
     const rows = this.sessionRepository.findAll();
     let restored = 0;
 
     for (const row of rows) {
+      // Skip expired sessions — they stay in DB for sdkSessionId continuity
+      if (expiredIds.has(row.session_id)) {
+        continue;
+      }
+
       try {
         // Try to load the agent
         const agent = this.agentLoader.get(row.agent_id) ??
@@ -468,12 +511,15 @@ export class SessionManager {
           continue;
         }
 
+        // Reset stuck 'processing' state (server crash recovery)
+        const restoredState = row.state === 'processing' ? 'idle' : row.state;
+
         const session: InternalSession = {
           sessionId: row.session_id,
           agentId: row.agent_id,
           platform: row.platform,
           userId: row.user_id,
-          state: row.state as SessionState,
+          state: restoredState as SessionState,
           createdAt: stringToDate(row.created_at),
           lastActiveAt: stringToDate(row.last_active_at),
           processedMessageIds: deserializeMessageIds(row.processed_message_ids),
@@ -490,8 +536,19 @@ export class SessionManager {
         this.sessions.set(key, session);
         restored++;
 
+        // Sync state reset to DB if needed
+        if (restoredState !== row.state) {
+          this.sessionRepository.updateState(row.session_id, restoredState as SessionState);
+          logger.info({ sessionId: row.session_id }, 'Reset stuck processing state to idle');
+        }
+
         logger.debug(
-          { sessionId: row.session_id, platform: row.platform, userId: row.user_id },
+          {
+            sessionId: row.session_id,
+            platform: row.platform,
+            userId: row.user_id,
+            hasSdkSessionId: row.sdk_session_id !== null,
+          },
           'Session restored from database'
         );
       } catch (error) {
@@ -499,8 +556,7 @@ export class SessionManager {
           { sessionId: row.session_id, agentId: row.agent_id, error: (error as Error).message },
           'Failed to restore session, agent may not exist'
         );
-        // Remove invalid session from database
-        this.sessionRepository.delete(row.session_id);
+        // Don't delete from DB — keep for sdkSessionId continuity
       }
     }
 

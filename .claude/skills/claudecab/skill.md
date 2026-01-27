@@ -49,7 +49,7 @@ claudecab/
 ├── agents/                # Agent 配置（每個子目錄 = 一個代理）
 │   ├── general/           # 通用助手
 │   └── coder/             # 程式碼助手
-├── tests/                 # 280 tests, 19 files
+├── tests/                 # 284 tests, 19 files
 └── data/                  # SQLite 資料庫
 ```
 
@@ -66,7 +66,7 @@ claudecab/
 
 ```bash
 npm run dev          # 啟動開發伺服器
-npm test             # 執行測試 (280 tests)
+npm test             # 執行測試 (284 tests)
 npm run typecheck    # TypeScript 型別檢查
 ```
 
@@ -80,6 +80,7 @@ npm run typecheck    # TypeScript 型別檢查
 | `WEBUI_ENABLED` | 啟用 WebUI 管理介面，預設 false |
 | `WEBUI_PORT` | WebUI 埠號，預設 3001 |
 | `WEBUI_PASSWORD` | WebUI 登入密碼（必填，若啟用 WebUI）|
+| `DB_RETENTION_MS` | DB session 保留時間（毫秒），預設 30 天（2592000000）|
 
 ## 自動更新規則
 

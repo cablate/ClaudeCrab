@@ -97,6 +97,11 @@ export interface IConversationRepository {
   findBySessionId(sessionId: string): ConversationRow[];
 
   /**
+   * Get last N messages for a session (ordered by sequence_number DESC)
+   */
+  getLastMessages(sessionId: string, count: number): ConversationRow[];
+
+  /**
    * Append a message to a session's conversation
    */
   appendMessage(sessionId: string, role: 'user' | 'assistant', content: string): void;
