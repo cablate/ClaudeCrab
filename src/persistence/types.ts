@@ -110,6 +110,11 @@ export interface IConversationRepository {
    * Clear all messages for a session
    */
   clearConversation(sessionId: string): void;
+
+  /**
+   * Get message count for a session
+   */
+  getMessageCount(sessionId: string): number;
 }
 
 /**

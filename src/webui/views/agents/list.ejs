@@ -28,6 +28,7 @@
         <thead class="bg-gray-50">
           <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bot Status</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sessions</th>
@@ -42,6 +43,9 @@
                   <p class="font-medium text-gray-900"><%= agent.name %></p>
                   <p class="text-sm text-gray-500"><%= agent.description || agent.id %></p>
                 </div>
+              </td>
+              <td class="px-6 py-4">
+                <span class="text-sm text-gray-500">v<%= agent.version || '1.0.0' %></span>
               </td>
               <td class="px-6 py-4">
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">

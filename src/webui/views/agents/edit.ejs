@@ -1,0 +1,236 @@
+<%- include('../partials/start', { title }) %>
+
+<!-- Back Button -->
+<a href="/agents/<%= agent.id %>" class="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
+  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+  </svg>
+  Back to Agent
+</a>
+
+<!-- Edit Agent Form -->
+<div class="max-w-2xl mx-auto">
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h2 class="text-lg font-medium text-gray-900">Edit Agent</h2>
+      <p class="text-sm text-gray-500 mt-1">Modify agent settings. Agent ID cannot be changed.</p>
+    </div>
+
+    <form id="editAgentForm" class="p-6 space-y-6">
+      <!-- Agent ID (Read-only) -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Agent ID</label>
+        <input
+          type="text"
+          value="<%= agent.id %>"
+          disabled
+          class="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-500 sm:text-sm"
+        >
+        <p class="mt-1 text-xs text-gray-500">Agent ID cannot be changed after creation.</p>
+      </div>
+
+      <!-- Name -->
+      <div>
+        <label for="agentName" class="block text-sm font-medium text-gray-700">Display Name *</label>
+        <input
+          type="text"
+          id="agentName"
+          name="name"
+          required
+          value="<%= agent.name %>"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+        >
+      </div>
+
+      <!-- Description -->
+      <div>
+        <label for="agentDescription" class="block text-sm font-medium text-gray-700">Description *</label>
+        <textarea
+          id="agentDescription"
+          name="description"
+          required
+          rows="2"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+        ><%= agent.description %></textarea>
+      </div>
+
+      <!-- Model -->
+      <div>
+        <label for="agentModel" class="block text-sm font-medium text-gray-700">Model *</label>
+        <select
+          id="agentModel"
+          name="model"
+          required
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+        >
+          <option value="sonnet" <%= agent.model === 'sonnet' ? 'selected' : '' %>>Sonnet (Recommended)</option>
+          <option value="opus" <%= agent.model === 'opus' ? 'selected' : '' %>>Opus</option>
+          <option value="haiku" <%= agent.model === 'haiku' ? 'selected' : '' %>>Haiku</option>
+        </select>
+      </div>
+
+      <!-- Telegram Bot Token (Optional) -->
+      <div>
+        <label for="telegramToken" class="block text-sm font-medium text-gray-700">Telegram Bot Token</label>
+        <input
+          type="text"
+          id="telegramToken"
+          name="telegramBotToken"
+          value="<%= agent.telegramBotToken %>"
+          placeholder="123456789:ABCdefGHIjklMNOpqrSTUvwxYZ"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+        >
+        <p class="mt-1 text-xs text-gray-500">Optional. Get it from @BotFather on Telegram. Leave empty to remove.</p>
+      </div>
+
+      <!-- Permissions (Advanced) -->
+      <details class="border border-gray-200 rounded-md">
+        <summary class="px-4 py-2 bg-gray-50 cursor-pointer text-sm font-medium text-gray-700 hover:bg-gray-100">
+          Advanced: Permissions
+        </summary>
+        <div class="p-4 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Allowed Tools</label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="flex items-center">
+                <input type="checkbox" name="allow" value="Read" <%= permissions.allow.includes('Read') ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
+                <span class="ml-2 text-sm text-gray-700">Read</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" name="allow" value="Write" <%= permissions.allow.includes('Write') ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
+                <span class="ml-2 text-sm text-gray-700">Write</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" name="allow" value="Edit" <%= permissions.allow.includes('Edit') ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
+                <span class="ml-2 text-sm text-gray-700">Edit</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" name="allow" value="Glob" <%= permissions.allow.includes('Glob') ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
+                <span class="ml-2 text-sm text-gray-700">Glob</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" name="allow" value="Grep" <%= permissions.allow.includes('Grep') ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
+                <span class="ml-2 text-sm text-gray-700">Grep</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" name="allow" value="Bash" <%= permissions.allow.includes('Bash') ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
+                <span class="ml-2 text-sm text-gray-700">Bash</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" name="allow" value="WebFetch" <%= permissions.allow.includes('WebFetch') ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
+                <span class="ml-2 text-sm text-gray-700">WebFetch</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" name="allow" value="WebSearch" <%= permissions.allow.includes('WebSearch') ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0">
+                <span class="ml-2 text-sm text-gray-700">WebSearch</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Error message -->
+      <div id="errorMessage" class="hidden p-4 bg-red-50 border border-red-200 rounded-md">
+        <p class="text-sm text-red-700"></p>
+      </div>
+
+      <!-- Success message -->
+      <div id="successMessage" class="hidden p-4 bg-green-50 border border-green-200 rounded-md">
+        <p class="text-sm text-green-700"></p>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+        <a href="/agents/<%= agent.id %>" class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+          Cancel
+        </a>
+        <button
+          type="submit"
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span id="submitText">Save Changes</span>
+          <svg id="submitSpinner" class="hidden animate-spin ml-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.getElementById('editAgentForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const form = e.target;
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const submitText = document.getElementById('submitText');
+  const submitSpinner = document.getElementById('submitSpinner');
+  const errorDiv = document.getElementById('errorMessage');
+  const successDiv = document.getElementById('successMessage');
+  
+  // Disable submit button
+  submitBtn.disabled = true;
+  submitText.textContent = 'Saving...';
+  submitSpinner.classList.remove('hidden');
+  errorDiv.classList.add('hidden');
+  successDiv.classList.add('hidden');
+  
+  // Collect form data
+  const formData = new FormData(form);
+  const allowedTools = formData.getAll('allow');
+  
+  const payload = {
+    name: formData.get('name'),
+    description: formData.get('description'),
+    model: formData.get('model'),
+  };
+  
+  // Handle telegram token (null to remove)
+  const telegramToken = formData.get('telegramBotToken');
+  if (telegramToken) {
+    payload.telegramBotToken = telegramToken;
+  } else {
+    payload.telegramBotToken = null; // Remove if empty
+  }
+  
+  // Add permissions
+  payload.permissions = {
+    allow: allowedTools,
+    deny: []
+  };
+  
+  try {
+    const response = await fetch('/api/agents/<%= agent.id %>', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      successDiv.querySelector('p').textContent = 'Agent updated successfully! Redirecting...';
+      successDiv.classList.remove('hidden');
+      
+      // Redirect to agent detail page after short delay
+      setTimeout(() => {
+        window.location.href = '/agents/<%= agent.id %>';
+      }, 1000);
+    } else {
+      throw new Error(data.error || 'Failed to update agent');
+    }
+  } catch (error) {
+    errorDiv.querySelector('p').textContent = error.message;
+    errorDiv.classList.remove('hidden');
+    
+    // Re-enable submit button
+    submitBtn.disabled = false;
+    submitText.textContent = 'Save Changes';
+    submitSpinner.classList.add('hidden');
+  }
+});
+</script>
+
+<%- include('../partials/end') %>

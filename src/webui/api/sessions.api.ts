@@ -27,12 +27,17 @@ export function createSessionsApiRouter(): Router {
   const router = Router();
 
   /**
-   * GET /api/sessions - List all sessions
+   * GET /api/sessions - List all sessions (including expired ones from DB)
    */
   router.get('/', (req, res) => {
-    const { sessionManager, agentLoader } = getDeps(req);
+    const { sessionManager, agentLoader, sessionRepository } = getDeps(req);
 
-    const sessions = sessionManager.getAllSessions().map((s) => {
+    // Get active sessions from memory
+    const memorySessions = sessionManager.getAllSessions();
+    const memorySessionIds = new Set(memorySessions.map((s) => s.sessionId));
+
+    // Build session list from memory sessions
+    const sessions = memorySessions.map((s) => {
       const agent = agentLoader.get(s.agentId);
       return {
         sessionId: s.sessionId,
@@ -44,8 +49,41 @@ export function createSessionsApiRouter(): Router {
         createdAt: s.createdAt.toISOString(),
         lastActiveAt: s.lastActiveAt.toISOString(),
         messageCount: s.processedMessageIds.size,
+        isExpired: false,
       };
     });
+
+    // Add expired sessions from DB (if persistence is enabled)
+    if (sessionRepository !== undefined) {
+      const { conversationRepository } = getDeps(req);
+      const dbSessions = sessionRepository.findAll();
+      for (const row of dbSessions) {
+        // Skip sessions already in memory
+        if (memorySessionIds.has(row.session_id)) {
+          continue;
+        }
+
+        // Get message count from conversations
+        let messageCount = 0;
+        if (conversationRepository !== undefined) {
+          messageCount = conversationRepository.getMessageCount(row.session_id);
+        }
+
+        const agent = agentLoader.get(row.agent_id);
+        sessions.push({
+          sessionId: row.session_id,
+          platform: row.platform,
+          userId: row.user_id,
+          agentId: row.agent_id,
+          agentName: agent?.config.name ?? row.agent_id,
+          state: row.state as 'idle' | 'processing',
+          createdAt: row.created_at,
+          lastActiveAt: row.last_active_at,
+          messageCount,
+          isExpired: true,
+        });
+      }
+    }
 
     // Sort by lastActiveAt descending
     sessions.sort(

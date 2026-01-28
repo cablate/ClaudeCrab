@@ -62,9 +62,42 @@
             <% } %>
           </dd>
         </div>
+        <div>
+          <dt class="text-sm text-gray-500">Telegram Token</dt>
+          <dd class="mt-1">
+            <% if (telegramBotToken) { %>
+              <span class="font-mono text-sm text-gray-900">
+                <%= telegramBotToken.slice(0, 4) %>****<%= telegramBotToken.slice(-4) %>
+              </span>
+              <button onclick="copyToken('<%= telegramBotToken %>')" class="ml-2 text-xs text-blue-600 hover:text-blue-800">Copy</button>
+            <% } else { %>
+              <span class="text-sm text-gray-500 italic">Not configured</span>
+            <% } %>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-sm text-gray-500">Allowed Tools</dt>
+          <dd class="mt-1 flex flex-wrap gap-1">
+            <% if (permissions.allow.length > 0) { %>
+              <% permissions.allow.forEach(tool => { %>
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <%= tool %>
+                </span>
+              <% }) %>
+            <% } else { %>
+              <span class="text-sm text-gray-500 italic">Default permissions</span>
+            <% } %>
+          </dd>
+        </div>
       </dl>
 
-      <div class="mt-6 pt-4 border-t border-gray-200">
+      <div class="mt-6 pt-4 border-t border-gray-200 space-y-2">
+        <a
+          href="/agents/<%= agent.id %>/edit"
+          class="block w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-center"
+        >
+          Edit Agent
+        </a>
         <button
           onclick="reloadAgent('<%= agent.id %>')"
           class="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors"
@@ -81,73 +114,154 @@
     </div>
   </div>
 
-  <!-- System Prompt & Sessions -->
-  <div class="lg:col-span-2 space-y-6">
-    <!-- System Prompt -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-800">System Prompt (CLAUDE.md)</h3>
-      </div>
-      <div class="p-6">
-        <% if (agent.systemPrompt) { %>
-          <pre class="bg-gray-50 border border-gray-200 p-4 rounded-lg text-sm text-gray-700 whitespace-pre-wrap max-h-96 overflow-y-auto"><%= agent.systemPrompt %></pre>
-        <% } else { %>
-          <p class="text-gray-500 italic">No system prompt defined</p>
-        <% } %>
+  <!-- Tabs Section -->
+  <div class="lg:col-span-2">
+    <!-- Tab Navigation -->
+    <div class="border-b border-gray-200 mb-6">
+      <nav class="-mb-px flex gap-4">
+        <button onclick="showTab('prompt')" id="tab-prompt" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-blue-500 text-blue-600">
+          System Prompt
+        </button>
+        <button onclick="showTab('memory')" id="tab-memory" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+          Memory System
+        </button>
+        <button onclick="showTab('sessions')" id="tab-sessions" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+          Sessions (<%= sessions.length %>)
+        </button>
+      </nav>
+    </div>
+
+    <!-- Tab Content: System Prompt -->
+    <div id="content-prompt" class="tab-content">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-800">System Prompt (CLAUDE.md)</h3>
+        </div>
+        <div class="p-6">
+          <% if (agent.systemPrompt) { %>
+            <pre class="bg-gray-50 border border-gray-200 p-4 rounded-lg text-sm text-gray-700 whitespace-pre-wrap max-h-96 overflow-y-auto"><%= agent.systemPrompt %></pre>
+          <% } else { %>
+            <p class="text-gray-500 italic">No system prompt defined</p>
+          <% } %>
+        </div>
       </div>
     </div>
 
-    <!-- Active Sessions -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-800">Active Sessions (<%= sessions.length %>)</h3>
-      </div>
-      <% if (sessions.length === 0) { %>
-        <div class="p-6">
-          <%- include('../components/empty-state', {
-            title: 'No active sessions',
-            message: 'Sessions using this agent will appear here'
-          }) %>
+    <!-- Tab Content: Memory System -->
+    <div id="content-memory" class="tab-content hidden">
+      <!-- Core Files -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-800">Core Files</h3>
         </div>
-      <% } else { %>
+        <div class="p-6 grid grid-cols-2 gap-4" id="coreFilesGrid">
+          <div class="text-center py-8 text-gray-500">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Daily Logs -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-800">Daily Logs</h3>
+        </div>
         <div class="overflow-x-auto">
-          <table class="w-full">
+          <table class="w-full" id="dailyLogsTable">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Size</th>
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              <% sessions.forEach(session => { %>
-                <tr class="hover:bg-gray-50">
-                  <td class="px-6 py-4 font-mono text-sm"><%= session.userId %></td>
-                  <td class="px-6 py-4 text-sm capitalize"><%= session.platform %></td>
-                  <td class="px-6 py-4">
-                    <%- include('../components/status-badge', { status: session.state, size: 'sm' }) %>
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-500">
-                    <%= new Date(session.lastActiveAt).toLocaleString('zh-TW') %>
-                  </td>
-                  <td class="px-6 py-4 text-right">
-                    <a href="/sessions/<%= session.sessionId %>" class="text-blue-600 hover:text-blue-800 text-sm">
-                      View
-                    </a>
-                  </td>
-                </tr>
-              <% }) %>
+              <tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">Loading...</td></tr>
             </tbody>
           </table>
         </div>
-      <% } %>
+      </div>
+    </div>
+
+    <!-- Tab Content: Sessions -->
+    <div id="content-sessions" class="tab-content hidden">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-800">Active Sessions (<%= sessions.length %>)</h3>
+        </div>
+        <% if (sessions.length === 0) { %>
+          <div class="p-6">
+            <%- include('../components/empty-state', {
+              title: 'No active sessions',
+              message: 'Sessions using this agent will appear here'
+            }) %>
+          </div>
+        <% } else { %>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Active</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <% sessions.forEach(session => { %>
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 font-mono text-sm"><%= session.userId %></td>
+                    <td class="px-6 py-4 text-sm capitalize"><%= session.platform %></td>
+                    <td class="px-6 py-4">
+                      <%- include('../components/status-badge', { status: session.state, size: 'sm' }) %>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500">
+                      <%= new Date(session.lastActiveAt).toLocaleString('zh-TW') %>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                      <a href="/sessions/<%= session.sessionId %>" class="text-blue-600 hover:text-blue-800 text-sm">
+                        View
+                      </a>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Memory Modal -->
+<div id="memoryModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col mx-4">
+    <div class="px-6 py-4 border-b flex justify-between items-center">
+      <h3 id="modalTitle" class="text-lg font-semibold"></h3>
+      <button onclick="closeMemoryModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+    </div>
+    <div class="p-6 flex-1 overflow-y-auto">
+      <textarea id="memoryContent" class="w-full h-96 font-mono text-sm p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
+    </div>
+    <div class="px-6 py-4 border-t flex justify-between items-center">
+      <span id="modalMeta" class="text-sm text-gray-500"></span>
+      <div class="flex gap-2">
+        <button onclick="closeMemoryModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
+        <button onclick="saveMemoryFile()" id="saveBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
+function copyToken(token) {
+  navigator.clipboard.writeText(token).then(() => {
+    alert('Token copied to clipboard');
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+  });
+}
+
 async function reloadAgent(agentId) {
   if (!confirm(`Reload agent "${agentId}"?`)) return;
 
@@ -165,6 +279,147 @@ async function reloadAgent(agentId) {
     alert(`Error: ${error.message}`);
   }
 }
+
+// Tab switching
+function showTab(tabName) {
+  // Hide all content
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  // Remove active state from all tabs
+  document.querySelectorAll('.tab-btn').forEach(el => {
+    el.classList.remove('border-blue-500', 'text-blue-600');
+    el.classList.add('border-transparent', 'text-gray-500');
+  });
+  // Show target content
+  document.getElementById(`content-${tabName}`).classList.remove('hidden');
+  // Activate target tab
+  const activeTab = document.getElementById(`tab-${tabName}`);
+  activeTab.classList.remove('border-transparent', 'text-gray-500');
+  activeTab.classList.add('border-blue-500', 'text-blue-600');
+  
+  // Load memory files when switching to memory tab
+  if (tabName === 'memory') {
+    loadMemoryFiles();
+  }
+}
+
+// Memory System
+let currentMemoryFile = null;
+let memoryLoaded = false;
+
+async function loadMemoryFiles() {
+  if (memoryLoaded) return;
+  
+  try {
+    const response = await fetch('/api/agents/<%= agent.id %>/memory');
+    const data = await response.json();
+    renderCoreFiles(data.coreFiles);
+    renderDailyLogs(data.dailyLogs);
+    memoryLoaded = true;
+  } catch (error) {
+    console.error('Failed to load memory files:', error);
+    document.getElementById('coreFilesGrid').innerHTML = 
+      '<div class="col-span-2 text-center py-4 text-red-500">Failed to load memory files</div>';
+  }
+}
+
+function renderCoreFiles(files) {
+  const grid = document.getElementById('coreFilesGrid');
+  grid.innerHTML = files.map(f => `
+    <div class="border rounded-lg p-4 ${f.modified ? '' : 'opacity-50'}">
+      <h4 class="font-medium text-gray-900">${f.name}</h4>
+      <p class="text-sm text-gray-500">${f.description}</p>
+      <p class="text-xs text-gray-400 mt-1">
+        ${f.modified ? new Date(f.modified).toLocaleString('zh-TW') : 'Not created'}
+      </p>
+      <div class="mt-2 flex gap-2">
+        ${f.modified ? `
+          <button onclick="openMemoryFile('${f.path}')" class="text-sm text-blue-600 hover:text-blue-800">View/Edit</button>
+        ` : `
+          <button onclick="createMemoryFile('${f.path}')" class="text-sm text-green-600 hover:text-green-800">Create</button>
+        `}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderDailyLogs(logs) {
+  const tbody = document.querySelector('#dailyLogsTable tbody');
+  if (logs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-gray-500">No daily logs yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = logs.map(f => `
+    <tr class="hover:bg-gray-50">
+      <td class="px-6 py-4 font-mono text-sm">${f.name.replace('.md', '')}</td>
+      <td class="px-6 py-4 text-sm text-gray-500">${(f.size / 1024).toFixed(1)} KB</td>
+      <td class="px-6 py-4 text-right">
+        <button onclick="openMemoryFile('${f.path}')" class="text-blue-600 hover:text-blue-800 text-sm">View/Edit</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function openMemoryFile(filePath) {
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/memory/file?path=${encodeURIComponent(filePath)}`);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      alert('Failed to load file: ' + (data.error || 'Unknown error'));
+      return;
+    }
+    
+    currentMemoryFile = filePath;
+    document.getElementById('modalTitle').textContent = filePath;
+    document.getElementById('memoryContent').value = data.content;
+    document.getElementById('modalMeta').textContent = `Last modified: ${new Date(data.modified).toLocaleString('zh-TW')}`;
+    document.getElementById('memoryModal').classList.remove('hidden');
+  } catch (error) {
+    alert('Failed to load file: ' + error.message);
+  }
+}
+
+function closeMemoryModal() {
+  document.getElementById('memoryModal').classList.add('hidden');
+  currentMemoryFile = null;
+}
+
+async function saveMemoryFile() {
+  const content = document.getElementById('memoryContent').value;
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/memory/file`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentMemoryFile, content })
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      closeMemoryModal();
+      memoryLoaded = false; // Force reload
+      loadMemoryFiles();
+    } else {
+      alert('Failed to save: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Failed to save: ' + error.message);
+  }
+}
+
+function createMemoryFile(filePath) {
+  currentMemoryFile = filePath;
+  document.getElementById('modalTitle').textContent = `Create ${filePath}`;
+  document.getElementById('memoryContent').value = `# ${filePath.replace('.md', '')}\n\n`;
+  document.getElementById('modalMeta').textContent = 'New file';
+  document.getElementById('memoryModal').classList.remove('hidden');
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeMemoryModal();
+  }
+});
 </script>
 
 <%- include('../partials/end') %>

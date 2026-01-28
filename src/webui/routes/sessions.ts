@@ -28,12 +28,76 @@ export function createSessionsRouter(): Router {
   const router = Router();
 
   /**
-   * GET /sessions - List all sessions
+   * GET /sessions - List all sessions (including expired ones from DB)
    */
   router.get('/', (req, res) => {
-    const { sessionManager, agentLoader } = getDeps(req);
+    const { sessionManager, agentLoader, sessionRepository } = getDeps(req);
 
-    const allSessions = sessionManager.getAllSessions();
+    // Get active sessions from memory
+    const memorySessions = sessionManager.getAllSessions();
+    const memorySessionIds = new Set(memorySessions.map((s) => s.sessionId));
+
+    // Build combined session list
+    interface SessionDisplay {
+      sessionId: string;
+      platform: string;
+      userId: string;
+      agentId: string;
+      agentName: string;
+      state: string;
+      createdAt: Date;
+      lastActiveAt: Date;
+      messageCount: number;
+      isExpired: boolean;
+    }
+
+    const allSessions: SessionDisplay[] = memorySessions.map((s) => {
+      const agent = agentLoader.get(s.agentId);
+      return {
+        sessionId: s.sessionId,
+        platform: s.platform,
+        userId: s.userId,
+        agentId: s.agentId,
+        agentName: agent?.config.name ?? s.agentId,
+        state: s.state,
+        createdAt: s.createdAt,
+        lastActiveAt: s.lastActiveAt,
+        messageCount: s.processedMessageIds.size,
+        isExpired: false,
+      };
+    });
+
+    // Add expired sessions from DB (if persistence is enabled)
+    if (sessionRepository !== undefined) {
+      const { conversationRepository } = getDeps(req);
+      const dbSessions = sessionRepository.findAll();
+      for (const row of dbSessions) {
+        // Skip sessions already in memory
+        if (memorySessionIds.has(row.session_id)) {
+          continue;
+        }
+
+        // Get message count from conversations
+        let messageCount = 0;
+        if (conversationRepository !== undefined) {
+          messageCount = conversationRepository.getMessageCount(row.session_id);
+        }
+
+        const agent = agentLoader.get(row.agent_id);
+        allSessions.push({
+          sessionId: row.session_id,
+          platform: row.platform,
+          userId: row.user_id,
+          agentId: row.agent_id,
+          agentName: agent?.config.name ?? row.agent_id,
+          state: row.state,
+          createdAt: new Date(row.created_at),
+          lastActiveAt: new Date(row.last_active_at),
+          messageCount,
+          isExpired: true,
+        });
+      }
+    }
 
     // Apply filters from query params
     const { platform, agentId, state } = req.query as {
@@ -59,22 +123,6 @@ export function createSessionsRouter(): Router {
     // Sort by lastActiveAt descending
     sessions.sort((a, b) => b.lastActiveAt.getTime() - a.lastActiveAt.getTime());
 
-    // Map to display format
-    const sessionList = sessions.map((s) => {
-      const agent = agentLoader.get(s.agentId);
-      return {
-        sessionId: s.sessionId,
-        platform: s.platform,
-        userId: s.userId,
-        agentId: s.agentId,
-        agentName: agent?.config.name ?? s.agentId,
-        state: s.state,
-        createdAt: s.createdAt,
-        lastActiveAt: s.lastActiveAt,
-        messageCount: s.processedMessageIds.size,
-      };
-    });
-
     // Get filter options
     const platforms = [...new Set(allSessions.map((s) => s.platform))];
     const agents = agentLoader.list().map((id) => ({
@@ -85,7 +133,7 @@ export function createSessionsRouter(): Router {
 
     res.render('sessions/list', {
       title: 'Sessions',
-      sessions: sessionList,
+      sessions,
       filters: {
         platform,
         agentId,
@@ -97,24 +145,86 @@ export function createSessionsRouter(): Router {
         states,
       },
       totalCount: allSessions.length,
-      filteredCount: sessionList.length,
+      filteredCount: sessions.length,
     });
   });
 
   /**
-   * GET /sessions/:id - Show session details
+   * GET /sessions/:id - Show session details (including expired sessions from DB)
    */
   router.get('/:id', (req, res, next) => {
-    const { sessionManager, agentLoader, conversationRepository } = getDeps(req);
+    const { sessionManager, agentLoader, conversationRepository, sessionRepository } = getDeps(req);
     const { id } = req.params;
 
-    const session = findSessionById(sessionManager, id);
-    if (!session) {
+    // Try to find session in memory first
+    const memorySession = findSessionById(sessionManager, id);
+    
+    // Session data for display
+    let sessionData: {
+      sessionId: string;
+      platform: string;
+      userId: string;
+      agentId: string;
+      agentName: string;
+      state: string;
+      createdAt: Date;
+      lastActiveAt: Date;
+      sdkSessionId?: string;
+      messageCount: number;
+      isExpired: boolean;
+    };
+
+    if (memorySession) {
+      const agent = agentLoader.get(memorySession.agentId);
+      const data: typeof sessionData = {
+        sessionId: memorySession.sessionId,
+        platform: memorySession.platform,
+        userId: memorySession.userId,
+        agentId: memorySession.agentId,
+        agentName: agent?.config.name ?? memorySession.agentId,
+        state: memorySession.state,
+        createdAt: memorySession.createdAt,
+        lastActiveAt: memorySession.lastActiveAt,
+        messageCount: memorySession.processedMessageIds.size,
+        isExpired: false,
+      };
+      if (memorySession.sdkSessionId !== undefined) {
+        data.sdkSessionId = memorySession.sdkSessionId;
+      }
+      sessionData = data;
+    } else if (sessionRepository !== undefined) {
+      // Try to find in DB (expired session)
+      const dbSession = sessionRepository.findBySessionId(id);
+      if (!dbSession) {
+        next(new NotFoundError('Session'));
+        return;
+      }
+      // Get message count from conversations
+      let messageCount = 0;
+      if (conversationRepository !== undefined) {
+        messageCount = conversationRepository.getMessageCount(id);
+      }
+      const agent = agentLoader.get(dbSession.agent_id);
+      const data: typeof sessionData = {
+        sessionId: dbSession.session_id,
+        platform: dbSession.platform,
+        userId: dbSession.user_id,
+        agentId: dbSession.agent_id,
+        agentName: agent?.config.name ?? dbSession.agent_id,
+        state: dbSession.state,
+        createdAt: new Date(dbSession.created_at),
+        lastActiveAt: new Date(dbSession.last_active_at),
+        messageCount,
+        isExpired: true,
+      };
+      if (dbSession.sdk_session_id !== null) {
+        data.sdkSessionId = dbSession.sdk_session_id;
+      }
+      sessionData = data;
+    } else {
       next(new NotFoundError('Session'));
       return;
     }
-
-    const agent = agentLoader.get(session.agentId);
 
     // Get conversation history if available
     let conversations: Array<{
@@ -134,18 +244,7 @@ export function createSessionsRouter(): Router {
 
     res.render('sessions/detail', {
       title: `Session ${id.slice(0, 8)}...`,
-      session: {
-        sessionId: session.sessionId,
-        platform: session.platform,
-        userId: session.userId,
-        agentId: session.agentId,
-        agentName: agent?.config.name ?? session.agentId,
-        state: session.state,
-        createdAt: session.createdAt,
-        lastActiveAt: session.lastActiveAt,
-        sdkSessionId: session.sdkSessionId,
-        messageCount: session.processedMessageIds.size,
-      },
+      session: sessionData,
       conversations,
     });
   });

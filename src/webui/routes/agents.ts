@@ -2,6 +2,8 @@ import { Router } from 'express';
 import type { Request } from 'express';
 import type { WebUIRequest, WebUIDependencies } from '../types.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 /**
  * Helper to get dependencies from request
@@ -62,10 +64,10 @@ export function createAgentsRouter(): Router {
   });
 
   /**
-   * GET /agents/:id - Show agent details
+   * GET /agents/:id/edit - Show edit agent form
    */
-  router.get('/:id', (req, res, next) => {
-    const { agentLoader, sessionManager, platformOrchestrator } = getDeps(req);
+  router.get('/:id/edit', (req, res, next) => {
+    const { agentLoader } = getDeps(req);
     const { id } = req.params;
 
     const agent = agentLoader.get(id);
@@ -74,24 +76,138 @@ export function createAgentsRouter(): Router {
       return;
     }
 
-    // Get sessions for this agent
-    const allSessions = sessionManager.getAllSessions();
-    const sessions = allSessions
-      .filter((s) => s.agentId === id)
-      .map((s) => ({
-        sessionId: s.sessionId,
-        platform: s.platform,
-        userId: s.userId,
-        state: s.state,
-        createdAt: s.createdAt,
-        lastActiveAt: s.lastActiveAt,
-      }));
+    // Read current settings.local.json for permissions and model
+    let permissions = { allow: [] as string[], deny: [] as string[] };
+    let settingsModel: string | undefined;
+    try {
+      const settingsPath = path.join(agent.path, '.claude', 'settings.local.json');
+      if (fs.existsSync(settingsPath)) {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as {
+          permissions?: { allow?: string[]; deny?: string[] };
+          model?: string;
+        };
+        if (settings.permissions) {
+          permissions = {
+            allow: settings.permissions.allow ?? [],
+            deny: settings.permissions.deny ?? [],
+          };
+        }
+        if (settings.model) {
+          settingsModel = settings.model;
+        }
+      }
+    } catch {
+      // Use default permissions
+    }
+
+    // Model priority: settings.local.json > agent.json > 'sonnet'
+    const effectiveModel = settingsModel ?? agent.config.model ?? 'sonnet';
+
+    res.render('agents/edit', {
+      title: `Edit ${agent.config.name ?? id}`,
+      agent: {
+        id: agent.id,
+        name: agent.config.name,
+        description: agent.config.description,
+        model: effectiveModel,
+        telegramBotToken: agent.config.telegramBotToken ?? '',
+        path: agent.path,
+      },
+      permissions,
+    });
+  });
+
+  /**
+   * GET /agents/:id - Show agent details
+   */
+  router.get('/:id', (req, res, next) => {
+    const { agentLoader, sessionManager, platformOrchestrator, sessionRepository, conversationRepository } = getDeps(req);
+    const { id } = req.params;
+
+    const agent = agentLoader.get(id);
+    if (!agent) {
+      next(new NotFoundError('Agent'));
+      return;
+    }
+
+    // Get sessions for this agent (including expired ones from DB)
+    const memorySessions = sessionManager.getAllSessions().filter((s) => s.agentId === id);
+    const memorySessionIds = new Set(memorySessions.map((s) => s.sessionId));
+
+    interface SessionDisplay {
+      sessionId: string;
+      platform: string;
+      userId: string;
+      state: string;
+      createdAt: Date;
+      lastActiveAt: Date;
+      messageCount: number;
+      isExpired: boolean;
+    }
+
+    const sessions: SessionDisplay[] = memorySessions.map((s) => ({
+      sessionId: s.sessionId,
+      platform: s.platform,
+      userId: s.userId,
+      state: s.state,
+      createdAt: s.createdAt,
+      lastActiveAt: s.lastActiveAt,
+      messageCount: s.processedMessageIds.size,
+      isExpired: false,
+    }));
+
+    // Add expired sessions from DB
+    if (sessionRepository !== undefined) {
+      const dbSessions = sessionRepository.findAll().filter((r) => r.agent_id === id);
+      for (const row of dbSessions) {
+        if (memorySessionIds.has(row.session_id)) {
+          continue;
+        }
+        // Get message count from conversations
+        let messageCount = 0;
+        if (conversationRepository !== undefined) {
+          messageCount = conversationRepository.getMessageCount(row.session_id);
+        }
+        sessions.push({
+          sessionId: row.session_id,
+          platform: row.platform,
+          userId: row.user_id,
+          state: row.state,
+          createdAt: new Date(row.created_at),
+          lastActiveAt: new Date(row.last_active_at),
+          messageCount,
+          isExpired: true,
+        });
+      }
+    }
+
+    // Sort by lastActiveAt descending
+    sessions.sort((a, b) => b.lastActiveAt.getTime() - a.lastActiveAt.getTime());
 
     // Get running adapters for this agent
     const runningAdapters = platformOrchestrator?.getRunningAdapters() ?? [];
     const botStatus = runningAdapters
       .filter((a) => a.agentId === id)
       .map((a) => ({ platform: a.platform, status: a.status }));
+
+    // Read permissions from settings.local.json
+    let permissions = { allow: [] as string[], deny: [] as string[] };
+    try {
+      const settingsPath = path.join(agent.path, '.claude', 'settings.local.json');
+      if (fs.existsSync(settingsPath)) {
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as {
+          permissions?: { allow?: string[]; deny?: string[] };
+        };
+        if (settings.permissions) {
+          permissions = {
+            allow: settings.permissions.allow ?? [],
+            deny: settings.permissions.deny ?? [],
+          };
+        }
+      }
+    } catch {
+      // Use default permissions
+    }
 
     res.render('agents/detail', {
       title: agent.config.name ?? id,
@@ -107,6 +223,8 @@ export function createAgentsRouter(): Router {
       },
       sessions,
       botStatus,
+      telegramBotToken: agent.config.telegramBotToken ?? null,
+      permissions,
     });
   });
 

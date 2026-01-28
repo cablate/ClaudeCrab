@@ -9,7 +9,56 @@
 
 ## 版本歷史
 
-### v1.7.1 - General Agent 權限修正 + Memory Checkpoint Hook（當前版本）
+### v1.8.0 - Agent 頁面 UI 改善 + Memory System UI（當前版本）
+
+**發布日期**：2026-01-28
+
+**變更**：
+
+1. **Agent Create/Edit 功能**
+   - 新增 `POST /api/agents` - 從 `_example` 模板建立新 agent
+   - 新增 `PUT /api/agents/:id` - 編輯現有 agent 設定
+   - 新增 `GET /agents/create` 和 `GET /agents/:id/edit` 頁面
+   - Agent ID、Name、Description、Model、Telegram Token、Permissions 完整編輯
+
+2. **Agent Detail 頁面資訊補充**
+   - 新增 Telegram Token 顯示（遮罩版 + Copy 按鈕）
+   - 新增 Allowed Tools (Permissions) 顯示（綠色 pill badges）
+   - Model 優先順序：`settings.local.json` > `agent.json` > `'sonnet'`
+
+3. **Agent List 頁面**
+   - 新增 Version 欄位顯示
+
+4. **Memory System UI（Tab 整合）**
+   - Detail 頁面改為 Tab 結構：System Prompt / Memory System / Sessions
+   - Core Files 顯示：SOUL.md、USER.md、IDENTITY.md、MEMORY.md
+   - Daily Logs 顯示：memory/*.md 日誌列表
+   - Modal 編輯器：支援檢視和編輯記憶檔案
+   - 新增 Memory API：
+     - `GET /api/agents/:id/memory` - 列出記憶檔案
+     - `GET /api/agents/:id/memory/file?path=...` - 讀取檔案
+     - `PUT /api/agents/:id/memory/file` - 更新檔案
+
+5. **Session 過期顯示修復**
+   - Sessions 列表現在會顯示所有 sessions（包括超過 `SESSION_TIMEOUT_MS` 的過期 sessions）
+   - 過期 sessions 從 DB 讀取，標記 `isExpired: true`
+   - Session detail 頁面可以查看過期 sessions 的詳情和對話歷史
+   - messageCount 從 conversations 表計算，不再顯示 0
+
+**修改檔案**：
+- `agents/_example/`（新增）— Agent 模板目錄
+- `src/core/AgentLoader.ts` — scanAgents() 跳過 `_example`
+- `src/webui/api/agents.api.ts` — POST/PUT agents + Memory API
+- `src/webui/routes/agents.ts` — create/edit 路由 + sessions 從 DB 讀取
+- `src/webui/views/agents/*.ejs` — UI 頁面（create, edit, detail, list）
+- `src/webui/routes/sessions.ts` — 從 DB 讀取過期 sessions + messageCount
+- `src/webui/api/sessions.api.ts` — 從 DB 讀取過期 sessions + messageCount
+- `src/webui/types.ts` — CreateAgent/UpdateAgent/Memory 型別
+- `src/persistence/types.ts` — IConversationRepository.getMessageCount
+
+---
+
+### v1.7.1 - General Agent 權限修正 + Memory Checkpoint Hook
 
 **發布日期**：2026-01-28
 

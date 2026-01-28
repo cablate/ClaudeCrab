@@ -154,3 +154,76 @@ export interface CreateAgentResponse {
   };
   error?: string;
 }
+
+
+/**
+ * Request body for updating an existing agent
+ */
+export interface UpdateAgentRequest {
+  name?: string;
+  description?: string;
+  model?: 'sonnet' | 'opus' | 'haiku';
+  telegramBotToken?: string | null; // null to remove
+  permissions?: {
+    allow: string[];
+    deny: string[];
+  };
+}
+
+/**
+ * Response for agent update
+ */
+export interface UpdateAgentResponse {
+  success: boolean;
+  agent?: {
+    id: string;
+    name: string;
+    path: string;
+  };
+  error?: string;
+}
+
+
+/**
+ * Memory file information
+ */
+export interface MemoryFile {
+  name: string;
+  path: string;
+  description: string;
+  modified: string | null;
+  size: number;
+}
+
+/**
+ * Response for listing memory files
+ */
+export interface MemoryListResponse {
+  coreFiles: MemoryFile[];
+  dailyLogs: MemoryFile[];
+}
+
+/**
+ * Response for reading a memory file
+ */
+export interface MemoryContentResponse {
+  filename: string;
+  content: string;
+  modified: string | null;
+}
+
+/**
+ * Request for updating a memory file
+ */
+export interface UpdateMemoryRequest {
+  content: string;
+}
+
+/**
+ * Response for updating a memory file
+ */
+export interface UpdateMemoryResponse {
+  success: boolean;
+  modified?: string;
+  error?: string;
+}
