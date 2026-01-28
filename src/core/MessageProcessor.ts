@@ -4,6 +4,7 @@ import type { IConversationRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager } from './SDKQueryManager.js';
 import { PermissionBridge } from './PermissionBridge.js';
+import { MEMORY_CHECKPOINT_CONTEXT } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 import {
@@ -346,7 +347,20 @@ export class MessageProcessor {
                   }
                   intermediateMessages.push(text);
                 },
-                additionalOptions: { canUseTool },
+                additionalOptions: {
+                  canUseTool,
+                  hooks: {
+                    UserPromptSubmit: [{
+                      hooks: [async () => ({
+                        continue: true,
+                        hookSpecificOutput: {
+                          hookEventName: 'UserPromptSubmit' as const,
+                          additionalContext: MEMORY_CHECKPOINT_CONTEXT,
+                        },
+                      })],
+                    }],
+                  },
+                },
               }
             );
           },
