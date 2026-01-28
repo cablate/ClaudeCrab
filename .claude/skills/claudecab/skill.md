@@ -51,7 +51,8 @@ claudecab/
 ├── public/                # 靜態資源 (JS)
 ├── agents/                # Agent 配置（每個子目錄 = 一個代理）
 │   ├── general/           # 通用助手（含記憶系統 workspace）
-│   │   ├── CLAUDE.md      # 系統提示（含記憶協議）
+│   │   ├── CLAUDE.md      # 系統提示（含記憶協議 + Lessons Learned）
+│   │   ├── BOOTSTRAP.md   # 首次啟動儀式（完成後自動刪除）
 │   │   ├── SOUL.md        # 人格定義
 │   │   ├── USER.md        # 使用者檔案
 │   │   ├── IDENTITY.md    # AI 身份
@@ -70,6 +71,7 @@ claudecab/
 | 版本歷史、重大變更、架構決策 (ADR) | [changelog.md](references/changelog.md) |
 | 已知問題、踩過的坑、解決方案 | [troubleshooting.md](references/troubleshooting.md) |
 | 「做 X 功能看哪些檔案」對照表 | [quick-nav.md](references/quick-nav.md) |
+| Moltbot 官方文件對照、機制取捨 | [moltbot-gap-analysis.md](references/moltbot-gap-analysis.md) |
 
 ## 常用指令
 

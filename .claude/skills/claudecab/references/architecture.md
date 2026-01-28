@@ -180,7 +180,8 @@ agents/general/
 ├── .claude/
 │   └── settings.local.json   # Agent 權限配置
 ├── agent.json                 # ClaudeCab 元資料
-├── CLAUDE.md                  # 系統提示詞（含記憶協議）
+├── CLAUDE.md                  # 系統提示詞（含記憶協議 + Lessons Learned）
+├── BOOTSTRAP.md               # 首次啟動儀式（完成後由 agent 自行刪除）
 ├── SOUL.md                    # 人格定義（穩定，緩慢演化）
 ├── USER.md                    # 使用者檔案（身份、偏好）
 ├── IDENTITY.md                # AI 身份（名字、風格）
@@ -190,6 +191,8 @@ agents/general/
 ```
 
 > **重要**：這些檔案不由引擎層管理。Agent 在 session 啟動時依 CLAUDE.md 指示自行讀取，對話中自行寫入。SDKQueryManager 完全不知道這些檔案的存在。
+>
+> **BOOTSTRAP.md**（v1.5.2）：一次性首次啟動儀式。Agent 偵測到此檔案存在時，執行 onboarding 流程（認識使用者、定義自己），完成後刪除檔案。不存在 = 已啟動過。
 
 ---
 
