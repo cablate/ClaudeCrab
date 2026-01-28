@@ -1,7 +1,7 @@
 {
   "model": "sonnet",
   "permissions": {
-    "allow": ["*","WebFetch","WebSearch"],
+    "allow": ["Read", "Glob", "Grep", "WebFetch", "WebSearch"],
     "deny": []
   }
 }

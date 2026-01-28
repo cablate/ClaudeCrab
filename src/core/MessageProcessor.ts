@@ -3,6 +3,7 @@ import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import type { IConversationRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager } from './SDKQueryManager.js';
+import { PermissionBridge } from './PermissionBridge.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 import {
@@ -225,9 +226,99 @@ export class MessageProcessor {
       }, this.typingIndicatorIntervalMs);
     }
 
+    // Set up permission bridge for interactive tool approval via Telegram
+    const permissionBridge = new PermissionBridge(120_000);
+    adapter.setPermissionResolver((requestId, decision) => {
+      permissionBridge.resolvePermission(
+        requestId,
+        decision === 'allow'
+          ? { behavior: 'allow' }
+          : { behavior: 'deny', message: 'User denied permission' }
+      );
+    });
+
     try {
       // Track intermediate messages sent via streaming callback
       const intermediateMessages: string[] = [];
+
+      // Build canUseTool closure for SDK permission callback
+      const canUseTool = async (
+        toolName: string,
+        toolInput: Record<string, unknown>,
+        options: {
+          signal: AbortSignal;
+          blockedPath?: string;
+          decisionReason?: string;
+          toolUseID: string;
+        }
+      ) => {
+        const bridgeOptions: {
+          signal: AbortSignal;
+          toolUseID: string;
+          decisionReason?: string;
+          blockedPath?: string;
+        } = { signal: options.signal, toolUseID: options.toolUseID };
+        if (options.decisionReason !== undefined) {
+          bridgeOptions.decisionReason = options.decisionReason;
+        }
+        if (options.blockedPath !== undefined) {
+          bridgeOptions.blockedPath = options.blockedPath;
+        }
+
+        const { requestId, promise } = permissionBridge.requestPermission(
+          toolName, toolInput, bridgeOptions
+        );
+
+        const promptOptions: {
+          requestId: string;
+          toolName: string;
+          toolInput: Record<string, unknown>;
+          decisionReason?: string;
+          blockedPath?: string;
+        } = { requestId, toolName, toolInput };
+        if (options.decisionReason !== undefined) {
+          promptOptions.decisionReason = options.decisionReason;
+        }
+        if (options.blockedPath !== undefined) {
+          promptOptions.blockedPath = options.blockedPath;
+        }
+
+        const promptResult = await adapter.sendPermissionPrompt(chatId, promptOptions);
+
+        if (!promptResult.success) {
+          logger.warn(
+            { error: promptResult.error, chatId, toolName },
+            'Failed to send permission prompt, auto-denying'
+          );
+          permissionBridge.resolvePermission(requestId, {
+            behavior: 'deny',
+            message: 'Failed to send permission prompt',
+          });
+        }
+
+        const decision = await promise;
+
+        // Update the permission prompt message with the decision
+        if (promptResult.messageId) {
+          const statusText = decision.behavior === 'allow'
+            ? `✅ Allowed: \`${toolName}\``
+            : `❌ Denied: \`${toolName}\``;
+          await adapter.updatePermissionPrompt(chatId, promptResult.messageId, statusText);
+        }
+
+        if (decision.behavior === 'allow') {
+          return {
+            behavior: 'allow' as const,
+            updatedInput: toolInput,
+            toolUseID: options.toolUseID,
+          };
+        }
+        return {
+          behavior: 'deny' as const,
+          message: decision.message ?? 'User denied permission',
+          toolUseID: options.toolUseID,
+        };
+      };
 
       // Helper: execute SDK query with retry for rate limit / transient errors
       const executeWithRetry = async (resumeId: string | undefined) => {
@@ -255,6 +346,7 @@ export class MessageProcessor {
                   }
                   intermediateMessages.push(text);
                 },
+                additionalOptions: { canUseTool },
               }
             );
           },
@@ -344,6 +436,10 @@ export class MessageProcessor {
 
       return result.response;
     } finally {
+      // Clean up permission bridge (deny any pending requests)
+      permissionBridge.cancelAll();
+      adapter.setPermissionResolver(() => {});
+
       // Stop typing indicator
       if (typingInterval !== null) {
         clearInterval(typingInterval);

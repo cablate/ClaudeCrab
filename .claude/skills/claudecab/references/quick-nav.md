@@ -28,6 +28,21 @@
 
 ---
 
+## 權限審批系統
+
+| 要做什麼 | 主要檔案 | 相關檔案 |
+|----------|----------|----------|
+| 修改權限橋接邏輯（timeout、cancelAll） | `src/core/PermissionBridge.ts` | `tests/unit/PermissionBridge.test.ts` |
+| 修改權限 UI（按鈕文字、InlineKeyboard） | `src/adapters/TelegramAdapter.ts` | `sendPermissionPrompt`、`callback_query` handler |
+| 修改權限型別定義 | `src/adapters/types.ts` | `PermissionPromptOptions`、`PermissionPromptResult`、`PermissionResolver` |
+| 新增平台的權限 UI | 繼承 `src/adapters/BaseAdapter.ts` | Override `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` |
+| 修改 canUseTool 閉包組裝 | `src/core/MessageProcessor.ts` | `PermissionBridge.ts` |
+| 調整 Agent 預設允許的工具 | `agents/general/.claude/settings.local.json` | `permissions.allow` 陣列 |
+
+> **注意**：grammy message handler 必須 fire-and-forget，否則 callback_query 會死鎖。詳見 troubleshooting。
+
+---
+
 ## WebUI 管理介面
 
 | 要做什麼 | 主要檔案 | 相關檔案 |
@@ -88,6 +103,7 @@
 | AgentHooks | `src/types/hooks.ts` |
 | ClaudeCabError 及子類 | `src/types/errors.ts` |
 | UnifiedMessage, SendOptions | `src/adapters/types.ts` |
+| PermissionPromptOptions, PermissionPromptResult, PermissionResolver | `src/adapters/types.ts` |
 
 ---
 
@@ -100,6 +116,7 @@
 | SDKQueryManager | `tests/unit/SDKQueryManager.test.ts` |
 | MessageProcessor | `tests/unit/MessageProcessor.test.ts` |
 | TelegramAdapter | `tests/unit/TelegramAdapter.test.ts` |
+| PermissionBridge | `tests/unit/PermissionBridge.test.ts` |
 | 持久化 | `tests/unit/persistence/` |
 | 整合測試 | `tests/integration/` |
 

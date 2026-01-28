@@ -1,4 +1,4 @@
-import { Bot, Context, GrammyError, HttpError } from 'grammy';
+import { Bot, Context, GrammyError, HttpError, InlineKeyboard } from 'grammy';
 import { BaseAdapter } from './BaseAdapter.js';
 import type {
   TelegramAdapterConfig,
@@ -6,6 +6,9 @@ import type {
   SendOptions,
   SendResult,
   RateLimitConfig,
+  PermissionPromptOptions,
+  PermissionPromptResult,
+  PermissionResolver,
 } from './types.js';
 import { DEFAULT_RATE_LIMIT } from './types.js';
 import {
@@ -113,6 +116,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   private readonly rateLimiter: RateLimiter;
   private commandDeps: CommandDependencies | undefined;
   private readonly securityConfig: SecurityConfig;
+  private permissionResolver: PermissionResolver | null = null;
 
   /** Maximum message length for Telegram */
   static readonly MAX_MESSAGE_LENGTH = 4096;
@@ -176,12 +180,45 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     }
 
     // Set up message handler (for non-command text messages)
-    this.bot.on('message:text', async (ctx) => {
+    // IMPORTANT: Fire-and-forget (void) to avoid blocking grammy's polling loop.
+    // If the handler blocks, grammy can't poll for new updates (e.g. callback_query
+    // from permission inline keyboards), causing a deadlock.
+    this.bot.on('message:text', (ctx) => {
       // Skip if this is a command message and we have command handlers
       if (this.commandDeps !== undefined && ctx.message?.text?.startsWith('/')) {
         return;
       }
-      await this.handleTextMessage(ctx);
+      void this.handleTextMessage(ctx).catch((error) => {
+        this.log.error({ error }, 'Unhandled error in message handler');
+      });
+    });
+
+    // Set up permission callback query handler (inline keyboard buttons)
+    // Use bot.on("callback_query:data") for reliable update type detection in polling
+    this.bot.on('callback_query:data', async (ctx) => {
+      const data = ctx.callbackQuery.data;
+      this.log.debug({ callbackData: data }, 'Received callback query');
+
+      const match = /^perm_(allow|deny):(.+)$/.exec(data);
+      if (match === null) {
+        // Not a permission callback — ignore (let other handlers process if any)
+        return;
+      }
+
+      const decision = match[1] as 'allow' | 'deny';
+      const requestId = match[2] as string;
+
+      if (this.permissionResolver === null) {
+        this.log.warn({ requestId }, 'Permission resolver not set, session may have expired');
+        await ctx.answerCallbackQuery({ text: '⏳ Permission session expired' });
+        return;
+      }
+
+      this.log.info({ requestId, decision, toolUseID: requestId }, 'Permission decision received');
+      this.permissionResolver(requestId, decision);
+      await ctx.answerCallbackQuery({
+        text: decision === 'allow' ? '✅ Allowed' : '❌ Denied',
+      });
     });
 
     // Verify bot token by getting bot info
@@ -264,6 +301,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       // Polling mode
       this.log.info('Starting bot in polling mode');
       void this.bot.start({
+        allowed_updates: ['message', 'callback_query'],
         onStart: (botInfo) => {
           this.log.info(
             { username: botInfo.username },
@@ -437,6 +475,93 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       });
     } catch (error) {
       this.log.warn({ error, chatId }, 'Failed to send typing indicator');
+    }
+  }
+
+  /**
+   * Store the permission resolver callback for inline keyboard handling.
+   */
+  override setPermissionResolver(resolver: PermissionResolver): void {
+    this.permissionResolver = resolver;
+  }
+
+  /**
+   * Send a permission prompt with inline keyboard buttons (Allow / Deny).
+   */
+  override async sendPermissionPrompt(
+    chatId: string,
+    options: PermissionPromptOptions
+  ): Promise<PermissionPromptResult> {
+    if (this.bot === null) {
+      return { success: false, error: 'Bot not initialized' };
+    }
+
+    try {
+      const keyboard = new InlineKeyboard()
+        .text('✅ Allow', `perm_allow:${options.requestId}`)
+        .text('❌ Deny', `perm_deny:${options.requestId}`);
+
+      // Format tool input for display (truncate if too long)
+      const inputStr = JSON.stringify(options.toolInput, null, 2);
+      const displayInput = inputStr.length > 500
+        ? inputStr.slice(0, 497) + '...'
+        : inputStr;
+
+      const text = [
+        '🔐 *Permission Request*',
+        '',
+        `Tool: \`${options.toolName}\``,
+        ...(options.decisionReason ? [`Reason: ${options.decisionReason}`] : []),
+        'Input:',
+        '```',
+        displayInput,
+        '```',
+      ].join('\n');
+
+      const result = await this.rateLimiter.execute(async () => {
+        return this.bot!.api.sendMessage(chatId, text, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        });
+      });
+
+      return {
+        success: true,
+        messageId: result.message_id.toString(),
+      };
+    } catch (error) {
+      const errorMessage = this.formatError(error);
+      this.log.error({ error, chatId }, 'Failed to send permission prompt');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Update a permission prompt message after the user's decision.
+   */
+  override async updatePermissionPrompt(
+    chatId: string,
+    messageId: string,
+    text: string
+  ): Promise<void> {
+    if (this.bot === null) {
+      return;
+    }
+
+    try {
+      await this.rateLimiter.execute(async () => {
+        await this.bot!.api.editMessageText(
+          chatId,
+          parseInt(messageId, 10),
+          text,
+          { parse_mode: 'Markdown' }
+        );
+      });
+    } catch (error) {
+      this.log.warn(
+        { error, chatId, messageId },
+        'Failed to update permission prompt'
+      );
     }
   }
 

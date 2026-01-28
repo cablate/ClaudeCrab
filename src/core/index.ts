@@ -17,3 +17,8 @@ export {
   type PlatformOrchestratorOptions,
   type RunningAdapterInfo,
 } from './PlatformOrchestrator.js';
+export {
+  PermissionBridge,
+  type PermissionDecision,
+  type PermissionRequestInfo,
+} from './PermissionBridge.js';

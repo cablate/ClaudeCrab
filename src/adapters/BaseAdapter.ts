@@ -5,6 +5,9 @@ import type {
   SendOptions,
   SendResult,
   MessageHandler,
+  PermissionPromptOptions,
+  PermissionPromptResult,
+  PermissionResolver,
 } from './types.js';
 import { getEventBus } from '../core/EventBus.js';
 import { logger } from '../utils/logger.js';
@@ -176,6 +179,44 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * Send typing indicator
    */
   abstract sendTypingIndicator(chatId: string): Promise<void>;
+
+  /**
+   * Send a permission prompt to the user.
+   * Default implementation sends a text-only message (no interactive buttons).
+   * Subclasses should override for interactive prompts (e.g., Telegram InlineKeyboard).
+   */
+  async sendPermissionPrompt(
+    chatId: string,
+    options: PermissionPromptOptions
+  ): Promise<PermissionPromptResult> {
+    const text = `🔐 Permission Request\nTool: ${options.toolName}\nReason: ${options.decisionReason ?? 'N/A'}`;
+    const result = await this.sendMessage(chatId, text);
+    return {
+      success: result.success,
+      messageId: result.messageId,
+      error: result.error,
+    };
+  }
+
+  /**
+   * Update a previously sent permission prompt (e.g., mark as resolved).
+   * Default: no-op. Subclasses override to edit the message.
+   */
+  async updatePermissionPrompt(
+    _chatId: string,
+    _messageId: string,
+    _text: string
+  ): Promise<void> {
+    // Default: no-op
+  }
+
+  /**
+   * Register a callback for permission decision results from the platform.
+   * Default: no-op. Subclasses override to wire platform-specific callback routing.
+   */
+  setPermissionResolver(_resolver: PermissionResolver): void {
+    // Default: no-op
+  }
 
   /**
    * Platform-specific initialization

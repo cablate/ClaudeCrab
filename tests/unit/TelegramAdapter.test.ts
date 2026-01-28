@@ -29,6 +29,7 @@ vi.mock('grammy', () => {
     };
     command = vi.fn();
     on = vi.fn();
+    callbackQuery = vi.fn();
     catch = vi.fn();
     start = vi.fn().mockImplementation(({ onStart }: { onStart?: (info: { username: string }) => void }) => {
       if (onStart) {
@@ -45,6 +46,9 @@ vi.mock('grammy', () => {
   return {
     Bot: MockBot,
     Context: class {},
+    InlineKeyboard: class {
+      text() { return this; }
+    },
     GrammyError: class GrammyError extends Error {
       constructor(message: string) {
         super(message);

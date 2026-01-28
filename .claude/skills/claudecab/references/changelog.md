@@ -9,11 +9,37 @@
 
 ## 版本歷史
 
-### v1.6.0 - 中間訊息即時串流（當前版本）
+### v1.7.0 - 互動式 Telegram 權限審批系統（當前版本）
 
 **發布日期**：2026-01-28
 
-**背景**：SDK 多輪 agent 處理期間會產生多個 assistant 訊息（「讓我查看檔案」→ 工具執行 →「找到了」→ 最終回答），但原本所有訊息收集後一次性發送，使用者在處理期間完全沒有反饋。
+**背景**：Agent SDK 執行工具時需要人類審批權限（canUseTool callback），但原先只能在 CLI 中操作。ClaudeCab 需要將此流程橋接到 Telegram，讓使用者透過 InlineKeyboard 按鈕即時審批。
+
+**變更**：
+- **PermissionBridge**（新增 `src/core/PermissionBridge.ts`）：Promise-based 非同步橋接，管理 requestId → deferred Promise，支援 120 秒 timeout 自動 deny、AbortSignal、cancelAll
+- **PermissionBridge 單元測試**（新增 `tests/unit/PermissionBridge.test.ts`）：13 項單元測試覆蓋核心邏輯
+- **Adapter 型別擴充**（`src/adapters/types.ts`）：新增 `PermissionPromptOptions`、`PermissionPromptResult`、`PermissionResolver` 型別
+- **BaseAdapter 預設方法**（`src/adapters/BaseAdapter.ts`）：新增 3 個預設方法 — `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver`
+- **TelegramAdapter 權限 UI**（`src/adapters/TelegramAdapter.ts`）：Override 3 個方法 + InlineKeyboard（Allow / Deny）+ `callback_query` handler；message handler 改為 fire-and-forget 避免 grammy polling deadlock；`doStart` 加入 `allowed_updates: ['message', 'callback_query']`
+- **MessageProcessor 權限組裝**（`src/core/MessageProcessor.ts`）：建立 PermissionBridge、組裝 `canUseTool` 閉包、透過 `additionalOptions` 傳入 SDK；allow 回應包含 `updatedInput`（SDK Zod schema 要求）
+- **Agent 權限收緊**（`agents/general/.claude/settings.local.json`）：`allow` 從 `["*"]` 改為 `["Read", "Glob", "Grep", "WebFetch", "WebSearch"]`
+
+**修改檔案**：
+- `src/core/PermissionBridge.ts`（新增）
+- `tests/unit/PermissionBridge.test.ts`（新增）
+- `src/adapters/types.ts` — 新增權限相關型別
+- `src/adapters/BaseAdapter.ts` — 新增 3 個預設方法
+- `src/adapters/TelegramAdapter.ts` — 權限 UI + fire-and-forget + allowed_updates
+- `src/core/MessageProcessor.ts` — PermissionBridge 組裝 + canUseTool 閉包
+- `agents/general/.claude/settings.local.json` — 權限收緊
+
+---
+
+### v1.6.0 - 中間訊息即時串流
+
+**發布日期**：2026-01-28
+
+**背景**：SDK 多輪 agent 處理期間會產生多個 assistant 訊息（「讓我查看檔案」 → 工具執行 →「找到了」→ 最終回答），但原本所有訊息收集後一次性發送，使用者在處理期間完全沒有反饋。
 
 **變更**：
 - **Callback-based Streaming**：`ExecuteQueryOptions` 新增 `onIntermediateMessage` optional callback，SDK for-await 迴圈中每收到 assistant 訊息即呼叫 callback 即時送出
@@ -531,3 +557,57 @@
 **實作位置**：
 - `agents/general/CLAUDE.md`（記憶協議定義）
 - `agents/general/SOUL.md`、`USER.md`、`IDENTITY.md`、`MEMORY.md`、`memory/`（workspace 檔案）
+
+---
+
+### ADR-009: canUseTool callback（SDK 原生機制）vs Hook system
+
+**背景**：需要在 Telegram 中實作工具使用的人類審批流程，有兩種可能機制
+
+**選項**：
+1. SDK 的 `canUseTool` callback — SDK 為程式化權限處理設計的原生機制
+2. Hook system（PreToolUse） — SDK 的事件攔截機制
+
+**決策**：選擇 `canUseTool` callback
+
+**理由**：
+- `canUseTool` 是 SDK 專為程式化權限處理設計的機制，回傳 Promise<PermissionResult> 與 Telegram 按鈕互動天然匹配
+- Promise-based 設計可以直接 await Telegram 使用者的按鈕回應
+- Hook system 設計目的偏向日誌記錄和觀察，非權限控制
+
+**實作位置**：
+- `src/core/PermissionBridge.ts`（Promise 橋接）
+- `src/core/MessageProcessor.ts`（canUseTool 閉包組裝）
+
+---
+
+### ADR-010: grammy message handler 必須 fire-and-forget
+
+**背景**：TelegramAdapter 的 message handler 中呼叫 MessageProcessor 處理使用者訊息，SDK query 可能觸發 canUseTool → 發送 InlineKeyboard → 等待使用者按下按鈕（callback_query）
+
+**問題**：若 message handler `await` 整個 SDK query 流程，grammy 的 polling loop 被阻塞，無法收到後續的 `callback_query` 事件，造成死鎖（SDK 等按鈕 → grammy 等 handler 完成 → 永遠卡住）
+
+**決策**：message handler 改為 fire-and-forget（不 await processMessage），讓 grammy polling loop 立即釋放以接收後續事件
+
+**後果**：
+- handler 內的錯誤需要額外 `.catch()` 處理，不會自動冒泡
+- grammy 的 `bot.catch()` 無法攔截非同步錯誤
+
+**實作位置**：`src/adapters/TelegramAdapter.ts`（message handler）
+
+---
+
+### ADR-011: SDK PermissionResult Zod schema vs TypeScript types 不一致
+
+**背景**：SDK 的 `PermissionResult` 型別定義中，allow variant 的 `updatedInput` 欄位在 TypeScript type 中標記為 `optional`（`updatedInput?: object`），但實際 Zod schema 將其定義為 `required`
+
+**問題**：若按 TypeScript type 不傳 `updatedInput`，runtime 會被 Zod validation 拒絕
+
+**決策**：即使 TypeScript type 標記為 optional，仍然始終傳入 `updatedInput` 欄位（傳入原始 toolInput）
+
+**後果**：
+- 程式碼與 TypeScript type 看似不一致，但確保 runtime 正確
+- 需要在 changelog/troubleshooting 記錄此陷阱
+- 未來 SDK 版本可能修復此不一致
+
+**實作位置**：`src/core/MessageProcessor.ts`（canUseTool 閉包中的 allow 回應）

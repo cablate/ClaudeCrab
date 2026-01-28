@@ -5,9 +5,10 @@
 1. [Agent 載入問題](#agent-載入問題)
 2. [SDK 整合問題](#sdk-整合問題)
 3. [Telegram 問題](#telegram-問題)
-4. [持久化問題](#持久化問題)
-5. [WebUI 問題](#webui-問題)
-6. [開發注意事項](#開發注意事項)
+4. [權限審批問題](#權限審批問題)
+5. [持久化問題](#持久化問題)
+6. [WebUI 問題](#webui-問題)
+7. [開發注意事項](#開發注意事項)
 
 ---
 
@@ -165,6 +166,47 @@ const hooksModule = await import(pathToFileURL(hooksPath).href);
 3. 是否在白名單中（如啟用 ALLOWED_USERS）
 4. Session 是否卡在 `processing` 狀態
 5. WebUI Agents 頁面查看 Bot Status 是否為 `running`
+
+---
+
+## 權限審批問題
+
+### grammy polling deadlock（message handler 阻塞導致 callback_query 無法接收）
+
+**症狀**：使用者發送訊息後，Bot 發出權限審批按鈕（InlineKeyboard），但使用者按下 Allow / Deny 後完全沒有反應，整個 Bot 卡住
+
+**原因**：
+1. grammy 的 polling loop 是單執行緒事件驅動。message handler 若 `await processMessage()`，整個 handler 會等到 SDK query 完成才返回
+2. SDK query 過程中觸發 `canUseTool` → PermissionBridge 等待使用者按按鈕 → 發送 callback_query
+3. 但 grammy 的 polling loop 正在等待 message handler 完成，無法處理新進的 `callback_query` 事件
+4. 形成死鎖：SDK 等按鈕回應 → grammy 等 handler 完成 → 永遠卡住
+
+**解決方案**（v1.7.0 已修復）：
+- message handler 改為 fire-and-forget — 呼叫 `processMessage()` 但不 `await`，加 `.catch()` 處理錯誤
+- grammy polling loop 立即釋放，可正常接收後續的 `callback_query` 事件
+
+**相關檔案**：`src/adapters/TelegramAdapter.ts`（message handler）
+
+**注意**：此模式意味著 handler 內的錯誤不會被 grammy 的 `bot.catch()` 攔截，需要在 `.catch()` 中自行處理
+
+---
+
+### SDK PermissionResult Zod schema 與 TypeScript type 不一致（updatedInput 必填）
+
+**症狀**：`canUseTool` callback 回傳 `{ behavior: 'allow' }` 時，SDK runtime 拋出 Zod validation error
+
+**原因**：
+- SDK 的 `PermissionResult` TypeScript type 中，allow variant 的 `updatedInput` 標記為 `optional`（`updatedInput?: object`）
+- 但 SDK 內部實際使用的 Zod schema 將 `updatedInput` 定義為 `required`
+- TypeScript 編譯不會報錯，但 runtime Zod validation 會拒絕沒有 `updatedInput` 的回應
+
+**解決方案**（v1.7.0 已修復）：
+- 即使 TypeScript type 標記為 optional，始終傳入 `updatedInput` 欄位
+- allow 回應格式：`{ behavior: 'allow', updatedInput: toolInput }`（傳入原始 toolInput）
+
+**相關檔案**：`src/core/MessageProcessor.ts`（canUseTool 閉包中的 allow 回應）
+
+**注意**：此問題可能在未來 SDK 版本中修復。若升級 SDK 後出現相關變更，可檢查是否仍需要此 workaround
 
 ---
 

@@ -70,18 +70,29 @@ interface IAgentRepository {
 - 支援重試邏輯
 - **中間訊息串流**（v1.6.0）：`onIntermediateMessage` optional callback，每收到 assistant 訊息即呼叫，支援即時回饋而非等全部完成
 
+### PermissionBridge (`src/core/PermissionBridge.ts`)
+
+Promise-based 非同步權限橋接，用於連接 SDK 的 `canUseTool` callback 與 Telegram InlineKeyboard 審批 UI：
+- 管理 `requestId → deferred Promise` 映射，每個工具審批請求對應一個 pending Promise
+- SDK 呼叫 `canUseTool` 時建立 deferred，Telegram 使用者按下按鈕時 resolve
+- **120 秒 timeout** — 超時自動 deny，避免 Promise 永遠 pending
+- **AbortSignal 支援** — 外部可取消等待中的請求
+- **cancelAll()** — 一次取消所有 pending 請求（如 session 結束時清理）
+- 不直接依賴 Adapter 或 SDK，純粹的 Promise 協調層
+
 ### MessageProcessor (`src/core/MessageProcessor.ts`)
 
 處理訊息流程（SDK 模式）：
 1. 接收 UnifiedMessage
 2. 取得/建立 Session
 3. **動態讀取 systemPrompt**（v1.5.1）：透過 `getSystemPrompt(agentId)` 函數注入，每次查詢前從磁碟重新讀取 CLAUDE.md，確保 Agent 自主更新的內容即時生效
-4. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId` + `onIntermediateMessage` callback）
-5. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram，使用者可看到處理進度
-6. SDK 管理對話歷史（resume option）
-7. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
-8. 持久化訊息到資料庫（中間訊息分段存入，供 WebUI 查看）
-9. 透過 Adapter 發送殘餘回應（若全部已透過 callback 發出則跳過）
+4. **建立 PermissionBridge + canUseTool 閉包**（v1.7.0）：組裝閉包呼叫 PermissionBridge 發起審批請求 → Adapter 發送 InlineKeyboard → 使用者按按鈕 → resolve Promise → 回傳 PermissionResult 給 SDK。allow 回應包含 `updatedInput`（SDK Zod schema 要求）
+5. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId` + `onIntermediateMessage` callback + `canUseTool` via `additionalOptions`）
+6. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram，使用者可看到處理進度
+7. SDK 管理對話歷史（resume option）
+8. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
+9. 持久化訊息到資料庫（中間訊息分段存入，供 WebUI 查看）
+10. 透過 Adapter 發送殘餘回應（若全部已透過 callback 發出則跳過）
 
 ### EventBus (`src/core/EventBus.ts`)
 
@@ -107,6 +118,12 @@ interface IAgentRepository {
 - Key 為 `platform::agentId` 複合鍵
 - 支援按平台+Agent 查詢 Adapter
 
+### BaseAdapter (`src/adapters/BaseAdapter.ts`)
+
+所有平台 Adapter 的抽象基底類別：
+- 定義 `sendMessage`、`sendTypingIndicator` 等抽象方法
+- **權限審批預設方法**（v1.7.0）：提供 `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` 三個預設方法（no-op / auto-deny），子類可 override 實作平台特定的審批 UI
+
 ### TelegramAdapter (`src/adapters/TelegramAdapter.ts`)
 
 Telegram 平台整合（每個 Agent 一個 Bot 實例）：
@@ -116,6 +133,9 @@ Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 - 打字指示器
 - 速率限制（35ms 最小間隔）
 - 指令處理：`/start`, `/help`, `/reset`
+- **權限審批 UI**（v1.7.0）：Override `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` 三個方法；發送 InlineKeyboard（Allow / Deny 按鈕）；註冊 `callback_query` handler 處理使用者按鈕回應
+- **Fire-and-forget message handler**（v1.7.0）：message handler 不 await processMessage，避免阻塞 grammy polling loop 造成 callback_query 死鎖
+- **allowed_updates**（v1.7.0）：`doStart` 明確指定 `allowed_updates: ['message', 'callback_query']` 確保接收按鈕回調事件
 
 ### Persistence 層 (`src/persistence/`)
 
@@ -352,4 +372,24 @@ interface UnifiedMessage {
   timestamp: Date;
   metadata?: Record<string, unknown>;
 }
+```
+
+### Permission Types（v1.7.0）
+
+```typescript
+// 權限提示選項（Adapter 發送審批 UI 時使用）
+interface PermissionPromptOptions {
+  requestId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  chatId: string;
+}
+
+// 權限提示結果（使用者按下按鈕後回傳）
+interface PermissionPromptResult {
+  messageId: number;  // 用於後續更新訊息狀態
+}
+
+// 權限解析回調（Adapter 呼叫以通知 PermissionBridge 使用者決定）
+type PermissionResolver = (requestId: string, allowed: boolean) => void;
 ```

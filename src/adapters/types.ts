@@ -86,6 +86,43 @@ export interface SendResult {
 }
 
 /**
+ * Options for sending a permission prompt to the user.
+ */
+export interface PermissionPromptOptions {
+  /** Unique ID for this permission request */
+  requestId: string;
+
+  /** Name of the tool requesting permission */
+  toolName: string;
+
+  /** Tool input (will be summarized for display) */
+  toolInput: Record<string, unknown>;
+
+  /** Why this permission was triggered */
+  decisionReason?: string;
+
+  /** Blocked file path, if applicable */
+  blockedPath?: string;
+}
+
+/**
+ * Result of sending a permission prompt.
+ */
+export interface PermissionPromptResult {
+  success: boolean;
+
+  /** The message ID of the sent prompt (for later editing) */
+  messageId?: string | undefined;
+
+  error?: string | undefined;
+}
+
+/**
+ * Callback signature for resolving a permission decision from the adapter.
+ */
+export type PermissionResolver = (requestId: string, decision: 'allow' | 'deny') => void;
+
+/**
  * Adapter lifecycle state
  */
 export type AdapterState =
