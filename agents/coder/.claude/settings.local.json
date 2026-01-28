@@ -1,5 +1,4 @@
 {
-  "model": "opus",
   "permissions": {
     "allow": [
       "Read",
@@ -10,5 +9,6 @@
       "Grep"
     ],
     "deny": []
-  }
+  },
+  "model": "opus"
 }
