@@ -8,4 +8,4 @@
  * before responding to the new message.
  */
 export const MEMORY_CHECKPOINT_CONTEXT =
-  '【記憶檢查點】回覆前，先檢查上一輪對話是否有值得記錄的內容。如果有，先寫入對應的記憶檔案再回覆使用者。';
+  '【記憶檢查】回覆前，參照 CLAUDE.md 的 Memory System 段落，檢查上輪對話是否有該記錄的內容。有就先寫入對應檔案。';
