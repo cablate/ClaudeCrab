@@ -69,12 +69,24 @@ export class AgentLoader implements IAgentRepository {
    * Scan the agents directory and return all agent IDs
    */
   async scanAgents(): Promise<string[]> {
+    // System directories to skip (templates, git, etc.)
+    const SKIP_DIRS = new Set(['_example', 'node_modules', '.git']);
+
     try {
       const entries = await fs.readdir(this.agentsDir, { withFileTypes: true });
       const agentIds: string[] = [];
 
       for (const entry of entries) {
         if (entry.isDirectory()) {
+          // Skip system directories
+          if (SKIP_DIRS.has(entry.name)) {
+            logger.debug(
+              { dir: entry.name },
+              'Skipping system directory'
+            );
+            continue;
+          }
+
           // Check if directory contains agent.json
           const configPath = path.join(
             this.agentsDir,

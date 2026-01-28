@@ -125,3 +125,32 @@ export function asyncHandler(fn: AsyncRequestHandler): RequestHandler {
     Promise.resolve(fn(req as WebUIRequest, res, next)).catch(next);
   };
 }
+
+
+/**
+ * Request body for creating a new agent
+ */
+export interface CreateAgentRequest {
+  id: string;
+  name: string;
+  description: string;
+  model: 'sonnet' | 'opus' | 'haiku';
+  telegramBotToken?: string;
+  permissions?: {
+    allow: string[];
+    deny: string[];
+  };
+}
+
+/**
+ * Response for agent creation
+ */
+export interface CreateAgentResponse {
+  success: boolean;
+  agent?: {
+    id: string;
+    name: string;
+    path: string;
+  };
+  error?: string;
+}

@@ -53,6 +53,15 @@ export function createAgentsRouter(): Router {
   });
 
   /**
+   * GET /agents/create - Show create agent form
+   */
+  router.get('/create', (_req, res) => {
+    res.render('agents/create', {
+      title: 'Create Agent',
+    });
+  });
+
+  /**
    * GET /agents/:id - Show agent details
    */
   router.get('/:id', (req, res, next) => {

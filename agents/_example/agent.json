@@ -1,0 +1,6 @@
+{
+  "name": "{{AGENT_NAME}}",
+  "description": "{{AGENT_DESCRIPTION}}",
+  "version": "1.0.0",
+  "model": "sonnet"
+}
