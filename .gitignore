@@ -30,6 +30,10 @@ coverage/
 # TypeScript cache
 *.tsbuildinfo
 
+# SQLite WAL files
+*.db-wal
+*.db-shm
+
 # Temporary files
 tmp/
 temp/

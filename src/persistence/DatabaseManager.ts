@@ -113,6 +113,8 @@ export class DatabaseManager {
   private db: DatabaseType | null = null;
   private readonly config: PersistenceConfig;
   private initialized = false;
+  private checkpointTimer: ReturnType<typeof setInterval> | null = null;
+  private static readonly CHECKPOINT_INTERVAL_MS = 30_000;
 
   constructor(options: DatabaseManagerOptions = {}) {
     this.config = {
@@ -144,7 +146,8 @@ export class DatabaseManager {
     // Enable WAL mode for better concurrency
     if (this.config.walMode) {
       this.db.pragma('journal_mode = WAL');
-      logger.debug('WAL mode enabled');
+      this.db.pragma('wal_autocheckpoint = 100');
+      logger.debug('WAL mode enabled (autocheckpoint=100 pages)');
     }
 
     // Enable foreign keys
@@ -152,6 +155,11 @@ export class DatabaseManager {
 
     // Initialize schema
     this.initializeSchema();
+
+    // Start periodic WAL checkpoint
+    if (this.config.walMode) {
+      this.startCheckpointTimer();
+    }
 
     this.initialized = true;
     logger.info({ dbPath: this.config.dbPath }, 'Database initialized');
@@ -236,11 +244,33 @@ export class DatabaseManager {
    * Close the database connection
    */
   close(): void {
+    this.stopCheckpointTimer();
     if (this.db !== null) {
+      this.db.pragma('wal_checkpoint(TRUNCATE)');
       this.db.close();
       this.db = null;
       this.initialized = false;
-      logger.info('Database connection closed');
+      logger.info('Database connection closed (WAL checkpointed)');
+    }
+  }
+
+  private startCheckpointTimer(): void {
+    this.checkpointTimer = setInterval(() => {
+      if (this.db !== null) {
+        try {
+          this.db.pragma('wal_checkpoint(PASSIVE)');
+        } catch {
+          // DB may have been closed between check and pragma
+        }
+      }
+    }, DatabaseManager.CHECKPOINT_INTERVAL_MS);
+    this.checkpointTimer.unref();
+  }
+
+  private stopCheckpointTimer(): void {
+    if (this.checkpointTimer !== null) {
+      clearInterval(this.checkpointTimer);
+      this.checkpointTimer = null;
     }
   }
 
