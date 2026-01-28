@@ -1,4 +1,4 @@
-import { query, type Query, type SDKMessage, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, type Query, type Options } from '@anthropic-ai/claude-agent-sdk';
 import type { LoadedAgent } from '../types/agent.js';
 import { logger } from '../utils/logger.js';
 
@@ -17,6 +17,9 @@ export interface QueryResult {
 
   /** Duration in milliseconds */
   durationMs?: number;
+
+  /** Number of intermediate messages delivered via onIntermediateMessage callback */
+  intermediateMessageCount?: number;
 }
 
 /**
@@ -48,6 +51,14 @@ export interface ExecuteQueryOptions {
 
   /** Additional SDK options */
   additionalOptions?: Partial<Options>;
+
+  /**
+   * Called when an intermediate assistant message is received during multi-turn processing.
+   * When provided, the message text will NOT be included in the final QueryResult.response,
+   * avoiding duplicate delivery.
+   * If the callback returns a Promise, it will be awaited before continuing iteration.
+   */
+  onIntermediateMessage?: (text: string) => void | Promise<void>;
 }
 
 /**
@@ -165,6 +176,7 @@ export class SDKQueryManager {
       let sdkSessionId = '';
       let numTurns = 0;
       let durationMs = 0;
+      let intermediateCount = 0;
 
       // Process SDK messages
       for await (const message of q) {
@@ -193,9 +205,19 @@ export class SDKQueryManager {
 
         // Collect assistant response text
         if (message.type === 'assistant' && message.message?.content) {
+          const textParts: string[] = [];
           for (const block of message.message.content) {
             if (block.type === 'text') {
-              responseChunks.push(block.text);
+              textParts.push(block.text);
+            }
+          }
+          const messageText = textParts.join('');
+          if (messageText.length > 0) {
+            if (options.onIntermediateMessage) {
+              await options.onIntermediateMessage(messageText);
+              intermediateCount++;
+            } else {
+              responseChunks.push(messageText);
             }
           }
         }
@@ -241,6 +263,7 @@ export class SDKQueryManager {
         sdkSessionId,
         numTurns,
         durationMs,
+        intermediateMessageCount: intermediateCount,
       };
     } finally {
       // Clean up active query

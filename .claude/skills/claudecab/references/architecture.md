@@ -68,6 +68,7 @@ interface IAgentRepository {
 - 使用 `resume` option 恢復對話歷史
 - 從 SDK 訊息擷取 `session_id`
 - 支援重試邏輯
+- **中間訊息串流**（v1.6.0）：`onIntermediateMessage` optional callback，每收到 assistant 訊息即呼叫，支援即時回饋而非等全部完成
 
 ### MessageProcessor (`src/core/MessageProcessor.ts`)
 
@@ -75,11 +76,12 @@ interface IAgentRepository {
 1. 接收 UnifiedMessage
 2. 取得/建立 Session
 3. **動態讀取 systemPrompt**（v1.5.1）：透過 `getSystemPrompt(agentId)` 函數注入，每次查詢前從磁碟重新讀取 CLAUDE.md，確保 Agent 自主更新的內容即時生效
-4. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId`）
-5. SDK 管理對話歷史（resume option）
-6. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
-7. 持久化訊息到資料庫（供 WebUI 查看）
-8. 透過 Adapter 發送回應
+4. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId` + `onIntermediateMessage` callback）
+5. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram，使用者可看到處理進度
+6. SDK 管理對話歷史（resume option）
+7. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
+8. 持久化訊息到資料庫（中間訊息分段存入，供 WebUI 查看）
+9. 透過 Adapter 發送殘餘回應（若全部已透過 callback 發出則跳過）
 
 ### EventBus (`src/core/EventBus.ts`)
 

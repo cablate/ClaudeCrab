@@ -9,7 +9,32 @@
 
 ## 版本歷史
 
-### v1.5.2 - Moltbot Gap Analysis 實作（當前版本）
+### v1.6.0 - 中間訊息即時串流（當前版本）
+
+**發布日期**：2026-01-28
+
+**背景**：SDK 多輪 agent 處理期間會產生多個 assistant 訊息（「讓我查看檔案」→ 工具執行 →「找到了」→ 最終回答），但原本所有訊息收集後一次性發送，使用者在處理期間完全沒有反饋。
+
+**變更**：
+- **Callback-based Streaming**：`ExecuteQueryOptions` 新增 `onIntermediateMessage` optional callback，SDK for-await 迴圈中每收到 assistant 訊息即呼叫 callback 即時送出
+- **MessageProcessor 串流注入**：`executeQueryWithSDK()` 注入 callback 閉包，透過 adapter 即時發送中間訊息到 Telegram
+- **DB 分段持久化**：中間訊息獨立存入 DB，WebUI 對話記錄與 Telegram 看到的一致
+- **QueryResult 擴充**：新增 `intermediateMessageCount` 欄位追蹤已串流的訊息數量
+- **向後相容**：不提供 callback 時行為完全不變，既有 284 tests 零修改全部通過
+
+**設計原則維持**：
+- SDKQueryManager 保持解耦 — callback 是 optional 函式，不知道消費者身份
+- 零 Adapter 改動 — TelegramAdapter 既有的 RateLimiter 自動處理多次呼叫
+
+**修改檔案**：
+- `src/core/SDKQueryManager.ts` — `ExecuteQueryOptions` + `QueryResult` 介面擴充、for-await 迴圈 callback 邏輯、移除未使用 import
+- `src/core/MessageProcessor.ts` — `executeQueryWithSDK()` callback 注入、DB 分段持久化
+
+**測試**：284 tests, 19 files 全部通過
+
+---
+
+### v1.5.2 - Moltbot Gap Analysis 實作
 
 **發布日期**：2026-01-28
 

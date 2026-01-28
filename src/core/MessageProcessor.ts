@@ -226,6 +226,9 @@ export class MessageProcessor {
     }
 
     try {
+      // Track intermediate messages sent via streaming callback
+      const intermediateMessages: string[] = [];
+
       // Helper: execute SDK query with retry for rate limit / transient errors
       const executeWithRetry = async (resumeId: string | undefined) => {
         return await retryAsync(
@@ -239,6 +242,19 @@ export class MessageProcessor {
                 systemPrompt,
                 maxTurns: agent.config.settings?.maxTurns ?? 10,
                 resume: resumeId,
+                onIntermediateMessage: async (text: string): Promise<void> => {
+                  await adapter.sendTypingIndicator(chatId);
+                  const sendResult = await adapter.sendMessage(chatId, text, {
+                    parseMode: 'Markdown',
+                  });
+                  if (!sendResult.success) {
+                    logger.warn(
+                      { error: sendResult.error, chatId },
+                      'Failed to send intermediate message'
+                    );
+                  }
+                  intermediateMessages.push(text);
+                },
               }
             );
           },
@@ -247,6 +263,7 @@ export class MessageProcessor {
             isRetryable: (err) =>
               isRateLimitError(err) || isTransientError(err),
             onRetry: (attempt, err, delayMs) => {
+              intermediateMessages.length = 0;
               logger.warn(
                 {
                   sessionId,
@@ -295,6 +312,11 @@ export class MessageProcessor {
       if (this.conversationRepository !== undefined) {
         try {
           this.conversationRepository.appendMessage(sessionId, 'user', prompt);
+          // Store intermediate messages individually (matches what user saw in Telegram)
+          for (const msg of intermediateMessages) {
+            this.conversationRepository.appendMessage(sessionId, 'assistant', msg);
+          }
+          // Store remaining response if any (when no callback was used, or residual text)
           if (result.response.length > 0) {
             this.conversationRepository.appendMessage(sessionId, 'assistant', result.response);
           }
