@@ -9,7 +9,32 @@
 
 ## 版本歷史
 
-### v1.5.1 - Dynamic SystemPrompt（當前版本）
+### v1.5.2 - Moltbot Gap Analysis 實作（當前版本）
+
+**發布日期**：2026-01-28
+
+**背景**：根據 Moltbot 官方文件（docs.molt.bot）逐項對照，補齊 agents/general/ 缺少的機制。
+
+**變更**：
+- **教訓路由修正**：寫入規則從 SOUL.md 改為 CLAUDE.md 自身的 Lessons Learned 區段（符合官方 AGENTS.md 模板）
+- **BOOTSTRAP.md**：新增首次啟動儀式，agent 第一次對話時自動執行 onboarding（認識使用者、定義自己），完成後刪除檔案
+- **對話保護規則**：CLAUDE.md 新增 Auto-flush 行為規則，agent 在長對話中主動保存記憶
+- **Lessons Learned 區段**：CLAUDE.md 尾部新增空區段，供 agent 自行寫入從經驗學到的操作規則
+
+**決定不做**：
+- **HEARTBEAT.md**：需要 Gateway 排程器配套才能實現定期巡邏，純 CLAUDE.md 指令無法達成
+- **TOOLS.md**：general agent 不需要環境特定備註
+
+**修改檔案**：
+- `agents/general/CLAUDE.md` — 教訓路由 + Startup Protocol + 對話保護 + Lessons Learned
+- `agents/general/BOOTSTRAP.md` — 新增
+- `docs/moltbot-gap-analysis.md` — 新增（差距分析文件）
+
+**設計原則維持**：零引擎改動，所有變更都在 agent 層
+
+---
+
+### v1.5.1 - Dynamic SystemPrompt
 
 **發布日期**：2026-01-28
 
