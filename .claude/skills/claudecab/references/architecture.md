@@ -87,12 +87,18 @@ Promise-based 非同步權限橋接，用於連接 SDK 的 `canUseTool` callback
 2. 取得/建立 Session
 3. **動態讀取 systemPrompt**（v1.5.1）：透過 `getSystemPrompt(agentId)` 函數注入，每次查詢前從磁碟重新讀取 CLAUDE.md，確保 Agent 自主更新的內容即時生效
 4. **建立 PermissionBridge + canUseTool 閉包**（v1.7.0）：組裝閉包呼叫 PermissionBridge 發起審批請求 → Adapter 發送 InlineKeyboard → 使用者按按鈕 → resolve Promise → 回傳 PermissionResult 給 SDK。allow 回應包含 `updatedInput`（SDK Zod schema 要求）
-5. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId` + `onIntermediateMessage` callback + `canUseTool` via `additionalOptions`）
-6. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram，使用者可看到處理進度
-7. SDK 管理對話歷史（resume option）
-8. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
-9. 持久化訊息到資料庫（中間訊息分段存入，供 WebUI 查看）
-10. 透過 Adapter 發送殘餘回應（若全部已透過 callback 發出則跳過）
+5. **UserPromptSubmit Hook**（v1.7.1）：透過 SDK `hooks.UserPromptSubmit` 注入記憶檢查提醒（`MEMORY_CHECKPOINT_CONTEXT` 常數），每次使用者送訊息時 agent 會收到提醒檢查上一輪對話是否有值得記錄的內容
+6. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId` + `onIntermediateMessage` callback + `canUseTool` via `additionalOptions`）
+7. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram，使用者可看到處理進度
+8. SDK 管理對話歷史（resume option）
+9. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
+10. 持久化訊息到資料庫（中間訊息分段存入，供 WebUI 查看）
+11. 透過 Adapter 發送殘餘回應（若全部已透過 callback 發出則跳過）
+
+### constants (`src/core/constants.ts`)
+
+集中管理核心常數：
+- **MEMORY_CHECKPOINT_CONTEXT**（v1.7.1）：記憶檢查提醒文字，透過 UserPromptSubmit hook 注入，提醒 agent 在回覆前檢查上一輪對話是否有值得記錄的內容
 
 ### EventBus (`src/core/EventBus.ts`)
 

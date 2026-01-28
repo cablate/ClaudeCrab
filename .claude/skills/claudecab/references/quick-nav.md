@@ -11,9 +11,10 @@
 | 新增 Agent | `agents/<name>/` | `agent.json`, `CLAUDE.md`, `.claude/settings.local.json` |
 | 修改 Agent 載入邏輯 | `src/core/AgentLoader.ts` | `src/types/agent.ts` |
 | 修改 SDK 呼叫方式 | `src/core/SDKQueryManager.ts` | - |
-| 修改訊息處理流程 | `src/core/MessageProcessor.ts` | `SDKQueryManager.ts`, `SessionManager.ts` |
+| 修改訊息處理流程 | `src/core/MessageProcessor.ts` | `SDKQueryManager.ts`, `SessionManager.ts`, `constants.ts` |
 | 修改 Session 管理 | `src/core/SessionManager.ts` | `src/types/session.ts` |
 | 管理平台 Adapter 生命週期 | `src/core/PlatformOrchestrator.ts` | `src/core/AdapterRegistry.ts`, `src/adapters/TelegramAdapter.ts` |
+| 修改核心常數（如記憶檢查提醒） | `src/core/constants.ts` | `MessageProcessor.ts` |
 
 ---
 

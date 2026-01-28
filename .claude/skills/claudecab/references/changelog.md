@@ -9,7 +9,31 @@
 
 ## 版本歷史
 
-### v1.7.0 - 互動式 Telegram 權限審批系統（當前版本）
+### v1.7.1 - General Agent 權限修正 + Memory Checkpoint Hook（當前版本）
+
+**發布日期**：2026-01-28
+
+**變更**：
+
+1. **General Agent 權限修正**（`agents/general/.claude/settings.local.json`）
+   - `allow` 加回 `Write` 和 `Edit`
+   - 原因：記憶管理是 general agent 核心功能，每次寫入都要按按鈕體驗太差
+   - 最終權限：`["Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"]`，只有 `Bash` 需要審批
+
+2. **Memory Checkpoint Hook**
+   - 新增 `src/core/constants.ts`：定義 `MEMORY_CHECKPOINT_CONTEXT` 常數
+   - 修改 `src/core/MessageProcessor.ts`：透過 SDK `hooks.UserPromptSubmit` 注入記憶檢查提醒
+   - 每次使用者送訊息時，agent 會收到提醒：「回覆前，先檢查上一輪對話是否有值得記錄的內容」
+   - 目的：提高記憶寫入的可靠性，確保 agent 不會忘記保存重要內容
+
+**修改檔案**：
+- `agents/general/.claude/settings.local.json` — 權限修正
+- `src/core/constants.ts`（新增）— MEMORY_CHECKPOINT_CONTEXT 常數
+- `src/core/MessageProcessor.ts` — UserPromptSubmit hook 注入
+
+---
+
+### v1.7.0 - 互動式 Telegram 權限審批系統
 
 **發布日期**：2026-01-28
 
@@ -22,7 +46,7 @@
 - **BaseAdapter 預設方法**（`src/adapters/BaseAdapter.ts`）：新增 3 個預設方法 — `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver`
 - **TelegramAdapter 權限 UI**（`src/adapters/TelegramAdapter.ts`）：Override 3 個方法 + InlineKeyboard（Allow / Deny）+ `callback_query` handler；message handler 改為 fire-and-forget 避免 grammy polling deadlock；`doStart` 加入 `allowed_updates: ['message', 'callback_query']`
 - **MessageProcessor 權限組裝**（`src/core/MessageProcessor.ts`）：建立 PermissionBridge、組裝 `canUseTool` 閉包、透過 `additionalOptions` 傳入 SDK；allow 回應包含 `updatedInput`（SDK Zod schema 要求）
-- **Agent 權限收緊**（`agents/general/.claude/settings.local.json`）：`allow` 從 `["*"]` 改為 `["Read", "Glob", "Grep", "WebFetch", "WebSearch"]`
+- **Agent 權限收緊**（`agents/general/.claude/settings.local.json`）：`allow` 從 `["*"]` 改為 `["Read", "Glob", "Grep", "WebFetch", "WebSearch"]`（v1.7.1 加回 Write/Edit）
 
 **修改檔案**：
 - `src/core/PermissionBridge.ts`（新增）
