@@ -9,7 +9,25 @@
 
 ## 版本歷史
 
-### v1.8.0 - Agent 頁面 UI 改善 + Memory System UI（當前版本）
+### v1.8.1 - 時間注入修復（當前版本）
+
+**發布日期**：2026-01-29
+
+**變更**：
+
+1. **UserPromptSubmit Hook 時間注入**
+   - 新增 `buildPromptContext()` 函數，動態生成含當前時間的 context
+   - 格式：`【當前時間】2026/01/29 00:24 週四`
+   - 時區：Asia/Taipei
+   - 修復 AI 時間認知錯誤（如「已經 12:21 卻說快 12 點」）
+
+**修改檔案**：
+- `src/core/constants.ts` — 新增 `buildPromptContext()` 函數
+- `src/core/MessageProcessor.ts` — 使用動態 context 取代靜態常數
+
+---
+
+### v1.8.0 - Agent 頁面 UI 改善 + Memory System UI
 
 **發布日期**：2026-01-28
 
