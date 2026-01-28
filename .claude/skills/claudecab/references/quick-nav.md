@@ -63,6 +63,7 @@
 | 要做什麼 | 主要檔案 | 相關檔案 |
 |----------|----------|----------|
 | 修改 Agent 記憶協議 | `agents/general/CLAUDE.md` | Startup Protocol、Memory System 區段 |
+| 修改 Agent 輸出風格 | `agents/<name>/.claude/output-styles/` | `settings.local.json` 的 `outputStyle` 欄位 |
 | 修改 Agent 人格 | `agents/general/SOUL.md` | Core Truths、Boundaries、Vibe、Voice Guide |
 | 修改使用者檔案 | `agents/general/USER.md` | — |
 | 修改 AI 身份 | `agents/general/IDENTITY.md` | — |

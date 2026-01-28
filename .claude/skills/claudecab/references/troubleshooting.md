@@ -112,6 +112,24 @@ const hooksModule = await import(pathToFileURL(hooksPath).href);
 
 ---
 
+### Output Style 設定無效
+
+**症狀**：在 `settings.local.json` 設定 `"outputStyle": "my-style"`，但 agent 沒有遵守輸出風格
+
+**原因**：Output Style 是 Claude Code **CLI** 的功能，SDK 的 `Options` 型別中沒有 `outputStyle` 參數，會被忽略
+
+**解決方案**：把輸出風格指令直接寫在 CLAUDE.md 中
+
+```markdown
+## Output Style
+
+每次回覆結尾，如果有更新記憶檔案，簡述：「📝 已更新：[檔案清單]」
+```
+
+**相關檔案**：`agents/<name>/CLAUDE.md`
+
+---
+
 ### SDK init 時 model 不正確
 
 **症狀**：日誌顯示 SDK 使用了非預期的 model

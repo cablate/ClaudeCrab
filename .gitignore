@@ -37,3 +37,20 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Serena MCP
+.serena/
+
+# Windows special files
+nul
+
+# Agent workspace files (runtime personal data)
+agents/*/SOUL.md
+agents/*/USER.md
+agents/*/MEMORY.md
+agents/*/IDENTITY.md
+agents/*/BOOTSTRAP.md
+agents/*/memory/
+
+# Output styles (SDK doesn't support, use CLAUDE.md instead)
+agents/*/.claude/output-styles/

@@ -178,6 +178,40 @@ agents/general/
 
 > **重要**：使用 `settings.local.json` 而非 `settings.json`，搭配 `settingSources: ['local']` 避免 SDK 搜尋父目錄。
 
+### Output Style（僅 CLI 支援，SDK 不支援）
+
+Output Style 是 Claude Code **CLI** 的功能，允許自訂回覆風格。
+
+> **⚠️ 重要：SDK 不支援 Output Style**
+>
+> ClaudeCab 透過 `@anthropic-ai/claude-agent-sdk` 的 `query()` 函數呼叫，SDK 的 `Options` 型別中**沒有 `outputStyle` 參數**。即使在 `settings.local.json` 設定 `"outputStyle": "..."`，SDK 也會忽略此設定。
+>
+> **替代方案**：把輸出風格指令直接寫在 CLAUDE.md 中（如 `## Output Style` 區段）。
+
+以下為 CLI 原生 Output Style 的參考資訊（ClaudeCab 不適用）：
+
+**檔案位置**：`.claude/output-styles/<style-name>.md`
+
+**檔案格式**：
+```markdown
+---
+name: My Custom Style
+description: 顯示在 /output-style 選單的描述
+keep-coding-instructions: false
+---
+
+# 自訂指令
+[內容會加到系統提示末尾...]
+```
+
+**Frontmatter 選項**：
+
+| 欄位 | 說明 | 預設值 |
+|------|------|--------|
+| `name` | 風格名稱 | 從檔案名稱繼承 |
+| `description` | 風格描述 | 無 |
+| `keep-coding-instructions` | 是否保留編碼指令 | `false`（會排除編碼指令）|
+
 ### agent.json
 
 ```json
