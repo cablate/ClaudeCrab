@@ -707,6 +707,43 @@ export class MessageProcessor {
   }
 
   /**
+   * Cancel an active query for the given session.
+   * Returns true if a query was cancelled, false if no active query was found.
+   */
+  cancelQuery(sessionId: string): boolean {
+    const hasActive = this.sdkQueryManager.hasActiveQuery(sessionId);
+    if (hasActive) {
+      this.sdkQueryManager.cancelQuery(sessionId);
+      logger.info({ sessionId }, 'Cancelled active query');
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Cancel an active query for a user by platform/agent/user identifiers.
+   * Returns true if a query was cancelled, false if no active query was found.
+   */
+  cancelQueryForUser(platform: string, agentId: string, userId: string): boolean {
+    const session = this.sessionManager.getInternalSession(platform, agentId, userId);
+    if (session === undefined) {
+      return false;
+    }
+    return this.cancelQuery(session.sessionId);
+  }
+
+  /**
+   * Check if there's an active query for a user.
+   */
+  hasActiveQueryForUser(platform: string, agentId: string, userId: string): boolean {
+    const session = this.sessionManager.getInternalSession(platform, agentId, userId);
+    if (session === undefined) {
+      return false;
+    }
+    return this.sdkQueryManager.hasActiveQuery(session.sessionId);
+  }
+
+  /**
    * Dispose resources
    */
   dispose(): void {

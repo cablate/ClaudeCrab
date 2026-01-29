@@ -66,6 +66,7 @@ export async function handleStart(
 可用指令：
 • /help - 顯示幫助訊息
 • /reset - 重置對話記錄
+• /stop - 停止執行中的回應
 
 直接輸入訊息即可開始對話！`;
 
@@ -99,13 +100,15 @@ export async function handleHelp(
 /start - 開始使用並顯示歡迎訊息
 /help - 顯示此幫助訊息
 /reset - 清除對話記錄，重新開始
+/stop - 強制停止 Claude 執行
 
 **使用方式：**
 直接輸入文字訊息即可與 AI 對話。
 
 **提示：**
 • 對話記錄會保留在同一個會話中
-• 使用 /reset 可以清除記錄重新開始`;
+• 使用 /reset 可以清除記錄重新開始
+• 使用 /stop 可以中斷正在執行的 Claude 回應`;
 
   await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
 }
@@ -136,6 +139,38 @@ export async function handleReset(
   } catch (error) {
     logger.error({ error, userId }, 'Failed to reset conversation');
     await ctx.reply('抱歉，重置對話失敗。請稍後再試。');
+  }
+}
+
+/**
+ * Handle /stop command
+ * Cancels any active Claude query for the user
+ */
+export async function handleStop(
+  ctx: Context,
+  deps: CommandDependencies
+): Promise<void> {
+  const userId = ctx.from?.id.toString();
+  if (userId === undefined) {
+    return;
+  }
+
+  try {
+    const cancelled = deps.messageProcessor.cancelQueryForUser(
+      'telegram',
+      deps.agentId,
+      userId
+    );
+
+    if (cancelled) {
+      await ctx.reply('🛑 已停止 Claude 的執行。');
+      logger.info({ userId }, 'User stopped active query');
+    } else {
+      await ctx.reply('ℹ️ 目前沒有正在執行的查詢。');
+    }
+  } catch (error) {
+    logger.error({ error, userId }, 'Failed to stop query');
+    await ctx.reply('抱歉，停止執行失敗。請稍後再試。');
   }
 }
 
@@ -172,4 +207,5 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   start: handleStart,
   help: handleHelp,
   reset: handleReset,
+  stop: handleStop,
 };
