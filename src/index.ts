@@ -181,6 +181,7 @@ const main = async (): Promise<void> => {
       databaseManager: databaseManager ?? undefined,
       sessionRepository,
       conversationRepository,
+      scheduleManager: scheduleManager ?? undefined,
     });
 
     await webUIServer.start();

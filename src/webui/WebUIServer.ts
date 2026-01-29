@@ -31,6 +31,7 @@ export class WebUIServer {
       databaseManager: options.databaseManager,
       sessionRepository: options.sessionRepository,
       conversationRepository: options.conversationRepository,
+      scheduleManager: options.scheduleManager,
     };
 
     this.app = express();

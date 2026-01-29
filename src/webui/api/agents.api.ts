@@ -6,7 +6,9 @@ import path from 'node:path';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import os from 'node:os';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { validateScheduleSpec } from '../../schedule/schemas.js';
+import type { ScheduleInfo, ScheduleExecution } from '../../schedule/types.js';
 
 // Configure multer for zip file uploads
 const upload = multer({
@@ -766,6 +768,246 @@ export function createAgentsApiRouter(): Router {
       res.json({ success: true, message: `Skill "${name}" deleted` });
     } catch {
       res.status(404).json({ error: 'Skill not found' });
+    }
+  });
+
+  // ============================================================
+  // Schedule API Routes
+  // ============================================================
+
+  /**
+   * GET /api/agents/:id/schedules - List schedules for an agent
+   */
+  router.get('/:id/schedules', async (req, res) => {
+    const { agentLoader, scheduleManager } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (!scheduleManager) {
+      res.status(503).json({ error: 'Schedule system not enabled' });
+      return;
+    }
+
+    try {
+      const schedules = await scheduleManager.getSchedulesForAgent(agent.id);
+      res.json({ schedules });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to load schedules', details: String(error) });
+    }
+  });
+
+  /**
+   * GET /api/agents/:id/schedules/:scheduleId - Get schedule YAML content
+   */
+  router.get('/:id/schedules/:scheduleId', async (req, res) => {
+    const { agentLoader } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    const scheduleId = req.params.scheduleId;
+    const schedulePath = path.join(agent.path, 'schedules', `${scheduleId}.yaml`);
+
+    try {
+      const content = await fs.readFile(schedulePath, 'utf-8');
+      const stat = await fs.stat(schedulePath);
+      res.json({
+        id: scheduleId,
+        content,
+        modified: stat.mtime.toISOString(),
+      });
+    } catch {
+      res.status(404).json({ error: 'Schedule not found' });
+    }
+  });
+
+  /**
+   * PUT /api/agents/:id/schedules/:scheduleId - Update schedule YAML
+   */
+  router.put('/:id/schedules/:scheduleId', async (req, res) => {
+    const { agentLoader, scheduleManager } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (!scheduleManager) {
+      res.status(503).json({ error: 'Schedule system not enabled' });
+      return;
+    }
+
+    const scheduleId = req.params.scheduleId;
+    const { content } = req.body as { content: string };
+
+    if (!content || typeof content !== 'string') {
+      res.status(400).json({ error: 'content is required' });
+      return;
+    }
+
+    // Validate YAML structure
+    try {
+      const parsed = parseYaml(content);
+      validateScheduleSpec(parsed);
+    } catch (error) {
+      res.status(400).json({ error: 'Invalid YAML or schema', details: String(error) });
+      return;
+    }
+
+    const schedulePath = path.join(agent.path, 'schedules', `${scheduleId}.yaml`);
+
+    try {
+      await fs.writeFile(schedulePath, content, 'utf-8');
+      // Reload the schedule in the scheduler
+      await scheduleManager.reloadSchedule(agent.id, scheduleId);
+      res.json({ success: true, message: 'Schedule updated' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save schedule', details: String(error) });
+    }
+  });
+
+  /**
+   * DELETE /api/agents/:id/schedules/:scheduleId - Delete a schedule
+   */
+  router.delete('/:id/schedules/:scheduleId', async (req, res) => {
+    const { agentLoader, scheduleManager } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (!scheduleManager) {
+      res.status(503).json({ error: 'Schedule system not enabled' });
+      return;
+    }
+
+    const scheduleId = req.params.scheduleId;
+
+    try {
+      await scheduleManager.deleteSchedule(scheduleId);
+      res.json({ success: true, message: 'Schedule deleted' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete schedule', details: String(error) });
+    }
+  });
+
+  /**
+   * POST /api/agents/:id/schedules/:scheduleId/pause - Pause a schedule
+   */
+  router.post('/:id/schedules/:scheduleId/pause', async (req, res) => {
+    const { agentLoader, scheduleManager } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (!scheduleManager) {
+      res.status(503).json({ error: 'Schedule system not enabled' });
+      return;
+    }
+
+    const scheduleId = req.params.scheduleId;
+
+    try {
+      await scheduleManager.pauseSchedule(scheduleId);
+      res.json({ success: true, message: 'Schedule paused' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to pause schedule', details: String(error) });
+    }
+  });
+
+  /**
+   * POST /api/agents/:id/schedules/:scheduleId/resume - Resume a schedule
+   */
+  router.post('/:id/schedules/:scheduleId/resume', async (req, res) => {
+    const { agentLoader, scheduleManager } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (!scheduleManager) {
+      res.status(503).json({ error: 'Schedule system not enabled' });
+      return;
+    }
+
+    const scheduleId = req.params.scheduleId;
+
+    try {
+      await scheduleManager.resumeSchedule(scheduleId);
+      res.json({ success: true, message: 'Schedule resumed' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to resume schedule', details: String(error) });
+    }
+  });
+
+  /**
+   * POST /api/agents/:id/schedules/:scheduleId/run - Run a schedule immediately
+   */
+  router.post('/:id/schedules/:scheduleId/run', async (req, res) => {
+    const { agentLoader, scheduleManager } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (!scheduleManager) {
+      res.status(503).json({ error: 'Schedule system not enabled' });
+      return;
+    }
+
+    const scheduleId = req.params.scheduleId;
+
+    try {
+      // runNow returns immediately, execution happens in background
+      await scheduleManager.runNow(scheduleId);
+      res.json({ success: true, message: 'Schedule execution started' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to run schedule', details: String(error) });
+    }
+  });
+
+  /**
+   * GET /api/agents/:id/schedules/:scheduleId/history - Get execution history
+   */
+  router.get('/:id/schedules/:scheduleId/history', async (req, res) => {
+    const { agentLoader, scheduleManager } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (!scheduleManager) {
+      res.status(503).json({ error: 'Schedule system not enabled' });
+      return;
+    }
+
+    const scheduleId = req.params.scheduleId;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    try {
+      const history = scheduleManager.getExecutionHistory(scheduleId, limit);
+      res.json({ history });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get history', details: String(error) });
     }
   });
 

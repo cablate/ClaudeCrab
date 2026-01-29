@@ -128,6 +128,9 @@
         <button onclick="showTab('skills')" id="tab-skills" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
           Skills
         </button>
+        <button onclick="showTab('schedules')" id="tab-schedules" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+          Schedules
+        </button>
         <button onclick="showTab('sessions')" id="tab-sessions" class="tab-btn px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
           Sessions (<%= sessions.length %>)
         </button>
@@ -194,6 +197,18 @@
           </button>
         </div>
         <div id="skillsList" class="p-6">
+          <div class="text-center py-8 text-gray-500">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab Content: Schedules -->
+    <div id="content-schedules" class="tab-content hidden">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-semibold text-gray-800">Scheduled Tasks</h3>
+        </div>
+        <div id="schedulesList" class="p-6">
           <div class="text-center py-8 text-gray-500">Loading...</div>
         </div>
       </div>
@@ -317,6 +332,54 @@
   </div>
 </div>
 
+<!-- Schedule Edit Modal -->
+<div id="scheduleEditModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col mx-4">
+    <div class="px-6 py-4 border-b flex justify-between items-center">
+      <h3 id="scheduleModalTitle" class="text-lg font-semibold"></h3>
+      <button onclick="closeScheduleEditModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+    </div>
+    <div class="p-6 flex-1 overflow-y-auto">
+      <textarea id="scheduleContent" class="w-full h-96 font-mono text-sm p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
+    </div>
+    <div class="px-6 py-4 border-t flex justify-between items-center">
+      <span id="scheduleModalMeta" class="text-sm text-gray-500"></span>
+      <div class="flex gap-2">
+        <button onclick="closeScheduleEditModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
+        <button onclick="saveSchedule()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule History Modal -->
+<div id="scheduleHistoryModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col mx-4">
+    <div class="px-6 py-4 border-b flex justify-between items-center">
+      <h3 id="historyModalTitle" class="text-lg font-semibold">Execution History</h3>
+      <button onclick="closeScheduleHistoryModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+    </div>
+    <div class="p-6 flex-1 overflow-y-auto">
+      <table class="w-full">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
+            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Result</th>
+          </tr>
+        </thead>
+        <tbody id="historyTableBody" class="divide-y divide-gray-200">
+          <tr><td colspan="4" class="px-4 py-4 text-center text-gray-500">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="px-6 py-4 border-t flex justify-end">
+      <button onclick="closeScheduleHistoryModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 function copyToken(token) {
   navigator.clipboard.writeText(token).then(() => {
@@ -367,6 +430,10 @@ function showTab(tabName) {
   // Load skills when switching to skills tab
   if (tabName === 'skills') {
     loadSkills();
+  }
+  // Load schedules when switching to schedules tab
+  if (tabName === 'schedules') {
+    loadSchedules();
   }
 }
 
@@ -488,6 +555,8 @@ document.addEventListener('keydown', (e) => {
     closeMemoryModal();
     closeSkillUploadModal();
     closeSkillEditModal();
+    closeScheduleEditModal();
+    closeScheduleHistoryModal();
   }
 });
 
@@ -655,6 +724,270 @@ async function deleteSkill(skillPath, skillName) {
     if (data.success) {
       skillsLoaded = false;
       loadSkills();
+    } else {
+      alert('Failed to delete: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Failed to delete: ' + error.message);
+  }
+}
+
+// Schedule System
+let schedulesLoaded = false;
+let currentScheduleId = null;
+
+async function loadSchedules() {
+  if (schedulesLoaded) return;
+
+  try {
+    const response = await fetch('/api/agents/<%= agent.id %>/schedules');
+    const data = await response.json();
+
+    if (!response.ok) {
+      document.getElementById('schedulesList').innerHTML =
+        `<div class="text-center py-8 text-yellow-600">${data.error || 'Schedule system not available'}</div>`;
+      return;
+    }
+
+    renderSchedules(data.schedules);
+    schedulesLoaded = true;
+  } catch (error) {
+    console.error('Failed to load schedules:', error);
+    document.getElementById('schedulesList').innerHTML =
+      '<div class="text-center py-4 text-red-500">Failed to load schedules</div>';
+  }
+}
+
+function renderSchedules(schedules) {
+  const container = document.getElementById('schedulesList');
+
+  if (schedules.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-8">
+        <svg class="w-12 h-12 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <p class="text-gray-500 mb-2">No scheduled tasks</p>
+        <p class="text-sm text-gray-400">Ask the agent to create a scheduled task in conversation</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="grid grid-cols-1 gap-4">
+      ${schedules.map(schedule => {
+        const spec = schedule.spec;
+        const isEnabled = spec.metadata.enabled;
+        const statusClass = isEnabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600';
+        const statusText = isEnabled ? 'Running' : 'Paused';
+        const nextRun = schedule.nextRun ? new Date(schedule.nextRun).toLocaleString('zh-TW') : 'N/A';
+
+        return `
+          <div class="border rounded-lg p-4 hover:border-blue-300 transition-colors">
+            <div class="flex justify-between items-start">
+              <div class="flex-1">
+                <div class="flex items-center gap-2">
+                  <h4 class="font-medium text-gray-900">${spec.name}</h4>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+                    ${statusText}
+                  </span>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">${spec.description || 'No description'}</p>
+                <div class="mt-2 space-y-1">
+                  <p class="text-xs text-gray-400">
+                    <span class="font-medium">Cron:</span> ${spec.trigger.cron || 'N/A'} (${spec.trigger.timezone || 'UTC'})
+                  </p>
+                  <p class="text-xs text-gray-400">
+                    <span class="font-medium">Next run:</span> ${nextRun}
+                  </p>
+                </div>
+              </div>
+              <div class="flex flex-col gap-1 ml-4">
+                <button onclick="editSchedule('${spec.id}')" class="text-blue-600 hover:text-blue-800 text-sm">Edit</button>
+                ${isEnabled
+                  ? `<button onclick="pauseSchedule('${spec.id}')" class="text-yellow-600 hover:text-yellow-800 text-sm">Pause</button>`
+                  : `<button onclick="resumeSchedule('${spec.id}')" class="text-green-600 hover:text-green-800 text-sm">Resume</button>`
+                }
+                <button onclick="runScheduleNow('${spec.id}')" class="text-purple-600 hover:text-purple-800 text-sm">Run Now</button>
+                <button onclick="viewScheduleHistory('${spec.id}')" class="text-gray-600 hover:text-gray-800 text-sm">History</button>
+                <button onclick="deleteSchedule('${spec.id}', '${spec.name}')" class="text-red-600 hover:text-red-800 text-sm">Delete</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function editSchedule(scheduleId) {
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/schedules/${encodeURIComponent(scheduleId)}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert('Failed to load schedule: ' + (data.error || 'Unknown error'));
+      return;
+    }
+
+    currentScheduleId = scheduleId;
+    document.getElementById('scheduleModalTitle').textContent = `Edit: ${scheduleId}.yaml`;
+    document.getElementById('scheduleContent').value = data.content;
+    document.getElementById('scheduleModalMeta').textContent = `Last modified: ${new Date(data.modified).toLocaleString('zh-TW')}`;
+    document.getElementById('scheduleEditModal').classList.remove('hidden');
+  } catch (error) {
+    alert('Failed to load schedule: ' + error.message);
+  }
+}
+
+function closeScheduleEditModal() {
+  document.getElementById('scheduleEditModal').classList.add('hidden');
+  currentScheduleId = null;
+}
+
+async function saveSchedule() {
+  const content = document.getElementById('scheduleContent').value;
+
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/schedules/${encodeURIComponent(currentScheduleId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      closeScheduleEditModal();
+      schedulesLoaded = false;
+      loadSchedules();
+    } else {
+      alert('Failed to save: ' + (data.error || data.details || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Failed to save: ' + error.message);
+  }
+}
+
+async function pauseSchedule(scheduleId) {
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/schedules/${encodeURIComponent(scheduleId)}/pause`, {
+      method: 'POST'
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      schedulesLoaded = false;
+      loadSchedules();
+    } else {
+      alert('Failed to pause: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Failed to pause: ' + error.message);
+  }
+}
+
+async function resumeSchedule(scheduleId) {
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/schedules/${encodeURIComponent(scheduleId)}/resume`, {
+      method: 'POST'
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      schedulesLoaded = false;
+      loadSchedules();
+    } else {
+      alert('Failed to resume: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Failed to resume: ' + error.message);
+  }
+}
+
+async function runScheduleNow(scheduleId) {
+  if (!confirm('Run this schedule immediately?')) return;
+
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/schedules/${encodeURIComponent(scheduleId)}/run`, {
+      method: 'POST'
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      alert('Schedule execution started');
+    } else {
+      alert('Failed to run: ' + (data.error || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Failed to run: ' + error.message);
+  }
+}
+
+async function viewScheduleHistory(scheduleId) {
+  document.getElementById('historyModalTitle').textContent = `Execution History: ${scheduleId}`;
+  document.getElementById('historyTableBody').innerHTML = '<tr><td colspan="4" class="px-4 py-4 text-center text-gray-500">Loading...</td></tr>';
+  document.getElementById('scheduleHistoryModal').classList.remove('hidden');
+
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/schedules/${encodeURIComponent(scheduleId)}/history`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      document.getElementById('historyTableBody').innerHTML =
+        `<tr><td colspan="4" class="px-4 py-4 text-center text-red-500">${data.error || 'Failed to load history'}</td></tr>`;
+      return;
+    }
+
+    const history = data.history || [];
+    if (history.length === 0) {
+      document.getElementById('historyTableBody').innerHTML =
+        '<tr><td colspan="4" class="px-4 py-4 text-center text-gray-500">No execution history</td></tr>';
+      return;
+    }
+
+    document.getElementById('historyTableBody').innerHTML = history.map(exec => {
+      const startTime = new Date(exec.startedAt).toLocaleString('zh-TW');
+      const statusClass = exec.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+      const statusText = exec.success ? 'Success' : 'Failed';
+      const duration = exec.durationMs ? `${(exec.durationMs / 1000).toFixed(1)}s` : 'N/A';
+      const result = exec.success ? (exec.resultSummary || '-') : (exec.errorMessage || '-');
+
+      return `
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-2 text-sm">${startTime}</td>
+          <td class="px-4 py-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+              ${statusText}
+            </span>
+          </td>
+          <td class="px-4 py-2 text-sm">${duration}</td>
+          <td class="px-4 py-2 text-sm text-gray-500 max-w-xs truncate" title="${result}">${result}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (error) {
+    document.getElementById('historyTableBody').innerHTML =
+      `<tr><td colspan="4" class="px-4 py-4 text-center text-red-500">Error: ${error.message}</td></tr>`;
+  }
+}
+
+function closeScheduleHistoryModal() {
+  document.getElementById('scheduleHistoryModal').classList.add('hidden');
+}
+
+async function deleteSchedule(scheduleId, scheduleName) {
+  if (!confirm(`Delete schedule "${scheduleName}"? This cannot be undone.`)) return;
+
+  try {
+    const response = await fetch(`/api/agents/<%= agent.id %>/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'DELETE'
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      schedulesLoaded = false;
+      loadSchedules();
     } else {
       alert('Failed to delete: ' + (data.error || 'Unknown error'));
     }
