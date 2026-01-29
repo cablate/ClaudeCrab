@@ -9,7 +9,69 @@
 
 ## 版本歷史
 
-### v1.9.2 - SDK 權限回調擴展 + /stop 指令（當前版本）
+### v1.10.0 - Agent-Driven Scheduling System（當前版本）
+
+**發布日期**：2026-01-29
+
+**變更**：
+
+1. **排程系統核心架構**
+   - 三層架構：對話層 → 規格層 → 執行層
+   - Agent 可偵測排程意圖，引導使用者建立 YAML 規格
+   - 排程任務使用獨立 session 執行（Agent 有 Startup Protocol 提供 context）
+
+2. **YAML 規格系統**
+   - 排程檔案位置：`agents/{agentId}/schedules/{taskId}.yaml`
+   - 支援 cron、interval、once 三種觸發類型
+   - 完整的 Zod schema 驗證
+
+3. **執行與通知**
+   - `CronScheduler` 使用 node-cron 管理排程觸發
+   - `ScheduleExecutor` 執行任務，記錄結果
+   - `ScheduleNotifier` 發送 Telegram 通知（完成/失敗）
+
+4. **資料庫擴展**
+   - 新增 `scheduled_tasks` 表（任務定義）
+   - 新增 `schedule_executions` 表（執行記錄）
+   - Schema 版本升級至 v3
+
+5. **Telegram 指令**
+   - `/schedule list` - 列出所有排程
+   - `/schedule info <id>` - 查看詳情
+   - `/schedule pause/resume <id>` - 暫停/恢復
+   - `/schedule run <id>` - 立即執行
+   - `/schedule delete <id>` - 刪除
+   - `/schedule history [id]` - 執行歷史
+
+6. **Agent 指引擴展**
+   - `agents/_example/CLAUDE.md` 新增 Scheduling System 區段
+   - 定義觸發詞、建立流程、YAML 範例
+
+**新增檔案**：
+- `src/schedule/schemas.ts` — Zod schema 定義
+- `src/schedule/types.ts` — TypeScript 類型
+- `src/schedule/ScheduleLoader.ts` — YAML 載入器
+- `src/schedule/CronScheduler.ts` — Cron 排程器
+- `src/schedule/ScheduleExecutor.ts` — 任務執行器
+- `src/schedule/ScheduleNotifier.ts` — 通知發送器
+- `src/schedule/ScheduleManager.ts` — 統一管理介面
+- `src/schedule/index.ts` — 模組匯出
+- `src/persistence/ScheduleRepository.ts` — 排程資料庫操作
+
+**修改檔案**：
+- `src/persistence/DatabaseManager.ts` — 新增 v3 schema + migration
+- `src/adapters/commands/TelegramCommands.ts` — 新增 /schedule 指令
+- `src/core/PlatformOrchestrator.ts` — 傳遞 scheduleManager
+- `src/index.ts` — 初始化排程系統
+- `agents/_example/CLAUDE.md` — 新增排程指引
+
+**新增依賴**：
+- `node-cron` — Cron 表達式排程
+- `yaml` — YAML 解析
+
+---
+
+### v1.9.2 - SDK 權限回調擴展 + /stop 指令
 
 **發布日期**：2026-01-29
 

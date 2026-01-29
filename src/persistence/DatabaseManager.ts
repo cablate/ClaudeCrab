@@ -58,9 +58,45 @@ CREATE TABLE IF NOT EXISTS metadata (
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- Scheduled tasks table
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    trigger_type TEXT NOT NULL,
+    trigger_config TEXT NOT NULL,
+    execution_config TEXT NOT NULL,
+    notification_config TEXT,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- Scheduled tasks indexes
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_agent ON scheduled_tasks(agent_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
+
+-- Schedule executions table
+CREATE TABLE IF NOT EXISTS schedule_executions (
+    id TEXT PRIMARY KEY,
+    schedule_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    success INTEGER,
+    duration_ms INTEGER,
+    result_summary TEXT,
+    error_message TEXT,
+    FOREIGN KEY (schedule_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
+);
+
+-- Schedule executions indexes
+CREATE INDEX IF NOT EXISTS idx_schedule_executions_schedule ON schedule_executions(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_executions(started_at);
 `;
 
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 
 /**
  * Migration SQL from v1 to v2:
@@ -93,6 +129,48 @@ CREATE INDEX IF NOT EXISTS idx_sessions_platform ON sessions(platform);
 CREATE INDEX IF NOT EXISTS idx_sessions_platform_agent_user ON sessions(platform, agent_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id);
+`;
+
+/**
+ * Migration SQL from v2 to v3:
+ * Adds scheduled_tasks and schedule_executions tables
+ */
+const MIGRATION_V2_TO_V3 = `
+-- Scheduled tasks table
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    trigger_type TEXT NOT NULL,
+    trigger_config TEXT NOT NULL,
+    execution_config TEXT NOT NULL,
+    notification_config TEXT,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- Scheduled tasks indexes
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_agent ON scheduled_tasks(agent_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
+
+-- Schedule executions table
+CREATE TABLE IF NOT EXISTS schedule_executions (
+    id TEXT PRIMARY KEY,
+    schedule_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    success INTEGER,
+    duration_ms INTEGER,
+    result_summary TEXT,
+    error_message TEXT,
+    FOREIGN KEY (schedule_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
+);
+
+-- Schedule executions indexes
+CREATE INDEX IF NOT EXISTS idx_schedule_executions_schedule ON schedule_executions(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_executions(started_at);
 `;
 
 /**
@@ -213,6 +291,12 @@ export class DatabaseManager {
       this.db.exec(MIGRATION_V1_TO_V2);
       this.db.pragma('foreign_keys = ON');
       logger.info('Migration v1 → v2 completed');
+      currentVersion = '2';
+    }
+
+    if (currentVersion === '2') {
+      this.db.exec(MIGRATION_V2_TO_V3);
+      logger.info('Migration v2 → v3 completed');
     }
 
     // Update schema version

@@ -3,18 +3,28 @@ import { logger } from './utils/logger.js';
 import { AgentLoader } from './core/AgentLoader.js';
 import { SessionManager } from './core/SessionManager.js';
 import { MessageProcessor } from './core/MessageProcessor.js';
+import { SDKQueryManager } from './core/SDKQueryManager.js';
 import { PlatformOrchestrator } from './core/PlatformOrchestrator.js';
 import { loadSecurityConfig } from './utils/security.js';
 import { DatabaseManager } from './persistence/DatabaseManager.js';
 import { SessionRepository } from './persistence/SessionRepository.js';
 import { ConversationRepository } from './persistence/ConversationRepository.js';
+import { ScheduleRepository } from './persistence/ScheduleRepository.js';
 import { WebUIServer } from './webui/index.js';
+import {
+  ScheduleLoader,
+  CronScheduler,
+  ScheduleExecutor,
+  ScheduleNotifier,
+  ScheduleManager,
+} from './schedule/index.js';
 
 // Global references for cleanup
 let orchestrator: PlatformOrchestrator | null = null;
 let sessionManager: SessionManager | null = null;
 let databaseManager: DatabaseManager | null = null;
 let webUIServer: WebUIServer | null = null;
+let scheduleManager: ScheduleManager | null = null;
 
 const main = async (): Promise<void> => {
   logger.info('ClaudeCab v1.0.0 starting...');
@@ -103,10 +113,59 @@ const main = async (): Promise<void> => {
     sessionManager,
     messageProcessor,
     securityConfig,
+    ...(scheduleManager !== null ? { scheduleManager } : {}),
   });
 
   // Start all platform adapters (one per agent with a platform token)
   await orchestrator.startAll();
+
+  // Initialize Schedule System (if persistence is enabled)
+  const scheduleEnabled = process.env.SCHEDULE_ENABLED !== 'false'; // Default enabled
+  let scheduleRepository: ScheduleRepository | undefined;
+
+  if (scheduleEnabled) {
+    logger.info('Initializing Schedule System...');
+
+    // Create schedule repository (if persistence is enabled)
+    if (enablePersistence && databaseManager !== null) {
+      scheduleRepository = new ScheduleRepository(databaseManager.getDatabase());
+    }
+
+    // Create schedule components
+    const scheduleLoader = new ScheduleLoader(agentLoader.getAgentsDir());
+
+    // Create SDK query manager for schedule execution
+    const sdkManager = new SDKQueryManager();
+
+    // Create notifier with adapters from orchestrator (will be populated after start)
+    const scheduleNotifier = new ScheduleNotifier(new Map());
+
+    // Create executor
+    const scheduleExecutor = new ScheduleExecutor(
+      agentLoader,
+      sdkManager,
+      scheduleNotifier,
+      scheduleRepository
+    );
+
+    // Create cron scheduler
+    const cronScheduler = new CronScheduler(scheduleExecutor);
+
+    // Create manager
+    scheduleManager = new ScheduleManager(
+      scheduleLoader,
+      cronScheduler,
+      scheduleRepository
+    );
+
+    // Initialize (load and register schedules)
+    await scheduleManager.initialize();
+
+    // Update notifier with adapters after orchestrator starts
+    // This will be done in orchestrator.startAll()
+
+    logger.info('Schedule System initialized');
+  }
 
   // Initialize WebUI (if enabled)
   const webUIEnabled = process.env.WEBUI_ENABLED === 'true';
@@ -136,6 +195,7 @@ const main = async (): Promise<void> => {
       adapters: runningAdapters.map((a) => `${a.platform}::${a.agentId}`),
       persistenceEnabled: enablePersistence,
       webUIEnabled,
+      scheduleEnabled,
     },
     'ClaudeCab initialized successfully'
   );
@@ -149,6 +209,12 @@ const shutdown = async (signal: string): Promise<void> => {
     // Stop WebUI server
     if (webUIServer !== null) {
       await webUIServer.stop();
+    }
+
+    // Stop schedule manager
+    if (scheduleManager !== null) {
+      scheduleManager.dispose();
+      logger.info('Schedule manager disposed');
     }
 
     // Stop all platform adapters

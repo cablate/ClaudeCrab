@@ -10,6 +10,7 @@ import { TelegramAdapter } from '../adapters/TelegramAdapter.js';
 import type { TelegramAdapterConfig, AdapterSecurityConfig } from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import type { CommandDependencies } from '../adapters/commands/index.js';
+import type { ScheduleManager } from '../schedule/ScheduleManager.js';
 import { AdapterRegistry } from './AdapterRegistry.js';
 import { AgentLoader } from './AgentLoader.js';
 import { SessionManager } from './SessionManager.js';
@@ -34,6 +35,7 @@ export interface PlatformOrchestratorOptions {
   sessionManager: SessionManager;
   messageProcessor: MessageProcessor;
   securityConfig?: AdapterSecurityConfig;
+  scheduleManager?: ScheduleManager;
 }
 
 /**
@@ -46,12 +48,14 @@ export class PlatformOrchestrator {
   private readonly sessionManager: SessionManager;
   private readonly messageProcessor: MessageProcessor;
   private readonly securityConfig: AdapterSecurityConfig | undefined;
+  private readonly scheduleManager: ScheduleManager | undefined;
 
   constructor(options: PlatformOrchestratorOptions) {
     this.agentLoader = options.agentLoader;
     this.sessionManager = options.sessionManager;
     this.messageProcessor = options.messageProcessor;
     this.securityConfig = options.securityConfig;
+    this.scheduleManager = options.scheduleManager;
   }
 
   /**
@@ -183,6 +187,7 @@ export class PlatformOrchestrator {
       sessionManager: this.sessionManager,
       messageProcessor: this.messageProcessor,
       agentId,
+      ...(this.scheduleManager !== undefined ? { scheduleManager: this.scheduleManager } : {}),
     };
     adapter.setCommandDependencies(commandDeps);
 

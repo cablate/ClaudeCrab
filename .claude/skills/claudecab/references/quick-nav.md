@@ -78,6 +78,24 @@
 
 ---
 
+## 排程系統
+
+| 要做什麼 | 主要檔案 | 相關檔案 |
+|----------|----------|----------|
+| 修改 YAML schema | `src/schedule/schemas.ts` | `src/schedule/types.ts` |
+| 修改排程載入邏輯 | `src/schedule/ScheduleLoader.ts` | - |
+| 修改 cron 觸發邏輯 | `src/schedule/CronScheduler.ts` | `node-cron` |
+| 修改任務執行邏輯 | `src/schedule/ScheduleExecutor.ts` | `SDKQueryManager.ts` |
+| 修改執行通知 | `src/schedule/ScheduleNotifier.ts` | `BaseAdapter.ts` |
+| 修改排程管理 API | `src/schedule/ScheduleManager.ts` | - |
+| 修改 /schedule 指令 | `src/adapters/commands/TelegramCommands.ts` | `handleSchedule*` 函數 |
+| 修改排程資料庫操作 | `src/persistence/ScheduleRepository.ts` | `DatabaseManager.ts` |
+| 修改 Agent 排程指引 | `agents/_example/CLAUDE.md` | Scheduling System 區段 |
+
+**排程檔案位置**：`agents/{agentId}/schedules/{taskId}.yaml`
+
+---
+
 ## Agent 記憶系統
 
 | 要做什麼 | 主要檔案 | 相關檔案 |

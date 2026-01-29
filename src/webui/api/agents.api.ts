@@ -6,6 +6,7 @@ import path from 'node:path';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import os from 'node:os';
+import { parse as parseYaml } from 'yaml';
 
 // Configure multer for zip file uploads
 const upload = multer({
@@ -474,11 +475,17 @@ export function createAgentsApiRouter(): Router {
           let description = '';
 
           if (frontmatterMatch?.[1]) {
-            const frontmatter = frontmatterMatch[1];
-            const nameMatch = frontmatter.match(/^name:\s*(.+)$/m);
-            const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
-            if (nameMatch?.[1]) name = nameMatch[1].trim();
-            if (descMatch?.[1]) description = descMatch[1].trim();
+            try {
+              const frontmatter = parseYaml(frontmatterMatch[1]) as Record<string, unknown>;
+              if (frontmatter.name && typeof frontmatter.name === 'string') {
+                name = frontmatter.name.trim();
+              }
+              if (frontmatter.description && typeof frontmatter.description === 'string') {
+                description = frontmatter.description.trim();
+              }
+            } catch {
+              // YAML parse failed, fall back to directory name
+            }
           }
 
           skills.push({
