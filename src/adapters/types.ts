@@ -120,7 +120,51 @@ export interface PermissionPromptResult {
 /**
  * Callback signature for resolving a permission decision from the adapter.
  */
-export type PermissionResolver = (requestId: string, decision: 'allow' | 'deny') => void;
+export type PermissionResolver = (requestId: string, decision: 'allow' | 'always' | 'deny') => void;
+
+/**
+ * A single question option for AskUserQuestion prompts.
+ */
+export interface QuestionOption {
+  /** Display label for this option */
+  label: string;
+  /** Description of what this option means */
+  description: string;
+}
+
+/**
+ * Options for sending a question prompt to the user (AskUserQuestion).
+ */
+export interface QuestionPromptOptions {
+  /** Unique ID for this question request */
+  requestId: string;
+  /** The question text to display */
+  question: string;
+  /** Short header/label for the question */
+  header: string;
+  /** Available options for the user to choose from */
+  options: QuestionOption[];
+  /** Whether multiple selections are allowed (Phase 2: single-select only) */
+  multiSelect: boolean;
+}
+
+/**
+ * Result of a question prompt interaction.
+ */
+export interface QuestionPromptResult {
+  success: boolean;
+  /** The message ID of the sent prompt (for later editing) */
+  messageId?: string;
+  error?: string;
+}
+
+/**
+ * Callback signature for resolving a question answer from the adapter.
+ * answer can be:
+ * - A single option label (single-select)
+ * - null if user cancelled or timed out
+ */
+export type QuestionResolver = (requestId: string, answer: string | null) => void;
 
 /**
  * Adapter lifecycle state

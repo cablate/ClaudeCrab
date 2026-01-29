@@ -8,6 +8,9 @@ import type {
   PermissionPromptOptions,
   PermissionPromptResult,
   PermissionResolver,
+  QuestionPromptOptions,
+  QuestionPromptResult,
+  QuestionResolver,
 } from './types.js';
 import { getEventBus } from '../core/EventBus.js';
 import { logger } from '../utils/logger.js';
@@ -215,6 +218,50 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * Default: no-op. Subclasses override to wire platform-specific callback routing.
    */
   setPermissionResolver(_resolver: PermissionResolver): void {
+    // Default: no-op
+  }
+
+  /**
+   * Send a question prompt to the user (for AskUserQuestion tool).
+   * Default implementation sends a text-only message (no interactive buttons).
+   * Subclasses should override for interactive prompts (e.g., Telegram InlineKeyboard).
+   */
+  async sendQuestionPrompt(
+    chatId: string,
+    options: QuestionPromptOptions
+  ): Promise<QuestionPromptResult> {
+    const optionsList = options.options
+      .map((opt, i) => `${i + 1}. ${opt.label}: ${opt.description}`)
+      .join('\n');
+    const text = `❓ ${options.header}\n\n${options.question}\n\n${optionsList}`;
+    const result = await this.sendMessage(chatId, text);
+    const response: QuestionPromptResult = { success: result.success };
+    if (result.messageId !== undefined) {
+      response.messageId = result.messageId;
+    }
+    if (result.error !== undefined) {
+      response.error = result.error;
+    }
+    return response;
+  }
+
+  /**
+   * Update a previously sent question prompt (e.g., mark as answered).
+   * Default: no-op. Subclasses override to edit the message.
+   */
+  async updateQuestionPrompt(
+    _chatId: string,
+    _messageId: string,
+    _text: string
+  ): Promise<void> {
+    // Default: no-op
+  }
+
+  /**
+   * Register a callback for question answer results from the platform.
+   * Default: no-op. Subclasses override to wire platform-specific callback routing.
+   */
+  setQuestionResolver(_resolver: QuestionResolver): void {
     // Default: no-op
   }
 

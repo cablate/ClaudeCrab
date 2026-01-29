@@ -4,6 +4,7 @@ import type { IConversationRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager } from './SDKQueryManager.js';
 import { PermissionBridge } from './PermissionBridge.js';
+import { QuestionBridge } from './QuestionBridge.js';
 import { buildPromptContext } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
@@ -245,6 +246,20 @@ export class MessageProcessor {
       }
     });
 
+    // Set up question bridge for AskUserQuestion tool
+    const questionBridge = new QuestionBridge(120_000);
+    adapter.setQuestionResolver((requestId, answer) => {
+      if (answer === null) {
+        questionBridge.resolveQuestion(requestId, { answer: null });
+      } else {
+        // answer is the option index as string
+        const optionLabels = questionBridge.getOptionLabels(requestId);
+        const optionIndex = parseInt(answer, 10);
+        const selectedLabel = optionLabels?.[optionIndex] ?? answer;
+        questionBridge.resolveQuestion(requestId, { answer: selectedLabel });
+      }
+    });
+
     try {
       // Track intermediate messages sent via streaming callback
       const intermediateMessages: string[] = [];
@@ -260,6 +275,91 @@ export class MessageProcessor {
           toolUseID: string;
         }
       ) => {
+        // Handle AskUserQuestion tool - present options to user via Telegram
+        if (toolName === 'AskUserQuestion') {
+          const questions = toolInput.questions as Array<{
+            question: string;
+            header: string;
+            options: Array<{ label: string; description: string }>;
+            multiSelect: boolean;
+          }> | undefined;
+
+          if (questions === undefined || questions.length === 0) {
+            // No questions - just allow the tool
+            return {
+              behavior: 'allow' as const,
+              updatedInput: toolInput,
+              toolUseID: options.toolUseID,
+            };
+          }
+
+          // Phase 2: Only handle first question, single-select only
+          const firstQuestion = questions[0];
+          if (firstQuestion === undefined) {
+            // Empty questions array - just allow the tool
+            return {
+              behavior: 'allow' as const,
+              updatedInput: toolInput,
+              toolUseID: options.toolUseID,
+            };
+          }
+          const optionLabels = firstQuestion.options.map(opt => opt.label);
+
+          const { requestId, promise } = questionBridge.requestQuestion(
+            firstQuestion.question,
+            firstQuestion.header,
+            optionLabels,
+            { signal: options.signal }
+          );
+
+          const promptResult = await adapter.sendQuestionPrompt(chatId, {
+            requestId,
+            question: firstQuestion.question,
+            header: firstQuestion.header,
+            options: firstQuestion.options,
+            multiSelect: firstQuestion.multiSelect,
+          });
+
+          if (!promptResult.success) {
+            logger.warn(
+              { error: promptResult.error, chatId, toolName },
+              'Failed to send question prompt, auto-cancelling'
+            );
+            questionBridge.resolveQuestion(requestId, { answer: null });
+          }
+
+          const questionAnswer = await promise;
+
+          // Update the question prompt message with the selection
+          if (promptResult.messageId !== undefined && questionAnswer.answer !== null) {
+            const statusText = `✅ Selected: *${questionAnswer.answer}*`;
+            await adapter.updateQuestionPrompt(chatId, promptResult.messageId, statusText);
+          }
+
+          // If user cancelled or timed out, deny the tool
+          if (questionAnswer.answer === null) {
+            return {
+              behavior: 'deny' as const,
+              message: 'User cancelled the question',
+              toolUseID: options.toolUseID,
+            };
+          }
+
+          // Build answers object for SDK
+          const answers: Record<string, string> = {};
+          answers[firstQuestion.question] = questionAnswer.answer;
+
+          return {
+            behavior: 'allow' as const,
+            updatedInput: {
+              questions: toolInput.questions,
+              answers,
+            },
+            toolUseID: options.toolUseID,
+          };
+        }
+
+        // Normal permission flow for other tools
         const bridgeOptions: {
           signal: AbortSignal;
           toolUseID: string;

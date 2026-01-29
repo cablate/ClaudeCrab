@@ -9,6 +9,9 @@ import type {
   PermissionPromptOptions,
   PermissionPromptResult,
   PermissionResolver,
+  QuestionPromptOptions,
+  QuestionPromptResult,
+  QuestionResolver,
 } from './types.js';
 import { DEFAULT_RATE_LIMIT } from './types.js';
 import {
@@ -118,6 +121,9 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   private readonly securityConfig: SecurityConfig;
   private permissionResolver: PermissionResolver | null = null;
 
+  /** Callback for resolving AskUserQuestion responses */
+  private questionResolver: QuestionResolver | null = null;
+
   /** Maximum message length for Telegram */
   static readonly MAX_MESSAGE_LENGTH = 4096;
 
@@ -193,37 +199,58 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       });
     });
 
-    // Set up permission callback query handler (inline keyboard buttons)
+    // Set up callback query handler (inline keyboard buttons)
     // Use bot.on("callback_query:data") for reliable update type detection in polling
     this.bot.on('callback_query:data', async (ctx) => {
       const data = ctx.callbackQuery.data;
       this.log.debug({ callbackData: data }, 'Received callback query');
 
-      const match = /^perm_(allow|always|deny):(.+)$/.exec(data);
-      if (match === null) {
-        // Not a permission callback — ignore (let other handlers process if any)
+      // Handle permission callbacks (perm_allow, perm_always, perm_deny)
+      const permMatch = /^perm_(allow|always|deny):(.+)$/.exec(data);
+      if (permMatch !== null) {
+        const decision = permMatch[1] as 'allow' | 'always' | 'deny';
+        const requestId = permMatch[2] as string;
+
+        if (this.permissionResolver === null) {
+          this.log.warn({ requestId }, 'Permission resolver not set, session may have expired');
+          await ctx.answerCallbackQuery({ text: '⏳ Permission session expired' });
+          return;
+        }
+
+        this.log.info({ requestId, decision, toolUseID: requestId }, 'Permission decision received');
+        this.permissionResolver(requestId, decision);
+
+        const answerText =
+          decision === 'allow'
+            ? '✅ Allowed'
+            : decision === 'always'
+              ? '✅ Always Allowed'
+              : '❌ Denied';
+        await ctx.answerCallbackQuery({ text: answerText });
         return;
       }
 
-      const decision = match[1] as 'allow' | 'always' | 'deny';
-      const requestId = match[2] as string;
+      // Handle question option callbacks (q_opt_<requestId>:<optionIndex>)
+      const qMatch = /^q_opt_([^:]+):(\d+)$/.exec(data);
+      if (qMatch !== null) {
+        const requestId = qMatch[1] as string;
+        const optionIndex = parseInt(qMatch[2] as string, 10);
 
-      if (this.permissionResolver === null) {
-        this.log.warn({ requestId }, 'Permission resolver not set, session may have expired');
-        await ctx.answerCallbackQuery({ text: '⏳ Permission session expired' });
+        if (this.questionResolver === null) {
+          this.log.warn({ requestId }, 'Question resolver not set, session may have expired');
+          await ctx.answerCallbackQuery({ text: '⏳ Question session expired' });
+          return;
+        }
+
+        // Store the option index; actual label resolution happens in MessageProcessor
+        this.log.info({ requestId, optionIndex }, 'Question option selected');
+        this.questionResolver(requestId, optionIndex.toString());
+        await ctx.answerCallbackQuery({ text: '✅ Selected' });
         return;
       }
 
-      this.log.info({ requestId, decision, toolUseID: requestId }, 'Permission decision received');
-      this.permissionResolver(requestId, decision);
-
-      const answerText =
-        decision === 'allow'
-          ? '✅ Allowed'
-          : decision === 'always'
-            ? '✅ Always Allowed'
-            : '❌ Denied';
-      await ctx.answerCallbackQuery({ text: answerText });
+      // Unknown callback format — log and ignore
+      this.log.debug({ data }, 'Unknown callback query format, ignoring');
     });
 
     // Verify bot token by getting bot info
@@ -567,6 +594,95 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       this.log.warn(
         { error, chatId, messageId },
         'Failed to update permission prompt'
+      );
+    }
+  }
+
+  /**
+   * Store the question resolver callback for AskUserQuestion handling.
+   */
+  override setQuestionResolver(resolver: QuestionResolver): void {
+    this.questionResolver = resolver;
+  }
+
+  /**
+   * Send a question prompt with inline keyboard buttons for each option.
+   */
+  override async sendQuestionPrompt(
+    chatId: string,
+    options: QuestionPromptOptions
+  ): Promise<QuestionPromptResult> {
+    if (this.bot === null) {
+      return { success: false, error: 'Bot not initialized' };
+    }
+
+    try {
+      // Build keyboard with one button per option
+      const keyboard = new InlineKeyboard();
+      options.options.forEach((opt, index) => {
+        keyboard.text(opt.label, `q_opt_${options.requestId}:${index}`);
+        // Add row break every 2 options for better layout
+        if ((index + 1) % 2 === 0 && index < options.options.length - 1) {
+          keyboard.row();
+        }
+      });
+
+      // Format the question text
+      const optionDescriptions = options.options
+        .map((opt, i) => `${i + 1}. **${opt.label}**: ${opt.description}`)
+        .join('\n');
+
+      const text = [
+        `❓ *${options.header}*`,
+        '',
+        options.question,
+        '',
+        optionDescriptions,
+      ].join('\n');
+
+      const result = await this.rateLimiter.execute(async () => {
+        return this.bot!.api.sendMessage(chatId, text, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        });
+      });
+
+      return {
+        success: true,
+        messageId: result.message_id.toString(),
+      };
+    } catch (error) {
+      const errorMessage = this.formatError(error);
+      this.log.error({ error, chatId }, 'Failed to send question prompt');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Update a question prompt message after the user's selection.
+   */
+  override async updateQuestionPrompt(
+    chatId: string,
+    messageId: string,
+    text: string
+  ): Promise<void> {
+    if (this.bot === null) {
+      return;
+    }
+
+    try {
+      await this.rateLimiter.execute(async () => {
+        await this.bot!.api.editMessageText(
+          chatId,
+          parseInt(messageId, 10),
+          text,
+          { parse_mode: 'Markdown' }
+        );
+      });
+    } catch (error) {
+      this.log.warn(
+        { error, chatId, messageId },
+        'Failed to update question prompt'
       );
     }
   }
