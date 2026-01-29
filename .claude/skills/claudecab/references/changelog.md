@@ -9,7 +9,46 @@
 
 ## 版本歷史
 
-### v1.9.1 - SDK 類型系統擴展（當前版本）
+### v1.9.2 - SDK 權限回調擴展 + /stop 指令（當前版本）
+
+**發布日期**：2026-01-29
+
+**變更**：
+
+1. **Allow Always 權限選項（Phase 1）**
+   - Telegram 權限提示新增三個按鈕：Allow / Always / Deny
+   - 點擊 "Always" 會設定 `alwaysAllow: true` 並回傳 `updatedPermissions`
+   - SDK 自動將權限寫入 `settings.local.json`，後續不再詢問
+   - 更新 `PermissionDecision` 介面加入 `alwaysAllow?: boolean`
+   - 更新 `PermissionResolver` 類型支援 `'allow' | 'always' | 'deny'`
+
+2. **AskUserQuestion 處理（Phase 2）**
+   - 新增 `QuestionBridge` 處理問題-答案的 async 協調
+   - 新增 `QuestionPromptOptions`、`QuestionPromptResult`、`QuestionResolver` 類型
+   - TelegramAdapter 實作 `sendQuestionPrompt`、`updateQuestionPrompt`、`setQuestionResolver`
+   - callback_query handler 處理 `q_opt_*` 事件
+   - canUseTool 閉包檢測 `AskUserQuestion` 工具並透過 Telegram 按鈕呈現選項
+   - 目前只支援單選（multiSelect 未來再支援）
+
+3. **/stop 指令**
+   - 新增 `/stop` Telegram 指令，可強制中斷正在執行的 Claude 查詢
+   - MessageProcessor 新增 `cancelQuery()`、`cancelQueryForUser()`、`hasActiveQueryForUser()` 方法
+   - 更新 `/help` 和 `/start` 訊息加入 `/stop` 說明
+
+**新增檔案**：
+- `src/core/QuestionBridge.ts` — 問題-答案橋接器
+
+**修改檔案**：
+- `src/adapters/types.ts` — 新增 Question 相關類型
+- `src/adapters/BaseAdapter.ts` — 新增 question 相關預設方法
+- `src/adapters/TelegramAdapter.ts` — 實作 question UI + Always 按鈕 + callback handler
+- `src/core/MessageProcessor.ts` — canUseTool 處理 AskUserQuestion + cancelQuery 方法
+- `src/core/PermissionBridge.ts` — PermissionDecision 加入 alwaysAllow
+- `src/adapters/commands/TelegramCommands.ts` — 新增 /stop 指令
+
+---
+
+### v1.9.1 - SDK 類型系統擴展
 
 **發布日期**：2026-01-29
 

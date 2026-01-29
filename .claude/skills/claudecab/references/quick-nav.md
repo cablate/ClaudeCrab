@@ -4,6 +4,18 @@
 
 ---
 
+## 產品定位
+
+> **開發新功能前，先閱讀 [product-vision.md](./product-vision.md)**
+
+| 文件 | 用途 |
+|------|------|
+| [product-vision.md](./product-vision.md) | 產品定位、功能開發原則、路線圖 |
+| [architecture.md](./architecture.md) | 技術架構說明 |
+| [changelog.md](./changelog.md) | 版本歷程 |
+
+---
+
 ## 核心功能
 
 | 要做什麼 | 主要檔案 | 相關檔案 |
@@ -26,6 +38,9 @@
 | 修改訊息發送邏輯 | `src/adapters/TelegramAdapter.ts` | - |
 | 修改訊息分割邏輯 | `src/adapters/TelegramAdapter.ts` | `splitMessage()` 方法 |
 | 新增其他平台 Adapter | 繼承 `src/adapters/BaseAdapter.ts` | `src/core/AdapterRegistry.ts` |
+| 取消執行中查詢 | `src/core/MessageProcessor.ts` | `cancelQuery()`、`cancelQueryForUser()` |
+
+**目前可用指令**：`/start`、`/help`、`/reset`、`/stop`
 
 ---
 
@@ -37,8 +52,10 @@
 | 修改權限 UI（按鈕文字、InlineKeyboard） | `src/adapters/TelegramAdapter.ts` | `sendPermissionPrompt`、`callback_query` handler |
 | 修改權限型別定義 | `src/adapters/types.ts` | `PermissionPromptOptions`、`PermissionPromptResult`、`PermissionResolver` |
 | 新增平台的權限 UI | 繼承 `src/adapters/BaseAdapter.ts` | Override `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` |
-| 修改 canUseTool 閉包組裝 | `src/core/MessageProcessor.ts` | `PermissionBridge.ts` |
+| 修改 canUseTool 閉包組裝 | `src/core/MessageProcessor.ts` | `PermissionBridge.ts`、`QuestionBridge.ts` |
 | 調整 Agent 預設允許的工具 | `agents/general/.claude/settings.local.json` | `permissions.allow` 陣列 |
+| 修改 AskUserQuestion 處理邏輯 | `src/core/QuestionBridge.ts` | `MessageProcessor.ts`、`TelegramAdapter.ts` |
+| 修改問題提示 UI | `src/adapters/TelegramAdapter.ts` | `sendQuestionPrompt`、`setQuestionResolver` |
 
 > **注意**：grammy message handler 必須 fire-and-forget，否則 callback_query 會死鎖。詳見 troubleshooting。
 
@@ -106,6 +123,8 @@
 | ClaudeCabError 及子類 | `src/types/errors.ts` |
 | UnifiedMessage, SendOptions | `src/adapters/types.ts` |
 | PermissionPromptOptions, PermissionPromptResult, PermissionResolver | `src/adapters/types.ts` |
+| QuestionPromptOptions, QuestionPromptResult, QuestionResolver | `src/adapters/types.ts` |
+| SDK 類型（PermissionMode, HookEvent 等） | `src/types/sdk.ts` |
 
 ---
 
