@@ -30,11 +30,21 @@
    - 建立測試用 `.mcp.json`（echo server）
    - 新增 `capability-discovery` skill（引導用戶發現 MCP/Skills 資源）
 
+4. **WebUI Skills 管理**
+   - Agent Detail 頁面新增 Skills Tab
+   - 上傳 skill zip 檔案安裝到 `.claude/skills/`
+   - 檢視/編輯 SKILL.md 內容
+   - 刪除 skills（含確認對話框）
+   - 發現資源連結（SkillsMP、SkillHub、Anthropic Skills）
+
 **修改檔案**：
 - `src/core/AgentLoader.ts` — `MCP_CONFIG_FILE` 改為 `.mcp.json`
 - `agents/general/.claude/settings.local.json` — 加入 `"Skill"`
 - `agents/general/.mcp.json`（新增）— 測試 MCP 配置
 - `agents/general/.claude/skills/capability-discovery/SKILL.md`（新增）— 能力發現引導 skill
+- `src/webui/api/agents.api.ts` — Skills API endpoints
+- `src/webui/types.ts` — SkillInfo 型別
+- `src/webui/views/agents/detail.ejs` — Skills Tab UI
 
 **配置範例**：
 

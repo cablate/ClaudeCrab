@@ -432,11 +432,11 @@ const sdkOptions: Options = {
 - [x] ~~讀取 SKILL.md 注入 system prompt~~ 不需要，SDK 自動載入
 - [x] 確保 `"Skill"` 在 settings.local.json 的 allow 清單（v1.9.0）
 - [x] 提供 capability-discovery skill（引導用戶發現 MCP/Skills 資源）
-- [ ] WebUI Skills 管理頁面（Phase 2）：
-  - [ ] 列出已安裝的 skills
-  - [ ] 上傳 skill 資料夾（zip）安裝到 `.claude/skills/`
-  - [ ] 編輯/刪除 skill
-  - [ ] 預覽 SKILL.md 內容
+- [x] WebUI Skills 管理頁面（v1.9.0）：
+  - [x] 列出已安裝的 skills
+  - [x] 上傳 skill 資料夾（zip）安裝到 `.claude/skills/`
+  - [x] 編輯/刪除 skill
+  - [x] 預覽 SKILL.md 內容
 
 ### 第二階段：進階能力（2-3 週）
 
