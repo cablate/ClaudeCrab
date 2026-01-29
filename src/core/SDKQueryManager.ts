@@ -1,5 +1,6 @@
 import { query, type Query, type Options } from '@anthropic-ai/claude-agent-sdk';
 import type { LoadedAgent } from '../types/agent.js';
+import type { ToolEvent } from '../adapters/types.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -59,6 +60,13 @@ export interface ExecuteQueryOptions {
    * If the callback returns a Promise, it will be awaited before continuing iteration.
    */
   onIntermediateMessage?: (text: string) => void | Promise<void>;
+
+  /**
+   * Called when a tool event occurs during query execution.
+   * Used for real-time status updates (e.g., showing which tool is being used).
+   * Events include: tool_use (started), tool_result (completed), tool_progress (in-progress updates).
+   */
+  onToolEvent?: (event: ToolEvent) => void | Promise<void>;
 }
 
 /**
@@ -122,7 +130,8 @@ export class SDKQueryManager {
     const sdkOptions: Options = {
       cwd: options.cwd,
       settingSources: options.settingSources ?? ['local'],
-      maxTurns: options.maxTurns ?? 1,
+      // Only set maxTurns if explicitly provided, otherwise let SDK use its default
+      ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
       abortController,
       // Don't override tools - let SDK read from agent's .claude/settings.json
       // Pass system prompt explicitly (agent isolation)
@@ -177,6 +186,8 @@ export class SDKQueryManager {
       let numTurns = 0;
       let durationMs = 0;
       let intermediateCount = 0;
+      // Track tool_use_id -> tool_name mapping for tool_result events
+      const toolIdToName = new Map<string, string>();
 
       // Process SDK messages
       for await (const message of q) {
@@ -219,6 +230,74 @@ export class SDKQueryManager {
             } else {
               responseChunks.push(messageText);
             }
+          }
+        }
+
+        // Handle tool events for status updates
+        if (options.onToolEvent) {
+          // tool_use: when a tool is being called
+          if (message.type === 'assistant' && message.message?.content) {
+            for (const block of message.message.content) {
+              if (block.type === 'tool_use') {
+                // Track tool_use_id -> name mapping for tool_result lookup
+                toolIdToName.set(block.id, block.name);
+                await options.onToolEvent({
+                  type: 'tool_use',
+                  toolName: block.name,
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          }
+
+          // tool_result: when a tool returns
+          if (message.type === 'user' && message.message?.content) {
+            for (const block of message.message.content) {
+              if (typeof block === 'object' && 'type' in block && block.type === 'tool_result') {
+                const toolResultBlock = block as { tool_use_id?: string; content?: string };
+                // Look up the actual tool name from our mapping
+                const toolName = toolResultBlock.tool_use_id 
+                  ? (toolIdToName.get(toolResultBlock.tool_use_id) ?? 'tool')
+                  : 'tool';
+                const toolEvent: ToolEvent = {
+                  type: 'tool_result',
+                  toolName,
+                  timestamp: Date.now(),
+                };
+                if (typeof toolResultBlock.content === 'string') {
+                  toolEvent.summary = toolResultBlock.content.substring(0, 100);
+                }
+                await options.onToolEvent(toolEvent);
+              }
+            }
+          }
+
+          // tool_progress: SDK's built-in progress events
+          if (message.type === 'tool_progress') {
+            const progressMsg = message as { tool_name?: string; elapsed_time_seconds?: number };
+            const toolEvent: ToolEvent = {
+              type: 'tool_progress',
+              toolName: progressMsg.tool_name ?? 'unknown',
+              timestamp: Date.now(),
+            };
+            if (progressMsg.elapsed_time_seconds !== undefined) {
+              toolEvent.elapsedSeconds = progressMsg.elapsed_time_seconds;
+            }
+            await options.onToolEvent(toolEvent);
+          }
+
+          // tool_use_summary: SDK's summary of tool usage
+          if (message.type === 'tool_use_summary') {
+            const summaryMsg = message as { tool_name?: string; summary?: string };
+            const toolEvent: ToolEvent = {
+              type: 'tool_use',
+              toolName: summaryMsg.tool_name ?? 'unknown',
+              timestamp: Date.now(),
+            };
+            if (summaryMsg.summary !== undefined) {
+              toolEvent.summary = summaryMsg.summary;
+            }
+            await options.onToolEvent(toolEvent);
           }
         }
 

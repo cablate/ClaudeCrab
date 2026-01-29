@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 export interface PermissionDecision {
   behavior: 'allow' | 'deny';
   message?: string;
+  alwaysAllow?: boolean;
 }
 
 /**

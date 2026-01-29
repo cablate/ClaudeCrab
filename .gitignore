@@ -50,7 +50,22 @@ agents/*/USER.md
 agents/*/MEMORY.md
 agents/*/IDENTITY.md
 agents/*/BOOTSTRAP.md
+agents/*/EQUIPMENT.md
 agents/*/memory/
+
+# Agent local settings (per-machine config, contains model/permission overrides)
+agents/*/.claude/settings.local.json
+
+# Agent installed skills (runtime installed, not source controlled)
+agents/*/.claude/skills/
 
 # Output styles (SDK doesn't support, use CLAUDE.md instead)
 agents/*/.claude/output-styles/
+
+# Database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Claude Code plans (temporary)
+.claude/plans/

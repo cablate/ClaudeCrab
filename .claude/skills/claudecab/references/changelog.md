@@ -35,14 +35,23 @@
    - MessageProcessor 新增 `cancelQuery()`、`cancelQueryForUser()`、`hasActiveQueryForUser()` 方法
    - 更新 `/help` 和 `/start` 訊息加入 `/stop` 說明
 
+4. **即時狀態訊息（Status Message）**
+   - 處理查詢時發送「🔄 處理中...」狀態訊息
+   - 捕捉 SDK tool 事件（tool_use, tool_result, tool_progress, tool_use_summary）
+   - Debounce 更新（1 秒最小間隔）避免 Telegram API 速率限制
+   - 顯示最近 5 個工具事件，提供即時執行反饋
+   - 完成時更新為「✅ 完成（使用了 N 個工具）」
+   - 狀態訊息不存入資料庫
+
 **新增檔案**：
 - `src/core/QuestionBridge.ts` — 問題-答案橋接器
 
 **修改檔案**：
-- `src/adapters/types.ts` — 新增 Question 相關類型
+- `src/adapters/types.ts` — 新增 Question 相關類型 + ToolEvent、StatusMessage 類型
 - `src/adapters/BaseAdapter.ts` — 新增 question 相關預設方法
-- `src/adapters/TelegramAdapter.ts` — 實作 question UI + Always 按鈕 + callback handler
-- `src/core/MessageProcessor.ts` — canUseTool 處理 AskUserQuestion + cancelQuery 方法
+- `src/adapters/TelegramAdapter.ts` — 實作 question UI + Always 按鈕 + callback handler + sendStatusMessage / updateStatusMessage
+- `src/core/MessageProcessor.ts` — canUseTool 處理 AskUserQuestion + cancelQuery 方法 + 狀態訊息整合
+- `src/core/SDKQueryManager.ts` — ExecuteQueryOptions 新增 onToolEvent callback + 捕捉 tool 事件
 - `src/core/PermissionBridge.ts` — PermissionDecision 加入 alwaysAllow
 - `src/adapters/commands/TelegramCommands.ts` — 新增 /stop 指令
 

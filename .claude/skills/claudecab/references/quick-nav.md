@@ -39,6 +39,9 @@
 | 修改訊息分割邏輯 | `src/adapters/TelegramAdapter.ts` | `splitMessage()` 方法 |
 | 新增其他平台 Adapter | 繼承 `src/adapters/BaseAdapter.ts` | `src/core/AdapterRegistry.ts` |
 | 取消執行中查詢 | `src/core/MessageProcessor.ts` | `cancelQuery()`、`cancelQueryForUser()` |
+| 修改即時狀態訊息 | `src/adapters/TelegramAdapter.ts` | `sendStatusMessage()`、`updateStatusMessage()` |
+| 修改工具事件捕捉 | `src/core/SDKQueryManager.ts` | `onToolEvent` callback |
+| 修改狀態訊息整合 | `src/core/MessageProcessor.ts` | debounce 邏輯、`ToolEvent` 類型 |
 
 **目前可用指令**：`/start`、`/help`、`/reset`、`/stop`
 
@@ -124,6 +127,7 @@
 | UnifiedMessage, SendOptions | `src/adapters/types.ts` |
 | PermissionPromptOptions, PermissionPromptResult, PermissionResolver | `src/adapters/types.ts` |
 | QuestionPromptOptions, QuestionPromptResult, QuestionResolver | `src/adapters/types.ts` |
+| ToolEvent, StatusMessageOptions, StatusMessageResult | `src/adapters/types.ts` |
 | SDK 類型（PermissionMode, HookEvent 等） | `src/types/sdk.ts` |
 
 ---

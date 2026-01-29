@@ -166,6 +166,33 @@ export interface QuestionPromptResult {
  */
 export type QuestionResolver = (requestId: string, answer: string | null) => void;
 
+
+// ============================================================
+// Tool Event Types (for status message feature)
+// ============================================================
+
+export interface ToolEvent {
+  type: 'tool_use' | 'tool_result' | 'tool_progress';
+  toolName: string;
+  /** Brief summary or status of the tool operation */
+  summary?: string;
+  /** For tool_progress: elapsed time in seconds */
+  elapsedSeconds?: number;
+  /** Timestamp when the event occurred */
+  timestamp: number;
+}
+
+export interface StatusMessageOptions {
+  chatId: string;
+  initialText?: string;
+}
+
+export interface StatusMessageResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
 /**
  * Adapter lifecycle state
  */

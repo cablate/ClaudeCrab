@@ -510,6 +510,53 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     }
   }
 
+
+  /**
+   * Send an initial status message that will be updated with tool events.
+   * Used for real-time feedback during query execution.
+   */
+  async sendStatusMessage(chatId: string, initialText: string = '🔄 處理中...'): Promise<string | null> {
+    if (this.bot === null) {
+      return null;
+    }
+
+    try {
+      const result = await this.rateLimiter.execute(async () => {
+        // Use plain text to avoid Markdown parsing issues with tool names
+        return await this.bot!.api.sendMessage(chatId, initialText);
+      });
+      return String(result.message_id);
+    } catch (error) {
+      this.log.warn({ error, chatId }, 'Failed to send status message');
+      return null;
+    }
+  }
+
+  /**
+   * Update an existing status message with new content.
+   * Used for real-time feedback during query execution.
+   */
+  async updateStatusMessage(chatId: string, messageId: string, text: string): Promise<boolean> {
+    if (this.bot === null) {
+      return false;
+    }
+
+    try {
+      await this.rateLimiter.execute(async () => {
+        // Use plain text to avoid Markdown parsing issues with tool names
+        await this.bot!.api.editMessageText(chatId, parseInt(messageId, 10), text);
+      });
+      return true;
+    } catch (error) {
+      // Ignore "message is not modified" errors
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (!errorMsg.includes('message is not modified')) {
+        this.log.warn({ error, chatId, messageId }, 'Failed to update status message');
+      }
+      return false;
+    }
+  }
+
   /**
    * Store the permission resolver callback for inline keyboard handling.
    */

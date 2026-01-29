@@ -228,6 +228,87 @@ export class MessageProcessor {
       }, this.typingIndicatorIntervalMs);
     }
 
+    // Set up status message for real-time tool event feedback
+    // Note: Only TelegramAdapter supports this feature currently
+    let statusMessageId: string | null = null;
+    let toolEvents: Array<{ toolName: string; status: string; detail?: string }> = [];
+    let lastStatusUpdate = 0;
+    let needNewStatusMessage = true; // Start with needing a new status message
+    const STATUS_UPDATE_DEBOUNCE_MS = 800; // Min 0.8 second between updates
+    const MAX_TOOL_EVENTS_DISPLAY = 8; // Show last N tool events
+
+    // Check if adapter supports status messages
+    const supportsStatusMessage = 'sendStatusMessage' in adapter && 
+      typeof (adapter as { sendStatusMessage?: unknown }).sendStatusMessage === 'function';
+
+    // Helper to get typed adapter
+    const getStatusAdapter = () => adapter as unknown as { 
+      sendStatusMessage: (chatId: string, text?: string) => Promise<string | null>;
+      updateStatusMessage: (chatId: string, messageId: string, text: string) => Promise<boolean>;
+    };
+
+    // Create a new status message (called when needed)
+    const createNewStatusMessage = async () => {
+      if (!supportsStatusMessage) return;
+      
+      // Finalize previous status message if exists
+      if (statusMessageId !== null && toolEvents.length > 0) {
+        const eventCount = toolEvents.length;
+        await getStatusAdapter().updateStatusMessage(
+          chatId, 
+          statusMessageId, 
+          `✓ 已處理 ${eventCount} 個操作`
+        );
+      }
+      
+      // Reset and create new
+      toolEvents = [];
+      statusMessageId = await getStatusAdapter().sendStatusMessage(chatId);
+      needNewStatusMessage = false;
+    };
+
+    // Mark that we need a new status message (called after assistant message)
+    const markNeedNewStatusMessage = () => {
+      needNewStatusMessage = true;
+    };
+
+    // Debounced status message update function
+    const updateStatusMessageDebounced = async (forceUpdate = false) => {
+      if (!supportsStatusMessage) return;
+      
+      // Create new status message if needed
+      if (needNewStatusMessage || statusMessageId === null) {
+        await createNewStatusMessage();
+      }
+      
+      if (statusMessageId === null) return;
+      
+      const now = Date.now();
+      if (!forceUpdate && now - lastStatusUpdate < STATUS_UPDATE_DEBOUNCE_MS) return;
+      
+      lastStatusUpdate = now;
+
+      // Build detailed status text from recent tool events
+      const recentEvents = toolEvents.slice(-MAX_TOOL_EVENTS_DISPLAY);
+      const eventLines = recentEvents.map(e => {
+        if (e.detail) {
+          return `${e.status}\n   └ ${e.detail}`;
+        }
+        return e.status;
+      });
+      
+      const hiddenCount = toolEvents.length - recentEvents.length;
+      const header = hiddenCount > 0 
+        ? `🔄 處理中... (${toolEvents.length} 個操作)`
+        : '🔄 處理中...';
+      
+      const statusText = eventLines.length > 0
+        ? `${header}\n\n${eventLines.join('\n')}`
+        : header;
+      
+      await getStatusAdapter().updateStatusMessage(chatId, statusMessageId, statusText);
+    };
+
     // Set up permission bridge for interactive tool approval via Telegram
     const permissionBridge = new PermissionBridge(120_000);
     adapter.setPermissionResolver((requestId, decision) => {
@@ -465,9 +546,22 @@ export class MessageProcessor {
               {
                 cwd: agent.path,
                 systemPrompt,
-                maxTurns: agent.config.settings?.maxTurns ?? 10,
+                // Only set maxTurns if explicitly configured in agent settings
+                // Otherwise let SDK use its default (unlimited turns)
+                ...(agent.config.settings?.maxTurns !== undefined 
+                  ? { maxTurns: agent.config.settings.maxTurns } 
+                  : {}),
                 resume: resumeId,
                 onIntermediateMessage: async (text: string): Promise<void> => {
+                  // Finalize current status message before sending assistant message
+                  if (supportsStatusMessage && statusMessageId !== null && toolEvents.length > 0) {
+                    await getStatusAdapter().updateStatusMessage(
+                      chatId,
+                      statusMessageId,
+                      `✓ 已處理 ${toolEvents.length} 個操作`
+                    );
+                  }
+                  
                   await adapter.sendTypingIndicator(chatId);
                   const sendResult = await adapter.sendMessage(chatId, text, {
                     parseMode: 'Markdown',
@@ -479,6 +573,46 @@ export class MessageProcessor {
                     );
                   }
                   intermediateMessages.push(text);
+                  
+                  // Mark that next tool event should create new status message
+                  markNeedNewStatusMessage();
+                },
+                onToolEvent: async (event) => {
+                  // Track tool events for status message with more details
+                  let statusLine: string;
+                  let detail: string | undefined;
+                  
+                  if (event.type === 'tool_use') {
+                    statusLine = `🔧 ${event.toolName}`;
+                    if (event.summary) {
+                      detail = event.summary.substring(0, 80);
+                    }
+                  } else if (event.type === 'tool_result') {
+                    statusLine = `✓ ${event.toolName} 完成`;
+                    if (event.summary) {
+                      // Truncate and clean up the result summary
+                      const cleanSummary = event.summary
+                        .replace(/\n/g, ' ')
+                        .substring(0, 60);
+                      detail = cleanSummary;
+                    }
+                  } else if (event.type === 'tool_progress') {
+                    statusLine = `⏳ ${event.toolName}`;
+                    if (event.elapsedSeconds !== undefined) {
+                      statusLine += ` (${Math.round(event.elapsedSeconds)}s)`;
+                    }
+                  } else {
+                    statusLine = `• ${event.toolName}`;
+                  }
+                  const toolEvent: { toolName: string; status: string; detail?: string } = {
+                    toolName: event.toolName,
+                    status: statusLine,
+                  };
+                  if (detail !== undefined) {
+                    toolEvent.detail = detail;
+                  }
+                  toolEvents.push(toolEvent);
+                  await updateStatusMessageDebounced();
                 },
                 additionalOptions: {
                   canUseTool,
@@ -517,23 +651,34 @@ export class MessageProcessor {
         );
       };
 
-      // Execute query — if resume fails, retry without resume (new conversation)
+      // Execute query — if resume fails due to session issues, retry without resume (new conversation)
+      // Note: Only retry without resume for actual session/resume errors, not for other SDK errors
       let result;
       try {
         result = await executeWithRetry(internalSession.sdkSessionId);
       } catch (error) {
-        if (internalSession.sdkSessionId !== undefined) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        
+        // Check if this is a resume-specific error (session not found, expired, etc.)
+        // vs other SDK errors (max_turns, max_budget, etc.) that should not trigger new session
+        const isResumeError = errorMsg.includes('session') || 
+                              errorMsg.includes('resume') ||
+                              errorMsg.includes('not found') ||
+                              errorMsg.includes('expired');
+        
+        if (internalSession.sdkSessionId !== undefined && isResumeError) {
           logger.warn(
             {
               sessionId,
               sdkSessionId: internalSession.sdkSessionId,
-              error: error instanceof Error ? error.message : String(error),
+              error: errorMsg,
             },
             'SDK resume failed, retrying without resume (new conversation)'
           );
           this.sessionManager.setSdkSessionId(platform, agentId, userId, undefined);
           result = await executeWithRetry(undefined);
         } else {
+          // For non-resume errors (max_turns, etc.), don't clear session, just throw
           throw error;
         }
       }
@@ -579,6 +724,18 @@ export class MessageProcessor {
             'Failed to send response'
           );
         }
+      }
+
+      // Finalize status message with completion summary
+      if (supportsStatusMessage && statusMessageId !== null && toolEvents.length > 0) {
+        await getStatusAdapter().updateStatusMessage(
+          chatId, 
+          statusMessageId, 
+          `✓ 已處理 ${toolEvents.length} 個操作`
+        );
+      } else if (supportsStatusMessage && statusMessageId !== null) {
+        // No tool events in this batch, just mark as done
+        await getStatusAdapter().updateStatusMessage(chatId, statusMessageId, '✓ 完成');
       }
 
       return result.response;
