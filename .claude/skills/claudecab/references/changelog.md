@@ -9,7 +9,40 @@
 
 ## 版本歷史
 
-### v1.9.0 - Agent 專門化支援（MCP + Skills）（當前版本）
+### v1.9.1 - SDK 類型系統擴展（當前版本）
+
+**發布日期**：2026-01-29
+
+**變更**：
+
+1. **SDK 類型轉接層**
+   - 新增 `src/types/sdk.ts` — 從 `@anthropic-ai/claude-agent-sdk` 導入並 re-export 所有類型
+   - 權限系統：`PermissionMode`, `PermissionBehavior`, `PermissionResult`, `CanUseTool` 等
+   - Hook 系統：`HookEvent`, `HookCallback`, 13 種 Hook 輸入/輸出類型
+   - 會話系統：`ExitReason`, `ConfigScope`, `SettingSource`
+   - 訊息類型：`SDKMessage`, `SDKAssistantMessage` 等
+   - 自定義 `AskUserQuestion` 類型（SDK 未暴露）
+
+2. **PermissionMode 擴展**
+   - 從 3 種擴展為 6 種：`default`, `acceptEdits`, `bypassPermissions`, `plan`, `delegate`, `dontAsk`
+   - 更新 `PermissionModeSchema`（Zod）
+   - 更新 `PERMISSION_MODE_MAP` 和 `SDKOptions` 介面
+
+3. **Hook 事件擴展**
+   - `HOOK_EVENT_NAMES` 加入 `setup` 事件（共 13 種）
+
+**修改檔案**：
+- `src/types/sdk.ts`（新增）— SDK 類型轉接層
+- `src/types/agent.ts` — 擴展 PermissionModeSchema
+- `src/types/hooks.ts` — 加入 setup 事件
+- `src/types/index.ts` — 導出 sdk.ts
+- `src/core/ConfigTransformer.ts` — 更新 PERMISSION_MODE_MAP 和 SDKOptions
+
+**測試**：297 tests, 20 files 全部通過
+
+---
+
+### v1.9.0 - Agent 專門化支援（MCP + Skills）
 
 **發布日期**：2026-01-29
 

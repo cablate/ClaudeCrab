@@ -110,6 +110,7 @@ export const HOOK_EVENT_NAMES = [
   'subagentStop',
   'preCompact',
   'permissionRequest',
+  'setup',
 ] as const;
 
 export type HookEventName = (typeof HOOK_EVENT_NAMES)[number];

@@ -18,6 +18,9 @@ const PERMISSION_MODE_MAP = {
   default: 'default',
   acceptEdits: 'acceptEdits',
   bypassPermissions: 'bypassPermissions',
+  plan: 'plan',
+  delegate: 'delegate',
+  dontAsk: 'dontAsk',
 } as const;
 
 /**
@@ -44,7 +47,7 @@ export interface SDKOptions {
   disallowedTools?: string[];
 
   /** Permission mode */
-  permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
+  permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'delegate' | 'dontAsk';
 
   /** Maximum turns for the conversation */
   maxTurns?: number;

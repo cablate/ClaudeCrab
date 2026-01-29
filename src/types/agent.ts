@@ -8,6 +8,9 @@ export const PermissionModeSchema = z.enum([
   'default',
   'acceptEdits',
   'bypassPermissions',
+  'plan',
+  'delegate',
+  'dontAsk',
 ]);
 
 export type PermissionMode = z.infer<typeof PermissionModeSchema>;

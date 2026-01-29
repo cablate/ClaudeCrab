@@ -3,6 +3,9 @@
  * Central export file for all type definitions
  */
 
+// SDK types (re-exported from @anthropic-ai/claude-agent-sdk)
+export * from './sdk.js';
+
 // Agent types
 export {
   AgentConfigSchema,
