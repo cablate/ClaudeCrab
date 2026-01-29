@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_agent ON scheduled_tasks(agent_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 
--- Schedule executions table
+-- Schedule executions table (no FK - YAML files are source of truth)
 CREATE TABLE IF NOT EXISTS schedule_executions (
     id TEXT PRIMARY KEY,
     schedule_id TEXT NOT NULL,
@@ -87,8 +87,7 @@ CREATE TABLE IF NOT EXISTS schedule_executions (
     success INTEGER,
     duration_ms INTEGER,
     result_summary TEXT,
-    error_message TEXT,
-    FOREIGN KEY (schedule_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
+    error_message TEXT
 );
 
 -- Schedule executions indexes
@@ -96,7 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_schedule_executions_schedule ON schedule_executio
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_executions(started_at);
 `;
 
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '4';
 
 /**
  * Migration SQL from v1 to v2:
@@ -155,7 +154,7 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_agent ON scheduled_tasks(agent_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
 
--- Schedule executions table
+-- Schedule executions table (no FK - YAML files are source of truth)
 CREATE TABLE IF NOT EXISTS schedule_executions (
     id TEXT PRIMARY KEY,
     schedule_id TEXT NOT NULL,
@@ -164,11 +163,39 @@ CREATE TABLE IF NOT EXISTS schedule_executions (
     success INTEGER,
     duration_ms INTEGER,
     result_summary TEXT,
-    error_message TEXT,
-    FOREIGN KEY (schedule_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
+    error_message TEXT
 );
 
 -- Schedule executions indexes
+CREATE INDEX IF NOT EXISTS idx_schedule_executions_schedule ON schedule_executions(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_executions(started_at);
+`;
+
+/**
+ * Migration SQL from v3 to v4:
+ * Removes foreign key from schedule_executions (YAML files are source of truth)
+ */
+const MIGRATION_V3_TO_V4 = `
+-- Recreate schedule_executions without foreign key
+CREATE TABLE IF NOT EXISTS schedule_executions_new (
+    id TEXT PRIMARY KEY,
+    schedule_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    success INTEGER,
+    duration_ms INTEGER,
+    result_summary TEXT,
+    error_message TEXT
+);
+
+-- Copy existing data
+INSERT OR IGNORE INTO schedule_executions_new SELECT * FROM schedule_executions;
+
+-- Drop old table and rename
+DROP TABLE IF EXISTS schedule_executions;
+ALTER TABLE schedule_executions_new RENAME TO schedule_executions;
+
+-- Recreate indexes
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_schedule ON schedule_executions(schedule_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_executions(started_at);
 `;
@@ -297,6 +324,15 @@ export class DatabaseManager {
     if (currentVersion === '2') {
       this.db.exec(MIGRATION_V2_TO_V3);
       logger.info('Migration v2 → v3 completed');
+      currentVersion = '3';
+    }
+
+    if (currentVersion === '3') {
+      // Disable foreign keys temporarily for migration
+      this.db.pragma('foreign_keys = OFF');
+      this.db.exec(MIGRATION_V3_TO_V4);
+      this.db.pragma('foreign_keys = ON');
+      logger.info('Migration v3 → v4 completed');
     }
 
     // Update schema version
