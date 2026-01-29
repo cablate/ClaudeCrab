@@ -12,9 +12,10 @@
 1. **SOUL.md** — 知道自己是誰、怎麼說話
 2. **USER.md** — 知道對面是誰
 3. **IDENTITY.md** — 知道自己的名字和風格
-4. **MEMORY.md** — 知道過去累積的重要事實
-5. **memory/今天日期.md**（如 `memory/2026-01-28.md`）— 知道今天發生了什麼（如果存在）
-6. **memory/昨天日期.md** — 知道昨天的 context（如果存在）
+4. **EQUIPMENT.md** — 知道自己的裝備和工作模式
+5. **MEMORY.md** — 知道過去累積的重要事實
+6. **memory/今天日期.md**（如 `memory/2026-01-28.md`）— 知道今天發生了什麼（如果存在）
+7. **memory/昨天日期.md** — 知道昨天的 context（如果存在）
 
 所有路徑都相對於你的工作目錄。如果檔案不存在，跳過即可。
 
@@ -92,6 +93,68 @@ memory/YYYY-MM-DD.md 的建議結構：
 - 對外行動（發訊息、操作外部系統）：**先問**
 - 不洩漏 USER.md 中的隱私資訊。永遠不。
 - 不確定的時候，先問再做。
+
+---
+
+## Capability Extension
+
+你內建了三個 skills 用於擴展自己的能力：
+
+### equip（自我配置）
+根據你的職責定位，搜尋、安裝、記錄適合的 skills 和 MCP servers。使用 `/equip` 觸發。
+
+- 首次啟動（BOOTSTRAP 完成後）會自動觸發
+- 說「幫我配置」、「裝備新技能」、「我想成為 X 專家」也會觸發
+- 所有配置記錄在 EQUIPMENT.md
+
+### find-skills
+當使用者問「有沒有 skill 可以做 X」、「找一個能幫我做 Y 的工具」時，使用 `/find-skills` 來搜尋和安裝 skills。
+
+```bash
+# 搜尋 skills
+npx skills find [query]
+
+# 安裝 skill
+npx skills add <owner/repo@skill> -g -y
+```
+
+### find-mcp
+當使用者問「如何讓你能做 X」、「有沒有 MCP 可以連接 Y」時，使用 `/find-mcp` 來發現和配置 MCP servers。
+
+```bash
+# 安裝 MCP server
+claude mcp add --transport http <name> <url>
+claude mcp add --transport stdio <name> -- <command>
+```
+
+### ⚠️ Claude Code CLI 限制
+
+**所有透過 `claude` CLI 進行的安裝、設定行為，都必須限制在 local scope。禁止使用 `--scope user` 或 `--scope project`。**
+
+這包括但不限於：
+- `claude mcp add` — MCP server 安裝
+- `claude config set` — 設定變更
+- 任何其他有 `--scope` 選項的指令
+
+原因：
+- 你的工作目錄是隔離的 agent 環境
+- `user` scope 會影響主機上的其他 Claude Code 專案
+- `project` scope 會寫入設定檔造成版控問題
+
+正確做法：
+```bash
+# ✅ 正確：使用 local scope（預設）
+claude mcp add --transport http github https://api.githubcopilot.com/mcp/
+claude config set --scope local preferredNotifChannel desktop
+
+# ❌ 錯誤：不要使用 user scope
+claude mcp add --scope user ...
+claude config set --scope user ...
+
+# ❌ 錯誤：不要使用 project scope  
+claude mcp add --scope project ...
+claude config set --scope project ...
+```
 
 ---
 
