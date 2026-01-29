@@ -5,9 +5,20 @@ description: ClaudeCab 專案開發助手 - 多代理 Telegram Bot 框架。使�
 
 # ClaudeCab 專案開發助手
 
-## 核心概念
+## 產品定位
 
-ClaudeCab 是基於 Claude Agent SDK 的多代理 Telegram Bot 框架。
+ClaudeCab 是**輕量級多代理框架**，讓 Claude Code 成為可被遠端操控的專業助手。
+
+**核心價值**：
+- **目錄即代理** - 清晰分割 Claude Code 工作區
+- **通訊介面** - Telegram 作為使用者操作介面
+- **智慧記憶** - Agent 具備學習與記憶能力
+- **任務理解** - 支援主動與被動任務處理
+- **排程監控** - Cron 等定時任務支援（規劃中）
+
+> 詳見 [product-vision.md](references/product-vision.md)
+
+## 核心概念
 
 **「目錄即代理」**：`agents/` 下每個子目錄代表一個獨立的 Claude Code 專案，擁有：
 - `.claude/settings.local.json` - 權限配置（model, permissions）
@@ -67,11 +78,14 @@ claudecab/
 
 | 需求 | 參考文件 |
 |------|----------|
+| **產品定位、功能開發原則、路線圖** | **[product-vision.md](references/product-vision.md)** |
 | 詳細架構設計、模組說明、資料流 | [architecture.md](references/architecture.md) |
 | 版本歷史、重大變更、架構決策 (ADR) | [changelog.md](references/changelog.md) |
 | 已知問題、踩過的坑、解決方案 | [troubleshooting.md](references/troubleshooting.md) |
 | 「做 X 功能看哪些檔案」對照表 | [quick-nav.md](references/quick-nav.md) |
 | Moltbot 官方文件對照、機制取捨 | [moltbot-gap-analysis.md](references/moltbot-gap-analysis.md) |
+
+> **開發新功能前，請先閱讀 [product-vision.md](references/product-vision.md) 確認符合產品定位。**
 
 ## 常用指令
 

@@ -69,3 +69,7 @@ data/*.db-shm
 
 # Claude Code plans (temporary)
 .claude/plans/
+
+# Test/personal agents (not part of the project)
+agents/nitterbot/
+agents/test/
