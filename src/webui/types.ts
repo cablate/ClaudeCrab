@@ -227,3 +227,46 @@ export interface UpdateMemoryResponse {
   modified?: string;
   error?: string;
 }
+
+
+/**
+ * Skill information
+ */
+export interface SkillInfo {
+  name: string;
+  description: string;
+  path: string;
+  modified: string | null;
+}
+
+/**
+ * Response for listing skills
+ */
+export interface SkillListResponse {
+  skills: SkillInfo[];
+}
+
+/**
+ * Response for reading a skill
+ */
+export interface SkillContentResponse {
+  name: string;
+  content: string;
+  modified: string | null;
+}
+
+/**
+ * Request for updating a skill
+ */
+export interface UpdateSkillRequest {
+  content: string;
+}
+
+/**
+ * Response for skill operations
+ */
+export interface SkillOperationResponse {
+  success: boolean;
+  skill?: SkillInfo;
+  error?: string;
+}
