@@ -622,7 +622,7 @@ export class MessageProcessor {
                         continue: true,
                         hookSpecificOutput: {
                           hookEventName: 'UserPromptSubmit' as const,
-                          additionalContext: buildPromptContext(),
+                          additionalContext: buildPromptContext(chatId),
                         },
                       })],
                     }],

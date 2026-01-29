@@ -195,9 +195,13 @@ document.getElementById('editAgentForm').addEventListener('submit', async (e) =>
     payload.telegramBotToken = null; // Remove if empty
   }
   
-  // Add permissions
+  // Add permissions - preserve any extra tools not shown in checkboxes
+  // (e.g., MCP tools added via SDK "Always Allow")
+  const baseTools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebFetch', 'WebSearch'];
+  const currentAllow = <%= JSON.stringify(permissions.allow) %>;
+  const extraTools = currentAllow.filter(tool => !baseTools.includes(tool));
   payload.permissions = {
-    allow: allowedTools,
+    allow: [...allowedTools, ...extraTools],
     deny: []
   };
   

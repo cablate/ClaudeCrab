@@ -174,7 +174,8 @@ claude config set --scope project ...
 1. **確認任務內容**：要做什麼？
 2. **確認執行時機**：什麼時候執行？多久一次？
 3. **確認通知設定**：完成/失敗時要通知嗎？
-4. **產出 YAML 規格**：寫入 `schedules/<task-id>.yaml`
+4. **取得 chatId**：從【當前對話】context 中讀取 chatId（系統會自動注入）
+5. **產出 YAML 規格**：寫入 `schedules/<task-id>.yaml`，使用實際 chatId
 
 ### YAML 範例
 
@@ -193,9 +194,9 @@ notification:
   onComplete: true
   onError: true
   platform: telegram
-  chatId: "{{USER_CHAT_ID}}"
+  chatId: "123456789"  # ← 從【當前對話】取得的實際 chatId
 metadata:
-  createdAt: {{NOW}}
+  createdAt: 2026-01-30T22:00:00+08:00
   createdBy: conversation
   enabled: true
 ```

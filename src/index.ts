@@ -161,8 +161,10 @@ const main = async (): Promise<void> => {
     // Initialize (load and register schedules)
     await scheduleManager.initialize();
 
-    // Update notifier with adapters after orchestrator starts
-    // This will be done in orchestrator.startAll()
+    // Populate notifier with adapters from orchestrator (keyed by agentId)
+    for (const adapter of orchestrator.getRegistry().getAll()) {
+      scheduleNotifier.addAdapter(adapter.agentId, adapter);
+    }
 
     logger.info('Schedule System initialized');
   }

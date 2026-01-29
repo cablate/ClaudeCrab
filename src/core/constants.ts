@@ -19,7 +19,7 @@ const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '�
  * Build the complete prompt context with current time.
  * Time is displayed in Asia/Taipei timezone.
  */
-export function buildPromptContext(): string {
+export function buildPromptContext(chatId?: string): string {
   const now = new Date();
   const taipeiTime = new Intl.DateTimeFormat('zh-TW', {
     timeZone: 'Asia/Taipei',
@@ -35,5 +35,11 @@ export function buildPromptContext(): string {
   const taipeiDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
   const weekday = WEEKDAYS[taipeiDate.getDay()];
   
-  return `【當前時間】${taipeiTime} ${weekday}\n${MEMORY_CHECKPOINT_CONTEXT}`;
+  let context = `【當前時間】${taipeiTime} ${weekday}\n${MEMORY_CHECKPOINT_CONTEXT}`;
+  
+  if (chatId) {
+    context += `\n【當前對話】platform: telegram, chatId: ${chatId}`;
+  }
+  
+  return context;
 }

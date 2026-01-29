@@ -56,6 +56,9 @@ export class ScheduleExecutor {
         // Generate a unique session ID for this execution
         const scheduleSessionId = `schedule:${spec.id}:${executionId}`;
 
+        // Track only the last assistant message for notification
+        let lastMessage = '';
+
         // Execute query with new session (no resume ID)
         const result = await this.sdkManager.executeQuery(
           scheduleSessionId,
@@ -73,6 +76,10 @@ export class ScheduleExecutor {
             additionalOptions: {
               abortController,
             },
+            // Only keep the last assistant message for notification
+            onIntermediateMessage: async (text: string) => {
+              lastMessage = text;
+            },
           }
         );
 
@@ -84,18 +91,25 @@ export class ScheduleExecutor {
         // Calculate duration
         const duration = Date.now() - startTime;
 
+        // Use lastMessage for notification (falls back to result.response if no intermediate messages)
+        const finalResponse = lastMessage || result.response;
+
         // Record success
         if (this.repository) {
           await this.repository.recordComplete(spec.id, executionId, {
             success: true,
             duration,
-            resultSummary: this.summarizeResult(result),
+            resultSummary: this.summarizeResult(finalResponse),
           });
         }
 
-        // Send success notification
+        // Send success notification with only the last message
         if (spec.notification?.onComplete) {
-          await this.notifier.notifyComplete(spec, result);
+          const notificationResult: QueryResult = {
+            ...result,
+            response: finalResponse,
+          };
+          await this.notifier.notifyComplete(spec, notificationResult);
         }
 
         logger.info(
@@ -137,16 +151,16 @@ export class ScheduleExecutor {
   }
 
   /**
-   * Summarize a query result for storage
+   * Summarize a response for storage
    */
-  private summarizeResult(result: QueryResult): string {
-    if (result.response) {
+  private summarizeResult(response: string): string {
+    if (response) {
       // Truncate long responses
       const maxLength = 500;
-      if (result.response.length > maxLength) {
-        return result.response.substring(0, maxLength) + '...';
+      if (response.length > maxLength) {
+        return response.substring(0, maxLength) + '...';
       }
-      return result.response;
+      return response;
     }
     return 'Execution completed';
   }

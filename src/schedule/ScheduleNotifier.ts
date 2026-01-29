@@ -10,17 +10,18 @@ import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import { logger } from '../utils/logger.js';
 
 export class ScheduleNotifier {
+  // Map key is agentId (not platform), since each agent has its own adapter
   constructor(private adapters: Map<string, BaseAdapter>) {}
 
   /**
    * Send notification about successful completion
    */
   async notifyComplete(spec: ScheduleSpec, result: QueryResult): Promise<void> {
-    const platform = spec.notification?.platform ?? 'telegram';
-    const adapter = this.adapters.get(platform);
+    const agentId = spec.execution.agent;
+    const adapter = this.adapters.get(agentId);
 
     if (!adapter) {
-      logger.warn(`[ScheduleNotifier] Adapter not found for platform: ${platform}`);
+      logger.warn(`[ScheduleNotifier] Adapter not found for agent: ${agentId}`);
       return;
     }
 
@@ -44,11 +45,11 @@ export class ScheduleNotifier {
    * Send notification about execution error
    */
   async notifyError(spec: ScheduleSpec, error: unknown): Promise<void> {
-    const platform = spec.notification?.platform ?? 'telegram';
-    const adapter = this.adapters.get(platform);
+    const agentId = spec.execution.agent;
+    const adapter = this.adapters.get(agentId);
 
     if (!adapter) {
-      logger.warn(`[ScheduleNotifier] Adapter not found for platform: ${platform}`);
+      logger.warn(`[ScheduleNotifier] Adapter not found for agent: ${agentId}`);
       return;
     }
 
@@ -111,16 +112,16 @@ export class ScheduleNotifier {
   }
 
   /**
-   * Add an adapter
+   * Add an adapter (keyed by agentId)
    */
-  addAdapter(platform: string, adapter: BaseAdapter): void {
-    this.adapters.set(platform, adapter);
+  addAdapter(agentId: string, adapter: BaseAdapter): void {
+    this.adapters.set(agentId, adapter);
   }
 
   /**
    * Remove an adapter
    */
-  removeAdapter(platform: string): void {
-    this.adapters.delete(platform);
+  removeAdapter(agentId: string): void {
+    this.adapters.delete(agentId);
   }
 }

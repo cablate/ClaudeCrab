@@ -9,7 +9,48 @@
 
 ## 版本歷史
 
-### v1.10.0 - Agent-Driven Scheduling System（當前版本）
+### v1.10.1 - 排程系統修復與優化（當前版本）
+
+**發布日期**：2026-01-30
+
+**變更**：
+
+1. **chatId 自動注入**
+   - `buildPromptContext(chatId?)` 接受 chatId 參數
+   - 輸出 `【當前對話】platform: telegram, chatId: xxx`
+   - Agent 建立排程時可從 context 取得 chatId，不需手動填入
+
+2. **WebUI 編輯保留 MCP 權限**
+   - 修復 `edit.ejs`：編輯 agent 時保留非基本工具權限（MCP 工具等）
+   - 之前問題：每次編輯會覆蓋 SDK "Always Allow" 加入的權限
+
+3. **ScheduleNotifier 修復**
+   - 從用 `platform` 改為用 `agentId` 作為 adapter key
+   - 修復多 agent 時通知送到錯誤頻道的問題
+   - `index.ts` 啟動時正確註冊 adapters 到 notifier
+
+4. **排程通知只傳最後一條訊息**
+   - `ScheduleExecutor` 加入 `onIntermediateMessage` callback
+   - 通知只包含最後一條 assistant message，不含中間過程
+
+5. **Database Schema v4**
+   - 移除 `schedule_executions` 的 FK 約束（YAML 是 source of truth）
+
+**修改檔案**：
+- `src/core/constants.ts` — buildPromptContext 接受 chatId
+- `src/core/MessageProcessor.ts` — 傳遞 chatId 給 hook
+- `src/schedule/ScheduleExecutor.ts` — onIntermediateMessage 只保留最後一條
+- `src/schedule/ScheduleNotifier.ts` — 用 agentId 作為 adapter key
+- `src/index.ts` — 註冊 adapters 到 notifier
+- `src/webui/views/agents/edit.ejs` — 保留非基本工具權限
+- `src/persistence/DatabaseManager.ts` — Schema v4 migration
+- `agents/_example/CLAUDE.md` — 排程指引更新
+- `agents/general/CLAUDE.md` — 排程指引更新
+- `agents/nitterbot/CLAUDE.md` — 排程指引更新
+
+---
+
+### v1.10.0 - Agent-Driven Scheduling System
 
 **發布日期**：2026-01-29
 
