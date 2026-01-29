@@ -27,13 +27,14 @@
 
 3. **General Agent 更新**
    - 新增 `"Skill"` 到允許的工具清單
-   - 建立測試用 `.mcp.json` 和 test-skill
+   - 建立測試用 `.mcp.json`（echo server）
+   - 新增 `capability-discovery` skill（引導用戶發現 MCP/Skills 資源）
 
 **修改檔案**：
 - `src/core/AgentLoader.ts` — `MCP_CONFIG_FILE` 改為 `.mcp.json`
 - `agents/general/.claude/settings.local.json` — 加入 `"Skill"`
 - `agents/general/.mcp.json`（新增）— 測試 MCP 配置
-- `agents/general/.claude/skills/test-skill/SKILL.md`（新增）— 測試 skill
+- `agents/general/.claude/skills/capability-discovery/SKILL.md`（新增）— 能力發現引導 skill
 
 **配置範例**：
 
