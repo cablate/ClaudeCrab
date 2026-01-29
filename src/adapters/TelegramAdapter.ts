@@ -199,13 +199,13 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       const data = ctx.callbackQuery.data;
       this.log.debug({ callbackData: data }, 'Received callback query');
 
-      const match = /^perm_(allow|deny):(.+)$/.exec(data);
+      const match = /^perm_(allow|always|deny):(.+)$/.exec(data);
       if (match === null) {
         // Not a permission callback — ignore (let other handlers process if any)
         return;
       }
 
-      const decision = match[1] as 'allow' | 'deny';
+      const decision = match[1] as 'allow' | 'always' | 'deny';
       const requestId = match[2] as string;
 
       if (this.permissionResolver === null) {
@@ -216,9 +216,14 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
       this.log.info({ requestId, decision, toolUseID: requestId }, 'Permission decision received');
       this.permissionResolver(requestId, decision);
-      await ctx.answerCallbackQuery({
-        text: decision === 'allow' ? '✅ Allowed' : '❌ Denied',
-      });
+
+      const answerText =
+        decision === 'allow'
+          ? '✅ Allowed'
+          : decision === 'always'
+            ? '✅ Always Allowed'
+            : '❌ Denied';
+      await ctx.answerCallbackQuery({ text: answerText });
     });
 
     // Verify bot token by getting bot info
@@ -499,6 +504,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     try {
       const keyboard = new InlineKeyboard()
         .text('✅ Allow', `perm_allow:${options.requestId}`)
+        .text('✅ Always', `perm_always:${options.requestId}`)
         .text('❌ Deny', `perm_deny:${options.requestId}`);
 
       // Format tool input for display (truncate if too long)

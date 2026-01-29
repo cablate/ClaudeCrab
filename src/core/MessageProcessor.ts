@@ -230,12 +230,19 @@ export class MessageProcessor {
     // Set up permission bridge for interactive tool approval via Telegram
     const permissionBridge = new PermissionBridge(120_000);
     adapter.setPermissionResolver((requestId, decision) => {
-      permissionBridge.resolvePermission(
-        requestId,
-        decision === 'allow'
-          ? { behavior: 'allow' }
-          : { behavior: 'deny', message: 'User denied permission' }
-      );
+      if (decision === 'always') {
+        permissionBridge.resolvePermission(requestId, {
+          behavior: 'allow',
+          alwaysAllow: true,
+        });
+      } else if (decision === 'allow') {
+        permissionBridge.resolvePermission(requestId, { behavior: 'allow' });
+      } else {
+        permissionBridge.resolvePermission(requestId, {
+          behavior: 'deny',
+          message: 'User denied permission',
+        });
+      }
     });
 
     try {
@@ -301,18 +308,44 @@ export class MessageProcessor {
 
         // Update the permission prompt message with the decision
         if (promptResult.messageId) {
-          const statusText = decision.behavior === 'allow'
-            ? `✅ Allowed: \`${toolName}\``
-            : `❌ Denied: \`${toolName}\``;
+          let statusText: string;
+          if (decision.behavior === 'allow') {
+            statusText = decision.alwaysAllow === true
+              ? `✅ Always Allowed: \`${toolName}\``
+              : `✅ Allowed: \`${toolName}\``;
+          } else {
+            statusText = `❌ Denied: \`${toolName}\``;
+          }
           await adapter.updatePermissionPrompt(chatId, promptResult.messageId, statusText);
         }
 
         if (decision.behavior === 'allow') {
-          return {
+          const allowResult: {
+            behavior: 'allow';
+            updatedInput: Record<string, unknown>;
+            toolUseID: string;
+            updatedPermissions?: Array<{
+              type: 'addRules';
+              rules: Array<{ toolName: string }>;
+              behavior: 'allow';
+              destination: 'localSettings';
+            }>;
+          } = {
             behavior: 'allow' as const,
             updatedInput: toolInput,
             toolUseID: options.toolUseID,
           };
+
+          if (decision.alwaysAllow === true) {
+            allowResult.updatedPermissions = [{
+              type: 'addRules' as const,
+              rules: [{ toolName }],
+              behavior: 'allow' as const,
+              destination: 'localSettings' as const,
+            }];
+          }
+
+          return allowResult;
         }
         return {
           behavior: 'deny' as const,
