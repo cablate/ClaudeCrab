@@ -421,16 +421,18 @@ const sdkOptions: Options = {
 | P0 | **Skills 目錄整合** | 高 | 低 |
 
 **MCP 實作清單**：
-- [ ] 擴展 AgentConfigSchema 加入 `mcpServers`
-- [ ] 修改 SDKQueryManager 傳遞 mcpServers
-- [ ] WebUI 新增 MCP 配置頁面
-- [ ] 提供預設 MCP server 範本
+- [x] ~~擴展 AgentConfigSchema 加入 `mcpServers`~~ SDK 自動從 `.mcp.json` 讀取
+- [x] ~~修改 SDKQueryManager 傳遞 mcpServers~~ 不需要，SDK 自動處理
+- [x] 配置檔從 `mcp.json` 改為 `.mcp.json`（v1.9.0）
+- [ ] WebUI 新增 MCP 配置頁面（Phase 2）
+- [x] 提供預設 MCP server 範本（echo server）
 
 **Skills 實作清單**：
-- [ ] AgentLoader 掃描 `skills/` 目錄
-- [ ] 讀取 SKILL.md 注入 system prompt
-- [ ] WebUI 新增 Skills 管理頁面
-- [ ] 提供 skill 範本
+- [x] ~~AgentLoader 掃描 `skills/` 目錄~~ SDK 自動從 `.claude/skills/` 載入
+- [x] ~~讀取 SKILL.md 注入 system prompt~~ 不需要，SDK 自動載入
+- [x] 確保 `"Skill"` 在 settings.local.json 的 allow 清單（v1.9.0）
+- [ ] WebUI 新增 Skills 管理頁面（Phase 2）
+- [x] 提供 skill 範本（test-skill）
 
 ### 第二階段：進階能力（2-3 週）
 
@@ -458,9 +460,11 @@ const sdkOptions: Options = {
 
 ClaudeCab 可以借鏡 Moltbot 的機制，但需配合 Claude Agent SDK 的能力範圍：
 
-1. **Skills** - 直接支援 Anthropic 標準，注入 system prompt
-2. **MCP** - SDK 完整支援，直接使用
+1. **Skills** - SDK 自動從 `.claude/skills/` 載入（已實作 v1.9.0）
+2. **MCP** - SDK 自動從 `.mcp.json` 讀取（已實作 v1.9.0）
 3. **Plugins** - 只能用 local 模式，需手動管理
 4. **Routing** - 需自行實作，改動較大
 
-建議從 **MCP + Skills** 開始，這是讓 Agent「能做事」的最直接路徑，且 SDK 支援度最好。
+**v1.9.0 已完成**：MCP + Skills 基礎支援，讓 Agent 能夠使用外部工具和自訂 skills。
+
+**下一步**：WebUI 管理介面（MCP 配置頁面、Skills 管理頁面）。

@@ -37,7 +37,7 @@ const HOOKS_FILE_JS = 'hooks.js';
 /**
  * MCP config file name
  */
-const MCP_CONFIG_FILE = 'mcp.json';
+const MCP_CONFIG_FILE = '.mcp.json';
 
 /**
  * AgentLoader options

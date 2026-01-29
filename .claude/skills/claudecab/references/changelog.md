@@ -9,7 +9,59 @@
 
 ## 版本歷史
 
-### v1.8.1 - 時間注入修復（當前版本）
+### v1.9.0 - Agent 專門化支援（MCP + Skills）（當前版本）
+
+**發布日期**：2026-01-29
+
+**變更**：
+
+1. **MCP Server 自動載入**
+   - 配置檔從 `mcp.json` 改為 `.mcp.json`（符合 SDK 的 project scope 標準）
+   - SDK 會自動從 `agents/{id}/.mcp.json` 讀取 MCP 配置
+   - 不需要手動傳遞 `mcpServers` 選項
+
+2. **Skills 支援**
+   - Skills 目錄結構：`agents/{id}/.claude/skills/{skill-name}/SKILL.md`
+   - SDK 會自動從 `.claude/skills/` 掃描並載入 skills
+   - 需要在 `settings.local.json` 的 `allow` 清單加入 `"Skill"`
+
+3. **General Agent 更新**
+   - 新增 `"Skill"` 到允許的工具清單
+   - 建立測試用 `.mcp.json` 和 test-skill
+
+**修改檔案**：
+- `src/core/AgentLoader.ts` — `MCP_CONFIG_FILE` 改為 `.mcp.json`
+- `agents/general/.claude/settings.local.json` — 加入 `"Skill"`
+- `agents/general/.mcp.json`（新增）— 測試 MCP 配置
+- `agents/general/.claude/skills/test-skill/SKILL.md`（新增）— 測試 skill
+
+**配置範例**：
+
+`.mcp.json`（放在 agent 根目錄）：
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-server-echo"]
+    }
+  }
+}
+```
+
+SKILL.md（放在 `.claude/skills/{name}/SKILL.md`）：
+```markdown
+---
+name: my-skill
+description: My custom skill
+---
+
+Instructions for the skill...
+```
+
+---
+
+### v1.8.1 - 時間注入修復
 
 **發布日期**：2026-01-29
 
