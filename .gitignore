@@ -54,10 +54,10 @@ agents/*/EQUIPMENT.md
 agents/*/memory/
 
 # Agent local settings (per-machine config, contains model/permission overrides)
-agents/*/.claude/settings.local.json
+# agents/*/.claude/settings.local.json
 
 # Agent installed skills (runtime installed, not source controlled)
-agents/*/.claude/skills/
+# agents/*/.claude/skills/
 
 # Output styles (SDK doesn't support, use CLAUDE.md instead)
 agents/*/.claude/output-styles/

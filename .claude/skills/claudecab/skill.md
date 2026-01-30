@@ -22,9 +22,10 @@ ClaudeCab 是**輕量級多代理框架**，讓 Claude Code 成為可被遠端�
 
 **「目錄即代理」**：`agents/` 下每個子目錄代表一個獨立的 Claude Code 專案，擁有：
 - `.claude/settings.local.json` - 權限配置（model, permissions）
-- `CLAUDE.md` - 系統提示詞（含記憶協議）
+- `.claude/skills/` - Agent Skills（協議、人格定義等）
+- `CLAUDE.md` - 系統提示詞（引導 agent 載入 skills）
 - `agent.json` - ClaudeCab 元資料（name, description）
-- Workspace 檔案（SOUL.md, USER.md, IDENTITY.md, MEMORY.md, memory/）— Agent 自主管理
+- Workspace 檔案（USER.md, MEMORY.md, memory/）— Agent 自主管理
 
 **SDKQueryManager 可獨立抽離**：SDK 整合層只接收 systemPrompt + cwd，不注入任何業務邏輯。記憶系統完全由 Agent 透過 CLAUDE.md 指令自行操作，引擎層（`src/`）零感知。
 
@@ -62,11 +63,14 @@ claudecab/
 ├── public/                # 靜態資源 (JS)
 ├── agents/                # Agent 配置（每個子目錄 = 一個代理）
 │   ├── general/           # 通用助手（含記憶系統 workspace）
-│   │   ├── CLAUDE.md      # 系統提示（含記憶協議 + Lessons Learned）
+│   │   ├── .claude/
+│   │   │   ├── settings.local.json  # 權限配置
+│   │   │   └── skills/              # Agent Skills
+│   │   │       ├── agent-protocols/ # 核心協議（啟動、記憶、安全）
+│   │   │       └── persona/         # 人格定義（soul, identity）
+│   │   ├── CLAUDE.md      # 系統提示（引導 → skills）
 │   │   ├── BOOTSTRAP.md   # 首次啟動儀式（完成後自動刪除）
-│   │   ├── SOUL.md        # 人格定義
 │   │   ├── USER.md        # 使用者檔案
-│   │   ├── IDENTITY.md    # AI 身份
 │   │   ├── MEMORY.md      # 長期記憶
 │   │   └── memory/        # 每日日誌
 │   └── coder/             # 程式碼助手

@@ -1,0 +1,20 @@
+{
+  "respectGitignore": false,
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Bash"
+    ],
+    "deny": []
+  },
+  "model": "sonnet",
+  "enabledPlugins": {
+    "superpowers@superpowers-marketplace": true
+  }
+}

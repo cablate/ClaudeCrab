@@ -96,20 +96,35 @@
 
 ---
 
+## Agent Skills（v1.11.0）
+
+| 要做什麼 | 主要檔案 | 相關檔案 |
+|----------|----------|----------|
+| 修改 Agent 啟動協議 | `agents/general/.claude/skills/agent-protocols/references/startup-protocol.md` | `SKILL.md` |
+| 修改記憶寫入規則 | `agents/general/.claude/skills/agent-protocols/references/memory-system.md` | — |
+| 修改安全規則 | `agents/general/.claude/skills/agent-protocols/references/safety.md` | — |
+| 修改排程建立指引 | `agents/general/.claude/skills/agent-protocols/references/scheduling.md` | — |
+| 修改回覆準則 | `agents/general/.claude/skills/agent-protocols/references/guidelines.md` | — |
+| 修改輸出格式（📝 標記） | `agents/general/.claude/skills/agent-protocols/references/output-style.md` | — |
+| 修改 Agent 人格（soul） | `agents/general/.claude/skills/persona/references/soul.md` | Core Truths、Boundaries、Vibe、Voice Guide |
+| 修改 AI 身份（identity） | `agents/general/.claude/skills/persona/references/identity.md` | 名字、角色、定位 |
+| 複製人格到其他 Agent | 複製 `agents/general/.claude/skills/persona/` | — |
+
+> **Skill 觸發**：Agent 在 session 開始時透過 Skill 工具調用 `/agent-protocols` 和 `/persona`。
+
+---
+
 ## Agent 記憶系統
 
 | 要做什麼 | 主要檔案 | 相關檔案 |
 |----------|----------|----------|
-| 修改 Agent 記憶協議 | `agents/general/CLAUDE.md` | Startup Protocol、Memory System 區段 |
-| 修改 Agent 輸出風格 | `agents/<name>/.claude/output-styles/` | `settings.local.json` 的 `outputStyle` 欄位 |
-| 修改 Agent 人格 | `agents/general/SOUL.md` | Core Truths、Boundaries、Vibe、Voice Guide |
+| 修改 CLAUDE.md 引導 | `agents/general/CLAUDE.md` | 引導 agent 載入 skills |
 | 修改使用者檔案 | `agents/general/USER.md` | — |
-| 修改 AI 身份 | `agents/general/IDENTITY.md` | — |
 | 查看/修改長期記憶 | `agents/general/MEMORY.md` | Agent 自行維護 |
 | 查看每日日誌 | `agents/general/memory/YYYY-MM-DD.md` | Agent 自行產生 |
 | 理解記憶設計原理 | `docs/moltbot-blueprint.md` | Moltbot Phase 0 純檔案架構 |
 
-> **注意**：記憶系統不涉及 `src/` 任何程式碼。修改只需調整 agent workspace 檔案。
+> **注意**：記憶系統不涉及 `src/` 任何程式碼。修改只需調整 agent workspace 檔案和 skills。
 
 ---
 

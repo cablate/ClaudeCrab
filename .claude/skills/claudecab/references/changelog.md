@@ -9,7 +9,82 @@
 
 ## 版本歷史
 
-### v1.10.1 - 排程系統修復與優化（當前版本）
+### v1.11.0 - Agent Skill 系統（當前版本）
+
+**發布日期**：2026-01-30
+
+**變更**：
+
+1. **協議 Skill 化（agent-protocols）**
+   - 將 Startup Protocol、Memory System、Safety、Scheduling、Guidelines、Output Style 抽離為獨立 skill
+   - 位置：`agents/general/.claude/skills/agent-protocols/`
+   - 所有協議文件移至 `references/` 子目錄
+   - SKILL.md 作為協議索引，觸發時機：每次 session 開始時
+
+2. **人格 Skill 化（persona）**
+   - 將 SOUL.md、IDENTITY.md 抽離為可攜帶的 skill
+   - 位置：`agents/general/.claude/skills/persona/`
+   - 人格與環境狀態（USER.md、MEMORY.md）分離
+   - 部署到新環境只需複製 persona skill
+
+3. **CLAUDE.md 簡化**
+   - 從完整協議文檔改為指向 skills 的引導文件
+   - 新增 `<STRICTLY_IMPORTANT>` 標籤強調啟動協議必須執行
+   - 新增「重新校準」機制：長對話時重新調用 skills 恢復注意力
+   - 保留 Lessons Learned 區段供 agent 自行維護
+
+4. **啟動協議提醒注入**
+   - `src/core/constants.ts` 新增 `STARTUP_PROTOCOL_REMINDER` 常數
+   - `buildPromptContext()` 接受 `isNewSession` 參數
+   - 新 session 時透過 UserPromptSubmit hook 注入啟動提醒
+   - `MessageProcessor` 使用 `internalSession.sdkSessionId === undefined` 判斷是否為新 session
+
+5. **記憶檔案讀取強化**
+   - `startup-protocol.md` 更新為更明確的步驟
+   - Step 2 加入 Glob 工具搜尋 `memory/*.md` 確認日誌檔案
+   - 明確指示讀取今天和昨天的日期檔案
+
+6. **日期時間處理改用 date-fns**
+   - `src/core/constants.ts` 使用 `date-fns` 和 `date-fns-tz` 處理日期
+   - 使用 `toZonedTime` 確保 Asia/Taipei 時區
+   - 使用 `subDays` 計算昨天日期
+   - 日誌路徑格式：`memory/YYYY-MM-DD.md`
+
+7. **SDK settingSources 改為 'project'**
+   - `src/core/SDKQueryManager.ts` 預設 `settingSources` 從 `['local']` 改為 `['project']`
+   - 目的：讓 SDK 能載入 `.claude/skills/` 目錄的 skills
+   - 仍透過 `systemPrompt` 參數明確傳入 CLAUDE.md 內容（避免 SDK 搜尋父目錄）
+
+**修改檔案**：
+- `agents/general/CLAUDE.md` — 簡化為 skill 引導
+- `agents/general/.claude/skills/agent-protocols/` — 新增協議 skill
+- `agents/general/.claude/skills/persona/` — 新增人格 skill
+- `src/core/constants.ts` — 新增 STARTUP_PROTOCOL_REMINDER、isNewSession 支援
+- `src/core/MessageProcessor.ts` — isNewSession 檢測、傳遞給 hook
+
+**Skill 結構**：
+
+```
+agents/general/.claude/skills/
+├── agent-protocols/
+│   ├── SKILL.md                    # 協議索引
+│   └── references/
+│       ├── startup-protocol.md     # 啟動流程
+│       ├── memory-system.md        # 記憶寫入規則
+│       ├── safety.md               # 安全規則
+│       ├── scheduling.md           # 排程建立指引
+│       ├── guidelines.md           # 回覆準則
+│       └── output-style.md         # 輸出格式
+└── persona/
+    ├── SKILL.md                    # 人格定義入口
+    └── references/
+        ├── soul.md                 # 核心價值觀、說話風格
+        └── identity.md             # 名字、角色、定位
+```
+
+---
+
+### v1.10.1 - 排程系統修復與優化
 
 **發布日期**：2026-01-30
 
@@ -771,13 +846,18 @@ Instructions for the skill...
 
 **問題**：當 agent 目錄在專案內時，會載入專案根目錄的 CLAUDE.md 而非 agent 自己的
 
-**決策**：
-1. 使用 `settingSources: ['local']` - 只讀取 agent 的 `.claude/settings.local.json`
-2. 透過 `systemPrompt` 參數明確傳遞 agent 的 CLAUDE.md 內容
+**決策**（v1.11.0 更新）：
+1. 使用 `settingSources: ['project']` - 載入 agent 的設定檔 **和 skills**
+2. 透過 `systemPrompt` 參數明確傳遞 agent 的 CLAUDE.md 內容（覆蓋 SDK 搜尋到的）
 
 **理由**：
-- `'project'` source 會遞迴搜尋
-- 明確傳遞確保隔離
+- `'local'` 無法載入 skills（v1.11.0 發現的問題）
+- `'project'` 會載入 `.claude/skills/` 目錄
+- 明確傳遞 `systemPrompt` 確保 agent isolation（假設 SDK 優先使用傳入的參數）
+
+**變更歷程**：
+- 原始決策（v1.0）：使用 `['local']` 完全隔離
+- v1.11.0 更新：改用 `['project']` 以支援 skills，同時保留明確傳遞 `systemPrompt`
 
 **實作位置**：`src/core/SDKQueryManager.ts`
 
@@ -949,3 +1029,98 @@ Instructions for the skill...
 - 未來 SDK 版本可能修復此不一致
 
 **實作位置**：`src/core/MessageProcessor.ts`（canUseTool 閉包中的 allow 回應）
+
+---
+
+### ADR-012: Agent Skill 系統設計原則
+
+**背景**：隨著 Agent 協議和人格定義變得複雜，原本將所有內容塞進 CLAUDE.md 的做法導致文件過長、難以維護。需要將協議模組化，同時保持可攜性和清晰的分層。
+
+**決策**：採用 Claude Code 原生 Skills 機制，將協議和人格抽離為獨立 skills：
+
+1. **Skill Metadata Description 是主要觸發機制**
+   - 每個 skill 的 `description` 在 session 開始時自動載入
+   - LLM 根據 description 決定是否調用該 skill
+   - 「何時使用」的資訊必須放在 description，不能只放在 SKILL.md 正文
+
+2. **CLAUDE.md 只負責引導**
+   - CLAUDE.md 不再包含完整協議內容
+   - 只需指示 agent「在回覆前，先調用 `/agent-protocols` skill」
+   - 實際協議細節在 skill 的 `references/` 子目錄
+
+3. **協議與人格分離**
+   - `agent-protocols` skill：定義「怎麼做」— Startup Protocol、Memory System、Safety 等
+   - `persona` skill：定義「是誰」— soul（價值觀、說話風格）、identity（名字、角色）
+
+4. **人格可攜帶性**
+   - `persona` skill 設計為可複製到其他 agent
+   - 複製 `.claude/skills/persona/` 目錄即可快速部署相同人格
+   - 環境狀態（USER.md、MEMORY.md、memory/）不放入 skill，屬於特定環境
+
+5. **Hook 輔助強化注意力**
+   - UserPromptSubmit hook 注入啟動協議提醒
+   - 新 session 時提醒 agent 執行 Startup Protocol
+   - 每次訊息時提醒檢查記憶寫入
+
+**設計原則總結**：
+
+| 原則 | 說明 |
+|------|------|
+| **Description-Driven Triggering** | Skill 的 description 是 LLM 決定是否調用的關鍵，必須清楚說明觸發時機 |
+| **CLAUDE.md 精簡化** | 只負責引導和強調，不堆疊內容 |
+| **協議 vs 人格分離** | agent-protocols = how, persona = who |
+| **可攜帶性優先** | persona skill 可獨立遷移，環境狀態留在原地 |
+| **Hook 輔助** | 透過 SDK hook 注入提醒，強化 agent 對協議的注意力 |
+| **References 子目錄** | 詳細內容放在 `references/`，SKILL.md 作為索引 |
+
+### Skill Metadata 預載機制與引導成本優化
+
+**核心洞察**：Claude Code 會在 session 開始時自動預載所有 skill 的 metadata（name, description），這些資訊會存在於對話 context 中，即使 agent 尚未調用該 skill。
+
+**傳統做法的問題**：
+```
+CLAUDE.md
+├── 「記得讀 SOUL.md」
+├── 「記得讀 USER.md」
+├── 「參考 Safety 規則在 xxx」
+└── ... 窮舉所有文件路徑
+```
+CLAUDE.md 變成臃腫的導航頁，每多一個文件就要多一行引導，忘記寫就不會被讀到。
+
+**優化後的架構**：
+
+| 層級 | 機制 | 特性 | 作用 |
+|------|------|------|------|
+| Skill Description | 被動預載 | 自動存在於 context | 減輕 CLAUDE.md 引導負擔 |
+| CLAUDE.md | 主動引導 | 權重確定 | 精簡強調，不需窮舉 |
+| SKILL.md → references/ | 調用後展開 | 正常文件結構 | 詳細內容 |
+
+**關鍵 Principle**：
+
+1. **被動載入 > 主動引導**
+   - 能透過 metadata 被動傳達的資訊，比需要層層引導才能讀到的更可靠
+   - Description 讓 agent「見過」skill 的存在，降低 CLAUDE.md 的解釋成本
+
+2. **Description + CLAUDE.md 互補，非取代**
+   - Description：第一層提醒，權重未知但至少存在
+   - CLAUDE.md：精簡強調層，不用窮舉，只強調最關鍵的入口
+   - 兩者形成分層冗餘
+
+3. **Skill 內部展開是可信的**
+   - 一旦 agent 主動調用了 skill，SKILL.md → references/ 的路徑會被正常執行
+   - 問題在於「如何讓 agent 知道要調用」，這由 description + CLAUDE.md 共同解決
+
+4. **Description 應包含觸發時機**
+   - 不只描述「這個 skill 是什麼」，還要說「什麼時候該用」
+   - 例：「Session 啟動必讀。在回覆使用者之前必須調用。」
+
+**取捨**：
+- Description 的實際權重未知，需要實測
+- 最差情況是沒效果，不會有負面影響
+- 最好情況是大幅減少 CLAUDE.md 的引導負擔
+
+**實作位置**：
+- `agents/general/.claude/skills/agent-protocols/` — 協議 skill
+- `agents/general/.claude/skills/persona/` — 人格 skill
+- `agents/general/CLAUDE.md` — 引導文件
+- `src/core/constants.ts` — Hook 提醒常數

@@ -1,8 +1,8 @@
 {
-  "name": "General Assistant",
+  "name": "閒聊好朋友",
   "description": "A helpful general-purpose AI assistant",
   "version": "1.0.0",
-  "model": "sonnet",
+  "model": "opus",
   "telegramBotToken": "8085979533:AAEZ7EVcE1SdhN22LvJBbepmts358Je2af8",
   "settings": {
     "permissionMode": "default",

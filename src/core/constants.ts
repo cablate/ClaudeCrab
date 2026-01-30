@@ -1,3 +1,7 @@
+import { format, subDays } from 'date-fns';
+import { zhTW } from 'date-fns/locale';
+import { toZonedTime } from 'date-fns-tz';
+
 /**
  * Hook-related constants
  */
@@ -8,38 +12,40 @@
  * before responding to the new message.
  */
 export const MEMORY_CHECKPOINT_CONTEXT =
-  '【記憶檢查】回覆前，參照 CLAUDE.md 的 Memory System 段落，檢查上輪對話是否有該記錄的內容。有就先寫入對應檔案。';
+  '【記憶檢查】回覆前，檢查上輪對話是否有該記錄的內容。有就先寫入對應檔案。';
+
+const TAIPEI_TZ = 'Asia/Taipei';
 
 /**
- * Weekday names in Traditional Chinese
+ * Startup protocol reminder for new sessions.
  */
-const WEEKDAYS = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+export const STARTUP_PROTOCOL_REMINDER =
+  '【啟動協議】新 session，回覆前先完成 CLAUDE.md 規定的 Startup Protocol。';
 
 /**
  * Build the complete prompt context with current time.
  * Time is displayed in Asia/Taipei timezone.
  */
-export function buildPromptContext(chatId?: string): string {
-  const now = new Date();
-  const taipeiTime = new Intl.DateTimeFormat('zh-TW', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(now);
-  
-  // Get weekday in Taipei timezone
-  const taipeiDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }));
-  const weekday = WEEKDAYS[taipeiDate.getDay()];
-  
-  let context = `【當前時間】${taipeiTime} ${weekday}\n${MEMORY_CHECKPOINT_CONTEXT}`;
-  
+export function buildPromptContext(chatId?: string, isNewSession?: boolean): string {
+  const now = toZonedTime(new Date(), TAIPEI_TZ);
+  const yesterday = subDays(now, 1);
+
+  const todayDate = format(now, 'yyyy-MM-dd');
+  const yesterdayDate = format(yesterday, 'yyyy-MM-dd');
+  const displayTime = format(now, 'yyyy/MM/dd HH:mm EEEE', { locale: zhTW });
+
+  let context = `【當前時間】${displayTime}`;
+  context += `\n【日誌路徑】今天: memory/${todayDate}.md | 昨天: memory/${yesterdayDate}.md`;
+
+  if (isNewSession) {
+    context += `\n${STARTUP_PROTOCOL_REMINDER}`;
+  }
+
+  context += `\n${MEMORY_CHECKPOINT_CONTEXT}`;
+
   if (chatId) {
     context += `\n【當前對話】platform: telegram, chatId: ${chatId}`;
   }
-  
+
   return context;
 }

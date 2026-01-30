@@ -1,9 +1,16 @@
 {
-  "name": "Code Assistant",
+  "name": "工程師",
   "description": "A specialized coding assistant that helps with programming tasks",
   "version": "1.0.0",
-  "model": "sonnet",
-  "allowedTools": ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+  "model": "opus",
+  "allowedTools": [
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Glob",
+    "Grep"
+  ],
   "telegramBotToken": "8585127707:AAExHiRF4aF7cbyXcyoN7fX4UgTqhU2u-2A",
   "settings": {
     "permissionMode": "default",

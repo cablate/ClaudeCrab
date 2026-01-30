@@ -213,6 +213,7 @@ export class MessageProcessor {
     }
 
     const agent = internalSession.agent;
+    const isNewSession = internalSession.sdkSessionId === undefined;
 
     // Read fresh system prompt from disk (agent may have updated CLAUDE.md at runtime)
     const systemPrompt = this.getSystemPrompt !== undefined
@@ -238,13 +239,25 @@ export class MessageProcessor {
     const MAX_TOOL_EVENTS_DISPLAY = 8; // Show last N tool events
 
     // Check if adapter supports status messages
-    const supportsStatusMessage = 'sendStatusMessage' in adapter && 
+    const supportsStatusMessage = 'sendStatusMessage' in adapter &&
       typeof (adapter as { sendStatusMessage?: unknown }).sendStatusMessage === 'function';
 
     // Helper to get typed adapter
-    const getStatusAdapter = () => adapter as unknown as { 
+    const getStatusAdapter = () => adapter as unknown as {
       sendStatusMessage: (chatId: string, text?: string) => Promise<string | null>;
       updateStatusMessage: (chatId: string, messageId: string, text: string) => Promise<boolean>;
+    };
+
+    // Helper to format completion summary with tool counts
+    const formatCompletionSummary = (events: Array<{ toolName: string }>) => {
+      const toolCounts = new Map<string, number>();
+      for (const event of events) {
+        toolCounts.set(event.toolName, (toolCounts.get(event.toolName) ?? 0) + 1);
+      }
+      const toolSummary = Array.from(toolCounts.entries())
+        .map(([name, count]) => `${name} (${count})`)
+        .join(' | ');
+      return `✓ 已完成 ${events.length} 個操作\n   ${toolSummary}`;
     };
 
     // Create a new status message (called when needed)
@@ -253,11 +266,10 @@ export class MessageProcessor {
       
       // Finalize previous status message if exists
       if (statusMessageId !== null && toolEvents.length > 0) {
-        const eventCount = toolEvents.length;
         await getStatusAdapter().updateStatusMessage(
-          chatId, 
-          statusMessageId, 
-          `✓ 已處理 ${eventCount} 個操作`
+          chatId,
+          statusMessageId,
+          formatCompletionSummary(toolEvents)
         );
       }
       
@@ -558,7 +570,7 @@ export class MessageProcessor {
                     await getStatusAdapter().updateStatusMessage(
                       chatId,
                       statusMessageId,
-                      `✓ 已處理 ${toolEvents.length} 個操作`
+                      formatCompletionSummary(toolEvents)
                     );
                   }
                   
@@ -622,7 +634,7 @@ export class MessageProcessor {
                         continue: true,
                         hookSpecificOutput: {
                           hookEventName: 'UserPromptSubmit' as const,
-                          additionalContext: buildPromptContext(chatId),
+                          additionalContext: buildPromptContext(chatId, isNewSession),
                         },
                       })],
                     }],
@@ -729,9 +741,9 @@ export class MessageProcessor {
       // Finalize status message with completion summary
       if (supportsStatusMessage && statusMessageId !== null && toolEvents.length > 0) {
         await getStatusAdapter().updateStatusMessage(
-          chatId, 
-          statusMessageId, 
-          `✓ 已處理 ${toolEvents.length} 個操作`
+          chatId,
+          statusMessageId,
+          formatCompletionSummary(toolEvents)
         );
       } else if (supportsStatusMessage && statusMessageId !== null) {
         // No tool events in this batch, just mark as done

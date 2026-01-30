@@ -20,11 +20,28 @@
 
 **原因**：SDK 會遞迴向上搜尋父目錄的 CLAUDE.md，即使遇到 `.git` 也不會停止
 
-**解決方案**：
-1. 使用 `settingSources: ['local']` 而非 `['project']`
-2. 透過 `systemPrompt` 參數明確傳遞 agent 的 CLAUDE.md 內容
+**解決方案**：透過 `systemPrompt` 參數明確傳遞 agent 的 CLAUDE.md 內容（SDK 會優先使用傳入的參數）
 
 **相關檔案**：`src/core/SDKQueryManager.ts`
+
+---
+
+### Skills 在 SDK 調用中顯示 "unknown skill"
+
+**症狀**：
+- Agent 調用 `/skill-name` 時顯示 `Unknown skill: skill-name`
+- 在 Claude Code CLI 互動模式下正常，但透過 ClaudeCab SDK 調用失敗
+
+**原因**：`settingSources: ['local']` 只載入權限設定，不會載入 `.claude/skills/` 目錄
+
+**解決方案**（v1.11.0）：
+1. 將 `settingSources` 改為 `['project']`
+2. 保留明確傳遞 `systemPrompt` 參數確保 agent isolation
+3. SDK 會同時載入 skills 並優先使用傳入的 systemPrompt
+
+**注意**：確保 `settings.local.json` 的 `allow` 清單包含 `"Skill"` 工具
+
+**相關檔案**：`src/core/SDKQueryManager.ts`、`agents/general/.claude/settings.local.json`
 
 ---
 

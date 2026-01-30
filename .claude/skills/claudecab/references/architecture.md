@@ -58,10 +58,10 @@ interface IAgentRepository {
 
 封裝 Claude Agent SDK `query()` 函數：
 
-**關鍵設計（Agent Isolation）**：
-- `settingSources: ['local']` - 只讀取 agent 的 `.claude/settings.local.json`
-- `systemPrompt` 參數 - 明確傳遞 agent 的 CLAUDE.md 內容
-- **原因**：SDK 會遞迴向上搜尋父目錄的 CLAUDE.md（.git 不是邊界），必須明確傳遞避免載入錯誤的系統提示詞
+**關鍵設計（Agent Isolation + Skills）**：
+- `settingSources: ['project']` - 載入 agent 的設定檔 **和 skills**
+- `systemPrompt` 參數 - 明確傳遞 agent 的 CLAUDE.md 內容（覆蓋 SDK 搜尋到的）
+- **原因**：`'local'` 無法載入 skills；改用 `'project'` 後，仍透過明確傳遞 `systemPrompt` 確保 agent isolation
 
 **功能**：
 - 管理 Query 生命週期
@@ -233,6 +233,38 @@ keep-coding-instructions: false
 
 SDK 會自動載入此檔案作為系統提示（透過 SDKQueryManager 明確傳遞）。
 
+### Agent Skills（v1.11.0）
+
+Claude Code 原生 Skills 機制，用於模組化 Agent 的協議和人格定義：
+
+```
+agents/general/.claude/skills/
+├── agent-protocols/              # 核心行為規範
+│   ├── SKILL.md                  # 協議索引（觸發入口）
+│   └── references/
+│       ├── startup-protocol.md   # Session 啟動流程
+│       ├── memory-system.md      # 記憶寫入規則
+│       ├── safety.md             # 安全規則
+│       ├── scheduling.md         # 排程建立指引
+│       ├── guidelines.md         # 回覆準則
+│       └── output-style.md       # 輸出格式（📝 標記）
+└── persona/                      # 人格定義（可攜帶）
+    ├── SKILL.md                  # 人格入口
+    └── references/
+        ├── soul.md               # 核心價值觀、說話風格
+        └── identity.md           # 名字、角色、定位
+```
+
+**Skill 載入機制**：
+- Skill metadata（name, description）在 session 開始時自動載入
+- Agent 透過 Skill 工具調用 `/skill-name` 載入完整內容
+- CLAUDE.md 引導 agent 在啟動時調用 `/agent-protocols`
+
+**設計原則**：
+- **協議與人格分離**：agent-protocols 定義「怎麼做」，persona 定義「是誰」
+- **可攜帶性**：persona skill 可複製到其他 agent 快速部署相同人格
+- **環境狀態獨立**：USER.md、MEMORY.md、memory/ 是環境特定狀態，不放入 skill
+
 ### Agent Workspace 檔案（記憶系統）
 
 Agent 可擁有額外的 workspace 檔案，由 CLAUDE.md 中的指令驅動 agent 自行讀寫：
@@ -240,17 +272,18 @@ Agent 可擁有額外的 workspace 檔案，由 CLAUDE.md 中的指令驅動 age
 ```
 agents/general/
 ├── .claude/
-│   └── settings.local.json   # Agent 權限配置
+│   ├── settings.local.json   # Agent 權限配置
+│   └── skills/               # Agent Skills（見上方）
 ├── agent.json                 # ClaudeCab 元資料
-├── CLAUDE.md                  # 系統提示詞（含記憶協議 + Lessons Learned）
+├── CLAUDE.md                  # 系統提示詞（引導 → skills）
 ├── BOOTSTRAP.md               # 首次啟動儀式（完成後由 agent 自行刪除）
-├── SOUL.md                    # 人格定義（穩定，緩慢演化）
 ├── USER.md                    # 使用者檔案（身份、偏好）
-├── IDENTITY.md                # AI 身份（名字、風格）
 ├── MEMORY.md                  # 長期記憶（篩選過的持久事實）
 └── memory/                    # 每日日誌
     └── YYYY-MM-DD.md
 ```
+
+> **v1.11.0 變更**：SOUL.md、IDENTITY.md 移至 `.claude/skills/persona/references/`，成為可攜帶的 skill
 
 > **重要**：這些檔案不由引擎層管理。Agent 在 session 啟動時依 CLAUDE.md 指示自行讀取，對話中自行寫入。SDKQueryManager 完全不知道這些檔案的存在。
 >
