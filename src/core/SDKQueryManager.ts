@@ -124,12 +124,13 @@ export class SDKQueryManager {
     const startTime = Date.now();
 
     // Build SDK options
-    // Use 'project' to load agent's settings AND skills from .claude/
+    // Use 'project' to load skills from .claude/skills/
+    // Use 'local' to load permissions from .claude/settings.local.json
     // System prompt is passed explicitly to ensure agent isolation
     // (the explicit systemPrompt parameter should override any CLAUDE.md found by SDK)
     const sdkOptions: Options = {
       cwd: options.cwd,
-      settingSources: options.settingSources ?? ['project'],
+      settingSources: options.settingSources ?? ['project', 'local'],
       // Only set maxTurns if explicitly provided, otherwise let SDK use its default
       ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
       abortController,

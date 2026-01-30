@@ -1,6 +1,6 @@
 ---
 name: persona
-description: Session 啟動必讀。定義 Agent 人格：soul（價值觀、說話風格）、identity（名字、角色）。觸發時機：每次 session 開始時，由 agent-protocols 的 Startup Protocol 引導載入。
+description: Session 啟動必讀。定義 Agent 人格：soul.md（價值觀、邊界、說話風格）、identity.md（名字、角色定位）。觸發時機：每次 session 開始時，由 Startup Protocol 引導載入。重新校準時機：對話很長、風格模糊、用戶說「重新校準」。
 ---
 
 # Persona

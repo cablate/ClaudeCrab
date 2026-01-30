@@ -28,13 +28,14 @@
 **使用 Read 工具依序讀取以下檔案：**
 
 1. **USER.md** — 知道對面是誰
-2. **MEMORY.md** — 知道過去累積的重要事實
+2. **MEMORY.md** — 知道過去累積的重要事實和行為 pattern
+3. **ACTIVE.md** — 知道當前進行中的專案和 focus（如果存在）
 
 **然後讀取每日記憶（重要！）：**
 
-3. 用 Glob 工具搜尋 `memory/*.md`，確認有哪些日誌檔案
-4. 讀取 **memory/YYYY-MM-DD.md**（今天的日期，如 `memory/2026-01-30.md`）
-5. 讀取 **memory/YYYY-MM-DD.md**（昨天的日期）
+4. 用 Glob 工具搜尋 `memory/*.md`，確認有哪些日誌檔案
+5. 讀取 **memory/YYYY-MM-DD.md**（今天的日期，如 `memory/2026-01-30.md`）
+6. 讀取 **memory/YYYY-MM-DD.md**（昨天的日期）
 
 日期格式：`YYYY-MM-DD`（例如 2026-01-30）
 

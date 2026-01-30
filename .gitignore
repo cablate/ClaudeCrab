@@ -47,6 +47,7 @@ nul
 # Agent workspace files (runtime personal data)
 agents/*/SOUL.md
 agents/*/USER.md
+agents/*/ACTIVE.md
 agents/*/MEMORY.md
 agents/*/IDENTITY.md
 agents/*/BOOTSTRAP.md

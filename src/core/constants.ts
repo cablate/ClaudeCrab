@@ -8,11 +8,19 @@ import { toZonedTime } from 'date-fns-tz';
 
 /**
  * Memory checkpoint reminder injected via UserPromptSubmit hook.
- * Reminds the agent to save important content from the previous turn
- * before responding to the new message.
+ * Reminds the agent to follow memory-system protocol.
  */
-export const MEMORY_CHECKPOINT_CONTEXT =
-  '【記憶檢查】回覆前，檢查上輪對話是否有該記錄的內容。有就先寫入對應檔案。';
+export const MEMORY_CHECKPOINT_CONTEXT = `【記憶】遵循 memory-system 規範
+1. 上輪有漏記？→ 根據規範寫入對應檔案
+2. 處理用戶訊息並回覆
+3. 結束前會再次檢查`;
+
+/**
+ * Memory checkpoint reminder injected via Stop hook.
+ * Final check before ending the conversation turn.
+ */
+export const MEMORY_STOP_CHECKPOINT = 
+  '【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md），再結束。';
 
 const TAIPEI_TZ = 'Asia/Taipei';
 

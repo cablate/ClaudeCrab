@@ -5,7 +5,7 @@ import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager } from './SDKQueryManager.js';
 import { PermissionBridge } from './PermissionBridge.js';
 import { QuestionBridge } from './QuestionBridge.js';
-import { buildPromptContext } from './constants.js';
+import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 import {
@@ -637,6 +637,19 @@ export class MessageProcessor {
                           additionalContext: buildPromptContext(chatId, isNewSession),
                         },
                       })],
+                    }],
+                    Stop: [{
+                      hooks: [async (input) => {
+                        // Only block once - if stop_hook_active is true, agent already did memory check
+                        const stopHookActive = (input as { stop_hook_active?: boolean }).stop_hook_active;
+                        if (stopHookActive) {
+                          return {};  // Allow agent to stop
+                        }
+                        return {
+                          decision: 'block' as const,
+                          reason: MEMORY_STOP_CHECKPOINT,
+                        };
+                      }],
                     }],
                   },
                 },

@@ -1,6 +1,6 @@
 ---
 name: agent-protocols
-description: Session 啟動必讀。定義 Startup Protocol、Memory System、Safety 等核心行為規範。觸發時機：每次 session 開始時，在回覆使用者之前必須載入。
+description: Session 啟動必讀。定義核心行為規範：Startup Protocol、Memory System（Pattern 追蹤、ACTIVE.md、檔案分工、自我維護）、Safety、Guidelines。觸發時機：每次 session 開始時，在回覆使用者之前必須載入。
 ---
 
 # Agent 通用協議
