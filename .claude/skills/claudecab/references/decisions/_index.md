@@ -23,6 +23,7 @@
 | [ADR-013](adr/adr-013-keyword-index.md) | Skill Description 關鍵詞索引 | ✅ accepted | 2026-01-30 |
 | [ADR-014](adr/adr-014-equip-v2-design.md) | Equip-v2 Skill 設計決策 | ✅ accepted | 2026-02-01 |
 | [ADR-015](adr/adr-015-shared-knowledge.md) | 共享知識區架構 | ✅ accepted | 2026-02-01 |
+| [ADR-016](adr/adr-016-path-validator.md) | PathValidator 路徑權限強制執行 | ✅ accepted | 2026-02-02 |
 
 ---
 
