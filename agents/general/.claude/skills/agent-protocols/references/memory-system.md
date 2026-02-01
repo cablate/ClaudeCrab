@@ -67,3 +67,35 @@
 - **過時** — 已經不正確的內容
 
 主動整理。這是你維護自己記憶系統的責任。
+
+---
+
+## Knowledge 檔案系統
+
+除了記憶系統，你還有**知識產出**的存放區：
+
+| 目錄 | 放什麼 | 更新頻率 |
+|------|--------|----------|
+| **knowledge/tools/{name}.md** | 工具評估、使用心得 | 研究工具後 |
+| **knowledge/cases/{slug}.md** | 案例研究、經驗分析 | 完成分析後 |
+| **knowledge/research/{topic}.md** | 主題研究筆記 | 研究過程中 |
+
+### 私有 vs 共享
+
+- **私有**：`knowledge/` — 你的工作區，草稿或個人筆記
+- **共享**：`../_shared/knowledge/{你的 agentId}/` — 發布給其他 bot 參考
+
+### 發布流程
+
+當你完成一份知識產出，且認為其他 bot 也能受益：
+1. 確認內容完整、有價值
+2. 複製到 `../_shared/knowledge/{你的 agentId}/` 對應目錄
+3. 其他 bot 可以從 `../_shared/knowledge/` 讀取你發布的內容
+
+### 引用其他 bot 的知識
+
+你可以讀取 `../_shared/knowledge/` 下其他 bot 發布的內容：
+- `../_shared/knowledge/general/` — general 發布的
+- `../_shared/knowledge/nitterbot/` — nitterbot 發布的
+
+**注意**：只能讀取，不能修改其他 bot 的發布內容。

@@ -6,7 +6,49 @@
 
 ## 版本歷史
 
-### v1.11.0 - Agent Skill 系統（當前版本）
+### v1.12.0 - 共享知識區架構（當前版本）
+
+**發布日期**：2026-02-01
+
+**變更**：
+
+1. **共享知識區 `_shared/knowledge/`**
+   - 建立跨 Agent 知識共享機制
+   - 目錄結構：`agents/_shared/knowledge/{agentId}/`
+   - 權限規則：所有 bot 可讀，只能寫入自己的命名空間
+
+2. **私有知識區 `knowledge/`**
+   - 將 `tools/` 和 `cases/` 整合到 `knowledge/` 目錄
+   - 分類：`tools/`（工具評估）、`cases/`（案例研究）、`research/`（研究筆記）
+   - 作為草稿區，完成後可發布到共享區
+
+3. **EQUIPMENT.md**
+   - 新增已安裝工具清單檔案
+   - 記錄 MCP servers、Skills、Plugins
+
+4. **Agent 協議更新**
+   - `memory-system.md` 新增 Knowledge 檔案系統規範
+   - `safety.md` 新增路徑權限規則（禁止存取其他 bot 工作區）
+   - `startup-protocol.md` Step 3 加入讀取 EQUIPMENT.md
+
+**新增檔案**：
+- `agents/_shared/knowledge/` 目錄結構
+- `agents/*/EQUIPMENT.md`
+- `agents/*/knowledge/` 目錄結構
+- `.claude/skills/claudecab/references/system/shared-knowledge.md`
+- `.claude/skills/claudecab/references/decisions/adr/adr-015-shared-knowledge.md`
+
+**修改檔案**：
+- `agents/*/agent-protocols/references/memory-system.md`
+- `agents/*/agent-protocols/references/safety.md`
+- `agents/*/agent-protocols/references/startup-protocol.md`
+- `.claude/skills/claudecab/references/system/overview.md`
+- `.claude/skills/claudecab/references/decisions/_index.md`
+- `.claude/skills/claudecab/SKILL.md`
+
+---
+
+### v1.11.0 - Agent Skill 系統
 
 **發布日期**：2026-01-30
 

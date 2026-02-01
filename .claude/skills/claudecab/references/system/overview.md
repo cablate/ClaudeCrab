@@ -335,9 +335,35 @@ agents/general/
 ├── BOOTSTRAP.md               # 首次啟動儀式（完成後由 agent 自行刪除）
 ├── USER.md                    # 使用者檔案（身份、偏好）
 ├── MEMORY.md                  # 長期記憶（篩選過的持久事實）
+├── EQUIPMENT.md               # 已安裝工具清單
+├── knowledge/                 # 私有知識產出（草稿區）
+│   ├── tools/                 # 工具評估
+│   ├── cases/                 # 案例研究
+│   └── research/              # 研究筆記
 └── memory/                    # 每日日誌
     └── YYYY-MM-DD.md
 ```
+
+### 共享知識區（v1.12.0）
+
+跨 Agent 的知識共享機制，讓 bot 產出的知識資產可被其他 bot 參考：
+
+```
+agents/
+├── _shared/
+│   └── knowledge/
+│       ├── general/           # general 發布的內容
+│       │   ├── tools/
+│       │   └── cases/
+│       └── nitterbot/         # nitterbot 發布的內容
+```
+
+**權限規則**：
+- 讀取：所有 bot 可讀整個 `_shared/knowledge/`
+- 寫入：只能寫入自己的命名空間 `_shared/knowledge/{agentId}/`
+- 禁止：存取其他 bot 的私有 `knowledge/` 目錄
+
+詳見 [shared-knowledge.md](shared-knowledge.md)
 
 > **v1.11.0 變更**：SOUL.md、IDENTITY.md 移至 `.claude/skills/persona/references/`，成為可攜帶的 skill
 
