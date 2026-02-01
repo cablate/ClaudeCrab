@@ -6,7 +6,38 @@
 
 ## 版本歷史
 
-### v1.12.0 - 共享知識區架構（當前版本）
+### v1.13.0 - PathValidator 路徑權限強制執行（當前版本）
+
+**發布日期**：2026-02-02
+
+**變更**：
+
+1. **PathValidator 路徑驗證模組**
+   - 新增 `src/core/PathValidator.ts`
+   - 強制執行 Agent 工作區隔離
+   - 透過 PreToolUse hook 攔截所有檔案操作工具
+
+2. **路徑權限規則（程式層面強制）**
+   - 自己的工作區：讀寫皆可
+   - `_shared/knowledge/`：所有 bot 可讀
+   - `_shared/knowledge/{自己}/`：可寫入
+   - `_shared/knowledge/{其他}/`：禁止寫入
+   - 其他路徑：禁止存取
+
+3. **MessageProcessor 整合**
+   - 在 `additionalOptions.hooks` 加入 PreToolUse hook
+   - 自動注入路徑驗證，Agent 無需維護 hooks.ts
+
+**新增檔案**：
+- `src/core/PathValidator.ts`
+- `tests/unit/PathValidator.test.ts`（20 個測試案例）
+
+**修改檔案**：
+- `src/core/MessageProcessor.ts`
+
+---
+
+### v1.12.0 - 共享知識區架構
 
 **發布日期**：2026-02-01
 

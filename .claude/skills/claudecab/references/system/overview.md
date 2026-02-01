@@ -151,6 +151,20 @@ Promise-based 非同步權限橋接，用於連接 SDK 的 `canUseTool` callback
 10. 持久化訊息到資料庫（中間訊息分段存入，供 WebUI 查看）
 11. 透過 Adapter 發送殘餘回應（若全部已透過 callback 發出則跳過）
 
+### PathValidator (`src/core/PathValidator.ts`)
+
+工作區隔離強制執行（v1.13.0）：
+- 透過 PreToolUse hook 攔截所有檔案操作工具（Read, Write, Edit, Glob, Grep）
+- 在 MessageProcessor 中自動注入，Agent 無需維護 hooks.ts
+
+**權限規則**：
+| 路徑 | 讀取 | 寫入 |
+|------|------|------|
+| 自己的工作區 `agents/{id}/` | ✅ | ✅ |
+| 共享區 `_shared/knowledge/` | ✅ | ❌ |
+| 自己的命名空間 `_shared/knowledge/{id}/` | ✅ | ✅ |
+| 其他 agent 工作區 | ❌ | ❌ |
+
 ### constants (`src/core/constants.ts`)
 
 集中管理核心常數：
