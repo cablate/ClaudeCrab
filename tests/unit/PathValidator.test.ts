@@ -94,7 +94,7 @@ describe('PathValidator', () => {
         file_path: path.join(sharedPath, 'knowledge', 'nitterbot', 'research.md'),
       });
       expect(result.allowed).toBe(false);
-      expect(result.reason).toContain('禁止寫入其他 agent');
+      expect(result.reason).toContain('Cannot write to other agent');
     });
 
     it('should deny Edit to other agent namespace in shared area', () => {
@@ -102,7 +102,7 @@ describe('PathValidator', () => {
         file_path: path.join(sharedPath, 'knowledge', 'nitterbot', 'research.md'),
       });
       expect(result.allowed).toBe(false);
-      expect(result.reason).toContain('禁止寫入其他 agent');
+      expect(result.reason).toContain('Cannot write to other agent');
     });
   });
 
@@ -113,7 +113,7 @@ describe('PathValidator', () => {
         file_path: path.join(otherWorkspace, 'CLAUDE.md'),
       });
       expect(result.allowed).toBe(false);
-      expect(result.reason).toContain('禁止存取工作區外');
+      expect(result.reason).toContain('Path outside workspace denied');
     });
 
     it('should deny Write to other agent workspace', () => {
@@ -191,7 +191,7 @@ describe('PathValidator', () => {
         command: 'cat ../nitterbot/CLAUDE.md',
       });
       expect(result.allowed).toBe(false);
-      expect(result.reason).toContain('Bash');
+      expect(result.reason).toContain('Bash:');
     });
 
     it('should deny Bash with ls on other agent directory', () => {

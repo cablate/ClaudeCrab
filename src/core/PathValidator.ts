@@ -103,11 +103,11 @@ export class PathValidator {
 
     // Extract potential paths from the command
     const paths = this.extractPathsFromCommand(command);
-    
+
     for (const p of paths) {
       const absolutePath = this.resolvePath(p);
       const normalized = this.normalizePath(absolutePath);
-      
+
       // Check if path escapes to other agent workspaces
       const result = this.checkBashPathPermission(normalized);
       if (!result.allowed) {
@@ -124,24 +124,31 @@ export class PathValidator {
   private extractPathsFromCommand(command: string): string[] {
     const paths: string[] = [];
 
-    // Pattern 1: Paths with ../ (relative escape attempts)
-    const relativeEscapePattern = /(?:^|[\s;|&])(\.\.[^\s;|&]*)/g;
+    // Pattern 1: Quoted paths (single or double quotes)
+    const quotedPattern = /["']([^"']+)["']/g;
     let match;
-    while ((match = relativeEscapePattern.exec(command)) !== null) {
+    while ((match = quotedPattern.exec(command)) !== null) {
       if (match[1]) paths.push(match[1]);
     }
 
-    // Pattern 2: Absolute paths starting with / or drive letter (Windows)
-    const absolutePathPattern = /(?:^|[\s;|&])((?:\/[^\s;|&]+)|(?:[A-Za-z]:[\\\/][^\s;|&]*))/g;
-    while ((match = absolutePathPattern.exec(command)) !== null) {
-      if (match[1]) paths.push(match[1]);
-    }
-
-    // Pattern 3: Paths in quotes
-    const quotedPathPattern = /["']([^"']*(?:\.\.|\/)['"]?[^"']*)["']/g;
-    while ((match = quotedPathPattern.exec(command)) !== null) {
-      if (match[1] && (match[1].includes('..') || match[1].includes('/'))) {
-        paths.push(match[1]);
+    // Pattern 2: Split by whitespace and find path-like tokens
+    const tokens = command.split(/\s+/);
+    for (const token of tokens) {
+      if (!token || token.startsWith('-')) continue; // Skip flags
+      
+      // Remove surrounding quotes if any
+      const cleaned = token.replace(/^["']|["']$/g, '');
+      
+      // Check if looks like a path
+      if (
+        cleaned.includes('..') || 
+        cleaned.startsWith('/') || 
+        cleaned.startsWith('./') ||
+        /^[A-Za-z]:[\\\/]/.test(cleaned)  // Windows absolute path
+      ) {
+        if (!paths.includes(cleaned)) {
+          paths.push(cleaned);
+        }
       }
     }
 
@@ -166,14 +173,14 @@ export class PathValidator {
     if (normalizedPath.startsWith(this.agentsRoot)) {
       return {
         allowed: false,
-        reason: `Bash 禁止存取其他 agent 的工作區。偵測到路徑: ${normalizedPath}`,
+        reason: `Bash: Cannot access other agent workspace. Path: ${normalizedPath}`,
       };
     }
 
     // 4. Paths outside agents/ - deny
     return {
       allowed: false,
-      reason: `Bash 禁止存取 agents/ 目錄外的路徑。偵測到路徑: ${normalizedPath}`,
+      reason: `Bash: Path outside agents/ denied. Path: ${normalizedPath}`,
     };
   }
 
@@ -242,21 +249,21 @@ export class PathValidator {
         }
         return {
           allowed: false,
-          reason: `禁止寫入其他 agent 的共享命名空間。只能寫入: _shared/knowledge/${this.options.agentId}/`,
+          reason: `Cannot write to other agent's shared namespace. Allowed: _shared/knowledge/${this.options.agentId}/`,
         };
       }
 
       // Unknown tool type in shared area - deny for safety
       return {
         allowed: false,
-        reason: `不明工具類型存取共享區: ${toolName}`,
+        reason: `Unknown tool accessing shared area: ${toolName}`,
       };
     }
 
     // 3. Other paths - denied
     return {
       allowed: false,
-      reason: `禁止存取工作區外的路徑。允許範圍: 自己的工作區 或 _shared/`,
+      reason: `Path outside workspace denied. Allowed: own workspace or _shared/`,
     };
   }
 }
