@@ -36,6 +36,7 @@ export class PathValidator {
   private readonly normalizedWorkspace: string;
   private readonly normalizedShared: string;
   private readonly normalizedOwnNamespace: string;
+  private readonly agentsRoot: string;
 
   // Tools that only read (don't modify files)
   private static readonly READ_ONLY_TOOLS = ['Read', 'Glob', 'Grep'];
@@ -46,6 +47,15 @@ export class PathValidator {
   // Path parameter field names for different tools
   private static readonly PATH_FIELDS = ['file_path', 'path'];
 
+  // Bash commands that access files (for path extraction)
+  private static readonly BASH_FILE_COMMANDS = [
+    'cat', 'head', 'tail', 'less', 'more', 'vim', 'nano', 'code',
+    'ls', 'dir', 'find', 'tree',
+    'cp', 'mv', 'rm', 'mkdir', 'rmdir', 'touch',
+    'grep', 'rg', 'ag', 'awk', 'sed',
+    'cd', 'pushd', 'popd',
+  ];
+
   constructor(private readonly options: PathValidatorOptions) {
     // Pre-normalize paths for efficient comparison
     this.normalizedWorkspace = this.normalizePath(options.workspacePath);
@@ -53,12 +63,19 @@ export class PathValidator {
     this.normalizedOwnNamespace = this.normalizePath(
       path.join(options.sharedPath, 'knowledge', options.agentId)
     );
+    // agents/ root directory (parent of workspace)
+    this.agentsRoot = this.normalizePath(path.dirname(options.workspacePath));
   }
 
   /**
    * Validate a tool's path access
    */
   validate(toolName: string, toolInput: Record<string, unknown>): PathValidationResult {
+    // Special handling for Bash
+    if (toolName === 'Bash') {
+      return this.validateBashCommand(toolInput);
+    }
+
     const pathValue = this.extractPath(toolInput);
     
     // No path parameter - allow (tool doesn't access file system)
@@ -73,6 +90,91 @@ export class PathValidator {
     const normalized = this.normalizePath(absolutePath);
 
     return this.checkPermission(toolName, normalized);
+  }
+
+  /**
+   * Validate Bash command for path access
+   */
+  private validateBashCommand(input: Record<string, unknown>): PathValidationResult {
+    const command = input.command;
+    if (typeof command !== 'string' || command.length === 0) {
+      return { allowed: true };
+    }
+
+    // Extract potential paths from the command
+    const paths = this.extractPathsFromCommand(command);
+    
+    for (const p of paths) {
+      const absolutePath = this.resolvePath(p);
+      const normalized = this.normalizePath(absolutePath);
+      
+      // Check if path escapes to other agent workspaces
+      const result = this.checkBashPathPermission(normalized);
+      if (!result.allowed) {
+        return result;
+      }
+    }
+
+    return { allowed: true };
+  }
+
+  /**
+   * Extract potential file paths from a bash command
+   */
+  private extractPathsFromCommand(command: string): string[] {
+    const paths: string[] = [];
+
+    // Pattern 1: Paths with ../ (relative escape attempts)
+    const relativeEscapePattern = /(?:^|[\s;|&])(\.\.[^\s;|&]*)/g;
+    let match;
+    while ((match = relativeEscapePattern.exec(command)) !== null) {
+      if (match[1]) paths.push(match[1]);
+    }
+
+    // Pattern 2: Absolute paths starting with / or drive letter (Windows)
+    const absolutePathPattern = /(?:^|[\s;|&])((?:\/[^\s;|&]+)|(?:[A-Za-z]:[\\\/][^\s;|&]*))/g;
+    while ((match = absolutePathPattern.exec(command)) !== null) {
+      if (match[1]) paths.push(match[1]);
+    }
+
+    // Pattern 3: Paths in quotes
+    const quotedPathPattern = /["']([^"']*(?:\.\.|\/)['"]?[^"']*)["']/g;
+    while ((match = quotedPathPattern.exec(command)) !== null) {
+      if (match[1] && (match[1].includes('..') || match[1].includes('/'))) {
+        paths.push(match[1]);
+      }
+    }
+
+    return paths;
+  }
+
+  /**
+   * Check if a path from Bash command is allowed
+   */
+  private checkBashPathPermission(normalizedPath: string): PathValidationResult {
+    // 1. Own workspace - allowed
+    if (normalizedPath.startsWith(this.normalizedWorkspace)) {
+      return { allowed: true };
+    }
+
+    // 2. Shared area - allowed (Bash is treated as read for simplicity)
+    if (normalizedPath.startsWith(this.normalizedShared)) {
+      return { allowed: true };
+    }
+
+    // 3. Other agent workspaces - DENIED
+    if (normalizedPath.startsWith(this.agentsRoot)) {
+      return {
+        allowed: false,
+        reason: `Bash 禁止存取其他 agent 的工作區。偵測到路徑: ${normalizedPath}`,
+      };
+    }
+
+    // 4. Paths outside agents/ - deny
+    return {
+      allowed: false,
+      reason: `Bash 禁止存取 agents/ 目錄外的路徑。偵測到路徑: ${normalizedPath}`,
+    };
   }
 
   /**

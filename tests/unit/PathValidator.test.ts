@@ -170,4 +170,78 @@ describe('PathValidator', () => {
       expect(result.allowed).toBe(false);
     });
   });
+
+  describe('Bash command validation', () => {
+    it('should allow Bash commands within own workspace', () => {
+      const result = validator.validate('Bash', {
+        command: 'ls -la ./memory/',
+      });
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should allow Bash commands accessing shared area', () => {
+      const result = validator.validate('Bash', {
+        command: `cat "${path.join(sharedPath, 'knowledge', 'nitterbot', 'research.md')}"`,
+      });
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should deny Bash commands with ../ escaping to other agents', () => {
+      const result = validator.validate('Bash', {
+        command: 'cat ../nitterbot/CLAUDE.md',
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('Bash');
+    });
+
+    it('should deny Bash with ls on other agent directory', () => {
+      const result = validator.validate('Bash', {
+        command: 'ls -la ../nitterbot/',
+      });
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny Bash with absolute path to other agent', () => {
+      const otherWorkspace = path.join(os.tmpdir(), 'agents', 'nitterbot');
+      const result = validator.validate('Bash', {
+        command: `cat "${otherWorkspace}/CLAUDE.md"`,
+      });
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny Bash accessing paths outside agents/', () => {
+      const result = validator.validate('Bash', {
+        command: 'cat /etc/passwd',
+      });
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should allow Bash without file operations', () => {
+      const result = validator.validate('Bash', {
+        command: 'echo "hello world"',
+      });
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should allow Bash with empty command', () => {
+      const result = validator.validate('Bash', {
+        command: '',
+      });
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should detect paths in piped commands', () => {
+      const result = validator.validate('Bash', {
+        command: 'cat ../nitterbot/file.md | grep something',
+      });
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should detect paths in chained commands', () => {
+      const result = validator.validate('Bash', {
+        command: 'echo test && cat ../nitterbot/file.md',
+      });
+      expect(result.allowed).toBe(false);
+    });
+  });
 });
