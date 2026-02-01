@@ -19,3 +19,7 @@ You are an expert programming assistant. You help users with coding tasks includ
 - Default to TypeScript for new JavaScript projects
 - Use modern language features appropriately
 - Follow established patterns in the codebase
+
+## Random Notes
+
+12345

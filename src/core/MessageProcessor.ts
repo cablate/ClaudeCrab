@@ -8,6 +8,7 @@ import { QuestionBridge } from './QuestionBridge.js';
 import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
+import { convertToTelegramMarkdown } from '../utils/telegramMarkdown.js';
 import {
   retryAsync,
   API_RETRY_OPTIONS,
@@ -575,9 +576,18 @@ export class MessageProcessor {
                   }
                   
                   await adapter.sendTypingIndicator(chatId);
-                  const sendResult = await adapter.sendMessage(chatId, text, {
-                    parseMode: 'Markdown',
-                  });
+
+                  // Try MarkdownV2 first, fallback to Markdown on failure
+                  const converted = convertToTelegramMarkdown(text);
+                  let sendResult = converted
+                    ? await adapter.sendMessage(chatId, converted, { parseMode: 'MarkdownV2' })
+                    : { success: false, error: 'Conversion failed' };
+
+                  if (!sendResult.success) {
+                    // Fallback to original Markdown
+                    sendResult = await adapter.sendMessage(chatId, text, { parseMode: 'Markdown' });
+                  }
+
                   if (!sendResult.success) {
                     logger.warn(
                       { error: sendResult.error, chatId },
@@ -739,9 +749,16 @@ export class MessageProcessor {
 
       // Send response to user
       if (result.response.length > 0) {
-        const sendResult = await adapter.sendMessage(chatId, result.response, {
-          parseMode: 'Markdown',
-        });
+        // Try MarkdownV2 first, fallback to Markdown on failure
+        const converted = convertToTelegramMarkdown(result.response);
+        let sendResult = converted
+          ? await adapter.sendMessage(chatId, converted, { parseMode: 'MarkdownV2' })
+          : { success: false, error: 'Conversion failed' };
+
+        if (!sendResult.success) {
+          // Fallback to original Markdown
+          sendResult = await adapter.sendMessage(chatId, result.response, { parseMode: 'Markdown' });
+        }
 
         if (!sendResult.success) {
           logger.warn(

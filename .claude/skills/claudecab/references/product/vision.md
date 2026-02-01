@@ -64,31 +64,30 @@ ClaudeCab
 
 ---
 
+## 核心概念
+
+### 目錄即代理
+
+每個 `agents/{id}/` 是獨立的 Claude Code 專案，擁有：
+- `.claude/settings.local.json` — 權限配置
+- `.claude/skills/` — Agent Skills（協議、人格）
+- `CLAUDE.md` — 系統提示詞
+- `agent.json` — ClaudeCab 元資料
+- Workspace 檔案（USER.md, MEMORY.md, memory/）
+
+### SDKQueryManager 可獨立抽離
+
+SDK 整合層只接收 `systemPrompt` + `cwd`，不注入任何業務邏輯。設計目標是可以從 ClaudeCab 整個帶走到其他專案使用。
+
+### Agent 自主管理
+
+記憶系統完全由 Agent 透過 CLAUDE.md 指令自行操作，引擎層（`src/`）零感知。不建立「組裝層」注入記憶內容到 systemPrompt。
+
+---
+
 ## 功能開發原則
 
-### ✅ 應該做的
-
-1. **強化代理隔離** - 讓每個 Agent 更獨立、更專業
-2. **改善通訊體驗** - Telegram 互動更流暢
-3. **擴展記憶系統** - 更好的學習與回憶機制
-4. **支援排程任務** - Cron、事件驅動
-5. **簡化部署** - 一鍵安裝、一鍵啟動
-
-### ❌ 不應該做的
-
-1. **重造輪子** - 已有好工具的領域用 MCP 整合
-2. **追求全能** - 不是每個功能都要自己實作
-3. **複雜化部署** - 不引入過多依賴
-4. **偏離核心** - 不做與「代理管理」無關的功能
-
-### 🤔 需要評估的
-
-當考慮新功能時，問自己：
-
-1. 這是否強化「目錄即代理」的核心概念？
-2. 這是否改善使用者透過 Telegram 操控 Agent 的體驗？
-3. 這能否透過 MCP 整合而非自己實作？
-4. 這是否保持部署的簡單性？
+> 詳見 [principle.md](principle.md)
 
 ---
 
@@ -102,9 +101,10 @@ ClaudeCab
 - [x] Memory System
 - [x] WebUI 管理介面
 
-### Phase 2：智慧任務 🔄
-- [ ] Cron 排程系統
-- [ ] 主動通知（Agent → User）
+### Phase 2：智慧任務 ✅
+- [x] Cron 排程系統（v1.10）
+- [x] 主動通知（Agent → User）（v1.10）
+- [x] Agent Skill 系統（v1.11）
 - [ ] 任務 Queue 管理
 - [ ] 事件驅動喚醒
 
@@ -132,9 +132,11 @@ ClaudeCab
 - **v1.0** - 基礎架構：目錄即代理、Telegram 整合
 - **v1.5** - SDK 整合：Claude Agent SDK、Memory System
 - **v1.8** - WebUI：Agent 管理介面
-- **v1.9** - 專門化：MCP + Skills 支援（當前）
-- **v2.0** - 智慧任務：Cron、主動通知（規劃中）
+- **v1.9** - 專門化：MCP + Skills 支援
+- **v1.10** - 排程系統：Agent-Driven Scheduling
+- **v1.11** - Skill 系統：協議與人格模組化（當前）
+- **v2.0** - 生態整合（規劃中）
 
 ---
 
-*最後更新：2026-01-29*
+*最後更新：2026-02-01*

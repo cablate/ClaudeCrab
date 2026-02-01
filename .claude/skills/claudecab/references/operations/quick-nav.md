@@ -4,14 +4,38 @@
 
 ---
 
+## 常用指令
+
+```bash
+npm run dev          # 啟動開發伺服器
+npm test             # 執行測試 (284 tests)
+npm run typecheck    # TypeScript 型別檢查
+```
+
+---
+
+## 環境變數
+
+| 變數 | 說明 |
+|------|------|
+| `ANTHROPIC_API_KEY` | Anthropic API 金鑰（必填）|
+| `ENABLE_PERSISTENCE` | 啟用 SQLite 持久化，預設 false |
+| `DB_PATH` | 資料庫路徑，預設 ./data/claudecab.db |
+| `WEBUI_ENABLED` | 啟用 WebUI 管理介面，預設 false |
+| `WEBUI_PORT` | WebUI 埠號，預設 3001 |
+| `WEBUI_PASSWORD` | WebUI 登入密碼（必填，若啟用 WebUI）|
+| `DB_RETENTION_MS` | DB session 保留時間（毫秒），預設 30 天（2592000000）|
+
+---
+
 ## 產品定位
 
-> **開發新功能前，先閱讀 [product-vision.md](./product-vision.md)**
+> **開發新功能前，先閱讀 [vision.md](../product/vision.md)**
 
 | 文件 | 用途 |
 |------|------|
-| [product-vision.md](./product-vision.md) | 產品定位、功能開發原則、路線圖 |
-| [architecture.md](./architecture.md) | 技術架構說明 |
+| [vision.md](../product/vision.md) | 產品定位、功能開發原則、路線圖 |
+| [overview.md](../system/overview.md) | 技術架構說明 |
 | [changelog.md](./changelog.md) | 版本歷程 |
 
 ---

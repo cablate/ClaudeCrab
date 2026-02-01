@@ -2,12 +2,67 @@
 
 ## 目錄
 
-1. [設計原則](#設計原則)
-2. [核心模組](#核心模組)
-3. [Agent 配置結構](#agent-配置結構)
-4. [Agent 記憶運作機制](#agent-記憶運作機制)
-5. [資料流](#資料流)
-6. [核心型別定義](#核心型別定義)
+1. [技術棧](#技術棧)
+2. [目錄結構](#目錄結構)
+3. [設計原則](#設計原則)
+4. [核心模組](#核心模組)
+5. [Agent 配置結構](#agent-配置結構)
+6. [Agent 記憶運作機制](#agent-記憶運作機制)
+7. [資料流](#資料流)
+8. [核心型別定義](#核心型別定義)
+
+---
+
+## 技術棧
+
+| 類別 | 技術 | 版本 |
+|------|------|------|
+| 語言 | TypeScript | 5.x (strict) |
+| 執行環境 | Node.js | >= 20 |
+| AI SDK | @anthropic-ai/claude-agent-sdk | ^0.2.19 |
+| Telegram | grammy | ^1.39.3 |
+| 驗證 | Zod | ^4.3.6 |
+| 持久化 | better-sqlite3 | ^12.6.2 |
+| WebUI | Express + EJS | ^5.2.1 |
+| CSS | TailwindCSS (CDN) | ^3.4.19 |
+| 測試 | Vitest | ^4.0.18 |
+
+---
+
+## 目錄結構
+
+```
+claudecab/
+├── src/
+│   ├── index.ts           # 主入口（Telegram Bot + WebUI）
+│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus, PlatformOrchestrator
+│   ├── persistence/       # SQLite 持久化層
+│   ├── adapters/          # TelegramAdapter, BaseAdapter
+│   ├── webui/             # Express + EJS 管理介面
+│   │   ├── WebUIServer.ts
+│   │   ├── routes/        # 頁面路由
+│   │   ├── api/           # API 端點
+│   │   ├── services/      # 業務邏輯
+│   │   └── views/         # EJS 模板（元件化）
+│   ├── types/             # TypeScript 型別定義
+│   └── utils/             # logger, security, audit, retry
+├── public/                # 靜態資源 (JS)
+├── agents/                # Agent 配置（每個子目錄 = 一個代理）
+│   ├── general/           # 通用助手（含記憶系統 workspace）
+│   │   ├── .claude/
+│   │   │   ├── settings.local.json  # 權限配置
+│   │   │   └── skills/              # Agent Skills
+│   │   │       ├── agent-protocols/ # 核心協議（啟動、記憶、安全）
+│   │   │       └── persona/         # 人格定義（soul, identity）
+│   │   ├── CLAUDE.md      # 系統提示（引導 → skills）
+│   │   ├── BOOTSTRAP.md   # 首次啟動儀式（完成後自動刪除）
+│   │   ├── USER.md        # 使用者檔案
+│   │   ├── MEMORY.md      # 長期記憶
+│   │   └── memory/        # 每日日誌
+│   └── coder/             # 程式碼助手
+├── tests/                 # 284 tests, 19 files
+└── data/                  # SQLite 資料庫
+```
 
 ---
 
@@ -59,9 +114,10 @@ interface IAgentRepository {
 封裝 Claude Agent SDK `query()` 函數：
 
 **關鍵設計（Agent Isolation + Skills）**：
-- `settingSources: ['project']` - 載入 agent 的設定檔 **和 skills**
+- `settingSources: ['project']` - 載入 agent 的設定檔（`.claude/settings.local.json`）**和 skills**（`.claude/skills/`）
 - `systemPrompt` 參數 - 明確傳遞 agent 的 CLAUDE.md 內容（覆蓋 SDK 搜尋到的）
 - **原因**：`'local'` 無法載入 skills；改用 `'project'` 後，仍透過明確傳遞 `systemPrompt` 確保 agent isolation
+- **變更歷史**：v1.11.0 從 `['local']` 改為 `['project']`
 
 **功能**：
 - 管理 Query 生命週期
