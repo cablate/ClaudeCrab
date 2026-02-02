@@ -74,12 +74,17 @@ export interface ProcessingResult {
  */
 export class MessageProcessor {
   private readonly sessionManager: SessionManager;
-  private readonly getAdapter: (platform: string, agentId: string) => BaseAdapter | undefined;
+  private readonly getAdapter: (
+    platform: string,
+    agentId: string
+  ) => BaseAdapter | undefined;
   private readonly sendTypingIndicators: boolean;
   private readonly typingIndicatorIntervalMs: number;
   private readonly sdkQueryManager: SDKQueryManager;
   private readonly conversationRepository: IConversationRepository | undefined;
-  private readonly getSystemPrompt: ((agentId: string) => Promise<string>) | undefined;
+  private readonly getSystemPrompt:
+    | ((agentId: string) => Promise<string>)
+    | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -96,7 +101,16 @@ export class MessageProcessor {
   /**
    * Process an incoming message
    */
-  async processMessage(message: UnifiedMessage, agentId: string): Promise<ProcessingResult> {
+  async processMessage(
+    message: UnifiedMessage,
+    agentId: string,
+    options?: {
+      /** If true, execute query but don't send reply (for group observers) */
+      observeOnly?: boolean;
+      /** Message ID to reply to (for group chats) */
+      replyToMessageId?: string;
+    }
+  ): Promise<ProcessingResult> {
     const { platform, userId, chatId, text, id: messageId } = message;
     const isGroupChat = message.metadata?.isGroupChat === true;
 
@@ -110,7 +124,14 @@ export class MessageProcessor {
     );
 
     // Check for duplicate message (idempotency)
-    if (this.sessionManager.isMessageProcessed(platform, agentId, effectiveUserId, messageId)) {
+    if (
+      this.sessionManager.isMessageProcessed(
+        platform,
+        agentId,
+        effectiveUserId,
+        messageId
+      )
+    ) {
       logger.debug({ messageId }, 'Skipping duplicate message');
       return { success: true, skipped: true };
     }
@@ -124,7 +145,10 @@ export class MessageProcessor {
         agentId,
       });
     } catch (error) {
-      logger.error({ error, platform, userId, agentId }, 'Failed to get/create session');
+      logger.error(
+        { error, platform, userId, agentId },
+        'Failed to get/create session'
+      );
       return {
         success: false,
         error: `Failed to create session: ${(error as Error).message}`,
@@ -134,8 +158,14 @@ export class MessageProcessor {
     // Get adapter for sending response
     const adapter = this.getAdapter(platform, agentId);
     if (adapter === undefined) {
-      logger.error({ platform, agentId }, 'No adapter found for platform and agent');
-      return { success: false, error: `No adapter for platform: ${platform}, agent: ${agentId}` };
+      logger.error(
+        { platform, agentId },
+        'No adapter found for platform and agent'
+      );
+      return {
+        success: false,
+        error: `No adapter for platform: ${platform}, agent: ${agentId}`,
+      };
     }
 
     // Process with lock to prevent concurrent processing
@@ -146,24 +176,60 @@ export class MessageProcessor {
         effectiveUserId,
         async () => {
           // Mark message as processed (before processing to prevent duplicates)
-          this.sessionManager.markMessageProcessed(platform, agentId, effectiveUserId, messageId);
+          this.sessionManager.markMessageProcessed(
+            platform,
+            agentId,
+            effectiveUserId,
+            messageId
+          );
 
           // Update session state
-          this.sessionManager.updateState(platform, agentId, effectiveUserId, 'processing');
+          this.sessionManager.updateState(
+            platform,
+            agentId,
+            effectiveUserId,
+            'processing'
+          );
 
           try {
             // Process the message using SDK
-            const queryOptions: { isGroupChat?: boolean; replyToMessageId?: string } = { isGroupChat };
-            if (message.metadata?.originalMessageId) {
-              queryOptions.replyToMessageId = message.metadata.originalMessageId;
+            const queryOptions: {
+              isGroupChat?: boolean;
+              replyToMessageId?: string;
+              observeOnly?: boolean;
+            } = { isGroupChat };
+
+            // Use replyToMessageId from options if provided, otherwise from metadata
+            if (options?.replyToMessageId) {
+              queryOptions.replyToMessageId = options.replyToMessageId;
+            } else if (message.metadata?.originalMessageId) {
+              queryOptions.replyToMessageId =
+                message.metadata.originalMessageId;
             }
+
+            // Pass observeOnly flag
+            if (options?.observeOnly) {
+              queryOptions.observeOnly = true;
+            }
+
             const response = await this.executeQueryWithSDK(
-              session.sessionId, text, adapter, chatId, platform, agentId, effectiveUserId,
+              session.sessionId,
+              text,
+              adapter,
+              chatId,
+              platform,
+              agentId,
+              effectiveUserId,
               queryOptions
             );
 
             // Update session state back to idle
-            this.sessionManager.updateState(platform, agentId, effectiveUserId, 'idle');
+            this.sessionManager.updateState(
+              platform,
+              agentId,
+              effectiveUserId,
+              'idle'
+            );
 
             return {
               success: true,
@@ -172,7 +238,12 @@ export class MessageProcessor {
             };
           } catch (error) {
             // Update session state to error
-            this.sessionManager.updateState(platform, agentId, effectiveUserId, 'error');
+            this.sessionManager.updateState(
+              platform,
+              agentId,
+              effectiveUserId,
+              'error'
+            );
             throw error;
           }
         }
@@ -194,7 +265,10 @@ export class MessageProcessor {
           : {}),
       };
 
-      logger.error({ err: errorDetails, platform, userId, agentId }, 'Failed to process message');
+      logger.error(
+        { err: errorDetails, platform, userId, agentId },
+        'Failed to process message'
+      );
 
       // Send error message to user
       await this.sendErrorToUser(adapter, chatId, err);
@@ -221,26 +295,36 @@ export class MessageProcessor {
     options?: {
       isGroupChat?: boolean;
       replyToMessageId?: string;
+      /** If true, execute query but don't send reply (for group observers) */
+      observeOnly?: boolean;
     }
   ): Promise<string> {
     // Get internal session for agent info
-    const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
+    const internalSession = this.sessionManager.getInternalSession(
+      platform,
+      agentId,
+      userId
+    );
 
     if (internalSession === undefined || internalSession.agent === undefined) {
-      throw new ProcessingError('PROCESSING_FAILED', 'Session or agent not found');
+      throw new ProcessingError(
+        'PROCESSING_FAILED',
+        'Session or agent not found'
+      );
     }
 
     const agent = internalSession.agent;
     const isNewSession = internalSession.sdkSessionId === undefined;
 
     // Read fresh system prompt from disk (agent may have updated CLAUDE.md at runtime)
-    const systemPrompt = this.getSystemPrompt !== undefined
-      ? await this.getSystemPrompt(agent.id)
-      : agent.systemPrompt;
+    const systemPrompt =
+      this.getSystemPrompt !== undefined
+        ? await this.getSystemPrompt(agent.id)
+        : agent.systemPrompt;
 
-    // Start typing indicator
+    // Start typing indicator (skip in observeOnly mode)
     let typingInterval: ReturnType<typeof setInterval> | null = null;
-    if (this.sendTypingIndicators) {
+    if (this.sendTypingIndicators && !options?.observeOnly) {
       await adapter.sendTypingIndicator(chatId);
       typingInterval = setInterval(() => {
         void adapter.sendTypingIndicator(chatId);
@@ -250,27 +334,44 @@ export class MessageProcessor {
     // Set up status message for real-time tool event feedback
     // Note: Only TelegramAdapter supports this feature currently
     let statusMessageId: string | null = null;
-    let toolEvents: Array<{ toolName: string; status: string; detail?: string }> = [];
+    let toolEvents: Array<{
+      toolName: string;
+      status: string;
+      detail?: string;
+    }> = [];
     let lastStatusUpdate = 0;
     let needNewStatusMessage = true; // Start with needing a new status message
     const STATUS_UPDATE_DEBOUNCE_MS = 2000; // Min 2 seconds between updates (avoid Telegram 429)
     const MAX_TOOL_EVENTS_DISPLAY = 8; // Show last N tool events
 
     // Check if adapter supports status messages
-    const supportsStatusMessage = 'sendStatusMessage' in adapter &&
-      typeof (adapter as { sendStatusMessage?: unknown }).sendStatusMessage === 'function';
+    const supportsStatusMessage =
+      'sendStatusMessage' in adapter &&
+      typeof (adapter as { sendStatusMessage?: unknown }).sendStatusMessage ===
+        'function';
 
     // Helper to get typed adapter
-    const getStatusAdapter = () => adapter as unknown as {
-      sendStatusMessage: (chatId: string, text?: string) => Promise<string | null>;
-      updateStatusMessage: (chatId: string, messageId: string, text: string) => Promise<boolean>;
-    };
+    const getStatusAdapter = () =>
+      adapter as unknown as {
+        sendStatusMessage: (
+          chatId: string,
+          text?: string
+        ) => Promise<string | null>;
+        updateStatusMessage: (
+          chatId: string,
+          messageId: string,
+          text: string
+        ) => Promise<boolean>;
+      };
 
     // Helper to format completion summary with tool counts
     const formatCompletionSummary = (events: Array<{ toolName: string }>) => {
       const toolCounts = new Map<string, number>();
       for (const event of events) {
-        toolCounts.set(event.toolName, (toolCounts.get(event.toolName) ?? 0) + 1);
+        toolCounts.set(
+          event.toolName,
+          (toolCounts.get(event.toolName) ?? 0) + 1
+        );
       }
       const toolSummary = Array.from(toolCounts.entries())
         .map(([name, count]) => `${name} (${count})`)
@@ -281,7 +382,7 @@ export class MessageProcessor {
     // Create a new status message (called when needed)
     const createNewStatusMessage = async () => {
       if (!supportsStatusMessage) return;
-      
+
       // Finalize previous status message if exists
       if (statusMessageId !== null && toolEvents.length > 0) {
         await getStatusAdapter().updateStatusMessage(
@@ -290,7 +391,7 @@ export class MessageProcessor {
           formatCompletionSummary(toolEvents)
         );
       }
-      
+
       // Reset and create new
       toolEvents = [];
       statusMessageId = await getStatusAdapter().sendStatusMessage(chatId);
@@ -305,38 +406,45 @@ export class MessageProcessor {
     // Debounced status message update function
     const updateStatusMessageDebounced = async (forceUpdate = false) => {
       if (!supportsStatusMessage) return;
-      
+
       // Create new status message if needed
       if (needNewStatusMessage || statusMessageId === null) {
         await createNewStatusMessage();
       }
-      
+
       if (statusMessageId === null) return;
-      
+
       const now = Date.now();
-      if (!forceUpdate && now - lastStatusUpdate < STATUS_UPDATE_DEBOUNCE_MS) return;
-      
+      if (!forceUpdate && now - lastStatusUpdate < STATUS_UPDATE_DEBOUNCE_MS)
+        return;
+
       lastStatusUpdate = now;
 
       // Build detailed status text from recent tool events
       const recentEvents = toolEvents.slice(-MAX_TOOL_EVENTS_DISPLAY);
-      const eventLines = recentEvents.map(e => {
+      const eventLines = recentEvents.map((e) => {
         if (e.detail) {
           return `${e.status}\n   └ ${e.detail}`;
         }
         return e.status;
       });
-      
+
       const hiddenCount = toolEvents.length - recentEvents.length;
-      const header = hiddenCount > 0 
-        ? `🔄 處理中... (${toolEvents.length} 個操作)`
-        : '🔄 處理中...';
-      
-      const statusText = eventLines.length > 0
-        ? `${header}\n\n${eventLines.join('\n')}`
-        : header;
-      
-      await getStatusAdapter().updateStatusMessage(chatId, statusMessageId, statusText);
+      const header =
+        hiddenCount > 0
+          ? `🔄 處理中... (${toolEvents.length} 個操作)`
+          : '🔄 處理中...';
+
+      const statusText =
+        eventLines.length > 0
+          ? `${header}\n\n${eventLines.join('\n')}`
+          : header;
+
+      await getStatusAdapter().updateStatusMessage(
+        chatId,
+        statusMessageId,
+        statusText
+      );
     };
 
     // Set up permission bridge for interactive tool approval via Telegram
@@ -388,12 +496,14 @@ export class MessageProcessor {
       ) => {
         // Handle AskUserQuestion tool - present options to user via Telegram
         if (toolName === 'AskUserQuestion') {
-          const questions = toolInput.questions as Array<{
-            question: string;
-            header: string;
-            options: Array<{ label: string; description: string }>;
-            multiSelect: boolean;
-          }> | undefined;
+          const questions = toolInput.questions as
+            | Array<{
+                question: string;
+                header: string;
+                options: Array<{ label: string; description: string }>;
+                multiSelect: boolean;
+              }>
+            | undefined;
 
           if (questions === undefined || questions.length === 0) {
             // No questions - just allow the tool
@@ -414,7 +524,7 @@ export class MessageProcessor {
               toolUseID: options.toolUseID,
             };
           }
-          const optionLabels = firstQuestion.options.map(opt => opt.label);
+          const optionLabels = firstQuestion.options.map((opt) => opt.label);
 
           const { requestId, promise } = questionBridge.requestQuestion(
             firstQuestion.question,
@@ -442,9 +552,16 @@ export class MessageProcessor {
           const questionAnswer = await promise;
 
           // Update the question prompt message with the selection
-          if (promptResult.messageId !== undefined && questionAnswer.answer !== null) {
+          if (
+            promptResult.messageId !== undefined &&
+            questionAnswer.answer !== null
+          ) {
             const statusText = `✅ Selected: *${questionAnswer.answer}*`;
-            await adapter.updateQuestionPrompt(chatId, promptResult.messageId, statusText);
+            await adapter.updateQuestionPrompt(
+              chatId,
+              promptResult.messageId,
+              statusText
+            );
           }
 
           // If user cancelled or timed out, deny the tool
@@ -485,7 +602,9 @@ export class MessageProcessor {
         }
 
         const { requestId, promise } = permissionBridge.requestPermission(
-          toolName, toolInput, bridgeOptions
+          toolName,
+          toolInput,
+          bridgeOptions
         );
 
         const promptOptions: {
@@ -502,7 +621,10 @@ export class MessageProcessor {
           promptOptions.blockedPath = options.blockedPath;
         }
 
-        const promptResult = await adapter.sendPermissionPrompt(chatId, promptOptions);
+        const promptResult = await adapter.sendPermissionPrompt(
+          chatId,
+          promptOptions
+        );
 
         if (!promptResult.success) {
           logger.warn(
@@ -521,13 +643,18 @@ export class MessageProcessor {
         if (promptResult.messageId) {
           let statusText: string;
           if (decision.behavior === 'allow') {
-            statusText = decision.alwaysAllow === true
-              ? `✅ Always Allowed: \`${toolName}\``
-              : `✅ Allowed: \`${toolName}\``;
+            statusText =
+              decision.alwaysAllow === true
+                ? `✅ Always Allowed: \`${toolName}\``
+                : `✅ Allowed: \`${toolName}\``;
           } else {
             statusText = `❌ Denied: \`${toolName}\``;
           }
-          await adapter.updatePermissionPrompt(chatId, promptResult.messageId, statusText);
+          await adapter.updatePermissionPrompt(
+            chatId,
+            promptResult.messageId,
+            statusText
+          );
         }
 
         if (decision.behavior === 'allow') {
@@ -548,12 +675,14 @@ export class MessageProcessor {
           };
 
           if (decision.alwaysAllow === true) {
-            allowResult.updatedPermissions = [{
-              type: 'addRules' as const,
-              rules: [{ toolName }],
-              behavior: 'allow' as const,
-              destination: 'localSettings' as const,
-            }];
+            allowResult.updatedPermissions = [
+              {
+                type: 'addRules' as const,
+                rules: [{ toolName }],
+                behavior: 'allow' as const,
+                destination: 'localSettings' as const,
+              },
+            ];
           }
 
           return allowResult;
@@ -578,20 +707,30 @@ export class MessageProcessor {
                 systemPrompt,
                 // Only set maxTurns if explicitly configured in agent settings
                 // Otherwise let SDK use its default (unlimited turns)
-                ...(agent.config.settings?.maxTurns !== undefined 
-                  ? { maxTurns: agent.config.settings.maxTurns } 
+                ...(agent.config.settings?.maxTurns !== undefined
+                  ? { maxTurns: agent.config.settings.maxTurns }
                   : {}),
                 resume: resumeId,
                 onIntermediateMessage: async (text: string): Promise<void> => {
+                  // In observeOnly mode, just record the message but don't send
+                  if (options?.observeOnly) {
+                    intermediateMessages.push(text);
+                    return;
+                  }
+
                   // Finalize current status message before sending assistant message
-                  if (supportsStatusMessage && statusMessageId !== null && toolEvents.length > 0) {
+                  if (
+                    supportsStatusMessage &&
+                    statusMessageId !== null &&
+                    toolEvents.length > 0
+                  ) {
                     await getStatusAdapter().updateStatusMessage(
                       chatId,
                       statusMessageId,
                       formatCompletionSummary(toolEvents)
                     );
                   }
-                  
+
                   await adapter.sendTypingIndicator(chatId);
 
                   // Build send options (include replyToMessageId for group chats)
@@ -603,12 +742,18 @@ export class MessageProcessor {
                   // Try MarkdownV2 first, fallback to Markdown on failure
                   const converted = convertToTelegramMarkdown(text);
                   let sendResult = converted
-                    ? await adapter.sendMessage(chatId, converted, { parseMode: 'MarkdownV2', ...sendOpts })
+                    ? await adapter.sendMessage(chatId, converted, {
+                        parseMode: 'MarkdownV2',
+                        ...sendOpts,
+                      })
                     : { success: false, error: 'Conversion failed' };
 
                   if (!sendResult.success) {
                     // Fallback to original Markdown
-                    sendResult = await adapter.sendMessage(chatId, text, { parseMode: 'Markdown', ...sendOpts });
+                    sendResult = await adapter.sendMessage(chatId, text, {
+                      parseMode: 'Markdown',
+                      ...sendOpts,
+                    });
                   }
 
                   if (!sendResult.success) {
@@ -618,7 +763,7 @@ export class MessageProcessor {
                     );
                   }
                   intermediateMessages.push(text);
-                  
+
                   // Mark that next tool event should create new status message
                   markNeedNewStatusMessage();
                 },
@@ -626,7 +771,7 @@ export class MessageProcessor {
                   // Track tool events for status message with more details
                   let statusLine: string;
                   let detail: string | undefined;
-                  
+
                   if (event.type === 'tool_use') {
                     statusLine = `🔧 ${event.toolName}`;
                     if (event.summary) {
@@ -649,7 +794,11 @@ export class MessageProcessor {
                   } else {
                     statusLine = `• ${event.toolName}`;
                   }
-                  const toolEvent: { toolName: string; status: string; detail?: string } = {
+                  const toolEvent: {
+                    toolName: string;
+                    status: string;
+                    detail?: string;
+                  } = {
                     toolName: event.toolName,
                     status: statusLine,
                   };
@@ -662,64 +811,94 @@ export class MessageProcessor {
                 additionalOptions: {
                   canUseTool,
                   hooks: {
-                    PreToolUse: [{
-                      hooks: [async (input) => {
-                        // Path validation hook - enforce workspace isolation
-                        const pathValidator = new PathValidator({
-                          agentId: agent.id,
-                          workspacePath: agent.path,
-                          sharedPath: path.resolve(agent.path, '../_shared'),
-                        });
+                    PreToolUse: [
+                      {
+                        hooks: [
+                          async (input) => {
+                            // Path validation hook - enforce workspace isolation
+                            const pathValidator = new PathValidator({
+                              agentId: agent.id,
+                              workspacePath: agent.path,
+                              sharedPath: path.resolve(
+                                agent.path,
+                                '../_shared'
+                              ),
+                            });
 
-                        const toolInput = (input as { tool_input?: Record<string, unknown> }).tool_input ?? {};
-                        const toolName = (input as { tool_name?: string }).tool_name ?? '';
+                            const toolInput =
+                              (
+                                input as {
+                                  tool_input?: Record<string, unknown>;
+                                }
+                              ).tool_input ?? {};
+                            const toolName =
+                              (input as { tool_name?: string }).tool_name ?? '';
 
-                        const result = pathValidator.validate(toolName, toolInput);
+                            const result = pathValidator.validate(
+                              toolName,
+                              toolInput
+                            );
 
-                        if (!result.allowed) {
-                          const reason = result.reason ?? 'Path access denied';
-                          logger.warn(
-                            { agentId: agent.id, toolName, reason },
-                            'Path access denied by PathValidator'
-                          );
-                          return {
-                            hookSpecificOutput: {
-                              hookEventName: 'PreToolUse' as const,
-                              permissionDecision: 'deny' as const,
-                              permissionDecisionReason: reason,
-                            },
-                          };
-                        }
+                            if (!result.allowed) {
+                              const reason =
+                                result.reason ?? 'Path access denied';
+                              logger.warn(
+                                { agentId: agent.id, toolName, reason },
+                                'Path access denied by PathValidator'
+                              );
+                              return {
+                                hookSpecificOutput: {
+                                  hookEventName: 'PreToolUse' as const,
+                                  permissionDecision: 'deny' as const,
+                                  permissionDecisionReason: reason,
+                                },
+                              };
+                            }
 
-                        return {
-                          hookSpecificOutput: {
-                            hookEventName: 'PreToolUse' as const,
+                            return {
+                              hookSpecificOutput: {
+                                hookEventName: 'PreToolUse' as const,
+                              },
+                            };
                           },
-                        };
-                      }],
-                    }],
-                    UserPromptSubmit: [{
-                      hooks: [async () => ({
-                        continue: true,
-                        hookSpecificOutput: {
-                          hookEventName: 'UserPromptSubmit' as const,
-                          additionalContext: buildPromptContext(chatId, isNewSession),
-                        },
-                      })],
-                    }],
-                    Stop: [{
-                      hooks: [async (input) => {
-                        // Only block once - if stop_hook_active is true, agent already did memory check
-                        const stopHookActive = (input as { stop_hook_active?: boolean }).stop_hook_active;
-                        if (stopHookActive) {
-                          return {};  // Allow agent to stop
-                        }
-                        return {
-                          decision: 'block' as const,
-                          reason: MEMORY_STOP_CHECKPOINT,
-                        };
-                      }],
-                    }],
+                        ],
+                      },
+                    ],
+                    UserPromptSubmit: [
+                      {
+                        hooks: [
+                          async () => ({
+                            continue: true,
+                            hookSpecificOutput: {
+                              hookEventName: 'UserPromptSubmit' as const,
+                              additionalContext: buildPromptContext(
+                                chatId,
+                                isNewSession
+                              ),
+                            },
+                          }),
+                        ],
+                      },
+                    ],
+                    Stop: [
+                      {
+                        hooks: [
+                          async (input) => {
+                            // Only block once - if stop_hook_active is true, agent already did memory check
+                            const stopHookActive = (
+                              input as { stop_hook_active?: boolean }
+                            ).stop_hook_active;
+                            if (stopHookActive) {
+                              return {}; // Allow agent to stop
+                            }
+                            return {
+                              decision: 'block' as const,
+                              reason: MEMORY_STOP_CHECKPOINT,
+                            };
+                          },
+                        ],
+                      },
+                    ],
                   },
                 },
               }
@@ -752,14 +931,15 @@ export class MessageProcessor {
         result = await executeWithRetry(internalSession.sdkSessionId);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        
+
         // Check if this is a resume-specific error (session not found, expired, etc.)
         // vs other SDK errors (max_turns, max_budget, etc.) that should not trigger new session
-        const isResumeError = errorMsg.includes('session') || 
-                              errorMsg.includes('resume') ||
-                              errorMsg.includes('not found') ||
-                              errorMsg.includes('expired');
-        
+        const isResumeError =
+          errorMsg.includes('session') ||
+          errorMsg.includes('resume') ||
+          errorMsg.includes('not found') ||
+          errorMsg.includes('expired');
+
         if (internalSession.sdkSessionId !== undefined && isResumeError) {
           logger.warn(
             {
@@ -769,7 +949,12 @@ export class MessageProcessor {
             },
             'SDK resume failed, retrying without resume (new conversation)'
           );
-          this.sessionManager.setSdkSessionId(platform, agentId, userId, undefined);
+          this.sessionManager.setSdkSessionId(
+            platform,
+            agentId,
+            userId,
+            undefined
+          );
           result = await executeWithRetry(undefined);
         } else {
           // For non-resume errors (max_turns, etc.), don't clear session, just throw
@@ -778,8 +963,16 @@ export class MessageProcessor {
       }
 
       // Save SDK session ID for future resume
-      if (result.sdkSessionId && result.sdkSessionId !== internalSession.sdkSessionId) {
-        this.sessionManager.setSdkSessionId(platform, agentId, userId, result.sdkSessionId);
+      if (
+        result.sdkSessionId &&
+        result.sdkSessionId !== internalSession.sdkSessionId
+      ) {
+        this.sessionManager.setSdkSessionId(
+          platform,
+          agentId,
+          userId,
+          result.sdkSessionId
+        );
         logger.debug(
           { sessionId, sdkSessionId: result.sdkSessionId },
           'Updated SDK session ID'
@@ -792,11 +985,19 @@ export class MessageProcessor {
           this.conversationRepository.appendMessage(sessionId, 'user', prompt);
           // Store intermediate messages individually (matches what user saw in Telegram)
           for (const msg of intermediateMessages) {
-            this.conversationRepository.appendMessage(sessionId, 'assistant', msg);
+            this.conversationRepository.appendMessage(
+              sessionId,
+              'assistant',
+              msg
+            );
           }
           // Store remaining response if any (when no callback was used, or residual text)
           if (result.response.length > 0) {
-            this.conversationRepository.appendMessage(sessionId, 'assistant', result.response);
+            this.conversationRepository.appendMessage(
+              sessionId,
+              'assistant',
+              result.response
+            );
           }
         } catch (persistError) {
           logger.warn(
@@ -806,8 +1007,8 @@ export class MessageProcessor {
         }
       }
 
-      // Send response to user
-      if (result.response.length > 0) {
+      // Send response to user (skip in observeOnly mode)
+      if (result.response.length > 0 && !options?.observeOnly) {
         // Build send options (include replyToMessageId for group chats)
         const finalSendOpts: SendOptions = {};
         if (options?.isGroupChat && options?.replyToMessageId) {
@@ -817,12 +1018,18 @@ export class MessageProcessor {
         // Try MarkdownV2 first, fallback to Markdown on failure
         const converted = convertToTelegramMarkdown(result.response);
         let sendResult = converted
-          ? await adapter.sendMessage(chatId, converted, { parseMode: 'MarkdownV2', ...finalSendOpts })
+          ? await adapter.sendMessage(chatId, converted, {
+              parseMode: 'MarkdownV2',
+              ...finalSendOpts,
+            })
           : { success: false, error: 'Conversion failed' };
 
         if (!sendResult.success) {
           // Fallback to original Markdown
-          sendResult = await adapter.sendMessage(chatId, result.response, { parseMode: 'Markdown', ...finalSendOpts });
+          sendResult = await adapter.sendMessage(chatId, result.response, {
+            parseMode: 'Markdown',
+            ...finalSendOpts,
+          });
         }
 
         if (!sendResult.success) {
@@ -833,16 +1040,29 @@ export class MessageProcessor {
         }
       }
 
-      // Finalize status message with completion summary
-      if (supportsStatusMessage && statusMessageId !== null && toolEvents.length > 0) {
+      // Finalize status message with completion summary (skip in observeOnly mode)
+      if (
+        !options?.observeOnly &&
+        supportsStatusMessage &&
+        statusMessageId !== null &&
+        toolEvents.length > 0
+      ) {
         await getStatusAdapter().updateStatusMessage(
           chatId,
           statusMessageId,
           formatCompletionSummary(toolEvents)
         );
-      } else if (supportsStatusMessage && statusMessageId !== null) {
+      } else if (
+        !options?.observeOnly &&
+        supportsStatusMessage &&
+        statusMessageId !== null
+      ) {
         // No tool events in this batch, just mark as done
-        await getStatusAdapter().updateStatusMessage(chatId, statusMessageId, '✓ 完成');
+        await getStatusAdapter().updateStatusMessage(
+          chatId,
+          statusMessageId,
+          '✓ 完成'
+        );
       }
 
       return result.response;
@@ -874,7 +1094,11 @@ export class MessageProcessor {
       throw new ProcessingError('PROCESSING_FAILED', 'Session not found');
     }
 
-    return { platform: session.platform, agentId: session.agentId, userId: session.userId };
+    return {
+      platform: session.platform,
+      agentId: session.agentId,
+      userId: session.userId,
+    };
   }
 
   /**
@@ -967,7 +1191,10 @@ export class MessageProcessor {
       this.conversationRepository.clearConversation(sessionId);
     }
 
-    logger.debug({ sessionId }, 'Cleared conversation (SDK session + persisted messages)');
+    logger.debug(
+      { sessionId },
+      'Cleared conversation (SDK session + persisted messages)'
+    );
   }
 
   /**
@@ -988,8 +1215,16 @@ export class MessageProcessor {
    * Cancel an active query for a user by platform/agent/user identifiers.
    * Returns true if a query was cancelled, false if no active query was found.
    */
-  cancelQueryForUser(platform: string, agentId: string, userId: string): boolean {
-    const session = this.sessionManager.getInternalSession(platform, agentId, userId);
+  cancelQueryForUser(
+    platform: string,
+    agentId: string,
+    userId: string
+  ): boolean {
+    const session = this.sessionManager.getInternalSession(
+      platform,
+      agentId,
+      userId
+    );
     if (session === undefined) {
       return false;
     }
@@ -999,8 +1234,16 @@ export class MessageProcessor {
   /**
    * Check if there's an active query for a user.
    */
-  hasActiveQueryForUser(platform: string, agentId: string, userId: string): boolean {
-    const session = this.sessionManager.getInternalSession(platform, agentId, userId);
+  hasActiveQueryForUser(
+    platform: string,
+    agentId: string,
+    userId: string
+  ): boolean {
+    const session = this.sessionManager.getInternalSession(
+      platform,
+      agentId,
+      userId
+    );
     if (session === undefined) {
       return false;
     }

@@ -33,6 +33,26 @@ export interface EventMap {
 
   /** Fired when a system error occurs */
   error: ClaudeCabError;
+
+  /** Fired when a group message is received (for multi-bot broadcast) */
+  'group:message': GroupMessagePayload;
+}
+
+/**
+ * Payload for group:message event (multi-bot broadcast)
+ */
+export interface GroupMessagePayload {
+  /** The unified message */
+  message: UnifiedMessage;
+
+  /** Agent ID that received this message from Telegram */
+  sourceAgentId: string;
+
+  /** Bot username mentioned in the message (without @), or null */
+  mentionedBot: string | null;
+
+  /** Whether this message is a reply to the source bot */
+  isReplyToBot: boolean;
 }
 
 /**

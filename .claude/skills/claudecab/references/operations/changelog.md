@@ -6,7 +6,46 @@
 
 ## 版本歷史
 
-### v1.14.0 - Telegram 群組對話支援 Phase 1（當前版本）
+### v1.15.0 - 多 Bot 群組協作 Phase 2（當前版本）
+
+**發布日期**：2026-02-02
+
+**變更**：
+
+1. **GroupBroadcaster 模組**
+   - 新增 `src/core/GroupBroadcaster.ts`
+   - 監聽 `group:message` 事件，分發給所有同群組 Bot
+   - 維護 chatId → agentIds 映射（Bot 收到訊息時自動註冊）
+
+2. **多 Bot 協作機制**
+   - 所有 Bot 都執行 query（維護各自 session 歷史）
+   - 只有被 @mention 或 reply to 的 Bot 發送回覆
+   - 其他 Bot 以 `observeOnly` 模式運行（query 但不回覆）
+
+3. **Bot 訊息過濾**
+   - TelegramAdapter 過濾 `from.is_bot === true` 的訊息
+   - 防止 Bot 之間互相觸發無限迴圈
+
+4. **observeOnly 模式**
+   - MessageProcessor 新增 `observeOnly` 參數
+   - 觀察模式跳過：typing indicator、中間訊息、最終回應、status message
+
+5. **事件系統擴展**
+   - 新增 `group:message` 事件類型（`GroupMessagePayload`）
+   - TelegramAdapter 群組訊息改為發出事件，由 GroupBroadcaster 處理
+
+**新增檔案**：
+- `src/core/GroupBroadcaster.ts`
+
+**修改檔案**：
+- `src/types/events.ts` - 新增 GroupMessagePayload
+- `src/adapters/TelegramAdapter.ts` - Bot 過濾、getBotInfo()、發出事件
+- `src/core/MessageProcessor.ts` - observeOnly 模式
+- `src/core/PlatformOrchestrator.ts` - 整合 GroupBroadcaster
+
+---
+
+### v1.14.0 - Telegram 群組對話支援 Phase 1
 
 **發布日期**：2026-02-02
 

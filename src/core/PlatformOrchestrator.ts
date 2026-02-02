@@ -7,12 +7,16 @@
  */
 
 import { TelegramAdapter } from '../adapters/TelegramAdapter.js';
-import type { TelegramAdapterConfig, AdapterSecurityConfig } from '../adapters/types.js';
+import type {
+  TelegramAdapterConfig,
+  AdapterSecurityConfig,
+} from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import type { CommandDependencies } from '../adapters/commands/index.js';
 import type { ScheduleManager } from '../schedule/ScheduleManager.js';
 import { AdapterRegistry } from './AdapterRegistry.js';
 import { AgentLoader } from './AgentLoader.js';
+import { GroupBroadcaster } from './GroupBroadcaster.js';
 import { SessionManager } from './SessionManager.js';
 import { MessageProcessor } from './MessageProcessor.js';
 import { logger } from '../utils/logger.js';
@@ -49,6 +53,7 @@ export class PlatformOrchestrator {
   private readonly messageProcessor: MessageProcessor;
   private readonly securityConfig: AdapterSecurityConfig | undefined;
   private readonly scheduleManager: ScheduleManager | undefined;
+  private readonly groupBroadcaster: GroupBroadcaster;
 
   constructor(options: PlatformOrchestratorOptions) {
     this.agentLoader = options.agentLoader;
@@ -56,6 +61,19 @@ export class PlatformOrchestrator {
     this.messageProcessor = options.messageProcessor;
     this.securityConfig = options.securityConfig;
     this.scheduleManager = options.scheduleManager;
+
+    // Initialize GroupBroadcaster for multi-bot group message handling
+    this.groupBroadcaster = new GroupBroadcaster({
+      messageProcessor: this.messageProcessor,
+      getBotInfo: (agentId: string) => {
+        // Get adapter from registry and retrieve bot info
+        const adapter = this.registry.get('telegram', agentId);
+        if (adapter !== undefined && adapter instanceof TelegramAdapter) {
+          return adapter.getBotInfo();
+        }
+        return null;
+      },
+    });
   }
 
   /**
@@ -66,7 +84,9 @@ export class PlatformOrchestrator {
     const agentsWithTokens = this.agentLoader.getAgentsWithPlatformTokens();
 
     if (agentsWithTokens.length === 0) {
-      logger.warn('No agents with platform bot tokens found. No adapters will start.');
+      logger.warn(
+        'No agents with platform bot tokens found. No adapters will start.'
+      );
       return;
     }
 
@@ -122,13 +142,18 @@ export class PlatformOrchestrator {
     logger.info({ agentId }, 'Reloading adapters for agent');
 
     // Stop existing adapters for this agent
-    const adapters = this.registry.getAll().filter((a) => a.agentId === agentId);
+    const adapters = this.registry
+      .getAll()
+      .filter((a) => a.agentId === agentId);
     for (const adapter of adapters) {
       try {
         await adapter.stop();
         await adapter.dispose();
       } catch (error) {
-        logger.error({ error, agentId, platform: adapter.platform }, 'Error stopping adapter');
+        logger.error(
+          { error, agentId, platform: adapter.platform },
+          'Error stopping adapter'
+        );
       }
       this.registry.unregister(adapter.platform, adapter.agentId);
     }
@@ -169,14 +194,19 @@ export class PlatformOrchestrator {
   /**
    * Create and start a Telegram adapter for a specific agent.
    */
-  private async startTelegramAdapter(agentId: string, token: string): Promise<void> {
+  private async startTelegramAdapter(
+    agentId: string,
+    token: string
+  ): Promise<void> {
     logger.info({ agentId }, 'Starting Telegram adapter');
 
     const config: TelegramAdapterConfig = {
       platform: 'telegram',
       agentId,
       token,
-      ...(this.securityConfig !== undefined ? { securityConfig: this.securityConfig } : {}),
+      ...(this.securityConfig !== undefined
+        ? { securityConfig: this.securityConfig }
+        : {}),
     };
 
     const adapter = new TelegramAdapter(config);
@@ -187,7 +217,9 @@ export class PlatformOrchestrator {
       sessionManager: this.sessionManager,
       messageProcessor: this.messageProcessor,
       agentId,
-      ...(this.scheduleManager !== undefined ? { scheduleManager: this.scheduleManager } : {}),
+      ...(this.scheduleManager !== undefined
+        ? { scheduleManager: this.scheduleManager }
+        : {}),
     };
     adapter.setCommandDependencies(commandDeps);
 

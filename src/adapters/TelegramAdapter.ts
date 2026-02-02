@@ -25,6 +25,8 @@ import {
   type SecurityConfig,
 } from '../utils/security.js';
 import { auditLogger } from '../utils/audit.js';
+import { getEventBus } from '../core/EventBus.js';
+import type { GroupMessagePayload } from '../types/events.js';
 
 /**
  * Rate limiter for Telegram API requests
@@ -59,7 +61,8 @@ class RateLimiter {
           }
         },
         resolve: () => {},
-        reject: (err: unknown) => reject(err instanceof Error ? err : new Error(String(err))),
+        reject: (err: unknown) =>
+          reject(err instanceof Error ? err : new Error(String(err))),
       });
 
       void this.processQueue();
@@ -134,7 +137,9 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     super(config);
     this.rateLimiter = new RateLimiter(config.rateLimit ?? DEFAULT_RATE_LIMIT);
     // Cast from unknown to CommandDependencies (type is defined in commands module)
-    this.commandDeps = config.commandDependencies as CommandDependencies | undefined;
+    this.commandDeps = config.commandDependencies as
+      | CommandDependencies
+      | undefined;
 
     // Initialize security config
     this.securityConfig = config.securityConfig
@@ -142,7 +147,8 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
           allowedUsers: config.securityConfig.allowedUsers,
           whitelistEnabled: config.securityConfig.whitelistEnabled,
           maxMessageLength: config.securityConfig.maxMessageLength,
-          promptInjectionDetection: config.securityConfig.promptInjectionDetection,
+          promptInjectionDetection:
+            config.securityConfig.promptInjectionDetection,
         }
       : DEFAULT_SECURITY_CONFIG;
 
@@ -163,6 +169,14 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
    */
   setCommandDependencies(deps: CommandDependencies): void {
     this.commandDeps = deps;
+  }
+
+  /**
+   * Get bot info (username, id) for group message handling.
+   * Returns null if bot is not initialized yet.
+   */
+  getBotInfo(): { username: string; id: number } | null {
+    return this.botInfo;
   }
 
   /**
@@ -194,7 +208,10 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     // from permission inline keyboards), causing a deadlock.
     this.bot.on('message:text', (ctx) => {
       // Skip if this is a command message and we have command handlers
-      if (this.commandDeps !== undefined && ctx.message?.text?.startsWith('/')) {
+      if (
+        this.commandDeps !== undefined &&
+        ctx.message?.text?.startsWith('/')
+      ) {
         return;
       }
       void this.handleTextMessage(ctx).catch((error) => {
@@ -215,12 +232,20 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         const requestId = permMatch[2] as string;
 
         if (this.permissionResolver === null) {
-          this.log.warn({ requestId }, 'Permission resolver not set, session may have expired');
-          await ctx.answerCallbackQuery({ text: '⏳ Permission session expired' });
+          this.log.warn(
+            { requestId },
+            'Permission resolver not set, session may have expired'
+          );
+          await ctx.answerCallbackQuery({
+            text: '⏳ Permission session expired',
+          });
           return;
         }
 
-        this.log.info({ requestId, decision, toolUseID: requestId }, 'Permission decision received');
+        this.log.info(
+          { requestId, decision, toolUseID: requestId },
+          'Permission decision received'
+        );
         this.permissionResolver(requestId, decision);
 
         const answerText =
@@ -240,8 +265,13 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         const optionIndex = parseInt(qMatch[2] as string, 10);
 
         if (this.questionResolver === null) {
-          this.log.warn({ requestId }, 'Question resolver not set, session may have expired');
-          await ctx.answerCallbackQuery({ text: '⏳ Question session expired' });
+          this.log.warn(
+            { requestId },
+            'Question resolver not set, session may have expired'
+          );
+          await ctx.answerCallbackQuery({
+            text: '⏳ Question session expired',
+          });
           return;
         }
 
@@ -275,10 +305,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   /**
    * Set up command handlers for the bot
    */
-  private setupCommandHandlers(
-    bot: Bot,
-    deps: CommandDependencies
-  ): void {
+  private setupCommandHandlers(bot: Bot, deps: CommandDependencies): void {
     // deps is already CommandDependencies - no conversion needed
     // This is the proper decoupled architecture: commands module defines its dependencies,
     // and adapters simply provide actual instances.
@@ -298,7 +325,10 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         const validation = validateMessage('', userId, this.securityConfig);
         if (!validation.valid && validation.error === 'unauthorized') {
           auditLogger.logUnauthorizedAccess('telegram', userId, chatId);
-          this.log.warn({ userId, chatId, command }, 'Unauthorized command attempt');
+          this.log.warn(
+            { userId, chatId, command },
+            'Unauthorized command attempt'
+          );
           await ctx.reply(getSecurityErrorMessage('unauthorized'));
           return;
         }
@@ -339,10 +369,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       void this.bot.start({
         allowed_updates: ['message', 'callback_query'],
         onStart: (botInfo) => {
-          this.log.info(
-            { username: botInfo.username },
-            'Bot started polling'
-          );
+          this.log.info({ username: botInfo.username }, 'Bot started polling');
         },
       });
     }
@@ -378,11 +405,21 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       return;
     }
 
+    // Filter out messages from other bots to prevent infinite loops
+    if (from.is_bot === true) {
+      this.log.debug({ botId: from.id }, 'Ignoring message from bot');
+      return;
+    }
+
     const userId = from.id.toString();
     const chatId = message.chat.id.toString();
 
     // Security validation
-    const validation = validateMessage(message.text, userId, this.securityConfig);
+    const validation = validateMessage(
+      message.text,
+      userId,
+      this.securityConfig
+    );
 
     if (!validation.valid) {
       // Log security event
@@ -390,7 +427,12 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         auditLogger.logUnauthorizedAccess('telegram', userId, chatId);
         this.log.warn({ userId, chatId }, 'Unauthorized access attempt');
       } else if (validation.error === 'message_too_long') {
-        auditLogger.logValidationFailed('telegram', userId, 'message_too_long', chatId);
+        auditLogger.logValidationFailed(
+          'telegram',
+          userId,
+          'message_too_long',
+          chatId
+        );
       }
 
       // Send rejection message
@@ -419,25 +461,6 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       : undefined;
     const replyToMessageId = message.reply_to_message?.message_id.toString();
 
-    // Group chat: only respond to @mention or reply to bot
-    if (isGroupChat && this.botInfo !== null) {
-      const isMentioned = message.text.includes(`@${this.botInfo.username}`);
-      const isReplyToBot = message.reply_to_message?.from?.id === this.botInfo.id;
-
-      if (!isMentioned && !isReplyToBot) {
-        this.log.debug(
-          { chatId, userId, isGroupChat },
-          'Ignoring group message: not mentioned and not reply to bot'
-        );
-        return;
-      }
-
-      this.log.debug(
-        { chatId, userId, isMentioned, isReplyToBot },
-        'Group message triggered bot response'
-      );
-    }
-
     const unifiedMessage: UnifiedMessage = {
       id: `telegram:${message.message_id}:${message.chat.id}`,
       platform: 'telegram',
@@ -458,6 +481,33 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     // Log user message
     auditLogger.logUserMessage(unifiedMessage);
 
+    // Group chat: emit group:message event for GroupBroadcaster to handle
+    if (isGroupChat && this.botInfo !== null) {
+      const isMentioned = message.text.includes(`@${this.botInfo.username}`);
+      const isReplyToBot =
+        message.reply_to_message?.from?.id === this.botInfo.id;
+
+      // Extract mentioned bot username from message (e.g., "@bot_name" -> "bot_name")
+      const mentionMatch = /@(\w+)/.exec(message.text);
+      const mentionedBot = mentionMatch?.[1] ?? null;
+
+      this.log.debug(
+        { chatId, userId, isMentioned, isReplyToBot, mentionedBot },
+        'Emitting group message event'
+      );
+
+      const payload: GroupMessagePayload = {
+        message: unifiedMessage,
+        sourceAgentId: this.config.agentId,
+        mentionedBot,
+        isReplyToBot,
+      };
+
+      getEventBus().emit('group:message', payload);
+      return; // GroupBroadcaster will handle message processing
+    }
+
+    // Private chat: use original emitMessage flow
     await this.emitMessage(unifiedMessage);
   }
 
@@ -486,7 +536,10 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
           sendOptions.parse_mode = options.parseMode;
         }
         if (options?.replyToMessageId !== undefined) {
-          sendOptions.reply_to_message_id = parseInt(options.replyToMessageId, 10);
+          sendOptions.reply_to_message_id = parseInt(
+            options.replyToMessageId,
+            10
+          );
         }
         if (options?.disableLinkPreview === true) {
           sendOptions.link_preview_options = { is_disabled: true };
@@ -533,12 +586,14 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     }
   }
 
-
   /**
    * Send an initial status message that will be updated with tool events.
    * Used for real-time feedback during query execution.
    */
-  async sendStatusMessage(chatId: string, initialText: string = '🔄 處理中...'): Promise<string | null> {
+  async sendStatusMessage(
+    chatId: string,
+    initialText: string = '🔄 處理中...'
+  ): Promise<string | null> {
     if (this.bot === null) {
       return null;
     }
@@ -559,7 +614,11 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
    * Update an existing status message with new content.
    * Used for real-time feedback during query execution.
    */
-  async updateStatusMessage(chatId: string, messageId: string, text: string): Promise<boolean> {
+  async updateStatusMessage(
+    chatId: string,
+    messageId: string,
+    text: string
+  ): Promise<boolean> {
     if (this.bot === null) {
       return false;
     }
@@ -567,14 +626,21 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     try {
       await this.rateLimiter.execute(async () => {
         // Use plain text to avoid Markdown parsing issues with tool names
-        await this.bot!.api.editMessageText(chatId, parseInt(messageId, 10), text);
+        await this.bot!.api.editMessageText(
+          chatId,
+          parseInt(messageId, 10),
+          text
+        );
       });
       return true;
     } catch (error) {
       // Ignore "message is not modified" errors
       const errorMsg = error instanceof Error ? error.message : String(error);
       if (!errorMsg.includes('message is not modified')) {
-        this.log.warn({ error, chatId, messageId }, 'Failed to update status message');
+        this.log.warn(
+          { error, chatId, messageId },
+          'Failed to update status message'
+        );
       }
       return false;
     }
@@ -606,15 +672,16 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
       // Format tool input for display (truncate if too long)
       const inputStr = JSON.stringify(options.toolInput, null, 2);
-      const displayInput = inputStr.length > 500
-        ? inputStr.slice(0, 497) + '...'
-        : inputStr;
+      const displayInput =
+        inputStr.length > 500 ? inputStr.slice(0, 497) + '...' : inputStr;
 
       const text = [
         '🔐 *Permission Request*',
         '',
         `Tool: \`${options.toolName}\``,
-        ...(options.decisionReason ? [`Reason: ${options.decisionReason}`] : []),
+        ...(options.decisionReason
+          ? [`Reason: ${options.decisionReason}`]
+          : []),
         'Input:',
         '```',
         displayInput,
@@ -781,7 +848,10 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       );
 
       // If no newline found, try space
-      if (splitIndex === -1 || splitIndex < TelegramAdapter.MAX_MESSAGE_LENGTH / 2) {
+      if (
+        splitIndex === -1 ||
+        splitIndex < TelegramAdapter.MAX_MESSAGE_LENGTH / 2
+      ) {
         splitIndex = remaining.lastIndexOf(
           ' ',
           TelegramAdapter.MAX_MESSAGE_LENGTH
@@ -789,7 +859,10 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       }
 
       // If still no good split point, force split
-      if (splitIndex === -1 || splitIndex < TelegramAdapter.MAX_MESSAGE_LENGTH / 2) {
+      if (
+        splitIndex === -1 ||
+        splitIndex < TelegramAdapter.MAX_MESSAGE_LENGTH / 2
+      ) {
         splitIndex = TelegramAdapter.MAX_MESSAGE_LENGTH;
       }
 
