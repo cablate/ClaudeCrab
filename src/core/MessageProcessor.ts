@@ -253,7 +253,7 @@ export class MessageProcessor {
     let toolEvents: Array<{ toolName: string; status: string; detail?: string }> = [];
     let lastStatusUpdate = 0;
     let needNewStatusMessage = true; // Start with needing a new status message
-    const STATUS_UPDATE_DEBOUNCE_MS = 800; // Min 0.8 second between updates
+    const STATUS_UPDATE_DEBOUNCE_MS = 2000; // Min 2 seconds between updates (avoid Telegram 429)
     const MAX_TOOL_EVENTS_DISPLAY = 8; // Show last N tool events
 
     // Check if adapter supports status messages
