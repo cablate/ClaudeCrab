@@ -1,38 +1,140 @@
+/**
+ * System Monitoring API
+ *
+ * Provides endpoints for system metrics, events, and audit logs.
+ */
+
 import { Router } from 'express';
 import type { WebUIRequest } from '../types.js';
-import { StatsService } from '../services/StatsService.js';
+import { MonitoringService } from '../services/MonitoringService.js';
 
 /**
- * Create system API router
+ * Create system monitoring API router
  */
 export function createSystemApiRouter(): Router {
   const router = Router();
 
   /**
-   * GET /api/system/stats - Get system statistics
+   * GET /api/system/metrics - Get system metrics
    */
-  router.get('/stats', (req, res) => {
-    const { agentLoader, sessionManager, sessionRepository, conversationRepository } =
-      (req as WebUIRequest).dependencies;
+  router.get('/metrics', (req, res) => {
+    const { monitoringService } = (req as WebUIRequest).dependencies;
 
-    const statsService = new StatsService(
-      agentLoader,
-      sessionManager,
-      sessionRepository,
-      conversationRepository
-    );
+    if (monitoringService === undefined) {
+      res.status(503).json({ error: 'Monitoring service not available' });
+      return;
+    }
 
-    const stats = statsService.getDashboardStats();
-    const sessionsByAgent = statsService.getSessionsByAgent();
-    const sessionsByPlatform = statsService.getSessionsByPlatform();
-    const recentActivity = statsService.getRecentActivity(24);
+    const metrics = monitoringService.getMetrics();
 
     res.json({
-      stats,
-      sessionsByAgent,
-      sessionsByPlatform,
-      recentActivity,
-      timestamp: new Date().toISOString(),
+      uptime: metrics.uptime,
+      uptimeFormatted: metrics.uptimeFormatted,
+      memory: {
+        heapUsed: metrics.memory.heapUsed,
+        heapUsedFormatted: MonitoringService.formatBytes(metrics.memory.heapUsed),
+        heapTotal: metrics.memory.heapTotal,
+        heapTotalFormatted: MonitoringService.formatBytes(metrics.memory.heapTotal),
+        rss: metrics.memory.rss,
+        rssFormatted: MonitoringService.formatBytes(metrics.memory.rss),
+        external: metrics.memory.external,
+        externalFormatted: MonitoringService.formatBytes(metrics.memory.external),
+      },
+      sessions: {
+        active: metrics.activeSessions,
+        processing: metrics.processingSessions,
+      },
+      bots: {
+        running: metrics.botsRunning,
+        stopped: metrics.botsStopped,
+        error: metrics.botsError,
+        total: metrics.botStatus.length,
+      },
+    });
+  });
+
+  /**
+   * GET /api/system/bots - Get all bot statuses
+   */
+  router.get('/bots', (req, res) => {
+    const { monitoringService } = (req as WebUIRequest).dependencies;
+
+    if (monitoringService === undefined) {
+      res.status(503).json({ error: 'Monitoring service not available' });
+      return;
+    }
+
+    const botStatus = monitoringService.getBotStatus();
+
+    res.json({ bots: botStatus });
+  });
+
+  /**
+   * GET /api/system/sessions/processing - Get processing sessions
+   */
+  router.get('/sessions/processing', (req, res) => {
+    const { monitoringService } = (req as WebUIRequest).dependencies;
+
+    if (monitoringService === undefined) {
+      res.status(503).json({ error: 'Monitoring service not available' });
+      return;
+    }
+
+    const sessions = monitoringService.getProcessingSessions();
+
+    res.json({ sessions });
+  });
+
+  /**
+   * GET /api/system/events - Get recent events
+   */
+  router.get('/events', (req, res) => {
+    const { monitoringService } = (req as WebUIRequest).dependencies;
+
+    if (monitoringService === undefined) {
+      res.status(503).json({ error: 'Monitoring service not available' });
+      return;
+    }
+
+    const limit = Math.min(
+      parseInt(req.query.limit as string) || 20,
+      100
+    );
+
+    const events = monitoringService.getRecentEvents(limit);
+
+    res.json({ events });
+  });
+
+  /**
+   * GET /api/system/audit - Get audit logs
+   * Note: For Phase 2, this returns recent events as a placeholder.
+   * Full audit logging with database persistence is planned for Phase 3.
+   */
+  router.get('/audit', (req, res) => {
+    const { monitoringService } = (req as WebUIRequest).dependencies;
+
+    if (monitoringService === undefined) {
+      res.status(503).json({ error: 'Monitoring service not available' });
+      return;
+    }
+
+    const limit = Math.min(
+      parseInt(req.query.limit as string) || 50,
+      200
+    );
+
+    // For now, return events as audit placeholder
+    const events = monitoringService.getRecentEvents(limit);
+
+    res.json({
+      logs: events.map((e) => ({
+        timestamp: e.timestamp,
+        action: e.type,
+        details: e.summary,
+        source: 'system',
+      })),
+      note: 'Full audit logging planned for Phase 3',
     });
   });
 
@@ -40,61 +142,22 @@ export function createSystemApiRouter(): Router {
    * GET /api/system/health - Health check endpoint
    */
   router.get('/health', (req, res) => {
-    const { databaseManager } = (req as WebUIRequest).dependencies;
+    const { monitoringService, agentLoader, sessionManager } = (
+      req as WebUIRequest
+    ).dependencies;
 
-    const health = {
-      status: 'healthy' as const,
-      timestamp: new Date().toISOString(),
-      components: {
-        webui: 'up',
-        database: databaseManager !== undefined ? 'up' : 'not configured',
-      },
+    const checks = {
+      agentLoader: agentLoader !== undefined,
+      sessionManager: sessionManager !== undefined,
+      monitoringService: monitoringService !== undefined,
     };
 
-    res.json(health);
-  });
+    const healthy = Object.values(checks).every((v) => v);
 
-  /**
-   * POST /api/system/database/vacuum - Run database maintenance
-   */
-  router.post('/database/vacuum', (req, res) => {
-    const { databaseManager } = (req as WebUIRequest).dependencies;
-
-    if (databaseManager === undefined) {
-      res.status(400).json({ error: 'Database not configured' });
-      return;
-    }
-
-    try {
-      const db = databaseManager.getDatabase();
-      db.pragma('wal_checkpoint(TRUNCATE)');
-      db.pragma('vacuum');
-
-      res.json({
-        success: true,
-        message: 'Database maintenance completed',
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Database maintenance failed';
-      res.status(500).json({ error: message });
-    }
-  });
-
-  /**
-   * GET /api/system/env - Get safe environment info (non-sensitive)
-   */
-  router.get('/env', (_req, res) => {
-    res.json({
-      nodeVersion: process.version,
-      platform: process.platform,
-      uptime: process.uptime(),
-      memoryUsage: process.memoryUsage(),
-      env: {
-        NODE_ENV: process.env.NODE_ENV ?? 'development',
-        WEBUI_PORT: process.env.WEBUI_PORT ?? '3001',
-        ENABLE_PERSISTENCE: process.env.ENABLE_PERSISTENCE ?? 'false',
-        DEFAULT_AGENT: process.env.DEFAULT_AGENT ?? 'general',
-      },
+    res.status(healthy ? 200 : 503).json({
+      status: healthy ? 'healthy' : 'degraded',
+      checks,
+      timestamp: new Date().toISOString(),
     });
   });
 

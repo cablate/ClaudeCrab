@@ -155,6 +155,7 @@ export function createAgentsApiRouter(): Router {
         version: agent?.config.version ?? '1.0.0',
         model: agent?.config.model ?? 'sonnet',
         botStatus: adapters.map((a) => ({ platform: a.platform, status: a.status })),
+        hasBotToken: agent?.config.telegramBotToken !== undefined,
       };
     });
 
@@ -263,6 +264,214 @@ export function createAgentsApiRouter(): Router {
   });
 
   /**
+   * DELETE /api/agents/:id - Delete an agent (soft delete by default)
+   * Query params:
+   *   - hard=true: Permanently delete instead of moving to .trash/
+   *   - force=true: Delete even if there are active sessions
+   */
+  router.delete('/:id', async (req, res) => {
+    const { agentLoader, sessionManager, platformOrchestrator } = getDeps(req);
+    const { id } = req.params;
+    const hardDelete = req.query.hard === 'true';
+    const forceDelete = req.query.force === 'true';
+
+    // Validate reserved IDs
+    if (['_example', 'node_modules', '.git'].includes(id)) {
+      res.status(400).json({ error: 'Cannot delete reserved agent.' });
+      return;
+    }
+
+    // Check if agent exists
+    const agent = agentLoader.get(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    try {
+      // Get sessions for this agent
+      const allSessions = sessionManager.getAllSessions();
+      const agentSessions = allSessions.filter((s) => s.agentId === id);
+
+      // Check for active sessions
+      const activeSessions = agentSessions.filter((s) => s.state === 'processing');
+      if (activeSessions.length > 0 && !forceDelete) {
+        res.status(409).json({
+          error: 'Agent has active sessions',
+          activeSessions: activeSessions.length,
+          message: 'Use ?force=true to delete anyway',
+        });
+        return;
+      }
+
+      // Close all sessions for this agent
+      for (const session of agentSessions) {
+        sessionManager.closeSession(session.platform, id, session.userId, 'user_request');
+      }
+
+      // Stop bot adapters for this agent
+      if (platformOrchestrator !== undefined) {
+        const registry = platformOrchestrator.getRegistry();
+        const adapters = registry.getAll().filter((a) => a.agentId === id);
+        for (const adapter of adapters) {
+          try {
+            await adapter.stop();
+            await adapter.dispose();
+            registry.unregister(adapter.platform, adapter.agentId);
+          } catch (error) {
+            // Log but continue with deletion
+            console.error(`Failed to stop adapter for ${id}:`, error);
+          }
+        }
+      }
+
+      const agentsDir = path.join(process.cwd(), 'agents');
+      const sourceDir = agent.path;
+
+      if (hardDelete) {
+        // Permanently delete
+        await fs.rm(sourceDir, { recursive: true, force: true });
+      } else {
+        // Soft delete: move to .trash/
+        const trashDir = path.join(agentsDir, '.trash');
+        await fs.mkdir(trashDir, { recursive: true });
+
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const trashPath = path.join(trashDir, `${id}-${timestamp}`);
+
+        await fs.rename(sourceDir, trashPath);
+      }
+
+      // Remove from AgentLoader cache
+      agentLoader.clearCache(id);
+
+      res.json({
+        success: true,
+        message: hardDelete ? `Agent "${id}" permanently deleted` : `Agent "${id}" moved to trash`,
+        closedSessions: agentSessions.length,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete agent';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  /**
+   * POST /api/agents/:id/clone - Clone an agent to a new ID
+   */
+  router.post('/:id/clone', async (req, res) => {
+    const { agentLoader } = getDeps(req);
+    const { id } = req.params;
+    const { newId, newName, keepMemory } = req.body as {
+      newId?: string;
+      newName?: string;
+      keepMemory?: boolean;
+    };
+
+    // Validate newId
+    if (!newId) {
+      res.status(400).json({ error: 'newId is required' });
+      return;
+    }
+
+    if (!/^[a-z0-9-]+$/.test(newId)) {
+      res.status(400).json({ error: 'Invalid newId. Use only lowercase letters, numbers, and hyphens.' });
+      return;
+    }
+
+    // Reserved IDs
+    if (['_example', 'node_modules', '.git'].includes(newId)) {
+      res.status(400).json({ error: 'Reserved agent ID.' });
+      return;
+    }
+
+    // Check source agent exists
+    const sourceAgent = agentLoader.get(id);
+    if (!sourceAgent) {
+      res.status(404).json({ error: 'Source agent not found' });
+      return;
+    }
+
+    const agentsDir = path.join(process.cwd(), 'agents');
+    const sourceDir = sourceAgent.path;
+    const targetDir = path.join(agentsDir, newId);
+
+    try {
+      // Check if target already exists
+      try {
+        await fs.access(targetDir);
+        res.status(409).json({ error: `Agent "${newId}" already exists.` });
+        return;
+      } catch {
+        // Target doesn't exist, good to proceed
+      }
+
+      // Copy directory recursively
+      await fs.cp(sourceDir, targetDir, { recursive: true });
+
+      // Update agent.json
+      const agentJsonPath = path.join(targetDir, 'agent.json');
+      const agentJson = JSON.parse(await fs.readFile(agentJsonPath, 'utf-8')) as Record<string, unknown>;
+      
+      // Update name
+      agentJson.name = newName ?? `${agentJson.name} (Copy)`;
+      
+      // Remove telegramBotToken to avoid conflicts
+      delete agentJson.telegramBotToken;
+      
+      await fs.writeFile(agentJsonPath, JSON.stringify(agentJson, null, 2));
+
+      // Clear memory if not keeping it
+      if (!keepMemory) {
+        const memoryDir = path.join(targetDir, 'memory');
+        try {
+          const entries = await fs.readdir(memoryDir);
+          for (const entry of entries) {
+            if (entry !== '.gitkeep') {
+              await fs.rm(path.join(memoryDir, entry), { recursive: true, force: true });
+            }
+          }
+        } catch {
+          // Memory directory doesn't exist, that's fine
+        }
+
+        // Also clear root memory files (USER.md, MEMORY.md, etc. but keep SOUL.md and IDENTITY.md)
+        const filesToClear = ['USER.md', 'MEMORY.md'];
+        for (const file of filesToClear) {
+          try {
+            await fs.unlink(path.join(targetDir, file));
+          } catch {
+            // File doesn't exist
+          }
+        }
+      }
+
+      // Load the new agent
+      await agentLoader.loadAgent(newId);
+      const newAgent = agentLoader.get(newId);
+
+      res.status(201).json({
+        success: true,
+        agent: {
+          id: newId,
+          name: newAgent?.config.name ?? agentJson.name,
+          path: targetDir,
+        },
+        message: `Agent "${id}" cloned to "${newId}"`,
+      });
+    } catch (error) {
+      // Cleanup on failure
+      try {
+        await fs.rm(targetDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+      const message = error instanceof Error ? error.message : 'Failed to clone agent';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  /**
    * POST /api/agents/:id/reload - Reload agent configuration and restart adapters
    */
   router.post('/:id/reload', async (req, res) => {
@@ -299,6 +508,99 @@ export function createAgentsApiRouter(): Router {
       res.status(500).json({ error: message });
     }
   });
+
+  // ==================== Bot Control API ====================
+
+  /**
+   * GET /api/agents/:id/bot/status - Get bot status for an agent
+   */
+  router.get('/:id/bot/status', (req, res) => {
+    const { agentLoader, platformOrchestrator } = getDeps(req);
+    const { id } = req.params;
+
+    // Check if agent exists
+    const agent = agentLoader.get(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (platformOrchestrator === undefined) {
+      res.status(503).json({ error: 'Platform orchestrator not available' });
+      return;
+    }
+
+    const status = platformOrchestrator.getBotStatusForAgent(id);
+    res.json({ agentId: id, status });
+  });
+
+  /**
+   * POST /api/agents/:id/bot/start - Start bot for an agent
+   */
+  router.post('/:id/bot/start', async (req, res) => {
+    const { agentLoader, platformOrchestrator } = getDeps(req);
+    const { id } = req.params;
+
+    // Check if agent exists
+    const agent = agentLoader.get(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (platformOrchestrator === undefined) {
+      res.status(503).json({ error: 'Platform orchestrator not available' });
+      return;
+    }
+
+    try {
+      await platformOrchestrator.startBotForAgent(id);
+      const status = platformOrchestrator.getBotStatusForAgent(id);
+      res.json({
+        success: true,
+        message: `Bot started for agent "${id}"`,
+        status,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to start bot';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  /**
+   * POST /api/agents/:id/bot/stop - Stop bot for an agent
+   */
+  router.post('/:id/bot/stop', async (req, res) => {
+    const { agentLoader, platformOrchestrator } = getDeps(req);
+    const { id } = req.params;
+
+    // Check if agent exists
+    const agent = agentLoader.get(id);
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (platformOrchestrator === undefined) {
+      res.status(503).json({ error: 'Platform orchestrator not available' });
+      return;
+    }
+
+    try {
+      await platformOrchestrator.stopBotForAgent(id);
+      const status = platformOrchestrator.getBotStatusForAgent(id);
+      res.json({
+        success: true,
+        message: `Bot stopped for agent "${id}"`,
+        status,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to stop bot';
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ==================== Memory API ====================
 
   /**
    * GET /api/agents/:id/memory - List memory files
@@ -797,6 +1099,121 @@ export function createAgentsApiRouter(): Router {
       res.json({ schedules });
     } catch (error) {
       res.status(500).json({ error: 'Failed to load schedules', details: String(error) });
+    }
+  });
+
+  /**
+   * POST /api/agents/:id/schedules - Create a new schedule
+   */
+  router.post('/:id/schedules', async (req, res) => {
+    const { agentLoader, scheduleManager } = getDeps(req);
+    const agent = agentLoader.get(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+
+    if (!scheduleManager) {
+      res.status(503).json({ error: 'Schedule system not enabled' });
+      return;
+    }
+
+    const body = req.body as {
+      id?: string;
+      name?: string;
+      description?: string;
+      trigger?: {
+        cron?: string;
+        timezone?: string;
+      };
+      action?: {
+        type?: string;
+        chatId?: string;
+        prompt?: string;
+      };
+      enabled?: boolean;
+    };
+
+    // Validate required fields
+    if (!body.id) {
+      res.status(400).json({ error: 'id is required' });
+      return;
+    }
+    if (!body.name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+    if (!body.trigger?.cron) {
+      res.status(400).json({ error: 'trigger.cron is required' });
+      return;
+    }
+    if (!body.action?.chatId) {
+      res.status(400).json({ error: 'action.chatId is required' });
+      return;
+    }
+    if (!body.action?.prompt) {
+      res.status(400).json({ error: 'action.prompt is required' });
+      return;
+    }
+
+    // Validate schedule ID format
+    if (!/^[a-z0-9-]+$/.test(body.id)) {
+      res.status(400).json({ error: 'Invalid schedule ID. Use only lowercase letters, numbers, and hyphens.' });
+      return;
+    }
+
+    try {
+      // Check if schedule already exists
+      const schedulePath = path.join(agent.path, 'schedules', `${body.id}.yaml`);
+      try {
+        await fs.access(schedulePath);
+        res.status(409).json({ error: `Schedule "${body.id}" already exists` });
+        return;
+      } catch {
+        // Doesn't exist, good to proceed
+      }
+
+      // Build schedule spec
+      const scheduleSpec = {
+        id: body.id,
+        name: body.name,
+        description: body.description ?? '',
+        trigger: {
+          cron: body.trigger.cron,
+          timezone: body.trigger.timezone ?? 'Asia/Taipei',
+        },
+        action: {
+          type: body.action.type ?? 'send_message',
+          chatId: body.action.chatId,
+          prompt: body.action.prompt,
+        },
+        enabled: body.enabled ?? true,
+      };
+
+      // Validate the spec
+      validateScheduleSpec(scheduleSpec);
+
+      // Convert to YAML
+      const yamlContent = stringifyYaml(scheduleSpec);
+
+      // Ensure schedules directory exists
+      await fs.mkdir(path.join(agent.path, 'schedules'), { recursive: true });
+
+      // Write the file
+      await fs.writeFile(schedulePath, yamlContent, 'utf-8');
+
+      // Load the schedule into the manager
+      await scheduleManager.reloadSchedule(agent.id, body.id);
+
+      res.status(201).json({
+        success: true,
+        message: `Schedule "${body.id}" created`,
+        schedule: scheduleSpec,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create schedule';
+      res.status(500).json({ error: message });
     }
   });
 

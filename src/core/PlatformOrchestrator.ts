@@ -192,6 +192,92 @@ export class PlatformOrchestrator {
   }
 
   /**
+   * Get the bot status for a specific agent.
+   * Returns 'running', 'stopped', 'error', or 'no-token' based on the adapter state.
+   */
+  getBotStatusForAgent(
+    agentId: string
+  ): 'running' | 'stopped' | 'error' | 'no-token' {
+    const agent = this.agentLoader.get(agentId);
+    if (agent === undefined || agent.config.telegramBotToken === undefined) {
+      return 'no-token';
+    }
+
+    const adapter = this.registry.get('telegram', agentId);
+    if (adapter === undefined) {
+      return 'stopped';
+    }
+
+    switch (adapter.state) {
+      case 'running':
+        return 'running';
+      case 'error':
+        return 'error';
+      default:
+        return 'stopped';
+    }
+  }
+
+  /**
+   * Start the bot for a specific agent.
+   * Does nothing if the bot is already running or the agent has no token.
+   */
+  async startBotForAgent(agentId: string): Promise<void> {
+    const agent = this.agentLoader.get(agentId);
+    if (agent === undefined) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    if (agent.config.telegramBotToken === undefined) {
+      throw new Error(`Agent "${agentId}" has no Telegram bot token configured`);
+    }
+
+    // Check if already running
+    const existingAdapter = this.registry.get('telegram', agentId);
+    if (existingAdapter !== undefined && existingAdapter.state === 'running') {
+      logger.info({ agentId }, 'Bot already running, skipping start');
+      return;
+    }
+
+    // If adapter exists but not running, stop and remove it first
+    if (existingAdapter !== undefined) {
+      try {
+        await existingAdapter.stop();
+        await existingAdapter.dispose();
+      } catch (error) {
+        logger.warn({ error, agentId }, 'Error stopping existing adapter');
+      }
+      this.registry.unregister('telegram', agentId);
+    }
+
+    // Start new adapter
+    await this.startTelegramAdapter(agentId, agent.config.telegramBotToken);
+    logger.info({ agentId }, 'Bot started for agent');
+  }
+
+  /**
+   * Stop the bot for a specific agent.
+   * Does nothing if the bot is not running.
+   */
+  async stopBotForAgent(agentId: string): Promise<void> {
+    const adapter = this.registry.get('telegram', agentId);
+    if (adapter === undefined) {
+      logger.info({ agentId }, 'No running bot found, skipping stop');
+      return;
+    }
+
+    try {
+      await adapter.stop();
+      await adapter.dispose();
+      this.registry.unregister('telegram', agentId);
+      logger.info({ agentId }, 'Bot stopped for agent');
+    } catch (error) {
+      logger.error({ error, agentId }, 'Error stopping bot');
+      throw error;
+    }
+  }
+
+  /**
    * Create and start a Telegram adapter for a specific agent.
    */
   private async startTelegramAdapter(

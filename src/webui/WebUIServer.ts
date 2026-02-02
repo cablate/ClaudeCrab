@@ -7,6 +7,8 @@ import type { WebUIServerOptions, WebUIDependencies, WebUIRequest } from './type
 import { createRouter } from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from '../utils/logger.js';
+import { MonitoringService } from './services/MonitoringService.js';
+import { getEventBus } from '../core/EventBus.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +26,17 @@ export class WebUIServer {
 
   constructor(options: WebUIServerOptions) {
     this.port = options.port;
+
+    // Create MonitoringService
+    const monitoringService = new MonitoringService({
+      sessionManager: options.sessionManager,
+      platformOrchestrator: options.platformOrchestrator,
+      agentLoader: options.agentLoader,
+    });
+
+    // Setup event bus listeners for monitoring
+    this.setupEventListeners(monitoringService);
+
     this.dependencies = {
       agentLoader: options.agentLoader,
       sessionManager: options.sessionManager,
@@ -32,12 +45,62 @@ export class WebUIServer {
       sessionRepository: options.sessionRepository,
       conversationRepository: options.conversationRepository,
       scheduleManager: options.scheduleManager,
+      monitoringService,
     };
 
     this.app = express();
     this.setupMiddleware();
     this.setupRoutes();
     this.setupErrorHandling();
+  }
+
+  /**
+   * Setup EventBus listeners for monitoring
+   */
+  private setupEventListeners(monitoringService: MonitoringService): void {
+    const eventBus = getEventBus();
+
+    eventBus.on('session:created', (session) => {
+      monitoringService.recordEvent(
+        'session:created',
+        `Session created: ${session.platform}:${session.userId}:${session.agentId}`
+      );
+    });
+
+    eventBus.on('session:closed', (payload) => {
+      monitoringService.recordEvent(
+        'session:closed',
+        `Session closed: ${payload.sessionId} (${payload.reason})`
+      );
+    });
+
+    eventBus.on('session:stateChanged', (payload) => {
+      monitoringService.recordEvent(
+        'session:stateChanged',
+        `Session ${payload.sessionId}: ${payload.previousState} → ${payload.newState}`
+      );
+    });
+
+    eventBus.on('message:sent', (payload) => {
+      monitoringService.recordEvent(
+        'message:sent',
+        `Message sent to ${payload.platform}:${payload.userId}`
+      );
+    });
+
+    eventBus.on('agent:reloaded', (agent) => {
+      monitoringService.recordEvent(
+        'agent:reloaded',
+        `Agent reloaded: ${agent.id}`
+      );
+    });
+
+    eventBus.on('error', (error) => {
+      monitoringService.recordEvent(
+        'error',
+        `Error: ${error.message}`
+      );
+    });
   }
 
   /**

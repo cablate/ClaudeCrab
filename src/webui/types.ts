@@ -5,6 +5,7 @@ import type { PlatformOrchestrator } from '../core/PlatformOrchestrator.js';
 import type { DatabaseManager } from '../persistence/DatabaseManager.js';
 import type { ISessionRepository, IConversationRepository } from '../persistence/types.js';
 import type { ScheduleManager } from '../schedule/ScheduleManager.js';
+import type { MonitoringService } from './services/MonitoringService.js';
 
 /**
  * WebUI Server configuration options
@@ -31,6 +32,7 @@ export interface WebUIDependencies {
   sessionRepository: ISessionRepository | undefined;
   conversationRepository: IConversationRepository | undefined;
   scheduleManager: ScheduleManager | undefined;
+  monitoringService: MonitoringService | undefined;
 }
 
 /**

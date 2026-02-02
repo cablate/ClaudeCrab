@@ -6,7 +6,72 @@
 
 ## 版本歷史
 
-### v1.15.0 - 多 Bot 群組協作 Phase 2（當前版本）
+### v1.16.0 - WebUI 管理系統增強（當前版本）
+
+**發布日期**：2026-02-02
+
+**Phase 1: 核心功能補完**
+
+1. **Agent 管理增強**
+   - Agent 刪除（軟刪除移至 `.trash/`，支援硬刪除）
+   - Agent 複製（含記憶保留選項）
+   - Bot 啟停控制（個別 Agent 的 Bot 啟動/停止）
+
+2. **排程建立 UI**
+   - Create Schedule Modal（表單化建立）
+   - YAML 即時預覽
+   - Cron 表達式說明
+
+3. **PlatformOrchestrator 新增方法**
+   - `getBotStatusForAgent()` - 取得 Bot 狀態
+   - `startBotForAgent()` - 啟動單一 Bot
+   - `stopBotForAgent()` - 停止單一 Bot
+
+**Phase 2: 監控與 Dashboard 改進**
+
+4. **MonitoringService 服務**
+   - 系統指標（uptime、memory、sessions）
+   - Bot 狀態追蹤
+   - 事件記錄（EventBus 整合）
+
+5. **System 監控頁面**
+   - `/system` - 系統總覽
+   - `/system/metrics` - 詳細指標
+   - `/system/events` - 事件日誌
+   - `/system/audit` - 審計日誌（預覽）
+
+6. **Dashboard 改進**
+   - 三欄布局
+   - Bot 狀態卡片（即時顯示）
+   - Recent Events 區塊
+
+7. **Sidebar 導航更新**
+   - 新增 System 區塊（Overview、Metrics、Events、Audit）
+
+**新增檔案**：
+- `src/webui/services/MonitoringService.ts`
+- `src/webui/api/system.api.ts`
+- `src/webui/routes/system.ts`
+- `src/webui/views/system/index.ejs`
+- `src/webui/views/system/metrics.ejs`
+- `src/webui/views/system/events.ejs`
+- `src/webui/views/system/audit.ejs`
+
+**修改檔案**：
+- `src/core/PlatformOrchestrator.ts` - Bot 單獨啟停方法
+- `src/webui/api/agents.api.ts` - 刪除、複製、Bot 控制、排程建立 API
+- `src/webui/WebUIServer.ts` - MonitoringService 整合
+- `src/webui/types.ts` - MonitoringService 依賴
+- `src/webui/routes/index.ts` - System 路由
+- `src/webui/routes/dashboard.ts` - 傳遞監控數據
+- `src/webui/views/dashboard/index.ejs` - Bot 狀態 + Events
+- `src/webui/views/agents/list.ejs` - 刪除、複製、Bot 控制 UI
+- `src/webui/views/agents/detail.ejs` - Schedule 建立 Modal
+- `src/webui/views/partials/sidebar.ejs` - System 導航
+
+---
+
+### v1.15.0 - 多 Bot 群組協作 Phase 2
 
 **發布日期**：2026-02-02
 

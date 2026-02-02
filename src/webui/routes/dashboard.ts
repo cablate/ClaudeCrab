@@ -12,8 +12,13 @@ export function createDashboardRouter(): Router {
    * GET /dashboard - Show dashboard
    */
   router.get('/', (req, res) => {
-    const { agentLoader, sessionManager, sessionRepository, conversationRepository } =
-      (req as WebUIRequest).dependencies;
+    const {
+      agentLoader,
+      sessionManager,
+      sessionRepository,
+      conversationRepository,
+      monitoringService,
+    } = (req as WebUIRequest).dependencies;
 
     const statsService = new StatsService(
       agentLoader,
@@ -37,6 +42,28 @@ export function createDashboardRouter(): Router {
       };
     });
 
+    // Get bot status and recent events from monitoring service
+    let botStatus: Array<{
+      agentId: string;
+      agentName: string;
+      platform: string;
+      status: string;
+    }> = [];
+    let recentEvents: Array<{
+      timestamp: string;
+      type: string;
+      summary: string;
+    }> = [];
+    let processingSessions = 0;
+
+    if (monitoringService !== undefined) {
+      botStatus = monitoringService.getBotStatus();
+      recentEvents = monitoringService.getRecentEvents(5);
+      processingSessions = monitoringService
+        .getProcessingSessions()
+        .length;
+    }
+
     res.render('dashboard/index', {
       title: 'Dashboard',
       stats,
@@ -44,6 +71,9 @@ export function createDashboardRouter(): Router {
       sessionsByPlatform,
       recentActivity,
       agents,
+      botStatus,
+      recentEvents,
+      processingSessions,
     });
   });
 

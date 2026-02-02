@@ -5,6 +5,7 @@ import { createDashboardRouter } from './dashboard.js';
 import { createAgentsRouter } from './agents.js';
 import { createSessionsRouter } from './sessions.js';
 import { createConversationsRouter } from './conversations.js';
+import { createSystemRouter } from './system.js';
 import { createAgentsApiRouter } from '../api/agents.api.js';
 import { createSessionsApiRouter } from '../api/sessions.api.js';
 import { createSystemApiRouter } from '../api/system.api.js';
@@ -26,6 +27,7 @@ export function createRouter(): Router {
   router.use('/agents', createAgentsRouter());
   router.use('/sessions', createSessionsRouter());
   router.use('/conversations', createConversationsRouter());
+  router.use('/system', createSystemRouter());
 
   // API routes
   router.use('/api/agents', createAgentsApiRouter());

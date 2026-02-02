@@ -205,8 +205,11 @@
     <!-- Tab Content: Schedules -->
     <div id="content-schedules" class="tab-content hidden">
       <div class="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div class="px-6 py-4 border-b border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
           <h3 class="text-lg font-semibold text-gray-800">Scheduled Tasks</h3>
+          <button onclick="openCreateScheduleModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+            + Create Schedule
+          </button>
         </div>
         <div id="schedulesList" class="p-6">
           <div class="text-center py-8 text-gray-500">Loading...</div>
@@ -376,6 +379,109 @@
     </div>
     <div class="px-6 py-4 border-t flex justify-end">
       <button onclick="closeScheduleHistoryModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Schedule Modal -->
+<div id="createScheduleModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col mx-4">
+    <div class="px-6 py-4 border-b flex justify-between items-center">
+      <h3 class="text-lg font-semibold">Create Schedule</h3>
+      <button onclick="closeCreateScheduleModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+    </div>
+    <div class="p-6 flex-1 overflow-y-auto">
+      <form id="createScheduleForm" class="space-y-4">
+        <!-- Basic Info -->
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Schedule ID *</label>
+            <input type="text" id="newScheduleId" required pattern="[a-z0-9-]+"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="daily-report">
+            <p class="text-xs text-gray-400 mt-1">Used as filename (lowercase, numbers, hyphens only)</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <input type="text" id="newScheduleName" required
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Daily Report">
+          </div>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <input type="text" id="newScheduleDescription"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Send daily report every morning">
+        </div>
+
+        <!-- Trigger Settings -->
+        <div class="border-t pt-4">
+          <h4 class="text-sm font-semibold text-gray-800 mb-3">Trigger</h4>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Cron Expression *</label>
+              <input type="text" id="newScheduleCron" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                placeholder="0 9 * * *">
+              <p id="cronDescription" class="text-xs text-gray-400 mt-1">Every day at 09:00</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
+              <select id="newScheduleTimezone"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="Asia/Taipei">Asia/Taipei (UTC+8)</option>
+                <option value="Asia/Tokyo">Asia/Tokyo (UTC+9)</option>
+                <option value="America/New_York">America/New_York (ET)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (PT)</option>
+                <option value="Europe/London">Europe/London (GMT)</option>
+                <option value="UTC">UTC</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Settings -->
+        <div class="border-t pt-4">
+          <h4 class="text-sm font-semibold text-gray-800 mb-3">Action</h4>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Chat ID *</label>
+            <input type="text" id="newScheduleChatId" required
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              placeholder="-100123456789">
+            <p class="text-xs text-gray-400 mt-1">Telegram chat ID (use /chatid in conversation to get it)</p>
+          </div>
+          <div class="mt-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Prompt *</label>
+            <textarea id="newSchedulePrompt" required rows="4"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Generate today's work report"></textarea>
+          </div>
+        </div>
+
+        <!-- Options -->
+        <div class="border-t pt-4">
+          <label class="flex items-center gap-2">
+            <input type="checkbox" id="newScheduleEnabled" checked
+              class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+            <span class="text-sm text-gray-700">Enable schedule immediately</span>
+          </label>
+        </div>
+
+        <!-- YAML Preview -->
+        <div class="border-t pt-4">
+          <div class="flex justify-between items-center mb-2">
+            <h4 class="text-sm font-semibold text-gray-800">YAML Preview</h4>
+            <button type="button" onclick="updateYamlPreview()" class="text-xs text-blue-600 hover:text-blue-800">Refresh</button>
+          </div>
+          <pre id="yamlPreview" class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono overflow-x-auto max-h-40"></pre>
+        </div>
+      </form>
+    </div>
+    <div class="px-6 py-4 border-t flex justify-end gap-2">
+      <button onclick="closeCreateScheduleModal()" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
+      <button onclick="createSchedule()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create</button>
     </div>
   </div>
 </div>
@@ -557,6 +663,7 @@ document.addEventListener('keydown', (e) => {
     closeSkillEditModal();
     closeScheduleEditModal();
     closeScheduleHistoryModal();
+    closeCreateScheduleModal();
   }
 });
 
@@ -974,6 +1081,125 @@ async function viewScheduleHistory(scheduleId) {
 
 function closeScheduleHistoryModal() {
   document.getElementById('scheduleHistoryModal').classList.add('hidden');
+}
+
+// Create Schedule Functions
+function openCreateScheduleModal() {
+  // Reset form
+  document.getElementById('createScheduleForm').reset();
+  document.getElementById('newScheduleEnabled').checked = true;
+  document.getElementById('cronDescription').textContent = 'Every day at 09:00';
+  updateYamlPreview();
+  document.getElementById('createScheduleModal').classList.remove('hidden');
+}
+
+function closeCreateScheduleModal() {
+  document.getElementById('createScheduleModal').classList.add('hidden');
+}
+
+function updateYamlPreview() {
+  const id = document.getElementById('newScheduleId').value || 'schedule-id';
+  const name = document.getElementById('newScheduleName').value || 'Schedule Name';
+  const description = document.getElementById('newScheduleDescription').value || '';
+  const cron = document.getElementById('newScheduleCron').value || '0 9 * * *';
+  const timezone = document.getElementById('newScheduleTimezone').value || 'Asia/Taipei';
+  const chatId = document.getElementById('newScheduleChatId').value || '-100123456789';
+  const prompt = document.getElementById('newSchedulePrompt').value || 'Your prompt here';
+  const enabled = document.getElementById('newScheduleEnabled').checked;
+
+  const yaml = `id: ${id}
+name: "${name}"
+${description ? `description: "${description}"\n` : ''}
+trigger:
+  cron: "${cron}"
+  timezone: "${timezone}"
+
+action:
+  type: send_message
+  chatId: "${chatId}"
+  prompt: |
+    ${prompt.split('\n').join('\n    ')}
+
+metadata:
+  enabled: ${enabled}`;
+
+  document.getElementById('yamlPreview').textContent = yaml;
+}
+
+// Update cron description on input
+document.getElementById('newScheduleCron')?.addEventListener('input', function(e) {
+  const cron = e.target.value;
+  const descriptions = {
+    '0 9 * * *': 'Every day at 09:00',
+    '0 0 * * *': 'Every day at midnight',
+    '0 * * * *': 'Every hour',
+    '*/5 * * * *': 'Every 5 minutes',
+    '0 9 * * 1': 'Every Monday at 09:00',
+    '0 9 * * 1-5': 'Weekdays at 09:00',
+    '0 9,18 * * *': 'Every day at 09:00 and 18:00',
+  };
+  document.getElementById('cronDescription').textContent = descriptions[cron] || 'Custom schedule';
+  updateYamlPreview();
+});
+
+// Update preview on any form change
+['newScheduleId', 'newScheduleName', 'newScheduleDescription', 'newScheduleTimezone', 
+ 'newScheduleChatId', 'newSchedulePrompt', 'newScheduleEnabled'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('input', updateYamlPreview);
+    el.addEventListener('change', updateYamlPreview);
+  }
+});
+
+async function createSchedule() {
+  const id = document.getElementById('newScheduleId').value.trim();
+  const name = document.getElementById('newScheduleName').value.trim();
+  const description = document.getElementById('newScheduleDescription').value.trim();
+  const cron = document.getElementById('newScheduleCron').value.trim();
+  const timezone = document.getElementById('newScheduleTimezone').value;
+  const chatId = document.getElementById('newScheduleChatId').value.trim();
+  const prompt = document.getElementById('newSchedulePrompt').value.trim();
+  const enabled = document.getElementById('newScheduleEnabled').checked;
+
+  // Basic validation
+  if (!id || !name || !cron || !chatId || !prompt) {
+    alert('Please fill in all required fields');
+    return;
+  }
+
+  // Validate ID format
+  if (!/^[a-z0-9-]+$/.test(id)) {
+    alert('Schedule ID must contain only lowercase letters, numbers, and hyphens');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/agents/<%= agent.id %>/schedules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        name,
+        description: description || undefined,
+        trigger: { cron, timezone },
+        action: { type: 'send_message', chatId, prompt },
+        enabled
+      })
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      closeCreateScheduleModal();
+      schedulesLoaded = false;
+      loadSchedules();
+      alert(`Schedule "${name}" created successfully!`);
+    } else {
+      alert('Failed to create schedule: ' + (data.error || data.details || 'Unknown error'));
+    }
+  } catch (error) {
+    alert('Failed to create schedule: ' + error.message);
+  }
 }
 
 async function deleteSchedule(scheduleId, scheduleName) {
