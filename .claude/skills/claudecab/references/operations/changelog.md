@@ -15,7 +15,7 @@
 1. **PathValidator 路徑驗證模組**
    - 新增 `src/core/PathValidator.ts`
    - 強制執行 Agent 工作區隔離
-   - 透過 PreToolUse hook 攔截所有檔案操作工具
+   - 透過 PreToolUse hook 攔截所有檔案操作工具（Read, Write, Edit, Glob, Grep, Bash）
 
 2. **路徑權限規則（程式層面強制）**
    - 自己的工作區：讀寫皆可
@@ -24,13 +24,18 @@
    - `_shared/knowledge/{其他}/`：禁止寫入
    - 其他路徑：禁止存取
 
-3. **MessageProcessor 整合**
+3. **Bash 命令路徑檢測**
+   - 從命令字串中提取路徑（引號內路徑、絕對路徑、相對路徑）
+   - 轉換為實際絕對路徑後驗證
+   - 阻止 `ls ../nitterbot/` 等越界操作
+
+4. **MessageProcessor 整合**
    - 在 `additionalOptions.hooks` 加入 PreToolUse hook
    - 自動注入路徑驗證，Agent 無需維護 hooks.ts
 
 **新增檔案**：
 - `src/core/PathValidator.ts`
-- `tests/unit/PathValidator.test.ts`（20 個測試案例）
+- `tests/unit/PathValidator.test.ts`（30 個測試案例）
 
 **修改檔案**：
 - `src/core/MessageProcessor.ts`

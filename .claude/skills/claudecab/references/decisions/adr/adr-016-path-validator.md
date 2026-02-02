@@ -66,8 +66,16 @@ ADR-015 建立了共享知識區架構，定義了路徑權限規則：
 | Edit | `file_path` | 寫入 |
 | Glob | `path` | 讀取 |
 | Grep | `path` | 讀取 |
+| Bash | `command`（解析） | 讀取 |
 
-**Bash 暫不處理**：命令解析複雜，且通常需要權限審批。
+### Bash 命令處理
+
+從 `command` 字串中提取路徑：
+1. **引號內路徑**：`ls "F:\path\to\dir"` → 提取 `F:\path\to\dir`
+2. **相對路徑**：`cat ../file.md` → 提取 `../file.md`
+3. **絕對路徑**：`ls /etc/passwd` → 提取 `/etc/passwd`
+
+提取後轉換為絕對路徑，再檢查是否在允許範圍內。
 
 ### 權限矩陣
 

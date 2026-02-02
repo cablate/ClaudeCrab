@@ -154,8 +154,9 @@ Promise-based 非同步權限橋接，用於連接 SDK 的 `canUseTool` callback
 ### PathValidator (`src/core/PathValidator.ts`)
 
 工作區隔離強制執行（v1.13.0）：
-- 透過 PreToolUse hook 攔截所有檔案操作工具（Read, Write, Edit, Glob, Grep）
+- 透過 PreToolUse hook 攔截所有檔案操作工具（Read, Write, Edit, Glob, Grep, Bash）
 - 在 MessageProcessor 中自動注入，Agent 無需維護 hooks.ts
+- **Bash 特殊處理**：從命令字串提取路徑（引號內、絕對、相對），轉換為實際路徑後驗證
 
 **權限規則**：
 | 路徑 | 讀取 | 寫入 |
