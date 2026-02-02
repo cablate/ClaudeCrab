@@ -6,7 +6,38 @@
 
 ## 版本歷史
 
-### v1.13.0 - PathValidator 路徑權限強制執行（當前版本）
+### v1.14.0 - Telegram 群組對話支援 Phase 1（當前版本）
+
+**發布日期**：2026-02-02
+
+**變更**：
+
+1. **群組觸發機制**
+   - 新增 `botInfo` 屬性保存 bot 的 username 和 id
+   - 群組中只回應 @mention 或 reply to bot 的訊息
+   - 非相關訊息自動忽略
+
+2. **群組共享 Session**
+   - 群組模式 Session Key: `platform::agentId::group::chatId`
+   - 所有群組成員共享同一對話歷史
+   - 私聊模式維持 `platform::agentId::userId`
+
+3. **群組回應策略**
+   - 群組中發送訊息時附帶 `reply_to_message_id`
+   - 讓回覆關聯原訊息，方便追蹤對話脈絡
+
+4. **Commands 支援**
+   - `handleStop`, `getCurrentSession` 支援群組 effectiveUserId
+   - `/reset`, `/stop` 在群組中正確操作共享 session
+
+**修改檔案**：
+- `src/adapters/TelegramAdapter.ts`
+- `src/adapters/commands/TelegramCommands.ts`
+- `src/core/MessageProcessor.ts`
+
+---
+
+### v1.13.0 - PathValidator 路徑權限強制執行
 
 **發布日期**：2026-02-02
 
