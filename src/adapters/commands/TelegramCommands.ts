@@ -161,16 +161,22 @@ export async function handleStop(
     return;
   }
 
+  const chatId = ctx.chat?.id.toString();
+  const isGroupChat = ctx.chat?.type !== 'private';
+
+  // For group chats, use chatId-based session key to match shared history
+  const effectiveUserId = isGroupChat && chatId ? `group::${chatId}` : userId;
+
   try {
     const cancelled = deps.messageProcessor.cancelQueryForUser(
       'telegram',
       deps.agentId,
-      userId
+      effectiveUserId
     );
 
     if (cancelled) {
       await ctx.reply('🛑 已停止 Claude 的執行。');
-      logger.info({ userId }, 'User stopped active query');
+      logger.info({ userId, effectiveUserId }, 'User stopped active query');
     } else {
       await ctx.reply('ℹ️ 目前沒有正在執行的查詢。');
     }
@@ -195,10 +201,16 @@ async function getCurrentSession(
     return undefined;
   }
 
+  const chatId = ctx.chat?.id.toString();
+  const isGroupChat = ctx.chat?.type !== 'private';
+
+  // For group chats, use chatId-based session key to match shared history
+  const effectiveUserId = isGroupChat && chatId ? `group::${chatId}` : userId;
+
   try {
     return await deps.sessionManager.getOrCreateSession({
       platform: 'telegram',
-      userId,
+      userId: effectiveUserId,
       agentId: deps.agentId,
     });
   } catch {

@@ -116,6 +116,9 @@ const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
  */
 export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   private bot: Bot | null = null;
+
+  /** Bot info (username, id) for group message filtering */
+  private botInfo: { username: string; id: number } | null = null;
   private readonly rateLimiter: RateLimiter;
   private commandDeps: CommandDependencies | undefined;
   private readonly securityConfig: SecurityConfig;
@@ -256,6 +259,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     // Verify bot token by getting bot info
     try {
       const me = await this.bot.api.getMe();
+      this.botInfo = { username: me.username, id: me.id };
       this.log.info(
         { botUsername: me.username, botId: me.id },
         'Bot authenticated'
@@ -414,6 +418,25 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       ? (message.chat as { title?: string }).title
       : undefined;
     const replyToMessageId = message.reply_to_message?.message_id.toString();
+
+    // Group chat: only respond to @mention or reply to bot
+    if (isGroupChat && this.botInfo !== null) {
+      const isMentioned = message.text.includes(`@${this.botInfo.username}`);
+      const isReplyToBot = message.reply_to_message?.from?.id === this.botInfo.id;
+
+      if (!isMentioned && !isReplyToBot) {
+        this.log.debug(
+          { chatId, userId, isGroupChat },
+          'Ignoring group message: not mentioned and not reply to bot'
+        );
+        return;
+      }
+
+      this.log.debug(
+        { chatId, userId, isMentioned, isReplyToBot },
+        'Group message triggered bot response'
+      );
+    }
 
     const unifiedMessage: UnifiedMessage = {
       id: `telegram:${message.message_id}:${message.chat.id}`,

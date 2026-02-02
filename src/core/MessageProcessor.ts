@@ -1,5 +1,6 @@
 import type { UnifiedMessage } from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
+import type { SendOptions } from '../adapters/types.js';
 import type { IConversationRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager } from './SDKQueryManager.js';
@@ -97,14 +98,19 @@ export class MessageProcessor {
    */
   async processMessage(message: UnifiedMessage, agentId: string): Promise<ProcessingResult> {
     const { platform, userId, chatId, text, id: messageId } = message;
+    const isGroupChat = message.metadata?.isGroupChat === true;
+
+    // For group chats, use chatId-based session key to share history among all members
+    // For private chats, use userId-based session key
+    const effectiveUserId = isGroupChat ? `group::${chatId}` : userId;
 
     logger.debug(
-      { platform, userId, agentId, messageId },
+      { platform, userId, agentId, messageId, isGroupChat, effectiveUserId },
       'Processing message'
     );
 
     // Check for duplicate message (idempotency)
-    if (this.sessionManager.isMessageProcessed(platform, agentId, userId, messageId)) {
+    if (this.sessionManager.isMessageProcessed(platform, agentId, effectiveUserId, messageId)) {
       logger.debug({ messageId }, 'Skipping duplicate message');
       return { success: true, skipped: true };
     }
@@ -114,7 +120,7 @@ export class MessageProcessor {
     try {
       session = await this.sessionManager.getOrCreateSession({
         platform,
-        userId,
+        userId: effectiveUserId,
         agentId,
       });
     } catch (error) {
@@ -137,22 +143,27 @@ export class MessageProcessor {
       const result = await this.sessionManager.withLock(
         platform,
         agentId,
-        userId,
+        effectiveUserId,
         async () => {
           // Mark message as processed (before processing to prevent duplicates)
-          this.sessionManager.markMessageProcessed(platform, agentId, userId, messageId);
+          this.sessionManager.markMessageProcessed(platform, agentId, effectiveUserId, messageId);
 
           // Update session state
-          this.sessionManager.updateState(platform, agentId, userId, 'processing');
+          this.sessionManager.updateState(platform, agentId, effectiveUserId, 'processing');
 
           try {
             // Process the message using SDK
+            const queryOptions: { isGroupChat?: boolean; replyToMessageId?: string } = { isGroupChat };
+            if (message.metadata?.originalMessageId) {
+              queryOptions.replyToMessageId = message.metadata.originalMessageId;
+            }
             const response = await this.executeQueryWithSDK(
-              session.sessionId, text, adapter, chatId, platform, agentId, userId
+              session.sessionId, text, adapter, chatId, platform, agentId, effectiveUserId,
+              queryOptions
             );
 
             // Update session state back to idle
-            this.sessionManager.updateState(platform, agentId, userId, 'idle');
+            this.sessionManager.updateState(platform, agentId, effectiveUserId, 'idle');
 
             return {
               success: true,
@@ -161,7 +172,7 @@ export class MessageProcessor {
             };
           } catch (error) {
             // Update session state to error
-            this.sessionManager.updateState(platform, agentId, userId, 'error');
+            this.sessionManager.updateState(platform, agentId, effectiveUserId, 'error');
             throw error;
           }
         }
@@ -206,7 +217,11 @@ export class MessageProcessor {
     chatId: string,
     platform: string,
     agentId: string,
-    userId: string
+    userId: string,
+    options?: {
+      isGroupChat?: boolean;
+      replyToMessageId?: string;
+    }
   ): Promise<string> {
     // Get internal session for agent info
     const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
@@ -579,15 +594,21 @@ export class MessageProcessor {
                   
                   await adapter.sendTypingIndicator(chatId);
 
+                  // Build send options (include replyToMessageId for group chats)
+                  const sendOpts: SendOptions = {};
+                  if (options?.isGroupChat && options?.replyToMessageId) {
+                    sendOpts.replyToMessageId = options.replyToMessageId;
+                  }
+
                   // Try MarkdownV2 first, fallback to Markdown on failure
                   const converted = convertToTelegramMarkdown(text);
                   let sendResult = converted
-                    ? await adapter.sendMessage(chatId, converted, { parseMode: 'MarkdownV2' })
+                    ? await adapter.sendMessage(chatId, converted, { parseMode: 'MarkdownV2', ...sendOpts })
                     : { success: false, error: 'Conversion failed' };
 
                   if (!sendResult.success) {
                     // Fallback to original Markdown
-                    sendResult = await adapter.sendMessage(chatId, text, { parseMode: 'Markdown' });
+                    sendResult = await adapter.sendMessage(chatId, text, { parseMode: 'Markdown', ...sendOpts });
                   }
 
                   if (!sendResult.success) {
@@ -787,15 +808,21 @@ export class MessageProcessor {
 
       // Send response to user
       if (result.response.length > 0) {
+        // Build send options (include replyToMessageId for group chats)
+        const finalSendOpts: SendOptions = {};
+        if (options?.isGroupChat && options?.replyToMessageId) {
+          finalSendOpts.replyToMessageId = options.replyToMessageId;
+        }
+
         // Try MarkdownV2 first, fallback to Markdown on failure
         const converted = convertToTelegramMarkdown(result.response);
         let sendResult = converted
-          ? await adapter.sendMessage(chatId, converted, { parseMode: 'MarkdownV2' })
+          ? await adapter.sendMessage(chatId, converted, { parseMode: 'MarkdownV2', ...finalSendOpts })
           : { success: false, error: 'Conversion failed' };
 
         if (!sendResult.success) {
           // Fallback to original Markdown
-          sendResult = await adapter.sendMessage(chatId, result.response, { parseMode: 'Markdown' });
+          sendResult = await adapter.sendMessage(chatId, result.response, { parseMode: 'Markdown', ...finalSendOpts });
         }
 
         if (!sendResult.success) {
