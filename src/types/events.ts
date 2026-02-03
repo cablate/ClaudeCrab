@@ -145,4 +145,6 @@ export const EVENT_NAMES: EventName[] = [
   'agent:loaded',
   'agent:reloaded',
   'error',
+  'group:message',
+  'bot:replied',
 ];

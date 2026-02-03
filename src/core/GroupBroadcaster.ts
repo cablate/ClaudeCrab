@@ -6,6 +6,7 @@ import type {
   IInjectionStateRepository,
 } from '../persistence/types.js';
 import { logger } from '../utils/logger.js';
+import { formatUserLabel, formatBotLabel } from '../utils/format.js';
 
 /**
  * Options for GroupBroadcaster
@@ -182,16 +183,11 @@ export class GroupBroadcaster {
     }
 
     // Format sender label for the message
-    const displayName = (message.metadata?.displayName as string) || '';
-    const username = (message.metadata?.username as string) || '';
-    const senderLabel =
-      displayName && username
-        ? `[${displayName} (@${username})]`
-        : displayName
-          ? `[${displayName}]`
-          : username
-            ? `[@${username}]`
-            : `[${message.userId}]`;
+    const senderLabel = formatUserLabel({
+      displayName: (message.metadata?.displayName as string) || undefined,
+      username: (message.metadata?.username as string) || undefined,
+      fallbackId: message.userId,
+    });
 
     // Record user message to group_messages table (for context injection)
     if (platformMsgId && this.groupMessageRepository) {
@@ -315,8 +311,7 @@ export class GroupBroadcaster {
 
     // Record bot reply to group_messages table (for context injection)
     if (replyMessageId && this.groupMessageRepository) {
-      const botInfo = this.getBotInfo(agentId);
-      const senderLabel = botInfo ? `[@${botInfo.username}]` : `[Bot ${agentId}]`;
+      const senderLabel = formatBotLabel(this.getBotInfo(agentId), agentId);
       this.log.info(
         {
           platform,

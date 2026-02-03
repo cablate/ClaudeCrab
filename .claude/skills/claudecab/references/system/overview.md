@@ -34,8 +34,10 @@
 ```
 claudecab/
 ├── src/
-│   ├── index.ts           # 主入口（Telegram Bot + WebUI）
-│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus, PlatformOrchestrator
+│   ├── index.ts           # 精簡入口（~20 行，委派給 AppBootstrap）
+│   ├── config.ts           # 集中化環境變數解析（AppConfig）
+│   ├── AppBootstrap.ts     # 應用生命週期管理（初始化 + 關機序列）
+│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus, PlatformOrchestrator, StatusMessageManager, InteractionHandler
 │   ├── persistence/       # SQLite 持久化層
 │   ├── adapters/          # TelegramAdapter, BaseAdapter
 │   ├── webui/             # Express + EJS 管理介面
@@ -45,7 +47,7 @@ claudecab/
 │   │   ├── services/      # 業務邏輯
 │   │   └── views/         # EJS 模板（元件化）
 │   ├── types/             # TypeScript 型別定義
-│   └── utils/             # logger, security, audit, retry
+│   └── utils/             # logger, security, audit, retry, format
 ├── public/                # 靜態資源 (JS)
 ├── agents/                # Agent 配置（每個子目錄 = 一個代理）
 │   ├── general/           # 通用助手（含記憶系統 workspace）
@@ -138,18 +140,33 @@ Promise-based 非同步權限橋接，用於連接 SDK 的 `canUseTool` callback
 
 ### MessageProcessor (`src/core/MessageProcessor.ts`)
 
-處理訊息流程（SDK 模式）：
+處理訊息流程（SDK 模式），v1.17.0 重構後約 1,065 行，職責分離至 InteractionHandler 和 StatusMessageManager：
 1. 接收 UnifiedMessage
 2. 取得/建立 Session
-3. **動態讀取 systemPrompt**（v1.5.1）：透過 `getSystemPrompt(agentId)` 函數注入，每次查詢前從磁碟重新讀取 CLAUDE.md，確保 Agent 自主更新的內容即時生效
-4. **建立 PermissionBridge + canUseTool 閉包**（v1.7.0）：組裝閉包呼叫 PermissionBridge 發起審批請求 → Adapter 發送 InlineKeyboard → 使用者按按鈕 → resolve Promise → 回傳 PermissionResult 給 SDK。allow 回應包含 `updatedInput`（SDK Zod schema 要求）
-5. **UserPromptSubmit Hook**（v1.7.1）：透過 SDK `hooks.UserPromptSubmit` 注入記憶檢查提醒（`MEMORY_CHECKPOINT_CONTEXT` 常數），每次使用者送訊息時 agent 會收到提醒檢查上一輪對話是否有值得記錄的內容
+3. **動態讀取 systemPrompt**（v1.5.1）：透過 `getSystemPrompt(agentId)` 函數注入
+4. **委派 InteractionHandler**（v1.17.0）：建立 InteractionHandler 處理 canUseTool callback
+5. **委派 StatusMessageManager**（v1.17.0）：建立 StatusMessageManager 處理即時狀態訊息
 6. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId` + `onIntermediateMessage` callback + `canUseTool` via `additionalOptions`）
-7. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram，使用者可看到處理進度
-8. SDK 管理對話歷史（resume option）
-9. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
-10. 持久化訊息到資料庫（中間訊息分段存入，供 WebUI 查看）
-11. 透過 Adapter 發送殘餘回應（若全部已透過 callback 發出則跳過）
+7. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram
+8. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
+9. **Post-query 處理**（v1.17.0 拆分為 private methods）：`saveSDKSessionId()` → `updateInjectionCursor()` → `persistConversation()` → `sendFinalResponse()` → `emitBotRepliedEvent()`
+
+### InteractionHandler (`src/core/InteractionHandler.ts`)
+
+v1.17.0 從 MessageProcessor 抽出，封裝 Permission/Question 互動橋接：
+- 建構時設置 PermissionBridge + QuestionBridge + Adapter 解析器
+- `buildCanUseTool()` 回傳 SDK 可用的 canUseTool callback
+- 攔截 `AskUserQuestion` 工具，透過 Telegram 按鈕呈現選項
+- 一般工具則走 PermissionBridge 審批流程
+- `dispose()` 清理所有 pending 請求
+
+### StatusMessageManager (`src/core/StatusMessageManager.ts`)
+
+v1.17.0 從 MessageProcessor 抽出，封裝即時狀態訊息管理：
+- Tool event 追蹤和 debounced 更新（避免 Telegram 429）
+- 狀態訊息建立/更新/結算生命週期
+- 中間 assistant 訊息發送時 finalize 當前 batch，下次 tool event 建新 status message
+- `isStatusCapable()` 型別守衛檢查 adapter 是否支援狀態訊息
 
 ### PathValidator (`src/core/PathValidator.ts`)
 

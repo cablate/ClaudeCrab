@@ -32,7 +32,7 @@ export class GroupMessageRepository implements IGroupMessageRepository {
     senderLabel: string,
     content: string
   ): void {
-    this.log.info(
+    this.log.debug(
       { platform, chatId, platformMsgId, senderType, senderId, senderLabel, contentLength: content.length },
       'recordMessage: attempting to insert'
     );
@@ -55,7 +55,7 @@ export class GroupMessageRepository implements IGroupMessageRepository {
     );
 
     if (result.changes > 0) {
-      this.log.info(
+      this.log.debug(
         { platform, chatId, platformMsgId, senderType, senderId },
         'recordMessage: SUCCESS - message inserted'
       );

@@ -6,7 +6,77 @@
 
 ## 版本歷史
 
-### v1.16.0 - WebUI 管理系統增強（當前版本）
+### v1.17.0 - Codebase 優化重構（當前版本）
+
+**發布日期**：2026-02-03
+
+**目標**：提升模組邊界清晰度、消除重複程式碼、改善開發者可維護性與可擴充性。
+
+**Tier 1: Quick Wins**
+
+1. **EVENT_NAMES 修復**
+   - 補齊缺失的 `group:message` 和 `bot:replied` 事件名稱
+
+2. **日誌等級修正**
+   - `ContextInjector`：4 處 info → debug（cursor 查詢為例行操作）
+   - `GroupMessageRepository`：2 處 info → debug（insert 操作為例行操作）
+
+3. **barrel exports 補齊**
+   - `src/core/index.ts` 補上 ContextInjector、QuestionBridge、GroupBroadcaster、SDKQueryManager、PathValidator
+
+4. **sendWithMarkdownFallback 共用函式**
+   - `src/utils/telegramMarkdown.ts` 新增函式，消除 MessageProcessor 中 2 處重複的 MarkdownV2 → Markdown fallback 邏輯
+
+5. **sender label 共用函式**
+   - 新增 `src/utils/format.ts`，提供 `formatUserLabel()` 和 `formatBotLabel()`
+   - 消除 GroupBroadcaster（2 處）和 MessageProcessor（1 處）的重複
+
+**Tier 2: Structural Refactors**
+
+6. **AppBootstrap 重構**
+   - 新增 `src/config.ts` — 集中化 env var 解析（AppConfig 介面）
+   - 新增 `src/AppBootstrap.ts` — 應用生命週期管理（start + shutdown）
+   - `src/index.ts` 從 288 行精簡到 20 行
+
+7. **StatusMessageManager 抽取**
+   - 新增 `src/core/StatusMessageManager.ts`（212 行）
+   - 封裝 tool event tracking、debounced 更新、status message 生命週期
+   - 提供 `isStatusCapable()` 型別守衛
+
+8. **InteractionHandler 抽取**
+   - 新增 `src/core/InteractionHandler.ts`（327 行）
+   - 封裝 PermissionBridge + QuestionBridge 設置和 canUseTool callback 建構
+   - AskUserQuestion 處理和一般權限審批流程
+
+9. **Post-query methods 拆分**
+   - MessageProcessor 的 post-query 區段拆分為 5 個 private methods
+   - `saveSDKSessionId()` / `updateInjectionCursor()` / `persistConversation()` / `sendFinalResponse()` / `emitBotRepliedEvent()`
+
+**重構成果**：
+- MessageProcessor: 1,397 行 → 1,065 行 (-24%)
+- index.ts: 288 行 → 20 行 (-93%)
+- 新增 5 個專責模組，總計 1,033 行
+
+**新增檔案**：
+- `src/config.ts`
+- `src/AppBootstrap.ts`
+- `src/core/StatusMessageManager.ts`
+- `src/core/InteractionHandler.ts`
+- `src/utils/format.ts`
+
+**修改檔案**：
+- `src/index.ts` — 精簡為委派 AppBootstrap
+- `src/core/MessageProcessor.ts` — 職責分離重構
+- `src/core/GroupBroadcaster.ts` — 使用共用 format 函式
+- `src/core/ContextInjector.ts` — 日誌等級修正
+- `src/core/index.ts` — 補齊 barrel exports
+- `src/persistence/GroupMessageRepository.ts` — 日誌等級修正
+- `src/types/events.ts` — EVENT_NAMES 補齊
+- `src/utils/telegramMarkdown.ts` — 新增 sendWithMarkdownFallback
+
+---
+
+### v1.16.0 - WebUI 管理系統增強
 
 **發布日期**：2026-02-02
 

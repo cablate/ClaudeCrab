@@ -47,7 +47,7 @@ npm run typecheck    # TypeScript 型別檢查
 | 新增 Agent | `agents/<name>/` | `agent.json`, `CLAUDE.md`, `.claude/settings.local.json` |
 | 修改 Agent 載入邏輯 | `src/core/AgentLoader.ts` | `src/types/agent.ts` |
 | 修改 SDK 呼叫方式 | `src/core/SDKQueryManager.ts` | - |
-| 修改訊息處理流程 | `src/core/MessageProcessor.ts` | `SDKQueryManager.ts`, `SessionManager.ts`, `constants.ts` |
+| 修改訊息處理流程 | `src/core/MessageProcessor.ts` | `SDKQueryManager.ts`, `SessionManager.ts`, `InteractionHandler.ts`, `StatusMessageManager.ts`, `constants.ts` |
 | 修改 Session 管理 | `src/core/SessionManager.ts` | `src/types/session.ts` |
 | 管理平台 Adapter 生命週期 | `src/core/PlatformOrchestrator.ts` | `src/core/AdapterRegistry.ts`, `src/adapters/TelegramAdapter.ts` |
 | 修改核心常數（如記憶檢查提醒） | `src/core/constants.ts` | `MessageProcessor.ts` |
@@ -65,7 +65,7 @@ npm run typecheck    # TypeScript 型別檢查
 | 取消執行中查詢 | `src/core/MessageProcessor.ts` | `cancelQuery()`、`cancelQueryForUser()` |
 | 修改即時狀態訊息 | `src/adapters/TelegramAdapter.ts` | `sendStatusMessage()`、`updateStatusMessage()` |
 | 修改工具事件捕捉 | `src/core/SDKQueryManager.ts` | `onToolEvent` callback |
-| 修改狀態訊息整合 | `src/core/MessageProcessor.ts` | debounce 邏輯、`ToolEvent` 類型 |
+| 修改狀態訊息整合 | `src/core/StatusMessageManager.ts` | debounce 邏輯、`ToolEventEntry` 類型 |
 
 **目前可用指令**：`/start`、`/help`、`/reset`、`/stop`
 
@@ -79,7 +79,7 @@ npm run typecheck    # TypeScript 型別檢查
 | 修改權限 UI（按鈕文字、InlineKeyboard） | `src/adapters/TelegramAdapter.ts` | `sendPermissionPrompt`、`callback_query` handler |
 | 修改權限型別定義 | `src/adapters/types.ts` | `PermissionPromptOptions`、`PermissionPromptResult`、`PermissionResolver` |
 | 新增平台的權限 UI | 繼承 `src/adapters/BaseAdapter.ts` | Override `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` |
-| 修改 canUseTool 閉包組裝 | `src/core/MessageProcessor.ts` | `PermissionBridge.ts`、`QuestionBridge.ts` |
+| 修改 canUseTool 閉包組裝 | `src/core/InteractionHandler.ts` | `PermissionBridge.ts`、`QuestionBridge.ts` |
 | 調整 Agent 預設允許的工具 | `agents/general/.claude/settings.local.json` | `permissions.allow` 陣列 |
 | 修改 AskUserQuestion 處理邏輯 | `src/core/QuestionBridge.ts` | `MessageProcessor.ts`、`TelegramAdapter.ts` |
 | 修改問題提示 UI | `src/adapters/TelegramAdapter.ts` | `sendQuestionPrompt`、`setQuestionResolver` |
@@ -208,7 +208,9 @@ npm run typecheck    # TypeScript 型別檢查
 
 | 用途 | 檔案 |
 |------|------|
-| Telegram Bot + WebUI 主程式 | `src/index.ts` |
+| 精簡主入口（~20 行） | `src/index.ts` |
+| 集中化配置解析 | `src/config.ts` |
+| 應用生命週期管理（初始化 + 關機） | `src/AppBootstrap.ts` |
 | WebUI 伺服器 | `src/webui/WebUIServer.ts` |
 
 ---

@@ -23,3 +23,27 @@ export {
   type PermissionRequestInfo,
 } from './PermissionBridge.js';
 export { MEMORY_CHECKPOINT_CONTEXT } from './constants.js';
+export {
+  ContextInjector,
+  type InjectionContext,
+  type InjectionOptions,
+} from './ContextInjector.js';
+export {
+  QuestionBridge,
+  type QuestionAnswer,
+  type QuestionRequestInfo,
+} from './QuestionBridge.js';
+export {
+  GroupBroadcaster,
+  type GroupBroadcasterOptions,
+} from './GroupBroadcaster.js';
+export {
+  SDKQueryManager,
+  type QueryResult,
+  type ExecuteQueryOptions,
+} from './SDKQueryManager.js';
+export {
+  PathValidator,
+  type PathValidatorOptions,
+  type PathValidationResult,
+} from './PathValidator.js';

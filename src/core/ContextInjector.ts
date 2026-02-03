@@ -67,7 +67,7 @@ export class ContextInjector {
     // Get injection state
     const state = this.injectionStateRepository.getState(agentId, chatId, platform);
 
-    this.log.info(
+    this.log.debug(
       { agentId, chatId, platform, hasState: !!state, state },
       'getInjectionContext: checking injection state'
     );
@@ -84,7 +84,7 @@ export class ContextInjector {
     // Priority: last_injected_msg_id > joined_msg_id
     const startFrom = state.last_injected_msg_id ?? state.joined_msg_id;
 
-    this.log.info(
+    this.log.debug(
       {
         agentId,
         chatId,
@@ -97,7 +97,7 @@ export class ContextInjector {
     );
 
     // Get messages after the cursor, excluding this bot's own messages
-    this.log.info(
+    this.log.debug(
       { agentId, chatId, platform, startFrom, limit },
       'getInjectionContext: calling getMessagesAfter'
     );
@@ -110,7 +110,7 @@ export class ContextInjector {
       limit
     );
 
-    this.log.info(
+    this.log.debug(
       {
         agentId,
         chatId,

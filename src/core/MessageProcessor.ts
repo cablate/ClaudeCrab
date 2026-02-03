@@ -4,13 +4,13 @@ import type { SendOptions } from '../adapters/types.js';
 import type { IConversationRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager } from './SDKQueryManager.js';
-import { PermissionBridge } from './PermissionBridge.js';
-import { QuestionBridge } from './QuestionBridge.js';
+import { InteractionHandler } from './InteractionHandler.js';
 import { EventBus } from './EventBus.js';
 import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
-import { convertToTelegramMarkdown } from '../utils/telegramMarkdown.js';
+import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
+import { formatBotLabel } from '../utils/format.js';
 import {
   retryAsync,
   API_RETRY_OPTIONS,
@@ -19,6 +19,11 @@ import {
 } from '../utils/retry.js';
 import { PathValidator } from './PathValidator.js';
 import { ContextInjector } from './ContextInjector.js';
+import {
+  StatusMessageManager,
+  isStatusCapable,
+  type ToolEventEntry,
+} from './StatusMessageManager.js';
 import * as path from 'node:path';
 
 /**
@@ -361,370 +366,23 @@ export class MessageProcessor {
       }, this.typingIndicatorIntervalMs);
     }
 
-    // Set up status message for real-time tool event feedback
-    // Note: Only TelegramAdapter supports this feature currently
-    let statusMessageId: string | null = null;
-    let toolEvents: Array<{
-      toolName: string;
-      status: string;
-      detail?: string;
-    }> = [];
-    let lastStatusUpdate = 0;
-    let needNewStatusMessage = true; // Start with needing a new status message
-    const STATUS_UPDATE_DEBOUNCE_MS = 2000; // Min 2 seconds between updates (avoid Telegram 429)
-    const MAX_TOOL_EVENTS_DISPLAY = 8; // Show last N tool events
+    // Set up StatusMessageManager for real-time tool event feedback
+    const statusManager = isStatusCapable(adapter)
+      ? new StatusMessageManager(adapter, chatId, {
+          debounceMs: 2000,
+          maxEventsDisplay: 8,
+        })
+      : null;
 
-    // Check if adapter supports status messages
-    const supportsStatusMessage =
-      'sendStatusMessage' in adapter &&
-      typeof (adapter as { sendStatusMessage?: unknown }).sendStatusMessage ===
-        'function';
-
-    // Helper to get typed adapter
-    const getStatusAdapter = () =>
-      adapter as unknown as {
-        sendStatusMessage: (
-          chatId: string,
-          text?: string
-        ) => Promise<string | null>;
-        updateStatusMessage: (
-          chatId: string,
-          messageId: string,
-          text: string
-        ) => Promise<boolean>;
-      };
-
-    // Helper to format completion summary with tool counts
-    const formatCompletionSummary = (events: Array<{ toolName: string }>) => {
-      const toolCounts = new Map<string, number>();
-      for (const event of events) {
-        toolCounts.set(
-          event.toolName,
-          (toolCounts.get(event.toolName) ?? 0) + 1
-        );
-      }
-      const toolSummary = Array.from(toolCounts.entries())
-        .map(([name, count]) => `${name} (${count})`)
-        .join(' | ');
-      return `✓ 已完成 ${events.length} 個操作\n   ${toolSummary}`;
-    };
-
-    // Create a new status message (called when needed)
-    const createNewStatusMessage = async () => {
-      if (!supportsStatusMessage) return;
-
-      // Finalize previous status message if exists
-      if (statusMessageId !== null && toolEvents.length > 0) {
-        await getStatusAdapter().updateStatusMessage(
-          chatId,
-          statusMessageId,
-          formatCompletionSummary(toolEvents)
-        );
-      }
-
-      // Reset and create new
-      toolEvents = [];
-      statusMessageId = await getStatusAdapter().sendStatusMessage(chatId);
-      needNewStatusMessage = false;
-    };
-
-    // Mark that we need a new status message (called after assistant message)
-    const markNeedNewStatusMessage = () => {
-      needNewStatusMessage = true;
-    };
-
-    // Debounced status message update function
-    const updateStatusMessageDebounced = async (forceUpdate = false) => {
-      if (!supportsStatusMessage) return;
-
-      // Create new status message if needed
-      if (needNewStatusMessage || statusMessageId === null) {
-        await createNewStatusMessage();
-      }
-
-      if (statusMessageId === null) return;
-
-      const now = Date.now();
-      if (!forceUpdate && now - lastStatusUpdate < STATUS_UPDATE_DEBOUNCE_MS)
-        return;
-
-      lastStatusUpdate = now;
-
-      // Build detailed status text from recent tool events
-      const recentEvents = toolEvents.slice(-MAX_TOOL_EVENTS_DISPLAY);
-      const eventLines = recentEvents.map((e) => {
-        if (e.detail) {
-          return `${e.status}\n   └ ${e.detail}`;
-        }
-        return e.status;
-      });
-
-      const hiddenCount = toolEvents.length - recentEvents.length;
-      const header =
-        hiddenCount > 0
-          ? `🔄 處理中... (${toolEvents.length} 個操作)`
-          : '🔄 處理中...';
-
-      const statusText =
-        eventLines.length > 0
-          ? `${header}\n\n${eventLines.join('\n')}`
-          : header;
-
-      await getStatusAdapter().updateStatusMessage(
-        chatId,
-        statusMessageId,
-        statusText
-      );
-    };
-
-    // Set up permission bridge for interactive tool approval via Telegram
-    const permissionBridge = new PermissionBridge(120_000);
-    adapter.setPermissionResolver((requestId, decision) => {
-      if (decision === 'always') {
-        permissionBridge.resolvePermission(requestId, {
-          behavior: 'allow',
-          alwaysAllow: true,
-        });
-      } else if (decision === 'allow') {
-        permissionBridge.resolvePermission(requestId, { behavior: 'allow' });
-      } else {
-        permissionBridge.resolvePermission(requestId, {
-          behavior: 'deny',
-          message: 'User denied permission',
-        });
-      }
-    });
-
-    // Set up question bridge for AskUserQuestion tool
-    const questionBridge = new QuestionBridge(120_000);
-    adapter.setQuestionResolver((requestId, answer) => {
-      if (answer === null) {
-        questionBridge.resolveQuestion(requestId, { answer: null });
-      } else {
-        // answer is the option index as string
-        const optionLabels = questionBridge.getOptionLabels(requestId);
-        const optionIndex = parseInt(answer, 10);
-        const selectedLabel = optionLabels?.[optionIndex] ?? answer;
-        questionBridge.resolveQuestion(requestId, { answer: selectedLabel });
-      }
-    });
+    // Set up interaction handler for permission prompts and question prompts
+    const interactionHandler = new InteractionHandler(adapter, chatId);
+    const canUseTool = interactionHandler.buildCanUseTool();
 
     try {
       // Track intermediate messages sent via streaming callback
       const intermediateMessages: string[] = [];
       // Track the last sent message ID (for bot:replied event in group chats)
       let lastSentMessageId: string | undefined;
-
-      // Build canUseTool closure for SDK permission callback
-      const canUseTool = async (
-        toolName: string,
-        toolInput: Record<string, unknown>,
-        options: {
-          signal: AbortSignal;
-          blockedPath?: string;
-          decisionReason?: string;
-          toolUseID: string;
-        }
-      ) => {
-        // Handle AskUserQuestion tool - present options to user via Telegram
-        if (toolName === 'AskUserQuestion') {
-          const questions = toolInput.questions as
-            | Array<{
-                question: string;
-                header: string;
-                options: Array<{ label: string; description: string }>;
-                multiSelect: boolean;
-              }>
-            | undefined;
-
-          if (questions === undefined || questions.length === 0) {
-            // No questions - just allow the tool
-            return {
-              behavior: 'allow' as const,
-              updatedInput: toolInput,
-              toolUseID: options.toolUseID,
-            };
-          }
-
-          // Phase 2: Only handle first question, single-select only
-          const firstQuestion = questions[0];
-          if (firstQuestion === undefined) {
-            // Empty questions array - just allow the tool
-            return {
-              behavior: 'allow' as const,
-              updatedInput: toolInput,
-              toolUseID: options.toolUseID,
-            };
-          }
-          const optionLabels = firstQuestion.options.map((opt) => opt.label);
-
-          const { requestId, promise } = questionBridge.requestQuestion(
-            firstQuestion.question,
-            firstQuestion.header,
-            optionLabels,
-            { signal: options.signal }
-          );
-
-          const promptResult = await adapter.sendQuestionPrompt(chatId, {
-            requestId,
-            question: firstQuestion.question,
-            header: firstQuestion.header,
-            options: firstQuestion.options,
-            multiSelect: firstQuestion.multiSelect,
-          });
-
-          if (!promptResult.success) {
-            logger.warn(
-              { error: promptResult.error, chatId, toolName },
-              'Failed to send question prompt, auto-cancelling'
-            );
-            questionBridge.resolveQuestion(requestId, { answer: null });
-          }
-
-          const questionAnswer = await promise;
-
-          // Update the question prompt message with the selection
-          if (
-            promptResult.messageId !== undefined &&
-            questionAnswer.answer !== null
-          ) {
-            const statusText = `✅ Selected: *${questionAnswer.answer}*`;
-            await adapter.updateQuestionPrompt(
-              chatId,
-              promptResult.messageId,
-              statusText
-            );
-          }
-
-          // If user cancelled or timed out, deny the tool
-          if (questionAnswer.answer === null) {
-            return {
-              behavior: 'deny' as const,
-              message: 'User cancelled the question',
-              toolUseID: options.toolUseID,
-            };
-          }
-
-          // Build answers object for SDK
-          const answers: Record<string, string> = {};
-          answers[firstQuestion.question] = questionAnswer.answer;
-
-          return {
-            behavior: 'allow' as const,
-            updatedInput: {
-              questions: toolInput.questions,
-              answers,
-            },
-            toolUseID: options.toolUseID,
-          };
-        }
-
-        // Normal permission flow for other tools
-        const bridgeOptions: {
-          signal: AbortSignal;
-          toolUseID: string;
-          decisionReason?: string;
-          blockedPath?: string;
-        } = { signal: options.signal, toolUseID: options.toolUseID };
-        if (options.decisionReason !== undefined) {
-          bridgeOptions.decisionReason = options.decisionReason;
-        }
-        if (options.blockedPath !== undefined) {
-          bridgeOptions.blockedPath = options.blockedPath;
-        }
-
-        const { requestId, promise } = permissionBridge.requestPermission(
-          toolName,
-          toolInput,
-          bridgeOptions
-        );
-
-        const promptOptions: {
-          requestId: string;
-          toolName: string;
-          toolInput: Record<string, unknown>;
-          decisionReason?: string;
-          blockedPath?: string;
-        } = { requestId, toolName, toolInput };
-        if (options.decisionReason !== undefined) {
-          promptOptions.decisionReason = options.decisionReason;
-        }
-        if (options.blockedPath !== undefined) {
-          promptOptions.blockedPath = options.blockedPath;
-        }
-
-        const promptResult = await adapter.sendPermissionPrompt(
-          chatId,
-          promptOptions
-        );
-
-        if (!promptResult.success) {
-          logger.warn(
-            { error: promptResult.error, chatId, toolName },
-            'Failed to send permission prompt, auto-denying'
-          );
-          permissionBridge.resolvePermission(requestId, {
-            behavior: 'deny',
-            message: 'Failed to send permission prompt',
-          });
-        }
-
-        const decision = await promise;
-
-        // Update the permission prompt message with the decision
-        if (promptResult.messageId) {
-          let statusText: string;
-          if (decision.behavior === 'allow') {
-            statusText =
-              decision.alwaysAllow === true
-                ? `✅ Always Allowed: \`${toolName}\``
-                : `✅ Allowed: \`${toolName}\``;
-          } else {
-            statusText = `❌ Denied: \`${toolName}\``;
-          }
-          await adapter.updatePermissionPrompt(
-            chatId,
-            promptResult.messageId,
-            statusText
-          );
-        }
-
-        if (decision.behavior === 'allow') {
-          const allowResult: {
-            behavior: 'allow';
-            updatedInput: Record<string, unknown>;
-            toolUseID: string;
-            updatedPermissions?: Array<{
-              type: 'addRules';
-              rules: Array<{ toolName: string }>;
-              behavior: 'allow';
-              destination: 'localSettings';
-            }>;
-          } = {
-            behavior: 'allow' as const,
-            updatedInput: toolInput,
-            toolUseID: options.toolUseID,
-          };
-
-          if (decision.alwaysAllow === true) {
-            allowResult.updatedPermissions = [
-              {
-                type: 'addRules' as const,
-                rules: [{ toolName }],
-                behavior: 'allow' as const,
-                destination: 'localSettings' as const,
-              },
-            ];
-          }
-
-          return allowResult;
-        }
-        return {
-          behavior: 'deny' as const,
-          message: decision.message ?? 'User denied permission',
-          toolUseID: options.toolUseID,
-        };
-      };
 
       // Context injection for multi-bot group chats (ADR-019)
       // Get messages since last query to inject as context
@@ -778,17 +436,7 @@ export class MessageProcessor {
                 resume: resumeId,
                 onIntermediateMessage: async (text: string): Promise<void> => {
                   // Finalize current status message before sending assistant message
-                  if (
-                    supportsStatusMessage &&
-                    statusMessageId !== null &&
-                    toolEvents.length > 0
-                  ) {
-                    await getStatusAdapter().updateStatusMessage(
-                      chatId,
-                      statusMessageId,
-                      formatCompletionSummary(toolEvents)
-                    );
-                  }
+                  await statusManager?.finalizeCurrentBatch();
 
                   await adapter.sendTypingIndicator(chatId);
 
@@ -799,21 +447,9 @@ export class MessageProcessor {
                   }
 
                   // Try MarkdownV2 first, fallback to Markdown on failure
-                  const converted = convertToTelegramMarkdown(text);
-                  let sendResult = converted
-                    ? await adapter.sendMessage(chatId, converted, {
-                        parseMode: 'MarkdownV2',
-                        ...sendOpts,
-                      })
-                    : { success: false, error: 'Conversion failed' };
-
-                  if (!sendResult.success) {
-                    // Fallback to original Markdown
-                    sendResult = await adapter.sendMessage(chatId, text, {
-                      parseMode: 'Markdown',
-                      ...sendOpts,
-                    });
-                  }
+                  const sendResult = await sendWithMarkdownFallback(
+                    adapter, chatId, text, sendOpts
+                  );
 
                   if (!sendResult.success) {
                     logger.warn(
@@ -827,10 +463,12 @@ export class MessageProcessor {
                   intermediateMessages.push(text);
 
                   // Mark that next tool event should create new status message
-                  markNeedNewStatusMessage();
+                  statusManager?.markNeedNewMessage();
                 },
                 onToolEvent: async (event) => {
-                  // Track tool events for status message with more details
+                  if (statusManager === null) return;
+
+                  // Build tool event entry for status display
                   let statusLine: string;
                   let detail: string | undefined;
 
@@ -842,7 +480,6 @@ export class MessageProcessor {
                   } else if (event.type === 'tool_result') {
                     statusLine = `✓ ${event.toolName} 完成`;
                     if (event.summary) {
-                      // Truncate and clean up the result summary
                       const cleanSummary = event.summary
                         .replace(/\n/g, ' ')
                         .substring(0, 60);
@@ -856,19 +493,15 @@ export class MessageProcessor {
                   } else {
                     statusLine = `• ${event.toolName}`;
                   }
-                  const toolEvent: {
-                    toolName: string;
-                    status: string;
-                    detail?: string;
-                  } = {
+
+                  const toolEvent: ToolEventEntry = {
                     toolName: event.toolName,
                     status: statusLine,
                   };
                   if (detail !== undefined) {
                     toolEvent.detail = detail;
                   }
-                  toolEvents.push(toolEvent);
-                  await updateStatusMessageDebounced();
+                  await statusManager.addToolEvent(toolEvent);
                 },
                 additionalOptions: {
                   canUseTool,
@@ -1024,196 +657,231 @@ export class MessageProcessor {
         }
       }
 
-      // Save SDK session ID for future resume
-      if (
-        result.sdkSessionId &&
-        result.sdkSessionId !== internalSession.sdkSessionId
-      ) {
-        this.sessionManager.setSdkSessionId(
-          platform,
-          agentId,
-          userId,
-          result.sdkSessionId
-        );
-        logger.debug(
-          { sessionId, sdkSessionId: result.sdkSessionId },
-          'Updated SDK session ID'
-        );
-      }
+      // --- Post-query handling ---
+      this.saveSDKSessionId(result, internalSession, platform, agentId, userId, sessionId);
+      this.updateInjectionCursor(injectionContext, userId, chatId, agentId, platform);
+      this.persistConversation(sessionId, prompt, intermediateMessages, result.response, agentId, options);
 
-      // Update injection cursor after successful SDK query (ADR-019)
-      // This must happen AFTER the query succeeds to avoid losing messages on failure
-      if (injectionContext?.lastMessageId && this.contextInjector) {
-        const groupChatId = userId.startsWith('group::') ? userId.slice(7) : chatId;
-        this.contextInjector.updateCursor(
-          agentId,
-          groupChatId,
-          platform,
-          injectionContext.lastMessageId
-        );
-      }
-
-      // Persist messages to database for WebUI visibility
-      if (this.conversationRepository !== undefined) {
-        try {
-          this.conversationRepository.appendMessage(sessionId, 'user', prompt);
-
-          // Get bot label for group chats
-          const botLabel =
-            options?.isGroupChat && this.getBotInfo !== undefined
-              ? (() => {
-                  const info = this.getBotInfo(agentId);
-                  return info?.username
-                    ? `[@${info.username}]`
-                    : `[bot:${agentId}]`;
-                })()
-              : null;
-
-          // Store intermediate messages individually (matches what user saw in Telegram)
-          for (const msg of intermediateMessages) {
-            const labeledMsg = botLabel !== null ? `${botLabel}: ${msg}` : msg;
-            this.conversationRepository.appendMessage(
-              sessionId,
-              'assistant',
-              labeledMsg
-            );
-          }
-          // Store remaining response if any (when no callback was used, or residual text)
-          if (result.response.length > 0) {
-            const labeledResponse =
-              botLabel !== null ? `${botLabel}: ${result.response}` : result.response;
-            this.conversationRepository.appendMessage(
-              sessionId,
-              'assistant',
-              labeledResponse
-            );
-          }
-        } catch (persistError) {
-          logger.warn(
-            { error: persistError, sessionId },
-            'Failed to persist conversation messages'
-          );
-        }
-      }
-
-      // Broadcast bot reply to other bots in group chat
-      // Combine all responses: intermediate messages (from streaming) + final response
+      // Build full response from intermediate messages + final response
       const allResponses = [...intermediateMessages];
       if (result.response.length > 0) {
         allResponses.push(result.response);
       }
       const fullResponse = allResponses.join('\n\n');
 
-      logger.debug(
-        {
-          isGroupChat: options?.isGroupChat,
-          hasEventBus: this.eventBus !== undefined,
-          intermediateCount: intermediateMessages.length,
-          finalResponseLength: result.response.length,
-          fullResponseLength: fullResponse.length,
-          agentId,
-          chatId,
-        },
-        'Checking bot:replied broadcast conditions'
+      // Send final response and track message ID
+      const finalMessageId = await this.sendFinalResponse(
+        result.response, adapter, chatId, agentId, options
       );
-
-      // Send response to user
-      // Note: lastSentMessageId may already have value from intermediate messages
-      if (result.response.length > 0) {
-        // Build send options (include replyToMessageId for group chats)
-        const finalSendOpts: SendOptions = {};
-        if (options?.isGroupChat && options?.replyToMessageId) {
-          finalSendOpts.replyToMessageId = options.replyToMessageId;
-        }
-
-        // Try MarkdownV2 first, fallback to Markdown on failure
-        const converted = convertToTelegramMarkdown(result.response);
-        let sendResult = converted
-          ? await adapter.sendMessage(chatId, converted, {
-              parseMode: 'MarkdownV2',
-              ...finalSendOpts,
-            })
-          : { success: false, error: 'Conversion failed' };
-
-        if (!sendResult.success) {
-          // Fallback to original Markdown
-          sendResult = await adapter.sendMessage(chatId, result.response, {
-            parseMode: 'Markdown',
-            ...finalSendOpts,
-          });
-        }
-
-        if (!sendResult.success) {
-          logger.warn(
-            { error: sendResult.error, chatId },
-            'Failed to send response'
-          );
-        } else if (sendResult.messageId) {
-          lastSentMessageId = sendResult.messageId;
-          logger.debug(
-            { chatId, agentId, lastSentMessageId },
-            'Final message sent successfully, got messageId'
-          );
-        }
+      if (finalMessageId !== undefined) {
+        lastSentMessageId = finalMessageId;
       }
 
-      // Emit bot:replied event for group chat context injection
-      // This must happen AFTER sendMessage to capture the replyMessageId
-      // lastSentMessageId may come from intermediate messages or final message
-      if (options?.isGroupChat && this.eventBus !== undefined && fullResponse.length > 0) {
-        const botInfo = this.getBotInfo?.(agentId);
-        const botLabel = botInfo?.username
-          ? `[@${botInfo.username}]`
-          : `[bot:${agentId}]`;
-
-        logger.info(
-          { chatId, agentId, botLabel, responsePreview: fullResponse.substring(0, 100), lastSentMessageId },
-          'Emitting bot:replied event'
-        );
-
-        this.eventBus.emit('bot:replied', {
-          chatId,
-          agentId,
-          response: `${botLabel}: ${fullResponse}`,
-          platform,
-          ...(lastSentMessageId !== undefined ? { replyMessageId: lastSentMessageId } : {}),
-        });
-      }
-
-      // Finalize status message with completion summary
-      if (
-        supportsStatusMessage &&
-        statusMessageId !== null &&
-        toolEvents.length > 0
-      ) {
-        await getStatusAdapter().updateStatusMessage(
-          chatId,
-          statusMessageId,
-          formatCompletionSummary(toolEvents)
-        );
-      } else if (
-        supportsStatusMessage &&
-        statusMessageId !== null
-      ) {
-        // No tool events in this batch, just mark as done
-        await getStatusAdapter().updateStatusMessage(
-          chatId,
-          statusMessageId,
-          '✓ 完成'
-        );
-      }
+      // Broadcast to other bots and finalize
+      this.emitBotRepliedEvent(fullResponse, chatId, agentId, platform, lastSentMessageId, options);
+      await statusManager?.finalizeAll();
 
       return result.response;
     } finally {
-      // Clean up permission bridge (deny any pending requests)
-      permissionBridge.cancelAll();
-      adapter.setPermissionResolver(() => {});
+      // Clean up interaction handler (deny any pending requests)
+      interactionHandler.dispose();
 
       // Stop typing indicator
       if (typingInterval !== null) {
         clearInterval(typingInterval);
       }
     }
+  }
+
+  // --- Post-query private helpers ---
+
+  /**
+   * Save SDK session ID for future conversation resume.
+   */
+  private saveSDKSessionId(
+    result: { sdkSessionId?: string; response: string },
+    internalSession: { sdkSessionId?: string },
+    platform: string,
+    agentId: string,
+    userId: string,
+    sessionId: string
+  ): void {
+    if (
+      result.sdkSessionId &&
+      result.sdkSessionId !== internalSession.sdkSessionId
+    ) {
+      this.sessionManager.setSdkSessionId(
+        platform,
+        agentId,
+        userId,
+        result.sdkSessionId
+      );
+      logger.debug(
+        { sessionId, sdkSessionId: result.sdkSessionId },
+        'Updated SDK session ID'
+      );
+    }
+  }
+
+  /**
+   * Update injection cursor after successful SDK query (ADR-019).
+   * Must happen AFTER the query succeeds to avoid losing messages on failure.
+   */
+  private updateInjectionCursor(
+    injectionContext: { lastMessageId: string | null } | null,
+    userId: string,
+    chatId: string,
+    agentId: string,
+    platform: string
+  ): void {
+    if (injectionContext?.lastMessageId && this.contextInjector) {
+      const groupChatId = userId.startsWith('group::')
+        ? userId.slice(7)
+        : chatId;
+      this.contextInjector.updateCursor(
+        agentId,
+        groupChatId,
+        platform,
+        injectionContext.lastMessageId
+      );
+    }
+  }
+
+  /**
+   * Persist user and assistant messages to database for WebUI visibility.
+   */
+  private persistConversation(
+    sessionId: string,
+    prompt: string,
+    intermediateMessages: string[],
+    resultResponse: string,
+    agentId: string,
+    options?: { isGroupChat?: boolean }
+  ): void {
+    if (this.conversationRepository === undefined) return;
+
+    try {
+      this.conversationRepository.appendMessage(sessionId, 'user', prompt);
+
+      const botLabel =
+        options?.isGroupChat && this.getBotInfo !== undefined
+          ? formatBotLabel(this.getBotInfo(agentId), agentId)
+          : null;
+
+      for (const msg of intermediateMessages) {
+        const labeledMsg = botLabel !== null ? `${botLabel}: ${msg}` : msg;
+        this.conversationRepository.appendMessage(
+          sessionId,
+          'assistant',
+          labeledMsg
+        );
+      }
+
+      if (resultResponse.length > 0) {
+        const labeledResponse =
+          botLabel !== null
+            ? `${botLabel}: ${resultResponse}`
+            : resultResponse;
+        this.conversationRepository.appendMessage(
+          sessionId,
+          'assistant',
+          labeledResponse
+        );
+      }
+    } catch (persistError) {
+      logger.warn(
+        { error: persistError, sessionId },
+        'Failed to persist conversation messages'
+      );
+    }
+  }
+
+  /**
+   * Send the final response to the user with markdown fallback.
+   * Returns the sent message ID if successful, undefined otherwise.
+   */
+  private async sendFinalResponse(
+    response: string,
+    adapter: BaseAdapter,
+    chatId: string,
+    agentId: string,
+    options?: { isGroupChat?: boolean; replyToMessageId?: string }
+  ): Promise<string | undefined> {
+    if (response.length === 0) return undefined;
+
+    const sendOpts: SendOptions = {};
+    if (options?.isGroupChat && options?.replyToMessageId) {
+      sendOpts.replyToMessageId = options.replyToMessageId;
+    }
+
+    const sendResult = await sendWithMarkdownFallback(
+      adapter,
+      chatId,
+      response,
+      sendOpts
+    );
+
+    if (!sendResult.success) {
+      logger.warn(
+        { error: sendResult.error, chatId },
+        'Failed to send response'
+      );
+      return undefined;
+    }
+
+    if (sendResult.messageId) {
+      logger.debug(
+        { chatId, agentId, lastSentMessageId: sendResult.messageId },
+        'Final message sent successfully'
+      );
+      return sendResult.messageId;
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Emit bot:replied event for group chat context injection (ADR-019).
+   * Must happen AFTER sendMessage to capture the replyMessageId.
+   */
+  private emitBotRepliedEvent(
+    fullResponse: string,
+    chatId: string,
+    agentId: string,
+    platform: string,
+    lastSentMessageId: string | undefined,
+    options?: { isGroupChat?: boolean }
+  ): void {
+    if (
+      !options?.isGroupChat ||
+      this.eventBus === undefined ||
+      fullResponse.length === 0
+    ) {
+      return;
+    }
+
+    const botLabel = formatBotLabel(this.getBotInfo?.(agentId), agentId);
+
+    logger.info(
+      {
+        chatId,
+        agentId,
+        botLabel,
+        responsePreview: fullResponse.substring(0, 100),
+        lastSentMessageId,
+      },
+      'Emitting bot:replied event'
+    );
+
+    this.eventBus.emit('bot:replied', {
+      chatId,
+      agentId,
+      response: `${botLabel}: ${fullResponse}`,
+      platform,
+      ...(lastSentMessageId !== undefined
+        ? { replyMessageId: lastSentMessageId }
+        : {}),
+    });
   }
 
   /**
