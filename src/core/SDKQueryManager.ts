@@ -154,6 +154,9 @@ export class SDKQueryManager {
       {
         sessionId,
         agentId: agent.id,
+        promptPreview: prompt.substring(0, 300) + (prompt.length > 300 ? '...' : ''),
+        promptLength: prompt.length,
+        hasInjectedContext: prompt.includes('[群組對話紀錄]'),
         sdkOptions: {
           cwd: sdkOptions.cwd,
           settingSources: sdkOptions.settingSources,

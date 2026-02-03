@@ -7,12 +7,18 @@ export type { DatabaseManagerOptions } from './DatabaseManager.js';
 
 export { SessionRepository } from './SessionRepository.js';
 export { ConversationRepository } from './ConversationRepository.js';
+export { GroupMessageRepository } from './GroupMessageRepository.js';
+export { InjectionStateRepository } from './InjectionStateRepository.js';
 
 export type {
   SessionRow,
   ConversationRow,
+  GroupMessageRow,
+  InjectionStateRow,
   ISessionRepository,
   IConversationRepository,
+  IGroupMessageRepository,
+  IInjectionStateRepository,
   PersistenceConfig,
 } from './types.js';
 

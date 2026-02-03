@@ -6,6 +6,7 @@ import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager } from './SDKQueryManager.js';
 import { PermissionBridge } from './PermissionBridge.js';
 import { QuestionBridge } from './QuestionBridge.js';
+import { EventBus } from './EventBus.js';
 import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
@@ -17,6 +18,7 @@ import {
   isTransientError,
 } from '../utils/retry.js';
 import { PathValidator } from './PathValidator.js';
+import { ContextInjector } from './ContextInjector.js';
 import * as path from 'node:path';
 
 /**
@@ -45,6 +47,21 @@ export interface MessageProcessorOptions {
    * Falls back to the cached agent.systemPrompt if not provided.
    */
   getSystemPrompt?: (agentId: string) => Promise<string>;
+
+  /**
+   * Get bot info for labeling assistant messages in group chats.
+   */
+  getBotInfo?: (agentId: string) => { username: string; id: number } | null;
+
+  /**
+   * Event bus for broadcasting events (e.g., bot:replied for group chats).
+   */
+  eventBus?: EventBus;
+
+  /**
+   * Context injector for multi-bot group chat history injection (ADR-019).
+   */
+  contextInjector?: ContextInjector;
 }
 
 /**
@@ -85,6 +102,11 @@ export class MessageProcessor {
   private readonly getSystemPrompt:
     | ((agentId: string) => Promise<string>)
     | undefined;
+  private readonly getBotInfo:
+    | ((agentId: string) => { username: string; id: number } | null)
+    | undefined;
+  private readonly eventBus: EventBus | undefined;
+  private readonly contextInjector: ContextInjector | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -94,19 +116,25 @@ export class MessageProcessor {
     this.sdkQueryManager = new SDKQueryManager();
     this.conversationRepository = options.conversationRepository;
     this.getSystemPrompt = options.getSystemPrompt;
+    this.getBotInfo = options.getBotInfo;
+    this.eventBus = options.eventBus;
+    this.contextInjector = options.contextInjector;
 
     logger.info('MessageProcessor initialized');
   }
 
   /**
    * Process an incoming message
+   *
+   * ADR-019: Simplified - no observeMode/silent mode.
+   * Only the @mentioned bot processes the message via GroupBroadcaster.
    */
   async processMessage(
     message: UnifiedMessage,
     agentId: string,
     options?: {
-      /** If true, execute query but don't send reply (for group observers) */
-      observeOnly?: boolean;
+      /** Whether this is a group chat (enables context injection) */
+      isGroupChat?: boolean;
       /** Message ID to reply to (for group chats) */
       replyToMessageId?: string;
     }
@@ -155,6 +183,8 @@ export class MessageProcessor {
       };
     }
 
+    // ADR-019: No silent mode - all messages are fully processed
+
     // Get adapter for sending response
     const adapter = this.getAdapter(platform, agentId);
     if (adapter === undefined) {
@@ -196,20 +226,20 @@ export class MessageProcessor {
             const queryOptions: {
               isGroupChat?: boolean;
               replyToMessageId?: string;
-              observeOnly?: boolean;
-            } = { isGroupChat };
-
-            // Use replyToMessageId from options if provided, otherwise from metadata
-            if (options?.replyToMessageId) {
-              queryOptions.replyToMessageId = options.replyToMessageId;
-            } else if (message.metadata?.originalMessageId) {
-              queryOptions.replyToMessageId =
-                message.metadata.originalMessageId;
+            } = {};
+            if (options?.isGroupChat === true) {
+              queryOptions.isGroupChat = true;
             }
 
-            // Pass observeOnly flag
-            if (options?.observeOnly) {
-              queryOptions.observeOnly = true;
+            // Use replyToMessageId from options if provided, otherwise from metadata.
+            // NOTE: For group chats, do NOT use metadata.originalMessageId as replyToMessageId
+            // because in regular Telegram groups, each bot sees different message_ids
+            // for the same physical message. The metadata ID may belong to a different bot.
+            if (options?.replyToMessageId) {
+              queryOptions.replyToMessageId = options.replyToMessageId;
+            } else if (!isGroupChat && message.metadata?.originalMessageId) {
+              queryOptions.replyToMessageId =
+                message.metadata.originalMessageId;
             }
 
             const response = await this.executeQueryWithSDK(
@@ -283,6 +313,8 @@ export class MessageProcessor {
 
   /**
    * Execute query using Claude Agent SDK
+   *
+   * ADR-019: No observeOnly mode - always send reply.
    */
   private async executeQueryWithSDK(
     sessionId: string,
@@ -295,8 +327,6 @@ export class MessageProcessor {
     options?: {
       isGroupChat?: boolean;
       replyToMessageId?: string;
-      /** If true, execute query but don't send reply (for group observers) */
-      observeOnly?: boolean;
     }
   ): Promise<string> {
     // Get internal session for agent info
@@ -322,9 +352,9 @@ export class MessageProcessor {
         ? await this.getSystemPrompt(agent.id)
         : agent.systemPrompt;
 
-    // Start typing indicator (skip in observeOnly mode)
+    // Start typing indicator
     let typingInterval: ReturnType<typeof setInterval> | null = null;
-    if (this.sendTypingIndicators && !options?.observeOnly) {
+    if (this.sendTypingIndicators) {
       await adapter.sendTypingIndicator(chatId);
       typingInterval = setInterval(() => {
         void adapter.sendTypingIndicator(chatId);
@@ -482,6 +512,8 @@ export class MessageProcessor {
     try {
       // Track intermediate messages sent via streaming callback
       const intermediateMessages: string[] = [];
+      // Track the last sent message ID (for bot:replied event in group chats)
+      let lastSentMessageId: string | undefined;
 
       // Build canUseTool closure for SDK permission callback
       const canUseTool = async (
@@ -694,13 +726,46 @@ export class MessageProcessor {
         };
       };
 
+      // Context injection for multi-bot group chats (ADR-019)
+      // Get messages since last query to inject as context
+      let injectionContext: { formattedHistory: string; messageCount: number; lastMessageId: string | null } | null = null;
+      if (options?.isGroupChat && this.contextInjector) {
+        // Extract chatId from group userId format: "group::{chatId}"
+        const groupChatId = userId.startsWith('group::') ? userId.slice(7) : chatId;
+        injectionContext = this.contextInjector.getInjectionContext(
+          agentId,
+          groupChatId,
+          platform
+        );
+        if (injectionContext.messageCount > 0) {
+          logger.info(
+            { agentId, chatId: groupChatId, messageCount: injectionContext.messageCount },
+            'Injecting group chat context'
+          );
+          logger.debug(
+            { agentId, formattedHistory: injectionContext.formattedHistory },
+            'Injection context content'
+          );
+        }
+      }
+
+      // Build final prompt with injected context
+      const finalPrompt = injectionContext?.formattedHistory
+        ? `${injectionContext.formattedHistory}\n${prompt}`
+        : prompt;
+
+      logger.debug(
+        { agentId, originalPrompt: prompt.substring(0, 100), hasInjection: !!injectionContext?.formattedHistory },
+        'Final prompt built'
+      );
+
       // Helper: execute SDK query with retry for rate limit / transient errors
       const executeWithRetry = async (resumeId: string | undefined) => {
         return await retryAsync(
           async () => {
             return await this.sdkQueryManager.executeQuery(
               sessionId,
-              prompt,
+              finalPrompt,
               agent,
               {
                 cwd: agent.path,
@@ -712,12 +777,6 @@ export class MessageProcessor {
                   : {}),
                 resume: resumeId,
                 onIntermediateMessage: async (text: string): Promise<void> => {
-                  // In observeOnly mode, just record the message but don't send
-                  if (options?.observeOnly) {
-                    intermediateMessages.push(text);
-                    return;
-                  }
-
                   // Finalize current status message before sending assistant message
                   if (
                     supportsStatusMessage &&
@@ -761,6 +820,9 @@ export class MessageProcessor {
                       { error: sendResult.error, chatId },
                       'Failed to send intermediate message'
                     );
+                  } else if (sendResult.messageId) {
+                    // Track the last sent message ID for bot:replied event
+                    lastSentMessageId = sendResult.messageId;
                   }
                   intermediateMessages.push(text);
 
@@ -979,24 +1041,51 @@ export class MessageProcessor {
         );
       }
 
+      // Update injection cursor after successful SDK query (ADR-019)
+      // This must happen AFTER the query succeeds to avoid losing messages on failure
+      if (injectionContext?.lastMessageId && this.contextInjector) {
+        const groupChatId = userId.startsWith('group::') ? userId.slice(7) : chatId;
+        this.contextInjector.updateCursor(
+          agentId,
+          groupChatId,
+          platform,
+          injectionContext.lastMessageId
+        );
+      }
+
       // Persist messages to database for WebUI visibility
       if (this.conversationRepository !== undefined) {
         try {
           this.conversationRepository.appendMessage(sessionId, 'user', prompt);
+
+          // Get bot label for group chats
+          const botLabel =
+            options?.isGroupChat && this.getBotInfo !== undefined
+              ? (() => {
+                  const info = this.getBotInfo(agentId);
+                  return info?.username
+                    ? `[@${info.username}]`
+                    : `[bot:${agentId}]`;
+                })()
+              : null;
+
           // Store intermediate messages individually (matches what user saw in Telegram)
           for (const msg of intermediateMessages) {
+            const labeledMsg = botLabel !== null ? `${botLabel}: ${msg}` : msg;
             this.conversationRepository.appendMessage(
               sessionId,
               'assistant',
-              msg
+              labeledMsg
             );
           }
           // Store remaining response if any (when no callback was used, or residual text)
           if (result.response.length > 0) {
+            const labeledResponse =
+              botLabel !== null ? `${botLabel}: ${result.response}` : result.response;
             this.conversationRepository.appendMessage(
               sessionId,
               'assistant',
-              result.response
+              labeledResponse
             );
           }
         } catch (persistError) {
@@ -1007,8 +1096,30 @@ export class MessageProcessor {
         }
       }
 
-      // Send response to user (skip in observeOnly mode)
-      if (result.response.length > 0 && !options?.observeOnly) {
+      // Broadcast bot reply to other bots in group chat
+      // Combine all responses: intermediate messages (from streaming) + final response
+      const allResponses = [...intermediateMessages];
+      if (result.response.length > 0) {
+        allResponses.push(result.response);
+      }
+      const fullResponse = allResponses.join('\n\n');
+
+      logger.debug(
+        {
+          isGroupChat: options?.isGroupChat,
+          hasEventBus: this.eventBus !== undefined,
+          intermediateCount: intermediateMessages.length,
+          finalResponseLength: result.response.length,
+          fullResponseLength: fullResponse.length,
+          agentId,
+          chatId,
+        },
+        'Checking bot:replied broadcast conditions'
+      );
+
+      // Send response to user
+      // Note: lastSentMessageId may already have value from intermediate messages
+      if (result.response.length > 0) {
         // Build send options (include replyToMessageId for group chats)
         const finalSendOpts: SendOptions = {};
         if (options?.isGroupChat && options?.replyToMessageId) {
@@ -1037,12 +1148,40 @@ export class MessageProcessor {
             { error: sendResult.error, chatId },
             'Failed to send response'
           );
+        } else if (sendResult.messageId) {
+          lastSentMessageId = sendResult.messageId;
+          logger.debug(
+            { chatId, agentId, lastSentMessageId },
+            'Final message sent successfully, got messageId'
+          );
         }
       }
 
-      // Finalize status message with completion summary (skip in observeOnly mode)
+      // Emit bot:replied event for group chat context injection
+      // This must happen AFTER sendMessage to capture the replyMessageId
+      // lastSentMessageId may come from intermediate messages or final message
+      if (options?.isGroupChat && this.eventBus !== undefined && fullResponse.length > 0) {
+        const botInfo = this.getBotInfo?.(agentId);
+        const botLabel = botInfo?.username
+          ? `[@${botInfo.username}]`
+          : `[bot:${agentId}]`;
+
+        logger.info(
+          { chatId, agentId, botLabel, responsePreview: fullResponse.substring(0, 100), lastSentMessageId },
+          'Emitting bot:replied event'
+        );
+
+        this.eventBus.emit('bot:replied', {
+          chatId,
+          agentId,
+          response: `${botLabel}: ${fullResponse}`,
+          platform,
+          ...(lastSentMessageId !== undefined ? { replyMessageId: lastSentMessageId } : {}),
+        });
+      }
+
+      // Finalize status message with completion summary
       if (
-        !options?.observeOnly &&
         supportsStatusMessage &&
         statusMessageId !== null &&
         toolEvents.length > 0
@@ -1053,7 +1192,6 @@ export class MessageProcessor {
           formatCompletionSummary(toolEvents)
         );
       } else if (
-        !options?.observeOnly &&
         supportsStatusMessage &&
         statusMessageId !== null
       ) {

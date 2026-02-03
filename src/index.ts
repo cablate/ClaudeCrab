@@ -5,11 +5,16 @@ import { SessionManager } from './core/SessionManager.js';
 import { MessageProcessor } from './core/MessageProcessor.js';
 import { SDKQueryManager } from './core/SDKQueryManager.js';
 import { PlatformOrchestrator } from './core/PlatformOrchestrator.js';
+import { getEventBus } from './core/EventBus.js';
+import { TelegramAdapter } from './adapters/TelegramAdapter.js';
 import { loadSecurityConfig } from './utils/security.js';
 import { DatabaseManager } from './persistence/DatabaseManager.js';
 import { SessionRepository } from './persistence/SessionRepository.js';
 import { ConversationRepository } from './persistence/ConversationRepository.js';
+import { GroupMessageRepository } from './persistence/GroupMessageRepository.js';
+import { InjectionStateRepository } from './persistence/InjectionStateRepository.js';
 import { ScheduleRepository } from './persistence/ScheduleRepository.js';
+import { ContextInjector } from './core/ContextInjector.js';
 import { WebUIServer } from './webui/index.js';
 import {
   ScheduleLoader,
@@ -61,6 +66,9 @@ const main = async (): Promise<void> => {
   const enablePersistence = process.env.ENABLE_PERSISTENCE === 'true';
   let sessionRepository: SessionRepository | undefined;
   let conversationRepository: ConversationRepository | undefined;
+  let groupMessageRepository: GroupMessageRepository | undefined;
+  let injectionStateRepository: InjectionStateRepository | undefined;
+  let contextInjector: ContextInjector | undefined;
 
   if (enablePersistence) {
     const dbPath = process.env.DB_PATH ?? './data/claudecab.db';
@@ -71,6 +79,11 @@ const main = async (): Promise<void> => {
 
     sessionRepository = new SessionRepository(databaseManager.getDatabase());
     conversationRepository = new ConversationRepository(databaseManager.getDatabase());
+    groupMessageRepository = new GroupMessageRepository(databaseManager.getDatabase());
+    injectionStateRepository = new InjectionStateRepository(databaseManager.getDatabase());
+
+    // Create ContextInjector for multi-bot group chat context injection (ADR-019)
+    contextInjector = new ContextInjector(groupMessageRepository, injectionStateRepository);
 
     logger.info('Persistence enabled');
   }
@@ -96,7 +109,7 @@ const main = async (): Promise<void> => {
   }
 
   // Create message processor
-  // Note: getAdapter uses orchestrator's registry, resolved lazily via closure
+  // Note: getAdapter and getBotInfo use orchestrator's registry, resolved lazily via closure
   const messageProcessor = new MessageProcessor({
     sessionManager,
     getAdapter: (platform, agentId) => orchestrator?.getRegistry().get(platform, agentId),
@@ -104,6 +117,18 @@ const main = async (): Promise<void> => {
     sendTypingIndicators: true,
     typingIndicatorIntervalMs: 5000,
     ...(conversationRepository !== undefined ? { conversationRepository } : {}),
+    // For group chat: get bot info for labeling assistant messages
+    getBotInfo: (agentId) => {
+      const adapter = orchestrator?.getRegistry().get('telegram', agentId);
+      if (adapter !== undefined && adapter instanceof TelegramAdapter) {
+        return adapter.getBotInfo();
+      }
+      return null;
+    },
+    // For group chat: broadcast bot replies to other bots
+    eventBus: getEventBus(),
+    // For group chat: inject conversation history from other bots (ADR-019)
+    ...(contextInjector !== undefined ? { contextInjector } : {}),
   });
 
   // Initialize PlatformOrchestrator
@@ -114,6 +139,9 @@ const main = async (): Promise<void> => {
     messageProcessor,
     securityConfig,
     ...(scheduleManager !== null ? { scheduleManager } : {}),
+    ...(conversationRepository !== undefined ? { conversationRepository } : {}),
+    ...(groupMessageRepository !== undefined ? { groupMessageRepository } : {}),
+    ...(injectionStateRepository !== undefined ? { injectionStateRepository } : {}),
   });
 
   // Start all platform adapters (one per agent with a platform token)

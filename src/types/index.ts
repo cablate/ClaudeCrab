@@ -57,6 +57,8 @@ export {
   type SessionClosedPayload,
   type SessionSwitchedPayload,
   type SessionStateChangedPayload,
+  type GroupMessagePayload,
+  type BotRepliedPayload,
 } from './events.js';
 
 // Error types

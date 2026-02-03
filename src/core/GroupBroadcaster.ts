@@ -1,6 +1,10 @@
 import { getEventBus } from './EventBus.js';
 import type { MessageProcessor } from './MessageProcessor.js';
-import type { GroupMessagePayload } from '../types/events.js';
+import type { GroupMessagePayload, BotRepliedPayload } from '../types/events.js';
+import type {
+  IGroupMessageRepository,
+  IInjectionStateRepository,
+} from '../persistence/types.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -12,23 +16,36 @@ export interface GroupBroadcasterOptions {
 
   /** Function to get bot info by agentId */
   getBotInfo: (agentId: string) => { username: string; id: number } | null;
+
+  /** Group message repository for recording messages (for context injection) */
+  groupMessageRepository?: IGroupMessageRepository;
+
+  /** Injection state repository for tracking injection cursor per bot */
+  injectionStateRepository?: IInjectionStateRepository;
 }
 
 /**
- * GroupBroadcaster manages message broadcasting in Telegram groups.
+ * GroupBroadcaster manages group message handling for multi-bot collaboration.
  *
- * When a group message is received, it broadcasts to all bots in that group:
- * - The mentioned bot (or reply target) processes and replies
- * - Other bots observe (query without replying)
+ * ADR-019 Design:
+ * - Only the @mentioned bot (or reply target) processes the message
+ * - Other bots do NOT process (no silent mode, no observe)
+ * - All bots share context via group_messages table (Context Injection)
  *
- * This enables multi-bot collaboration where all bots maintain
- * awareness of the conversation.
+ * Flow:
+ * 1. Group message arrives
+ * 2. Record user message to group_messages (once)
+ * 3. Ensure injection state for all bots (lazy creation)
+ * 4. Only process message for the @mentioned bot
+ * 5. Bot reply is recorded to group_messages via bot:replied event
  */
 export class GroupBroadcaster {
   private readonly messageProcessor: MessageProcessor;
   private readonly getBotInfo: (
     agentId: string
   ) => { username: string; id: number } | null;
+  private readonly groupMessageRepository: IGroupMessageRepository | undefined;
+  private readonly injectionStateRepository: IInjectionStateRepository | undefined;
 
   /**
    * Maps chatId to set of agentIds that are members of that group.
@@ -36,16 +53,36 @@ export class GroupBroadcaster {
    */
   private readonly groupMemberships: Map<string, Set<string>> = new Map();
 
+  /**
+   * Tracks processed message IDs to prevent duplicate processing.
+   * Since each TelegramAdapter emits group:message events independently,
+   * the same message can arrive multiple times.
+   */
+  private readonly processedMessages: Set<string> = new Set();
+
+  /**
+   * Maps dedupeKey -> Map<agentId, platformMsgId>.
+   * In regular Telegram groups, each bot sees a different message_id for the
+   * same physical message. We store each bot's perspective so the responding
+   * bot can use its own message_id for reply_to_message_id.
+   */
+  private readonly perBotMessageIds: Map<string, Map<string, string>> = new Map();
+
   private readonly log = logger.child({ module: 'GroupBroadcaster' });
 
   constructor(options: GroupBroadcasterOptions) {
     this.messageProcessor = options.messageProcessor;
     this.getBotInfo = options.getBotInfo;
+    this.groupMessageRepository = options.groupMessageRepository;
+    this.injectionStateRepository = options.injectionStateRepository;
 
     // Listen to group:message events
     getEventBus().on('group:message', this.handleGroupMessage.bind(this));
 
-    this.log.info('GroupBroadcaster initialized');
+    // Listen to bot:replied events for recording replies to group_messages
+    getEventBus().on('bot:replied', this.handleBotReplied.bind(this));
+
+    this.log.info('GroupBroadcaster initialized (ADR-019: no silent mode)');
   }
 
   /**
@@ -77,98 +114,269 @@ export class GroupBroadcaster {
   }
 
   /**
-   * Handle group:message event - broadcast to all bots in the group.
+   * Handle group:message event.
+   * ADR-019: Only process for the @mentioned bot, no silent mode.
    */
   private async handleGroupMessage(event: GroupMessagePayload): Promise<void> {
     const { message, sourceAgentId, mentionedBot, isReplyToBot } = event;
     const chatId = message.chatId;
 
-    // Register the source bot in this group
+    // IMPORTANT: Register bot BEFORE dedup check!
+    // Each TelegramAdapter emits group:message independently, so every bot
+    // gets registered even if their event is later deduplicated.
     this.registerBotInGroup(chatId, sourceAgentId);
 
-    // Get all bots in this group
-    const members = this.getGroupMembers(chatId);
+    // Get platform message ID (per-bot, differs in regular Telegram groups)
+    const platformMsgId = String(message.metadata?.originalMessageId ?? '');
 
-    this.log.debug(
-      {
-        chatId,
+    // IMPORTANT: Ensure injection state BEFORE dedup check!
+    // Each bot needs its own injection state created when it first sees a message.
+    // Use latest group_messages.id as cursor (not platform_msg_id which differs per bot).
+    if (this.injectionStateRepository) {
+      const latestId = this.groupMessageRepository?.getLatestId(
+        message.platform,
+        chatId
+      );
+      this.injectionStateRepository.ensureState(
         sourceAgentId,
-        mentionedBot,
-        isReplyToBot,
-        memberCount: members.length,
-      },
-      'Broadcasting group message'
+        chatId,
+        message.platform,
+        latestId?.toString() ?? '0'
+      );
+    }
+
+    // Deduplicate: each TelegramAdapter emits group:message independently,
+    // so the same message arrives multiple times (once per bot).
+    // Use content-based key because regular Telegram groups give each bot
+    // different message_ids for the same physical message.
+    const dedupeTs = Math.floor(message.timestamp.getTime() / 1000);
+    const messageKey = `${chatId}:${message.userId}:${dedupeTs}:${message.text.substring(0, 50)}`;
+
+    // BEFORE dedup: store this bot's perspective of the message_id.
+    // Each bot in a regular Telegram group sees a different message_id.
+    let botMsgIds = this.perBotMessageIds.get(messageKey);
+    if (botMsgIds === undefined) {
+      botMsgIds = new Map();
+      this.perBotMessageIds.set(messageKey, botMsgIds);
+    }
+    if (platformMsgId) {
+      botMsgIds.set(sourceAgentId, platformMsgId);
+    }
+
+    if (this.processedMessages.has(messageKey)) {
+      this.log.debug(
+        { messageKey, sourceAgentId },
+        'Skipping duplicate group message (bot already registered)'
+      );
+      return;
+    }
+    this.processedMessages.add(messageKey);
+
+    // Cleanup old entries to prevent memory leak (keep last 1000)
+    if (this.processedMessages.size > 1000) {
+      const toDelete = Array.from(this.processedMessages).slice(0, 500);
+      for (const key of toDelete) {
+        this.processedMessages.delete(key);
+        this.perBotMessageIds.delete(key);
+      }
+    }
+
+    // Format sender label for the message
+    const displayName = (message.metadata?.displayName as string) || '';
+    const username = (message.metadata?.username as string) || '';
+    const senderLabel =
+      displayName && username
+        ? `[${displayName} (@${username})]`
+        : displayName
+          ? `[${displayName}]`
+          : username
+            ? `[@${username}]`
+            : `[${message.userId}]`;
+
+    // Record user message to group_messages table (for context injection)
+    if (platformMsgId && this.groupMessageRepository) {
+      this.log.info(
+        { platform: message.platform, chatId, platformMsgId, senderType: 'user', senderId: message.userId },
+        'Recording user message to group_messages'
+      );
+      this.groupMessageRepository.recordMessage(
+        message.platform,
+        chatId,
+        platformMsgId,
+        'user',
+        message.userId,
+        senderLabel,
+        message.text
+      );
+    }
+
+    // Determine which bot should respond (ADR-019: only one bot processes)
+    const respondingBot = this.getRespondingBot(chatId, mentionedBot, isReplyToBot, sourceAgentId);
+
+    if (respondingBot === null) {
+      this.log.debug(
+        { chatId, mentionedBot, isReplyToBot, sourceAgentId },
+        'No bot should respond to this message'
+      );
+      return;
+    }
+
+    this.log.info(
+      { chatId, respondingBot, mentionedBot, isReplyToBot },
+      'Processing message for responding bot (ADR-019: single bot, no silent mode)'
     );
 
-    // Process message for each bot
-    const processingPromises = members.map(async (agentId) => {
-      // Determine if this bot should reply or just observe
-      const botInfo = this.getBotInfo(agentId);
-      const shouldReply = this.shouldBotReply(
-        agentId,
-        botInfo,
-        mentionedBot,
-        isReplyToBot,
-        sourceAgentId
+    // Create message with sender prefix
+    const prefixedMessage = {
+      ...message,
+      text: `${senderLabel}: ${message.text}`,
+    };
+
+    // Look up the responding bot's own message_id.
+    // In regular Telegram groups, each bot sees a different message_id.
+    // If the responding bot's event arrived first (common case), we have it.
+    // Otherwise, wait briefly for the responding bot's adapter to report its ID.
+    let respondingBotMsgId = this.perBotMessageIds.get(messageKey)?.get(respondingBot);
+    if (!respondingBotMsgId && respondingBot !== sourceAgentId) {
+      respondingBotMsgId = await this.waitForBotMessageId(messageKey, respondingBot, 300);
+    }
+
+    this.log.info(
+      { respondingBot, respondingBotMsgId, sourceAgentId, sourceMsgId: platformMsgId },
+      'Resolved responding bot message_id'
+    );
+
+    // Process message only for the responding bot, using its own message_id
+    try {
+      await this.messageProcessor.processMessage(prefixedMessage, respondingBot, {
+        isGroupChat: true,
+        ...(respondingBotMsgId ? { replyToMessageId: respondingBotMsgId } : {}),
+      });
+    } catch (error) {
+      this.log.error(
+        { error, chatId, respondingBot },
+        'Failed to process group message'
       );
-
-      this.log.debug(
-        { chatId, agentId, shouldReply, mentionedBot },
-        shouldReply ? 'Bot will reply' : 'Bot will observe'
-      );
-
-      try {
-        // Build options object - only include replyToMessageId if defined
-        const processOpts: { observeOnly: boolean; replyToMessageId?: string } =
-          {
-            observeOnly: !shouldReply,
-          };
-        if (message.metadata?.originalMessageId !== undefined) {
-          processOpts.replyToMessageId = message.metadata.originalMessageId;
-        }
-        await this.messageProcessor.processMessage(
-          message,
-          agentId,
-          processOpts
-        );
-      } catch (error) {
-        this.log.error(
-          { error, chatId, agentId, observeOnly: !shouldReply },
-          'Failed to process group message for bot'
-        );
-      }
-    });
-
-    // Wait for all bots to process (but don't fail if some fail)
-    await Promise.allSettled(processingPromises);
+    }
   }
 
   /**
-   * Determine if a bot should reply to the message or just observe.
+   * Determine which bot should respond to the message.
+   * Returns agentId of the responding bot, or null if no bot should respond.
+   *
+   * ADR-019: Only one bot processes per message (no silent observe mode).
    */
-  private shouldBotReply(
-    agentId: string,
-    botInfo: { username: string; id: number } | null,
+  private getRespondingBot(
+    chatId: string,
     mentionedBot: string | null,
     isReplyToBot: boolean,
     sourceAgentId: string
-  ): boolean {
-    // Only the source bot (the one that received the message) can be the reply target
-    if (agentId !== sourceAgentId) {
-      return false;
+  ): string | null {
+    // Case 1: Bot was explicitly @mentioned - find the corresponding agentId
+    if (mentionedBot !== null) {
+      const members = this.getGroupMembers(chatId);
+      for (const agentId of members) {
+        const botInfo = this.getBotInfo(agentId);
+        if (botInfo && mentionedBot.toLowerCase() === botInfo.username.toLowerCase()) {
+          this.log.debug(
+            { mentionedBot, agentId, botUsername: botInfo.username },
+            'Found responding bot by @mention'
+          );
+          return agentId;
+        }
+      }
+      // Mentioned bot not in group
+      this.log.debug(
+        { mentionedBot, members: this.getGroupMembers(chatId) },
+        'Mentioned bot not found in group members'
+      );
+      return null;
     }
 
-    // Reply if this bot was mentioned
-    if (mentionedBot !== null && botInfo !== null) {
-      return mentionedBot.toLowerCase() === botInfo.username.toLowerCase();
-    }
-
-    // Reply if this is a reply to the bot's message
+    // Case 2: Reply to bot's message - sourceAgentId is the responding bot
     if (isReplyToBot) {
-      return true;
+      this.log.debug(
+        { sourceAgentId, isReplyToBot },
+        'Responding bot determined by reply-to'
+      );
+      return sourceAgentId;
     }
 
-    return false;
+    // No bot should respond
+    return null;
+  }
+
+  /**
+   * Handle bot:replied event - record the reply to group_messages.
+   * ADR-019: Only record to group_messages, no broadcast to other bots' sessions.
+   */
+  private async handleBotReplied(payload: BotRepliedPayload): Promise<void> {
+    const { chatId, agentId, response, platform, replyMessageId } = payload;
+
+    // Record bot reply to group_messages table (for context injection)
+    if (replyMessageId && this.groupMessageRepository) {
+      const botInfo = this.getBotInfo(agentId);
+      const senderLabel = botInfo ? `[@${botInfo.username}]` : `[Bot ${agentId}]`;
+      this.log.info(
+        {
+          platform,
+          chatId,
+          agentId,
+          replyMessageId,
+          senderLabel,
+          responsePreview: response.substring(0, 100),
+        },
+        'Recording bot reply to group_messages (ADR-019: no broadcast to other sessions)'
+      );
+      this.groupMessageRepository.recordMessage(
+        platform,
+        chatId,
+        replyMessageId,
+        'bot',
+        agentId,
+        senderLabel,
+        response
+      );
+    } else {
+      this.log.warn(
+        { platform, chatId, agentId, replyMessageId, hasRepo: !!this.groupMessageRepository },
+        'Skipping bot reply recording - missing replyMessageId or repository'
+      );
+    }
+
+    // ADR-019: NO broadcast to other bots' DB sessions
+    // Context is shared via group_messages table and Context Injection
+  }
+
+  /**
+   * Wait for a specific bot's message_id to become available.
+   * In regular Telegram groups, each bot receives updates independently.
+   * The responding bot's adapter may not have emitted its event yet when
+   * the first bot's event passes dedup. We poll briefly to allow it to arrive.
+   */
+  private async waitForBotMessageId(
+    messageKey: string,
+    agentId: string,
+    timeoutMs: number
+  ): Promise<string | undefined> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const msgId = this.perBotMessageIds.get(messageKey)?.get(agentId);
+      if (msgId !== undefined) {
+        this.log.debug(
+          { agentId, msgId, waitedMs: Date.now() - start },
+          'Resolved bot message_id after waiting'
+        );
+        return msgId;
+      }
+      // Yield to allow other event handlers to run
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    this.log.warn(
+      { agentId, timeoutMs },
+      'Timed out waiting for bot message_id, will send without reply_to'
+    );
+    return undefined;
   }
 
   /**
@@ -176,6 +384,7 @@ export class GroupBroadcaster {
    */
   dispose(): void {
     this.groupMemberships.clear();
+    this.perBotMessageIds.clear();
     this.log.info('GroupBroadcaster disposed');
   }
 }

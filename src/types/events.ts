@@ -3,6 +3,8 @@ import type { UserSession } from './session.js';
 import type { ClaudeCabError } from './errors.js';
 import type { UnifiedMessage } from '../adapters/types.js';
 
+// ADR-019: ObserveMode removed - only @mentioned bot processes, no silent mode
+
 /**
  * Event map defining all system events and their payloads
  */
@@ -36,6 +38,9 @@ export interface EventMap {
 
   /** Fired when a group message is received (for multi-bot broadcast) */
   'group:message': GroupMessagePayload;
+
+  /** Fired when a bot replies in a group chat (for broadcasting to other bots) */
+  'bot:replied': BotRepliedPayload;
 }
 
 /**
@@ -53,6 +58,26 @@ export interface GroupMessagePayload {
 
   /** Whether this message is a reply to the source bot */
   isReplyToBot: boolean;
+}
+
+/**
+ * Payload for bot:replied event (for broadcasting bot replies to other bots)
+ */
+export interface BotRepliedPayload {
+  /** Chat ID where the reply was sent */
+  chatId: string;
+
+  /** Agent ID of the bot that replied */
+  agentId: string;
+
+  /** The response text (already labeled with [@bot_username]) */
+  response: string;
+
+  /** Platform (e.g., 'telegram') */
+  platform: string;
+
+  /** Platform-specific message ID of the reply (for context injection tracking) */
+  replyMessageId?: string;
 }
 
 /**

@@ -14,6 +14,11 @@ import type {
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import type { CommandDependencies } from '../adapters/commands/index.js';
 import type { ScheduleManager } from '../schedule/ScheduleManager.js';
+import type {
+  IConversationRepository,
+  IGroupMessageRepository,
+  IInjectionStateRepository,
+} from '../persistence/types.js';
 import { AdapterRegistry } from './AdapterRegistry.js';
 import { AgentLoader } from './AgentLoader.js';
 import { GroupBroadcaster } from './GroupBroadcaster.js';
@@ -40,6 +45,12 @@ export interface PlatformOrchestratorOptions {
   messageProcessor: MessageProcessor;
   securityConfig?: AdapterSecurityConfig;
   scheduleManager?: ScheduleManager;
+  /** Conversation repository (retained for non-group operations) */
+  conversationRepository?: IConversationRepository;
+  /** Group message repository for context injection (ADR-019) */
+  groupMessageRepository?: IGroupMessageRepository;
+  /** Injection state repository for context injection (ADR-019) */
+  injectionStateRepository?: IInjectionStateRepository;
 }
 
 /**
@@ -62,7 +73,7 @@ export class PlatformOrchestrator {
     this.securityConfig = options.securityConfig;
     this.scheduleManager = options.scheduleManager;
 
-    // Initialize GroupBroadcaster for multi-bot group message handling
+    // Initialize GroupBroadcaster for multi-bot group message handling (ADR-019)
     this.groupBroadcaster = new GroupBroadcaster({
       messageProcessor: this.messageProcessor,
       getBotInfo: (agentId: string) => {
@@ -73,6 +84,12 @@ export class PlatformOrchestrator {
         }
         return null;
       },
+      ...(options.groupMessageRepository !== undefined
+        ? { groupMessageRepository: options.groupMessageRepository }
+        : {}),
+      ...(options.injectionStateRepository !== undefined
+        ? { injectionStateRepository: options.injectionStateRepository }
+        : {}),
     });
   }
 

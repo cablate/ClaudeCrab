@@ -93,9 +93,45 @@ CREATE TABLE IF NOT EXISTS schedule_executions (
 -- Schedule executions indexes
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_schedule ON schedule_executions(schedule_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_executions(started_at);
+
+-- Group messages table (shared across bots for context injection)
+CREATE TABLE IF NOT EXISTS group_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    platform_msg_id TEXT NOT NULL,
+    sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'bot')),
+    sender_id TEXT NOT NULL,
+    sender_label TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(platform, chat_id, platform_msg_id)
+);
+
+-- Group messages indexes
+CREATE INDEX IF NOT EXISTS idx_group_messages_chat ON group_messages(platform, chat_id);
+CREATE INDEX IF NOT EXISTS idx_group_messages_lookup ON group_messages(platform, chat_id, platform_msg_id);
+
+-- Group injection state table (tracks injection cursor per bot per group)
+CREATE TABLE IF NOT EXISTS group_injection_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    joined_at TEXT NOT NULL,
+    joined_msg_id TEXT,
+    last_injected_msg_id TEXT,
+    last_injected_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(platform, agent_id, chat_id)
+);
+
+-- Group injection state indexes
+CREATE INDEX IF NOT EXISTS idx_injection_state_lookup ON group_injection_state(platform, agent_id, chat_id);
 `;
 
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
 
 /**
  * Migration SQL from v1 to v2:
@@ -198,6 +234,48 @@ ALTER TABLE schedule_executions_new RENAME TO schedule_executions;
 -- Recreate indexes
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_schedule ON schedule_executions(schedule_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_executions(started_at);
+`;
+
+/**
+ * Migration SQL from v4 to v5:
+ * Adds group_messages and group_injection_state tables for multi-bot context injection
+ */
+const MIGRATION_V4_TO_V5 = `
+-- Group messages table (shared across bots for context injection)
+CREATE TABLE IF NOT EXISTS group_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    platform_msg_id TEXT NOT NULL,
+    sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'bot')),
+    sender_id TEXT NOT NULL,
+    sender_label TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(platform, chat_id, platform_msg_id)
+);
+
+-- Group messages indexes
+CREATE INDEX IF NOT EXISTS idx_group_messages_chat ON group_messages(platform, chat_id);
+CREATE INDEX IF NOT EXISTS idx_group_messages_lookup ON group_messages(platform, chat_id, platform_msg_id);
+
+-- Group injection state table (tracks injection cursor per bot per group)
+CREATE TABLE IF NOT EXISTS group_injection_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    joined_at TEXT NOT NULL,
+    joined_msg_id TEXT,
+    last_injected_msg_id TEXT,
+    last_injected_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(platform, agent_id, chat_id)
+);
+
+-- Group injection state indexes
+CREATE INDEX IF NOT EXISTS idx_injection_state_lookup ON group_injection_state(platform, agent_id, chat_id);
 `;
 
 /**
@@ -333,6 +411,12 @@ export class DatabaseManager {
       this.db.exec(MIGRATION_V3_TO_V4);
       this.db.pragma('foreign_keys = ON');
       logger.info('Migration v3 → v4 completed');
+      currentVersion = '4';
+    }
+
+    if (currentVersion === '4') {
+      this.db.exec(MIGRATION_V4_TO_V5);
+      logger.info('Migration v4 → v5 completed');
     }
 
     // Update schema version
