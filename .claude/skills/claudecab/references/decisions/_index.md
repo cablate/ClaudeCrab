@@ -27,6 +27,7 @@
 | [ADR-017](adr/adr-017-group-chat.md) | Telegram 群組對話支援設計 | ✅ accepted | 2026-02-02 |
 | [ADR-018](adr/adr-018-multi-bot-group.md) | 多 Bot 群組協作設計 | ✅ accepted | 2026-02-02 |
 | [ADR-019](adr/adr-019-multi-agent-group.md) | 群組對話架構重設計 - Multi-Agent 協作生態系統 | ✅ accepted | 2026-02-03 |
+| [ADR-020](adr/adr-020-virtual-office.md) | 虛擬辦公室模式可行性評估與改進路線圖 | 📋 proposed | 2026-02-03 |
 
 ---
 
