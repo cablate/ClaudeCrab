@@ -145,9 +145,30 @@ CREATE TABLE IF NOT EXISTS group_members (
 -- Group members indexes
 CREATE INDEX IF NOT EXISTS idx_group_members_chat ON group_members(platform, chat_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_agent ON group_members(agent_id);
+
+-- Query metrics table (ADR-020 Phase 2: token usage tracking)
+CREATE TABLE IF NOT EXISTS query_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+    total_cost_usd REAL NOT NULL DEFAULT 0,
+    num_turns INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+-- Query metrics indexes
+CREATE INDEX IF NOT EXISTS idx_query_metrics_agent ON query_metrics(agent_id);
+CREATE INDEX IF NOT EXISTS idx_query_metrics_created ON query_metrics(created_at);
 `;
 
-const SCHEMA_VERSION = '6';
+const SCHEMA_VERSION = '7';
 
 /**
  * Migration SQL from v1 to v2:
@@ -317,6 +338,33 @@ CREATE INDEX IF NOT EXISTS idx_group_members_agent ON group_members(agent_id);
 `;
 
 /**
+ * Migration SQL from v6 to v7:
+ * Adds query_metrics table for token usage tracking (ADR-020 Phase 2)
+ */
+const MIGRATION_V6_TO_V7 = `
+-- Query metrics table (ADR-020 Phase 2: token usage tracking)
+CREATE TABLE IF NOT EXISTS query_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+    total_cost_usd REAL NOT NULL DEFAULT 0,
+    num_turns INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+-- Query metrics indexes
+CREATE INDEX IF NOT EXISTS idx_query_metrics_agent ON query_metrics(agent_id);
+CREATE INDEX IF NOT EXISTS idx_query_metrics_created ON query_metrics(created_at);
+`;
+
+/**
  * Database manager options
  */
 export interface DatabaseManagerOptions {
@@ -461,6 +509,12 @@ export class DatabaseManager {
     if (currentVersion === '5') {
       this.db.exec(MIGRATION_V5_TO_V6);
       logger.info('Migration v5 → v6 completed');
+      currentVersion = '6';
+    }
+
+    if (currentVersion === '6') {
+      this.db.exec(MIGRATION_V6_TO_V7);
+      logger.info('Migration v6 → v7 completed');
     }
 
     // Update schema version

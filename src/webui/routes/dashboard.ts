@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { WebUIRequest } from '../types.js';
 import { StatsService } from '../services/StatsService.js';
+import type { AgentUsageStats } from '../../persistence/types.js';
 
 /**
  * Create dashboard router
@@ -18,6 +19,7 @@ export function createDashboardRouter(): Router {
       sessionRepository,
       conversationRepository,
       monitoringService,
+      queryMetricsRepository,
     } = (req as WebUIRequest).dependencies;
 
     const statsService = new StatsService(
@@ -32,13 +34,33 @@ export function createDashboardRouter(): Router {
     const sessionsByPlatform = statsService.getSessionsByPlatform();
     const recentActivity = statsService.getRecentActivity(24);
 
+    // ADR-020 Phase 2: Get agent usage stats for last 24 hours
+    let agentUsageStats: AgentUsageStats[] = [];
+    let todayCostUsd = 0;
+    if (queryMetricsRepository !== undefined) {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      agentUsageStats = queryMetricsRepository.getAllAgentStatsSince(since);
+      todayCostUsd = agentUsageStats.reduce(
+        (sum, s) => sum + s.totalCostUsd,
+        0
+      );
+    }
+
+    // Build agent usage map for easy lookup in template
+    const agentUsageMap = new Map<string, AgentUsageStats>();
+    for (const stat of agentUsageStats) {
+      agentUsageMap.set(stat.agentId, stat);
+    }
+
     // Get agent list for quick access
     const agents = agentLoader.list().map((id) => {
       const agent = agentLoader.get(id);
+      const usage = agentUsageMap.get(id);
       return {
         id,
         name: agent?.config.name ?? id,
         description: agent?.config.description ?? '',
+        usage: usage ?? null,
       };
     });
 
@@ -74,6 +96,7 @@ export function createDashboardRouter(): Router {
       botStatus,
       recentEvents,
       processingSessions,
+      todayCostUsd,
     });
   });
 

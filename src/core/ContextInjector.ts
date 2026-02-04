@@ -37,6 +37,8 @@ export interface GroupMemberInfo {
   agentId: string;
   name: string;
   description?: string;
+  /** Telegram @username for @mention suggestions */
+  username?: string;
 }
 
 /**
@@ -220,9 +222,10 @@ export class ContextInjector {
     }
 
     const lines = members.map((m) => {
+      const handle = m.username ? ` (@${m.username})` : '';
       const desc = m.description ? ` — ${m.description}` : '';
       const selfTag = m.agentId === agentId ? '（你自己）' : '';
-      return `- ${m.name}${desc}${selfTag}`;
+      return `- ${m.name}${handle}${desc}${selfTag}`;
     });
 
     return [

@@ -10,18 +10,23 @@ export { ConversationRepository } from './ConversationRepository.js';
 export { GroupMessageRepository } from './GroupMessageRepository.js';
 export { InjectionStateRepository } from './InjectionStateRepository.js';
 export { GroupMemberRepository } from './GroupMemberRepository.js';
+export { QueryMetricsRepository } from './QueryMetricsRepository.js';
 
 export type {
   SessionRow,
   ConversationRow,
   GroupMessageRow,
   GroupMemberRow,
+  QueryMetricRow,
   InjectionStateRow,
+  AgentUsageStats,
+  DailyUsageStats,
   ISessionRepository,
   IConversationRepository,
   IGroupMessageRepository,
   IGroupMemberRepository,
   IInjectionStateRepository,
+  IQueryMetricsRepository,
   PersistenceConfig,
 } from './types.js';
 

@@ -29,7 +29,7 @@ export function buildMemoryStopCheckpoint(groupChatId?: string): string {
   if (!groupChatId) {
     return MEMORY_STOP_CHECKPOINT;
   }
-  return `【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md、groups/${groupChatId}/），再結束。`;
+  return `【記憶檢查】這是群組對話。結束前檢查這輪有沒有該記的內容。群組事件、共識、討論請寫入群組記憶（groups/${groupChatId}/），不要寫到個人日誌（memory/*.md）。個人層級只更新 MEMORY.md（持久事實）或 CLAUDE.md（教訓）。`;
 }
 
 const TAIPEI_TZ = 'Asia/Taipei';
@@ -58,7 +58,14 @@ export function buildPromptContext(
   const displayTime = format(now, 'yyyy/MM/dd HH:mm EEEE', { locale: zhTW });
 
   let context = `【當前時間】${displayTime}`;
-  context += `\n【日誌路徑】今天: memory/${todayDate}.md | 昨天: memory/${yesterdayDate}.md`;
+
+  if (groupChatId) {
+    // Group chat: point diary path to group memory, not personal
+    context += `\n【群組日誌路徑】groups/${groupChatId}/${todayDate}.md`;
+    context += `\n【群組記憶】groups/${groupChatId}/MEMORY.md`;
+  } else {
+    context += `\n【日誌路徑】今天: memory/${todayDate}.md | 昨天: memory/${yesterdayDate}.md`;
+  }
 
   if (isNewSession) {
     context += `\n${STARTUP_PROTOCOL_REMINDER}`;
@@ -68,11 +75,6 @@ export function buildPromptContext(
 
   if (chatId) {
     context += `\n【當前對話】platform: telegram, chatId: ${chatId}`;
-  }
-
-  // ADR-020: Group memory path hints
-  if (groupChatId) {
-    context += `\n【群組記憶】groups/${groupChatId}/MEMORY.md | groups/${groupChatId}/${todayDate}.md`;
   }
 
   return context;

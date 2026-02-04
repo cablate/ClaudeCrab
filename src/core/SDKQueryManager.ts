@@ -4,6 +4,17 @@ import type { ToolEvent } from '../adapters/types.js';
 import { logger } from '../utils/logger.js';
 
 /**
+ * Token usage breakdown from SDK result (ADR-020 Phase 2)
+ */
+export interface QueryUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  costUsd: number;
+}
+
+/**
  * Result of executing a query
  */
 export interface QueryResult {
@@ -21,6 +32,12 @@ export interface QueryResult {
 
   /** Number of intermediate messages delivered via onIntermediateMessage callback */
   intermediateMessageCount?: number;
+
+  /** Token usage breakdown (ADR-020 Phase 2) */
+  usage?: QueryUsage;
+
+  /** Total cost in USD from SDK (ADR-020 Phase 2) */
+  totalCostUsd?: number;
 }
 
 /**
@@ -190,6 +207,8 @@ export class SDKQueryManager {
       let numTurns = 0;
       let durationMs = 0;
       let intermediateCount = 0;
+      let usage: QueryUsage | undefined;
+      let totalCostUsd: number | undefined;
       // Track tool_use_id -> tool_name mapping for tool_result events
       const toolIdToName = new Map<string, string>();
 
@@ -311,6 +330,37 @@ export class SDKQueryManager {
           numTurns = message.num_turns ?? 0;
           durationMs = message.duration_ms ?? 0;
 
+          // ADR-020 Phase 2: Capture token usage from SDK result
+          const resultMsg = message as {
+            total_cost_usd?: number;
+            modelUsage?: Record<string, {
+              inputTokens?: number;
+              outputTokens?: number;
+              cacheReadInputTokens?: number;
+              cacheCreationInputTokens?: number;
+              costUSD?: number;
+            }>;
+          };
+
+          if (resultMsg.modelUsage) {
+            let input = 0, output = 0, cacheRead = 0, cacheCreation = 0, cost = 0;
+            for (const mu of Object.values(resultMsg.modelUsage)) {
+              input += mu.inputTokens ?? 0;
+              output += mu.outputTokens ?? 0;
+              cacheRead += mu.cacheReadInputTokens ?? 0;
+              cacheCreation += mu.cacheCreationInputTokens ?? 0;
+              cost += mu.costUSD ?? 0;
+            }
+            usage = {
+              inputTokens: input,
+              outputTokens: output,
+              cacheReadInputTokens: cacheRead,
+              cacheCreationInputTokens: cacheCreation,
+              costUsd: cost,
+            };
+          }
+          totalCostUsd = resultMsg.total_cost_usd;
+
           // Capture session_id from result if not already set
           if (!sdkSessionId && message.session_id) {
             sdkSessionId = message.session_id;
@@ -337,17 +387,33 @@ export class SDKQueryManager {
           responseLength: response.length,
           numTurns,
           durationMs,
+          ...(usage ? {
+            usage: {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cacheReadTokens: usage.cacheReadInputTokens,
+              costUsd: usage.costUsd,
+            },
+            totalCostUsd,
+          } : {}),
         },
         'SDK query completed'
       );
 
-      return {
+      const queryResult: QueryResult = {
         response,
         sdkSessionId,
         numTurns,
         durationMs,
         intermediateMessageCount: intermediateCount,
       };
+      if (usage) {
+        queryResult.usage = usage;
+      }
+      if (totalCostUsd !== undefined) {
+        queryResult.totalCostUsd = totalCostUsd;
+      }
+      return queryResult;
     } finally {
       // Clean up active query
       this.activeQueries.delete(sessionId);

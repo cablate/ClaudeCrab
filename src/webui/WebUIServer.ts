@@ -46,6 +46,7 @@ export class WebUIServer {
       conversationRepository: options.conversationRepository,
       scheduleManager: options.scheduleManager,
       monitoringService,
+      queryMetricsRepository: options.queryMetricsRepository,
     };
 
     this.app = express();

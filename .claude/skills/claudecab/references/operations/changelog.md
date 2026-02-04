@@ -6,7 +6,56 @@
 
 ## 版本歷史
 
-### v1.18.0 - 虛擬辦公室群組協作 Phase 1（當前版本）
+### v1.19.0 - ADR-020 Phase 2: Token 追蹤 + Dashboard 增強（當前版本）
+
+**發布日期**：2026-02-04
+
+**目標**：實作 ADR-020 Phase 2（Token 用量追蹤與數據可視化）+ 群組記憶隔離修正。
+
+**1. Token 用量追蹤**
+- `SDKQueryManager` 新增 `QueryUsage` 介面，從 SDK `modelUsage` 聚合 input/output/cache tokens 和成本
+- `QueryResult` 擴展 `usage` 和 `totalCostUsd` 欄位
+- DB Schema v6→v7，新增 `query_metrics` 表（agent_id, tokens, cost, duration 等）
+- 新增 `QueryMetricsRepository`：`record()` / `getAgentStats()` / `getAllAgentStatsSince()` / `getDailyStats()`
+- `MessageProcessor` 新增 `recordQueryMetrics()` 私有方法，每次 SDK query 成功後記錄
+
+**2. Dashboard 增強**
+- 新增「Today's Cost」統計卡片（綠/黃/紅色根據金額）
+- Agent 列表增強：顯示 24h queries 數、成本（$X.XXX）、IN/OUT token（Xk）、平均回應時間
+- `queryMetricsRepository` 完整佈線：AppBootstrap → WebUIServer → Dashboard route
+
+**3. 成員清單加入 @username**
+- `GroupMemberInfo` 新增 `username` 欄位
+- `AppBootstrap` 的 `getGroupMembersInfo` callback 從 `TelegramAdapter.getBotInfo()` 取 username
+- `formatMemberList()` 顯示格式：`- Kevin (@kevin_bot) — 秘書（你自己）`
+- Bot 可建議「@coder_bot 來處理」，用戶直接知道要打什麼
+
+**4. 群組記憶隔離修正**
+- `buildMemoryStopCheckpoint()` 群組版明確指示：群組事件寫 `groups/{chatId}/`，不寫 `memory/*.md`
+- `buildPromptContext()` 群組模式改顯示 `【群組日誌路徑】` 取代個人 `【日誌路徑】`
+- 修正 Bot 在群組對話時同時寫個人日誌 + 群組日誌的冗余問題
+
+**新增檔案**：
+- `src/persistence/QueryMetricsRepository.ts`
+
+**修改檔案**：
+- `src/core/SDKQueryManager.ts` — QueryUsage + QueryResult 擴展 + usage 捕捉
+- `src/persistence/DatabaseManager.ts` — Schema v6→v7 migration + query_metrics 表
+- `src/persistence/types.ts` — QueryMetricRow、AgentUsageStats、DailyUsageStats、IQueryMetricsRepository
+- `src/persistence/index.ts` — 新增 exports
+- `src/core/MessageProcessor.ts` — recordQueryMetrics() + queryMetricsRepository 選項
+- `src/AppBootstrap.ts` — 佈線 QueryMetricsRepository + username lookup
+- `src/core/ContextInjector.ts` — GroupMemberInfo.username + formatMemberList 顯示
+- `src/core/constants.ts` — 群組記憶隔離（Stop checkpoint + promptContext）
+- `src/webui/types.ts` — queryMetricsRepository 依賴
+- `src/webui/WebUIServer.ts` — 傳遞 queryMetricsRepository
+- `src/webui/routes/dashboard.ts` — 查詢 24h agent usage stats
+- `src/webui/views/dashboard/index.ejs` — Today's Cost + Agent usage UI
+- `tests/unit/DatabaseManager.test.ts` — schema version 更新為 '7'
+
+---
+
+### v1.18.0 - 虛擬辦公室群組協作 Phase 1
 
 **發布日期**：2026-02-04
 

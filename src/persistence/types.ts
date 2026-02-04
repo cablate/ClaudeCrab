@@ -224,6 +224,85 @@ export interface IGroupMemberRepository {
 }
 
 /**
+ * Database row type for query_metrics table (ADR-020 Phase 2)
+ */
+export interface QueryMetricRow {
+  id: number;
+  agent_id: string;
+  platform: string;
+  chat_id: string;
+  user_id: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  total_cost_usd: number;
+  num_turns: number;
+  duration_ms: number;
+  created_at: string;
+}
+
+/**
+ * Aggregated usage stats per agent (ADR-020 Phase 2)
+ */
+export interface AgentUsageStats {
+  agentId: string;
+  totalQueries: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  totalCostUsd: number;
+  avgDurationMs: number;
+}
+
+/**
+ * Daily usage stats (ADR-020 Phase 2)
+ */
+export interface DailyUsageStats {
+  date: string;
+  queries: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+/**
+ * Query metrics repository interface (ADR-020 Phase 2)
+ */
+export interface IQueryMetricsRepository {
+  /** Record a query's metrics */
+  record(params: {
+    agentId: string;
+    platform: string;
+    chatId: string;
+    userId: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    totalCostUsd: number;
+    numTurns: number;
+    durationMs: number;
+  }): void;
+
+  /** Get aggregated stats for a specific agent (all time) */
+  getAgentStats(agentId: string): AgentUsageStats | null;
+
+  /** Get aggregated stats for a specific agent since a given ISO timestamp */
+  getAgentStatsSince(agentId: string, since: string): AgentUsageStats | null;
+
+  /** Get aggregated stats for all agents (all time) */
+  getAllAgentStats(): AgentUsageStats[];
+
+  /** Get aggregated stats for all agents since a given ISO timestamp */
+  getAllAgentStatsSince(since: string): AgentUsageStats[];
+
+  /** Get daily stats for an agent over N days */
+  getDailyStats(agentId: string, days: number): DailyUsageStats[];
+}
+
+/**
  * Conversation repository interface
  */
 export interface IConversationRepository {

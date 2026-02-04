@@ -6,6 +6,7 @@ import type { DatabaseManager } from '../persistence/DatabaseManager.js';
 import type { ISessionRepository, IConversationRepository } from '../persistence/types.js';
 import type { ScheduleManager } from '../schedule/ScheduleManager.js';
 import type { MonitoringService } from './services/MonitoringService.js';
+import type { IQueryMetricsRepository } from '../persistence/types.js';
 
 /**
  * WebUI Server configuration options
@@ -19,6 +20,7 @@ export interface WebUIServerOptions {
   sessionRepository: ISessionRepository | undefined;
   conversationRepository: IConversationRepository | undefined;
   scheduleManager: ScheduleManager | undefined;
+  queryMetricsRepository: IQueryMetricsRepository | undefined;
 }
 
 /**
@@ -33,6 +35,7 @@ export interface WebUIDependencies {
   conversationRepository: IConversationRepository | undefined;
   scheduleManager: ScheduleManager | undefined;
   monitoringService: MonitoringService | undefined;
+  queryMetricsRepository: IQueryMetricsRepository | undefined;
 }
 
 /**

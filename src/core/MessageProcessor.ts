@@ -1,9 +1,9 @@
 import type { UnifiedMessage } from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import type { SendOptions } from '../adapters/types.js';
-import type { IConversationRepository } from '../persistence/types.js';
+import type { IConversationRepository, IQueryMetricsRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
-import { SDKQueryManager } from './SDKQueryManager.js';
+import { SDKQueryManager, type QueryResult } from './SDKQueryManager.js';
 import { InteractionHandler } from './InteractionHandler.js';
 import { EventBus } from './EventBus.js';
 import { buildPromptContext, buildMemoryStopCheckpoint } from './constants.js';
@@ -67,6 +67,11 @@ export interface MessageProcessorOptions {
    * Context injector for multi-bot group chat history injection (ADR-019).
    */
   contextInjector?: ContextInjector;
+
+  /**
+   * Query metrics repository for token usage tracking (ADR-020 Phase 2).
+   */
+  queryMetricsRepository?: IQueryMetricsRepository;
 }
 
 /**
@@ -112,6 +117,7 @@ export class MessageProcessor {
     | undefined;
   private readonly eventBus: EventBus | undefined;
   private readonly contextInjector: ContextInjector | undefined;
+  private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -124,6 +130,7 @@ export class MessageProcessor {
     this.getBotInfo = options.getBotInfo;
     this.eventBus = options.eventBus;
     this.contextInjector = options.contextInjector;
+    this.queryMetricsRepository = options.queryMetricsRepository;
 
     logger.info('MessageProcessor initialized');
   }
@@ -665,6 +672,7 @@ export class MessageProcessor {
 
       // --- Post-query handling ---
       this.saveSDKSessionId(result, internalSession, platform, agentId, userId, sessionId);
+      this.recordQueryMetrics(result, agentId, platform, chatId, userId);
       this.updateInjectionCursor(injectionContext, userId, chatId, agentId, platform);
       this.persistConversation(sessionId, prompt, intermediateMessages, result.response, agentId, options);
 
@@ -725,6 +733,40 @@ export class MessageProcessor {
       logger.debug(
         { sessionId, sdkSessionId: result.sdkSessionId },
         'Updated SDK session ID'
+      );
+    }
+  }
+
+  /**
+   * Record query metrics for token usage tracking (ADR-020 Phase 2).
+   */
+  private recordQueryMetrics(
+    result: QueryResult,
+    agentId: string,
+    platform: string,
+    chatId: string,
+    userId: string
+  ): void {
+    if (!this.queryMetricsRepository || !result.usage) return;
+
+    try {
+      this.queryMetricsRepository.record({
+        agentId,
+        platform,
+        chatId,
+        userId,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        cacheReadTokens: result.usage.cacheReadInputTokens,
+        cacheCreationTokens: result.usage.cacheCreationInputTokens,
+        totalCostUsd: result.totalCostUsd ?? result.usage.costUsd,
+        numTurns: result.numTurns ?? 0,
+        durationMs: result.durationMs ?? 0,
+      });
+    } catch (error) {
+      logger.warn(
+        { error, agentId },
+        'Failed to record query metrics'
       );
     }
   }

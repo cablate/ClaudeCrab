@@ -19,6 +19,7 @@ import { ConversationRepository } from './persistence/ConversationRepository.js'
 import { GroupMessageRepository } from './persistence/GroupMessageRepository.js';
 import { InjectionStateRepository } from './persistence/InjectionStateRepository.js';
 import { GroupMemberRepository } from './persistence/GroupMemberRepository.js';
+import { QueryMetricsRepository } from './persistence/QueryMetricsRepository.js';
 import { ScheduleRepository } from './persistence/ScheduleRepository.js';
 import { WebUIServer } from './webui/index.js';
 import {
@@ -77,7 +78,8 @@ export class AppBootstrap {
       sessionManager,
       agentLoader,
       persistence?.conversationRepository,
-      persistence?.contextInjector
+      persistence?.contextInjector,
+      persistence?.queryMetricsRepository
     );
 
     this.orchestrator = this.createOrchestrator(
@@ -187,8 +189,10 @@ export class AppBootstrap {
     const groupMessageRepository = new GroupMessageRepository(db);
     const injectionStateRepository = new InjectionStateRepository(db);
     const groupMemberRepository = new GroupMemberRepository(db);
+    const queryMetricsRepository = new QueryMetricsRepository(db);
 
     // ADR-020: Build group member info callback for ContextInjector
+    // Uses lazy reference to this.orchestrator (populated after persistence init)
     const getGroupMembersInfo = (chatId: string, platform: string) => {
       const memberRows = groupMemberRepository.getMembers(platform, chatId);
       return memberRows.map((row) => {
@@ -199,6 +203,14 @@ export class AppBootstrap {
         };
         if (agent?.config.description) {
           info.description = agent.config.description;
+        }
+        // Get Telegram @username from running adapter
+        const adapter = this.orchestrator?.getRegistry().get(platform, row.agent_id);
+        if (adapter instanceof TelegramAdapter) {
+          const botInfo = adapter.getBotInfo();
+          if (botInfo) {
+            info.username = botInfo.username;
+          }
         }
         return info;
       });
@@ -219,6 +231,7 @@ export class AppBootstrap {
       groupMessageRepository,
       injectionStateRepository,
       groupMemberRepository,
+      queryMetricsRepository,
       contextInjector,
     };
   }
@@ -246,7 +259,8 @@ export class AppBootstrap {
     sessionManager: SessionManager,
     agentLoader: AgentLoader,
     conversationRepository: ConversationRepository | undefined,
-    contextInjector: ContextInjector | undefined
+    contextInjector: ContextInjector | undefined,
+    queryMetricsRepository: QueryMetricsRepository | undefined
   ): MessageProcessor {
     // Note: getAdapter and getBotInfo reference orchestrator via closure (lazy resolution)
     return new MessageProcessor({
@@ -258,6 +272,9 @@ export class AppBootstrap {
       typingIndicatorIntervalMs: 5000,
       ...(conversationRepository !== undefined
         ? { conversationRepository }
+        : {}),
+      ...(queryMetricsRepository !== undefined
+        ? { queryMetricsRepository }
         : {}),
       getBotInfo: (agentId) => {
         const adapter = this.orchestrator
@@ -368,6 +385,7 @@ export class AppBootstrap {
       sessionRepository: persistence?.sessionRepository,
       conversationRepository: persistence?.conversationRepository,
       scheduleManager: this.scheduleManager ?? undefined,
+      queryMetricsRepository: persistence?.queryMetricsRepository,
     });
 
     await this.webUIServer.start();
@@ -401,5 +419,6 @@ interface PersistenceLayer {
   groupMessageRepository: GroupMessageRepository;
   injectionStateRepository: InjectionStateRepository;
   groupMemberRepository: GroupMemberRepository;
+  queryMetricsRepository: QueryMetricsRepository;
   contextInjector: ContextInjector;
 }

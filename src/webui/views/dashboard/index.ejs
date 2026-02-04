@@ -1,7 +1,7 @@
 <%- include('../partials/start', { title }) %>
 
 <!-- Stats Cards -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
   <%- include('../components/card', {
     title: 'Total Agents',
     value: stats.totalAgents,
@@ -20,6 +20,13 @@
     color: 'purple',
     icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z'
   }) %>
+  <% const costColor = todayCostUsd > 5 ? 'red' : todayCostUsd > 1 ? 'yellow' : 'green'; %>
+  <%- include('../components/card', {
+    title: "Today's Cost",
+    value: '$' + todayCostUsd.toFixed(2),
+    color: costColor,
+    icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+  }) %>
   <%- include('../components/card', {
     title: 'System Status',
     value: stats.systemStatus === 'running' ? 'Running' : stats.systemStatus,
@@ -30,13 +37,13 @@
 
 <!-- Three Column Layout -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-  <!-- Agents List -->
+  <!-- Agents List with Usage Stats -->
   <div class="bg-white rounded-lg shadow-sm border border-gray-200">
     <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-gray-800">Agents</h3>
+      <h3 class="text-lg font-semibold text-gray-800">Agents (24h)</h3>
       <a href="/agents" class="text-sm text-blue-600 hover:text-blue-700">View All &rarr;</a>
     </div>
-    <div class="divide-y divide-gray-200 max-h-64 overflow-y-auto">
+    <div class="divide-y divide-gray-200 max-h-80 overflow-y-auto">
       <% if (agents.length === 0) { %>
         <%- include('../components/empty-state', {
           title: 'No agents found',
@@ -46,14 +53,28 @@
         <% agents.forEach(agent => { %>
           <a href="/agents/<%= agent.id %>" class="block px-6 py-3 hover:bg-gray-50 transition-colors">
             <div class="flex items-center justify-between">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p class="font-medium text-gray-900"><%= agent.name %></p>
                 <p class="text-xs text-gray-500"><%= agent.id %></p>
               </div>
-              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-              </svg>
+              <% if (agent.usage) { %>
+                <div class="text-right ml-4 flex-shrink-0">
+                  <p class="text-sm font-semibold text-gray-900">$<%= agent.usage.totalCostUsd.toFixed(3) %></p>
+                  <p class="text-xs text-gray-500"><%= agent.usage.totalQueries %> queries</p>
+                </div>
+              <% } else { %>
+                <div class="text-right ml-4 flex-shrink-0">
+                  <p class="text-xs text-gray-400">No activity</p>
+                </div>
+              <% } %>
             </div>
+            <% if (agent.usage) { %>
+              <div class="mt-2 flex gap-3 text-xs text-gray-500">
+                <span title="Input tokens">IN: <%= (agent.usage.totalInputTokens / 1000).toFixed(1) %>k</span>
+                <span title="Output tokens">OUT: <%= (agent.usage.totalOutputTokens / 1000).toFixed(1) %>k</span>
+                <span title="Average response time">Avg: <%= (agent.usage.avgDurationMs / 1000).toFixed(1) %>s</span>
+              </div>
+            <% } %>
           </a>
         <% }) %>
       <% } %>
