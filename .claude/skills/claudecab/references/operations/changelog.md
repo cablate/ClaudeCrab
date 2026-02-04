@@ -6,7 +6,53 @@
 
 ## 版本歷史
 
-### v1.17.0 - Codebase 優化重構（當前版本）
+### v1.18.0 - 虛擬辦公室群組協作 Phase 1（當前版本）
+
+**發布日期**：2026-02-04
+
+**目標**：實作 ADR-020 Phase 1，讓多 Bot 群組協作（虛擬辦公室模式）實際可用。
+
+**1. 群組成員持久化**
+- DB Schema v5 → v6，新增 `group_members` 表（platform + chat_id + agent_id，UNIQUE 約束）
+- 新增 `GroupMemberRepository`：registerMember / getMembers / getAllMembers / removeMember
+- `GroupBroadcaster` 加入 DB 寫入 + `restoreMemberships()` 重啟時自動還原成員關係
+- `AppBootstrap` / `PlatformOrchestrator` 完成佈線
+
+**2. 群組成員注入**
+- `ContextInjector` 新增 `formatMemberList()` — 注入 `[群組成員]` 清單到 prompt
+- 包含每個成員的名字、描述、以及「你自己」標記
+- 即使沒有新的群組訊息，成員清單仍會注入（Bot 始終知道群組裡有誰）
+- `AppBootstrap` 建構 `getGroupMembersInfo` callback（整合 GroupMemberRepository + AgentLoader）
+
+**3. 群組記憶路徑**
+- `buildPromptContext` 在群組對話時輸出 `【群組記憶】groups/{chatId}/MEMORY.md | groups/{chatId}/YYYY-MM-DD.md`
+- `buildMemoryStopCheckpoint` 在群組對話時將 `groups/{chatId}/` 加入 Stop hook 的檢查清單
+- 三份 `memory-system.md` 新增群組記憶區段
+
+**4. 群組記憶寫入提示**
+- `formatHistory` 有注入訊息時，SYSTEM framing 加入「請寫入群組記憶」提示
+- 群組記憶目錄結構扁平化：`groups/{chatId}/YYYY-MM-DD.md`（無多餘 memory/ 子目錄）
+
+**新增檔案**：
+- `src/persistence/GroupMemberRepository.ts`
+- `agents/_example/groups/.gitkeep`
+
+**修改檔案**：
+- `src/persistence/DatabaseManager.ts` — Schema v5→v6 migration
+- `src/persistence/types.ts` — GroupMemberRow、IGroupMemberRepository
+- `src/persistence/index.ts` — 新增 exports
+- `src/core/GroupBroadcaster.ts` — 成員持久化 + restoreMemberships()
+- `src/core/PlatformOrchestrator.ts` — 佈線 groupMemberRepository
+- `src/AppBootstrap.ts` — 佈線 + getGroupMembersInfo callback
+- `src/core/ContextInjector.ts` — 成員清單注入 + 記憶寫入提示
+- `src/core/constants.ts` — buildPromptContext 群組記憶路徑 + buildMemoryStopCheckpoint
+- `src/core/MessageProcessor.ts` — 傳遞 groupChatId + 使用 buildMemoryStopCheckpoint
+- `agents/*/memory-system.md` — 新增群組記憶區段
+- `tests/unit/DatabaseManager.test.ts` — schema version 更新
+
+---
+
+### v1.17.0 - Codebase 優化重構
 
 **發布日期**：2026-02-03
 

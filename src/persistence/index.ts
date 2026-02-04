@@ -9,15 +9,18 @@ export { SessionRepository } from './SessionRepository.js';
 export { ConversationRepository } from './ConversationRepository.js';
 export { GroupMessageRepository } from './GroupMessageRepository.js';
 export { InjectionStateRepository } from './InjectionStateRepository.js';
+export { GroupMemberRepository } from './GroupMemberRepository.js';
 
 export type {
   SessionRow,
   ConversationRow,
   GroupMessageRow,
+  GroupMemberRow,
   InjectionStateRow,
   ISessionRepository,
   IConversationRepository,
   IGroupMessageRepository,
+  IGroupMemberRepository,
   IInjectionStateRepository,
   PersistenceConfig,
 } from './types.js';

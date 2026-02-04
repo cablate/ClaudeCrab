@@ -95,7 +95,7 @@ describe('DatabaseManager', () => {
       ).get() as { value: string } | undefined;
 
       expect(row).toBeDefined();
-      expect(row?.value).toBe('4');
+      expect(row?.value).toBe('6');
     });
   });
 

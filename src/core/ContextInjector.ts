@@ -31,6 +31,20 @@ export interface InjectionOptions {
 }
 
 /**
+ * Agent info for group member display (ADR-020)
+ */
+export interface GroupMemberInfo {
+  agentId: string;
+  name: string;
+  description?: string;
+}
+
+/**
+ * Callback to get group member info for a group (ADR-020)
+ */
+export type GetGroupMembersInfo = (chatId: string, platform: string) => GroupMemberInfo[];
+
+/**
  * ContextInjector manages group chat history injection for SDK queries.
  *
  * When a bot in a group chat calls the SDK, this class:
@@ -42,14 +56,18 @@ export interface InjectionOptions {
 export class ContextInjector {
   private readonly groupMessageRepository: IGroupMessageRepository;
   private readonly injectionStateRepository: IInjectionStateRepository;
+  private readonly getGroupMembersInfo: GetGroupMembersInfo | undefined;
   private readonly log = logger.child({ module: 'ContextInjector' });
 
   constructor(
     groupMessageRepository: IGroupMessageRepository,
-    injectionStateRepository: IInjectionStateRepository
+    injectionStateRepository: IInjectionStateRepository,
+    /** Optional: callback to get group members info for member list injection (ADR-020) */
+    getGroupMembersInfo?: GetGroupMembersInfo
   ) {
     this.groupMessageRepository = groupMessageRepository;
     this.injectionStateRepository = injectionStateRepository;
+    this.getGroupMembersInfo = getGroupMembersInfo;
   }
 
   /**
@@ -64,6 +82,9 @@ export class ContextInjector {
   ): InjectionContext {
     const limit = options?.limit ?? 50;
 
+    // ADR-020: Get member list (always include even if no new messages)
+    const memberList = this.formatMemberList(agentId, chatId, platform);
+
     // Get injection state
     const state = this.injectionStateRepository.getState(agentId, chatId, platform);
 
@@ -77,7 +98,8 @@ export class ContextInjector {
         { agentId, chatId, platform },
         'No injection state found - bot has not seen this group yet'
       );
-      return { formattedHistory: '', messageCount: 0, lastMessageId: null };
+      // Even without state, return member list if available
+      return { formattedHistory: memberList, messageCount: 0, lastMessageId: null };
     }
 
     // Determine the starting point for injection
@@ -132,24 +154,30 @@ export class ContextInjector {
         { agentId, chatId, platform, startFrom },
         'No new messages to inject'
       );
-      return { formattedHistory: '', messageCount: 0, lastMessageId: null };
+      // Return member list even without new messages
+      return { formattedHistory: memberList, messageCount: 0, lastMessageId: null };
     }
 
-    // Format the history
-    const formattedHistory = this.formatHistory(messages);
+    // Format the history (ADR-020: includes memory write prompt)
+    const formattedHistory = this.formatHistory(messages, chatId);
     // Safe to access: we already checked messages.length > 0 above
     // Use autoincrement id (not platform_msg_id) for cursor tracking,
     // because regular Telegram groups give each bot different message_ids.
     const lastMessage = messages[messages.length - 1];
     const lastMessageId = lastMessage?.id?.toString() ?? null;
 
+    // Combine: member list + chat history
+    const combined = memberList
+      ? `${memberList}\n${formattedHistory}`
+      : formattedHistory;
+
     this.log.info(
-      { agentId, chatId, platform, messageCount: messages.length, lastMessageId },
+      { agentId, chatId, platform, messageCount: messages.length, lastMessageId, hasMemberList: !!memberList },
       'Prepared injection context'
     );
 
     return {
-      formattedHistory,
+      formattedHistory: combined,
       messageCount: messages.length,
       lastMessageId,
     };
@@ -174,22 +202,59 @@ export class ContextInjector {
   }
 
   /**
+   * Format group member list for injection (ADR-020).
+   * Shows who is in the group to help the bot understand the team.
+   */
+  private formatMemberList(
+    agentId: string,
+    chatId: string,
+    platform: string
+  ): string {
+    if (!this.getGroupMembersInfo) {
+      return '';
+    }
+
+    const members = this.getGroupMembersInfo(chatId, platform);
+    if (members.length === 0) {
+      return '';
+    }
+
+    const lines = members.map((m) => {
+      const desc = m.description ? ` — ${m.description}` : '';
+      const selfTag = m.agentId === agentId ? '（你自己）' : '';
+      return `- ${m.name}${desc}${selfTag}`;
+    });
+
+    return [
+      '[群組成員]',
+      ...lines,
+      '如需其他成員協助，可在回覆中建議用戶 @mention 對應的成員。',
+      '---',
+    ].join('\n');
+  }
+
+  /**
    * Format messages as conversation history for injection.
    * The framing must be explicit enough for the LLM to understand that
    * these are REAL messages that already happened in the group chat,
    * including actual responses from other bots.
+   * ADR-020: Includes memory write prompt when chatId is provided.
    */
-  private formatHistory(messages: GroupMessageRow[]): string {
+  private formatHistory(messages: GroupMessageRow[], chatId?: string): string {
     const lines = messages.map((msg) => {
       const date = new Date(msg.created_at);
       const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
       return `[${time}] ${msg.sender_label}: ${msg.content}`;
     });
 
+    const memoryHint = chatId
+      ? `\n如果對話中有重要的共識、決策或任務分配，請寫入群組記憶（groups/${chatId}/MEMORY.md 或 groups/${chatId}/YYYY-MM-DD.md）。`
+      : '';
+
     return [
       '[SYSTEM: 以下是此群組中已發生的真實聊天紀錄。',
       '標記為 [@...] 的訊息是群組中其他機器人的實際回覆，這些都是事實。',
-      '請在回答時參考這些對話內容。]',
+      `請在回答時參考這些對話內容。${memoryHint}]`,
       '---',
       ...lines,
       '---',

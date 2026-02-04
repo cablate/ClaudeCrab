@@ -10,7 +10,7 @@ import { MessageProcessor } from './core/MessageProcessor.js';
 import { SDKQueryManager } from './core/SDKQueryManager.js';
 import { PlatformOrchestrator } from './core/PlatformOrchestrator.js';
 import { getEventBus } from './core/EventBus.js';
-import { ContextInjector } from './core/ContextInjector.js';
+import { ContextInjector, type GroupMemberInfo } from './core/ContextInjector.js';
 import { TelegramAdapter } from './adapters/TelegramAdapter.js';
 import { loadSecurityConfig } from './utils/security.js';
 import { DatabaseManager } from './persistence/DatabaseManager.js';
@@ -18,6 +18,7 @@ import { SessionRepository } from './persistence/SessionRepository.js';
 import { ConversationRepository } from './persistence/ConversationRepository.js';
 import { GroupMessageRepository } from './persistence/GroupMessageRepository.js';
 import { InjectionStateRepository } from './persistence/InjectionStateRepository.js';
+import { GroupMemberRepository } from './persistence/GroupMemberRepository.js';
 import { ScheduleRepository } from './persistence/ScheduleRepository.js';
 import { WebUIServer } from './webui/index.js';
 import {
@@ -63,7 +64,7 @@ export class AppBootstrap {
 
     const securityConfig = loadSecurityConfig();
     const agentLoader = await this.initializeAgents();
-    const persistence = this.initializePersistence();
+    const persistence = this.initializePersistence(agentLoader);
     const sessionManager = this.initializeSessionManager(agentLoader, persistence);
 
     // Restore sessions from database
@@ -168,7 +169,7 @@ export class AppBootstrap {
     return agentLoader;
   }
 
-  private initializePersistence(): PersistenceLayer | null {
+  private initializePersistence(agentLoader: AgentLoader): PersistenceLayer | null {
     if (!this.config.persistence.enabled) {
       return null;
     }
@@ -185,9 +186,28 @@ export class AppBootstrap {
     const conversationRepository = new ConversationRepository(db);
     const groupMessageRepository = new GroupMessageRepository(db);
     const injectionStateRepository = new InjectionStateRepository(db);
+    const groupMemberRepository = new GroupMemberRepository(db);
+
+    // ADR-020: Build group member info callback for ContextInjector
+    const getGroupMembersInfo = (chatId: string, platform: string) => {
+      const memberRows = groupMemberRepository.getMembers(platform, chatId);
+      return memberRows.map((row) => {
+        const agent = agentLoader.get(row.agent_id);
+        const info: GroupMemberInfo = {
+          agentId: row.agent_id,
+          name: agent?.config.name ?? row.agent_id,
+        };
+        if (agent?.config.description) {
+          info.description = agent.config.description;
+        }
+        return info;
+      });
+    };
+
     const contextInjector = new ContextInjector(
       groupMessageRepository,
-      injectionStateRepository
+      injectionStateRepository,
+      getGroupMembersInfo
     );
 
     logger.info('Persistence enabled');
@@ -198,6 +218,7 @@ export class AppBootstrap {
       conversationRepository,
       groupMessageRepository,
       injectionStateRepository,
+      groupMemberRepository,
       contextInjector,
     };
   }
@@ -277,6 +298,9 @@ export class AppBootstrap {
         : {}),
       ...(persistence?.injectionStateRepository !== undefined
         ? { injectionStateRepository: persistence.injectionStateRepository }
+        : {}),
+      ...(persistence?.groupMemberRepository !== undefined
+        ? { groupMemberRepository: persistence.groupMemberRepository }
         : {}),
     });
   }
@@ -376,5 +400,6 @@ interface PersistenceLayer {
   conversationRepository: ConversationRepository;
   groupMessageRepository: GroupMessageRepository;
   injectionStateRepository: InjectionStateRepository;
+  groupMemberRepository: GroupMemberRepository;
   contextInjector: ContextInjector;
 }

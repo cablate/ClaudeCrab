@@ -4,6 +4,7 @@ import type { GroupMessagePayload, BotRepliedPayload } from '../types/events.js'
 import type {
   IGroupMessageRepository,
   IInjectionStateRepository,
+  IGroupMemberRepository,
 } from '../persistence/types.js';
 import { logger } from '../utils/logger.js';
 import { formatUserLabel, formatBotLabel } from '../utils/format.js';
@@ -23,6 +24,9 @@ export interface GroupBroadcasterOptions {
 
   /** Injection state repository for tracking injection cursor per bot */
   injectionStateRepository?: IInjectionStateRepository;
+
+  /** Group member repository for persistent membership (ADR-020) */
+  groupMemberRepository?: IGroupMemberRepository;
 }
 
 /**
@@ -47,6 +51,7 @@ export class GroupBroadcaster {
   ) => { username: string; id: number } | null;
   private readonly groupMessageRepository: IGroupMessageRepository | undefined;
   private readonly injectionStateRepository: IInjectionStateRepository | undefined;
+  private readonly groupMemberRepository: IGroupMemberRepository | undefined;
 
   /**
    * Maps chatId to set of agentIds that are members of that group.
@@ -76,6 +81,7 @@ export class GroupBroadcaster {
     this.getBotInfo = options.getBotInfo;
     this.groupMessageRepository = options.groupMessageRepository;
     this.injectionStateRepository = options.injectionStateRepository;
+    this.groupMemberRepository = options.groupMemberRepository;
 
     // Listen to group:message events
     getEventBus().on('group:message', this.handleGroupMessage.bind(this));
@@ -89,8 +95,9 @@ export class GroupBroadcaster {
   /**
    * Register a bot as a member of a group.
    * Called automatically when a bot receives a message from a group.
+   * ADR-020: Also persists to DB so memberships survive restarts.
    */
-  registerBotInGroup(chatId: string, agentId: string): void {
+  registerBotInGroup(chatId: string, agentId: string, platform?: string): void {
     let members = this.groupMemberships.get(chatId);
     if (members === undefined) {
       members = new Set();
@@ -99,11 +106,46 @@ export class GroupBroadcaster {
 
     if (!members.has(agentId)) {
       members.add(agentId);
+
+      // Persist to DB (ADR-020)
+      if (this.groupMemberRepository && platform) {
+        this.groupMemberRepository.registerMember(platform, chatId, agentId);
+      }
+
       this.log.debug(
         { chatId, agentId, memberCount: members.size },
         'Bot registered in group'
       );
     }
+  }
+
+  /**
+   * Restore group memberships from database (ADR-020).
+   * Called during startup to recover persistent state.
+   */
+  restoreMemberships(): void {
+    if (!this.groupMemberRepository) {
+      this.log.debug('No groupMemberRepository, skipping membership restoration');
+      return;
+    }
+
+    const allMembers = this.groupMemberRepository.getAllMembers();
+    let restoredCount = 0;
+
+    for (const row of allMembers) {
+      let members = this.groupMemberships.get(row.chat_id);
+      if (members === undefined) {
+        members = new Set();
+        this.groupMemberships.set(row.chat_id, members);
+      }
+      members.add(row.agent_id);
+      restoredCount++;
+    }
+
+    this.log.info(
+      { restoredCount, groupCount: this.groupMemberships.size },
+      'Group memberships restored from database'
+    );
   }
 
   /**
@@ -125,7 +167,7 @@ export class GroupBroadcaster {
     // IMPORTANT: Register bot BEFORE dedup check!
     // Each TelegramAdapter emits group:message independently, so every bot
     // gets registered even if their event is later deduplicated.
-    this.registerBotInGroup(chatId, sourceAgentId);
+    this.registerBotInGroup(chatId, sourceAgentId, message.platform);
 
     // Get platform message ID (per-bot, differs in regular Telegram groups)
     const platformMsgId = String(message.metadata?.originalMessageId ?? '');

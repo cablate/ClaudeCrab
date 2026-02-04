@@ -18,6 +18,7 @@ import type {
   IConversationRepository,
   IGroupMessageRepository,
   IInjectionStateRepository,
+  IGroupMemberRepository,
 } from '../persistence/types.js';
 import { AdapterRegistry } from './AdapterRegistry.js';
 import { AgentLoader } from './AgentLoader.js';
@@ -51,6 +52,8 @@ export interface PlatformOrchestratorOptions {
   groupMessageRepository?: IGroupMessageRepository;
   /** Injection state repository for context injection (ADR-019) */
   injectionStateRepository?: IInjectionStateRepository;
+  /** Group member repository for persistent membership (ADR-020) */
+  groupMemberRepository?: IGroupMemberRepository;
 }
 
 /**
@@ -90,6 +93,9 @@ export class PlatformOrchestrator {
       ...(options.injectionStateRepository !== undefined
         ? { injectionStateRepository: options.injectionStateRepository }
         : {}),
+      ...(options.groupMemberRepository !== undefined
+        ? { groupMemberRepository: options.groupMemberRepository }
+        : {}),
     });
   }
 
@@ -98,6 +104,9 @@ export class PlatformOrchestrator {
    * A single agent failing does NOT prevent other agents from starting.
    */
   async startAll(): Promise<void> {
+    // Restore persistent group memberships (ADR-020)
+    this.groupBroadcaster.restoreMemberships();
+
     const agentsWithTokens = this.agentLoader.getAgentsWithPlatformTokens();
 
     if (agentsWithTokens.length === 0) {

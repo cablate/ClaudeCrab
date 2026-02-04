@@ -185,8 +185,10 @@ v1.17.0 從 MessageProcessor 抽出，封裝即時狀態訊息管理：
 
 ### constants (`src/core/constants.ts`)
 
-集中管理核心常數：
+集中管理核心常數與 hook 建構函式：
 - **MEMORY_CHECKPOINT_CONTEXT**（v1.7.1）：記憶檢查提醒文字，透過 UserPromptSubmit hook 注入，提醒 agent 在回覆前檢查上一輪對話是否有值得記錄的內容
+- **buildMemoryStopCheckpoint(groupChatId?)**（v1.18.0）：Stop hook 記憶檢查，群組對話時在檔案清單中加入 `groups/{chatId}/`
+- **buildPromptContext(chatId?, isNewSession?, groupChatId?)**：UserPromptSubmit hook context，群組對話時加入 `【群組記憶】` 路徑提示
 
 ### EventBus (`src/core/EventBus.ts`)
 
@@ -234,9 +236,10 @@ Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 ### Persistence 層 (`src/persistence/`)
 
 SQLite 持久化：
-- `DatabaseManager.ts` - 連線管理、Schema 初始化（v2）、WAL 模式
+- `DatabaseManager.ts` - 連線管理、Schema 初始化（v6）、WAL 模式、線性 migration 鏈（v1→v6）
 - `SessionRepository.ts` - Session CRUD、過期清理、`sdkSessionId` 存儲（UNIQUE: platform + agent_id + user_id）
 - `ConversationRepository.ts` - 對話歷史 CRUD（SDK 訊息持久化，供 WebUI 查看）
+- `GroupMemberRepository.ts`（v1.18.0）- 群組成員持久化（platform + chat_id + agent_id），供重啟後還原成員關係
 
 ---
 
@@ -372,6 +375,10 @@ agents/general/
 │   ├── tools/                 # 工具評估
 │   ├── cases/                 # 案例研究
 │   └── research/              # 研究筆記
+├── groups/                    # 群組記憶（v1.18.0）
+│   └── {chatId}/
+│       ├── MEMORY.md          # 群組持久記憶（共識、決策、任務分配）
+│       └── YYYY-MM-DD.md      # 群組每日討論紀錄
 └── memory/                    # 每日日誌
     └── YYYY-MM-DD.md
 ```

@@ -129,9 +129,25 @@ CREATE TABLE IF NOT EXISTS group_injection_state (
 
 -- Group injection state indexes
 CREATE INDEX IF NOT EXISTS idx_injection_state_lookup ON group_injection_state(platform, agent_id, chat_id);
+
+-- Group members table (persistent group membership for bots, ADR-020)
+CREATE TABLE IF NOT EXISTS group_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    joined_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(platform, chat_id, agent_id)
+);
+
+-- Group members indexes
+CREATE INDEX IF NOT EXISTS idx_group_members_chat ON group_members(platform, chat_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_agent ON group_members(agent_id);
 `;
 
-const SCHEMA_VERSION = '5';
+const SCHEMA_VERSION = '6';
 
 /**
  * Migration SQL from v1 to v2:
@@ -279,6 +295,28 @@ CREATE INDEX IF NOT EXISTS idx_injection_state_lookup ON group_injection_state(p
 `;
 
 /**
+ * Migration SQL from v5 to v6:
+ * Adds group_members table for persistent group membership (ADR-020)
+ */
+const MIGRATION_V5_TO_V6 = `
+-- Group members table (persistent group membership for bots, ADR-020)
+CREATE TABLE IF NOT EXISTS group_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    chat_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    joined_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(platform, chat_id, agent_id)
+);
+
+-- Group members indexes
+CREATE INDEX IF NOT EXISTS idx_group_members_chat ON group_members(platform, chat_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_agent ON group_members(agent_id);
+`;
+
+/**
  * Database manager options
  */
 export interface DatabaseManagerOptions {
@@ -417,6 +455,12 @@ export class DatabaseManager {
     if (currentVersion === '4') {
       this.db.exec(MIGRATION_V4_TO_V5);
       logger.info('Migration v4 → v5 completed');
+      currentVersion = '5';
+    }
+
+    if (currentVersion === '5') {
+      this.db.exec(MIGRATION_V5_TO_V6);
+      logger.info('Migration v5 → v6 completed');
     }
 
     // Update schema version

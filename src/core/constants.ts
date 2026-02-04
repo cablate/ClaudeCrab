@@ -19,8 +19,18 @@ export const MEMORY_CHECKPOINT_CONTEXT = `【記憶】遵循 memory-system 規�
  * Memory checkpoint reminder injected via Stop hook.
  * Final check before ending the conversation turn.
  */
-export const MEMORY_STOP_CHECKPOINT = 
+export const MEMORY_STOP_CHECKPOINT =
   '【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md），再結束。';
+
+/**
+ * Build memory stop checkpoint with optional group memory hint (ADR-020).
+ */
+export function buildMemoryStopCheckpoint(groupChatId?: string): string {
+  if (!groupChatId) {
+    return MEMORY_STOP_CHECKPOINT;
+  }
+  return `【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md、groups/${groupChatId}/），再結束。`;
+}
 
 const TAIPEI_TZ = 'Asia/Taipei';
 
@@ -34,7 +44,12 @@ export const STARTUP_PROTOCOL_REMINDER =
  * Build the complete prompt context with current time.
  * Time is displayed in Asia/Taipei timezone.
  */
-export function buildPromptContext(chatId?: string, isNewSession?: boolean): string {
+export function buildPromptContext(
+  chatId?: string,
+  isNewSession?: boolean,
+  /** Group chat ID when in a group chat (ADR-020) */
+  groupChatId?: string
+): string {
   const now = toZonedTime(new Date(), TAIPEI_TZ);
   const yesterday = subDays(now, 1);
 
@@ -53,6 +68,11 @@ export function buildPromptContext(chatId?: string, isNewSession?: boolean): str
 
   if (chatId) {
     context += `\n【當前對話】platform: telegram, chatId: ${chatId}`;
+  }
+
+  // ADR-020: Group memory path hints
+  if (groupChatId) {
+    context += `\n【群組記憶】groups/${groupChatId}/MEMORY.md | groups/${groupChatId}/${todayDate}.md`;
   }
 
   return context;

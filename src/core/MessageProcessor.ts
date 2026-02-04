@@ -6,7 +6,7 @@ import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager } from './SDKQueryManager.js';
 import { InteractionHandler } from './InteractionHandler.js';
 import { EventBus } from './EventBus.js';
-import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
+import { buildPromptContext, buildMemoryStopCheckpoint } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
@@ -351,6 +351,11 @@ export class MessageProcessor {
     const agent = internalSession.agent;
     const isNewSession = internalSession.sdkSessionId === undefined;
 
+    // ADR-020: Determine group chat ID for group memory paths
+    const groupChatIdForContext = options?.isGroupChat
+      ? (userId.startsWith('group::') ? userId.slice(7) : chatId)
+      : undefined;
+
     // Read fresh system prompt from disk (agent may have updated CLAUDE.md at runtime)
     const systemPrompt =
       this.getSystemPrompt !== undefined
@@ -568,7 +573,8 @@ export class MessageProcessor {
                               hookEventName: 'UserPromptSubmit' as const,
                               additionalContext: buildPromptContext(
                                 chatId,
-                                isNewSession
+                                isNewSession,
+                                groupChatIdForContext
                               ),
                             },
                           }),
@@ -588,7 +594,7 @@ export class MessageProcessor {
                             }
                             return {
                               decision: 'block' as const,
-                              reason: MEMORY_STOP_CHECKPOINT,
+                              reason: buildMemoryStopCheckpoint(groupChatIdForContext),
                             };
                           },
                         ],

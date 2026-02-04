@@ -194,6 +194,36 @@ export interface IInjectionStateRepository {
 }
 
 /**
+ * Database row type for group_members table (ADR-020)
+ */
+export interface GroupMemberRow {
+  id: number;
+  platform: string;
+  chat_id: string;
+  agent_id: string;
+  joined_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Group member repository interface (ADR-020)
+ */
+export interface IGroupMemberRepository {
+  /** Register a bot as a member of a group (upsert) */
+  registerMember(platform: string, chatId: string, agentId: string): void;
+
+  /** Get all bot members in a group */
+  getMembers(platform: string, chatId: string): GroupMemberRow[];
+
+  /** Get all members across all groups (for startup restoration) */
+  getAllMembers(): GroupMemberRow[];
+
+  /** Remove a bot from a group */
+  removeMember(platform: string, chatId: string, agentId: string): void;
+}
+
+/**
  * Conversation repository interface
  */
 export interface IConversationRepository {
