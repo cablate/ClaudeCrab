@@ -29,6 +29,10 @@
 | [ADR-019](adr/adr-019-multi-agent-group.md) | 群組對話架構重設計 - Multi-Agent 協作生態系統 | ✅ accepted | 2026-02-03 |
 | [ADR-020](adr/adr-020-virtual-office.md) | 虛擬辦公室模式可行性評估與改進路線圖 | ✅ accepted (Phase 1+2) | 2026-02-04 |
 | [ADR-021](adr/adr-021-auto-delegation.md) | 群組自動委派（Auto-Delegation） | ✅ accepted | 2026-02-04 |
+| [ADR-022](adr/adr-022-delegation-enhancement.md) | 委派機制增強（多重委派 + 可配置） | 📋 proposed | 2026-02-04 |
+| [ADR-023](adr/adr-023-bot-initiative.md) | Bot 主動互動模式 | 📋 proposed | 2026-02-04 |
+| [ADR-024](adr/adr-024-group-commands.md) | 群組命令支援 | 📋 proposed | 2026-02-04 |
+| [ADR-025](adr/adr-025-dashboard-group-analytics.md) | Dashboard 群組分析與委派統計 | 📋 proposed | 2026-02-04 |
 
 ---
 
