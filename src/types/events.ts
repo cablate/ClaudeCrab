@@ -78,6 +78,12 @@ export interface BotRepliedPayload {
 
   /** Platform-specific message ID of the reply (for context injection tracking) */
   replyMessageId?: string;
+
+  /** Current delegation depth (0 = user-initiated, 1+ = auto-delegated) (ADR-021) */
+  delegationDepth?: number;
+
+  /** Chain of agentIds in this delegation sequence, for cycle detection (ADR-021) */
+  delegationChain?: string[];
 }
 
 /**

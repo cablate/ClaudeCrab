@@ -6,6 +6,31 @@
 
 ## 版本歷史
 
+### v1.20.0 - ADR-021: 群組自動委派（當前版本）
+
+**發布日期**：2026-02-04
+
+**目標**：Bot 回覆中 @mention 另一 Bot 時，自動觸發被提及的 Bot 處理（Auto-Delegation）。
+
+**核心功能**
+- `GroupBroadcaster.handleBotReplied()` 偵測回覆中的 @mention
+- `detectDelegationTarget()` 解析 @username 並匹配群組成員 Bot
+- `executeDelegation()` 建立合成 UnifiedMessage 觸發目標 Bot 的 processMessage
+- `BotRepliedPayload` 新增 `delegationDepth` 和 `delegationChain` 欄位
+
+**安全機制**
+- `MAX_DELEGATION_DEPTH = 3`：最多 3 層委派
+- Cycle detection：delegationChain 追蹤已委派的 agentId
+- 不自我委派：過濾發送者自身的 username
+- 單一委派：每次回覆只觸發第一個匹配的 Bot
+
+**修改檔案**：
+- `src/types/events.ts` — BotRepliedPayload 擴展
+- `src/core/GroupBroadcaster.ts` — 委派偵測 + 執行邏輯
+- `src/core/MessageProcessor.ts` — processMessage options + emitBotRepliedEvent 傳遞 delegation
+
+---
+
 ### v1.19.0 - ADR-020 Phase 2: Token 追蹤 + Dashboard 增強（當前版本）
 
 **發布日期**：2026-02-04

@@ -6,8 +6,12 @@ import type {
   IInjectionStateRepository,
   IGroupMemberRepository,
 } from '../persistence/types.js';
+import type { UnifiedMessage } from '../adapters/types.js';
 import { logger } from '../utils/logger.js';
 import { formatUserLabel, formatBotLabel } from '../utils/format.js';
+
+/** Maximum delegation depth to prevent infinite loops (ADR-021) */
+const MAX_DELEGATION_DEPTH = 3;
 
 /**
  * Options for GroupBroadcaster
@@ -383,6 +387,128 @@ export class GroupBroadcaster {
 
     // ADR-019: NO broadcast to other bots' DB sessions
     // Context is shared via group_messages table and Context Injection
+
+    // ADR-021: Auto-delegation — detect @mentions in bot reply
+    const depth = payload.delegationDepth ?? 0;
+    if (depth >= MAX_DELEGATION_DEPTH) {
+      this.log.debug(
+        { chatId, agentId, depth },
+        'Max delegation depth reached, skipping auto-delegation'
+      );
+      return;
+    }
+
+    const chain = payload.delegationChain ?? [agentId];
+    const target = this.detectDelegationTarget(response, chatId, agentId, chain);
+    if (target !== null) {
+      const newChain = [...chain, target];
+      this.log.info(
+        { chatId, from: agentId, to: target, depth: depth + 1, chain: newChain },
+        'Auto-delegating to mentioned bot (ADR-021)'
+      );
+      await this.executeDelegation(target, payload, newChain);
+    }
+  }
+
+  /**
+   * ADR-021: Detect if a bot's reply @mentions another bot in the group.
+   * Returns the agentId of the first matching bot, or null.
+   */
+  private detectDelegationTarget(
+    response: string,
+    chatId: string,
+    senderAgentId: string,
+    delegationChain: string[]
+  ): string | null {
+    // Extract all @mentions from the response text
+    const mentionRegex = /@(\w+)/g;
+    let match: RegExpExecArray | null;
+    const mentions: string[] = [];
+
+    while ((match = mentionRegex.exec(response)) !== null) {
+      if (match[1] !== undefined) {
+        mentions.push(match[1]);
+      }
+    }
+
+    if (mentions.length === 0) {
+      return null;
+    }
+
+    // Get sender's username to filter out self-mentions
+    const senderInfo = this.getBotInfo(senderAgentId);
+    const senderUsername = senderInfo?.username?.toLowerCase();
+
+    const members = this.getGroupMembers(chatId);
+
+    for (const mention of mentions) {
+      const mentionLower = mention.toLowerCase();
+
+      // Skip self-mention
+      if (senderUsername && mentionLower === senderUsername) {
+        continue;
+      }
+
+      // Find matching bot in group members
+      for (const agentId of members) {
+        // Skip bots already in the delegation chain (cycle detection)
+        if (delegationChain.includes(agentId)) {
+          this.log.debug(
+            { agentId, mention, delegationChain },
+            'Skipping delegation target - already in chain (cycle prevention)'
+          );
+          continue;
+        }
+
+        const botInfo = this.getBotInfo(agentId);
+        if (botInfo && mentionLower === botInfo.username.toLowerCase()) {
+          return agentId;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * ADR-021: Execute auto-delegation by creating a synthetic message
+   * and triggering processMessage for the target bot.
+   */
+  private async executeDelegation(
+    targetAgentId: string,
+    payload: BotRepliedPayload,
+    newChain: string[]
+  ): Promise<void> {
+    const newDepth = (payload.delegationDepth ?? 0) + 1;
+
+    // Build synthetic UnifiedMessage from the bot's reply
+    const syntheticMessage: UnifiedMessage = {
+      id: `delegation-${Date.now()}-${targetAgentId}`,
+      platform: payload.platform,
+      userId: payload.chatId, // Will become group::{chatId} in processMessage
+      chatId: payload.chatId,
+      text: payload.response, // Already contains sender label from emitBotRepliedEvent
+      timestamp: new Date(),
+      metadata: {
+        isGroupChat: true,
+        isDelegation: true,
+        delegationFrom: payload.agentId,
+        delegationDepth: newDepth,
+      },
+    };
+
+    try {
+      await this.messageProcessor.processMessage(syntheticMessage, targetAgentId, {
+        isGroupChat: true,
+        delegationDepth: newDepth,
+        delegationChain: newChain,
+      });
+    } catch (error) {
+      this.log.error(
+        { error, chatId: payload.chatId, from: payload.agentId, to: targetAgentId, depth: newDepth },
+        'Auto-delegation failed'
+      );
+    }
   }
 
   /**

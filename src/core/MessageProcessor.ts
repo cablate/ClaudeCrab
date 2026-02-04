@@ -149,6 +149,10 @@ export class MessageProcessor {
       isGroupChat?: boolean;
       /** Message ID to reply to (for group chats) */
       replyToMessageId?: string;
+      /** Delegation depth for auto-delegation (ADR-021) */
+      delegationDepth?: number;
+      /** Delegation chain for cycle detection (ADR-021) */
+      delegationChain?: string[];
     }
   ): Promise<ProcessingResult> {
     const { platform, userId, chatId, text, id: messageId } = message;
@@ -898,7 +902,7 @@ export class MessageProcessor {
     agentId: string,
     platform: string,
     lastSentMessageId: string | undefined,
-    options?: { isGroupChat?: boolean }
+    options?: { isGroupChat?: boolean; delegationDepth?: number; delegationChain?: string[] }
   ): void {
     if (
       !options?.isGroupChat ||
@@ -928,6 +932,13 @@ export class MessageProcessor {
       platform,
       ...(lastSentMessageId !== undefined
         ? { replyMessageId: lastSentMessageId }
+        : {}),
+      // ADR-021: Pass delegation info for chain tracking
+      ...(options?.delegationDepth !== undefined
+        ? { delegationDepth: options.delegationDepth }
+        : {}),
+      ...(options?.delegationChain !== undefined
+        ? { delegationChain: options.delegationChain }
         : {}),
     });
   }
