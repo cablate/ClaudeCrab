@@ -23,6 +23,97 @@ export interface CommandDependencies {
 
   /** Schedule manager for schedule operations (optional) */
   scheduleManager?: ScheduleManager;
+
+  /** ADR-024: Get group member bot infos for /members command */
+  getGroupBotMembers?: (chatId: string) => Array<{
+    agentId: string;
+    name: string;
+    username?: string;
+    description?: string;
+  }>;
+
+  /** ADR-024: Get bot running status for /status command */
+  getBotStatus?: (agentId: string) => 'running' | 'stopped' | 'error' | 'no-token';
+}
+
+// ── ADR-024: Group command utilities ────────────────────────────
+
+/** Commands that modify state — require explicit @target in groups */
+export const DESTRUCTIVE_COMMANDS = new Set(['reset', 'stop']);
+
+/** Escape HTML special characters for Telegram HTML parse mode */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Route a command in a group chat.
+ * - `'targeted'` — explicitly addressed to this bot (`@me` or `@all`)
+ * - `'bare'`     — no `@` suffix; needs dedup for read-only, rejection for destructive
+ * - `'other_bot'`— addressed to a different bot; ignore
+ */
+export function routeGroupCommand(
+  ctx: Context,
+  myUsername: string
+): 'targeted' | 'bare' | 'other_bot' {
+  const text = ctx.message?.text ?? '';
+  const match = text.match(/^\/\w+@(\w+)/);
+  if (!match) return 'bare';
+
+  const target = match[1];
+  if (target === undefined) return 'bare';
+  const targetUsername = target.toLowerCase();
+  if (targetUsername === 'all') return 'targeted';
+  if (targetUsername === myUsername.toLowerCase()) return 'targeted';
+  return 'other_bot';
+}
+
+/** Check if a command targets `@all` (e.g. `/reset@all`). */
+export function isTargetAll(ctx: Context): boolean {
+  const text = ctx.message?.text ?? '';
+  const match = text.match(/^\/\w+@(\w+)/);
+  return match !== null && match[1] !== undefined && match[1].toLowerCase() === 'all';
+}
+
+/**
+ * Cross-bot dedup for group commands.
+ *
+ * Telegram assigns each bot a **different `message_id`** for the same message,
+ * so we key on `chatId:date:userId:command` instead.  `ctx.message.date` is a
+ * server-side Unix timestamp (seconds) that IS identical across all bots.
+ *
+ * The Set lives on `globalThis` to guarantee a single instance even if the
+ * module is resolved through different import paths.
+ */
+const DEDUP_GLOBAL_KEY = '__claudecab_group_cmd_dedup__';
+if ((globalThis as Record<string, unknown>)[DEDUP_GLOBAL_KEY] === undefined) {
+  (globalThis as Record<string, unknown>)[DEDUP_GLOBAL_KEY] = new Set<string>();
+}
+const processedGroupCommands = (globalThis as Record<string, unknown>)[
+  DEDUP_GLOBAL_KEY
+] as Set<string>;
+
+export function isGroupCommandProcessed(
+  chatId: string,
+  messageDate: number,
+  userId: string,
+  command: string
+): boolean {
+  const key = `${chatId}:${messageDate}:${userId}:${command}`;
+  if (processedGroupCommands.has(key)) {
+    logger.debug({ key }, 'Group command dedup hit');
+    return true;
+  }
+  processedGroupCommands.add(key);
+  // Evict oldest entries when the set grows too large
+  if (processedGroupCommands.size > 500) {
+    const toDelete = Array.from(processedGroupCommands).slice(0, 250);
+    for (const k of toDelete) processedGroupCommands.delete(k);
+  }
+  return false;
 }
 
 /**
@@ -91,6 +182,29 @@ export async function handleHelp(
   ctx: Context,
   deps: CommandDependencies
 ): Promise<void> {
+  const isGroupChat = ctx.chat?.type !== 'private';
+
+  if (isGroupChat) {
+    const groupHelp = `📖 **群組指令說明**
+
+**唯讀指令（直接使用）：**
+/help - 顯示此幫助訊息
+/status - 顯示所有 Bot 狀態
+/members - 顯示群組 Bot 成員列表
+
+**操作指令（需指定目標）：**
+/reset@botname - 重置指定 Bot 的對話記錄
+/reset@all - 重置所有 Bot 的對話記錄
+/stop@botname - 停止指定 Bot 的執行
+/stop@all - 停止所有 Bot 的執行
+
+**對話方式：**
+使用 @botname 來呼叫特定 Bot。`;
+
+    await ctx.reply(groupHelp, { parse_mode: 'Markdown' });
+    return;
+  }
+
   const session = await getCurrentSession(ctx, deps);
   const agent = session !== undefined ? deps.agentLoader.get(session.agentId) : undefined;
   const agentName = agent?.config.name ?? '未知';
@@ -106,6 +220,7 @@ export async function handleHelp(
 /reset - 清除對話記錄，重新開始
 /stop - 強制停止 Claude 執行
 /schedule - 管理排程任務
+/status - 顯示 Bot 狀態
 
 **使用方式：**
 直接輸入文字訊息即可與 AI 對話。
@@ -137,6 +252,12 @@ export async function handleReset(
     if (session !== undefined) {
       // Clear conversation history
       deps.messageProcessor.clearConversation(session.sessionId);
+    }
+
+    // ADR-024: @all in group — reset silently (combined reply sent by routing layer)
+    if (ctx.chat?.type !== 'private' && isTargetAll(ctx)) {
+      logger.info({ userId, agentId: deps.agentId }, 'Group @all reset (silent)');
+      return;
     }
 
     await ctx.reply('🔄 對話記錄已清除。\n\n現在可以開始新的對話了！');
@@ -173,6 +294,12 @@ export async function handleStop(
       deps.agentId,
       effectiveUserId
     );
+
+    // ADR-024: @all in group — stop silently (combined reply sent by routing layer)
+    if (isGroupChat && isTargetAll(ctx)) {
+      logger.info({ userId, agentId: deps.agentId, cancelled }, 'Group @all stop (silent)');
+      return;
+    }
 
     if (cancelled) {
       await ctx.reply('🛑 已停止 Claude 的執行。');
@@ -468,10 +595,102 @@ async function handleScheduleHelp(ctx: Context): Promise<void> {
 /**
  * Map of command names to handlers
  */
+
+/** ADR-024: /members — show group bot member list */
+async function handleMembers(
+  ctx: Context,
+  deps: CommandDependencies
+): Promise<void> {
+  const chatId = ctx.chat?.id.toString();
+  if (chatId === undefined) return;
+
+  const isGroupChat = ctx.chat?.type !== 'private';
+  if (!isGroupChat) {
+    await ctx.reply('ℹ️ /members 命令只能在群組中使用。');
+    return;
+  }
+
+  if (deps.getGroupBotMembers === undefined) {
+    await ctx.reply('ℹ️ 群組成員資訊暫時無法取得。');
+    return;
+  }
+
+  const members = deps.getGroupBotMembers(chatId);
+  if (members.length === 0) {
+    await ctx.reply('ℹ️ 此群組尚未有已註冊的 Bot 成員。');
+    return;
+  }
+
+  const statusEmoji = (s: string): string =>
+    s === 'running' ? '🟢' : s === 'stopped' ? '🔴' : s === 'error' ? '⚠️' : '⚪';
+
+  const lines = members.map((m) => {
+    const username = m.username !== undefined ? `@${m.username}` : '';
+    const desc = m.description !== undefined ? ` — ${escapeHtml(m.description)}` : '';
+    const status = deps.getBotStatus !== undefined ? deps.getBotStatus(m.agentId) : 'unknown';
+    return `${statusEmoji(status)} <b>${escapeHtml(m.name)}</b> ${username}${desc}`;
+  });
+
+  const message = `👥 <b>群組 Bot 成員</b>\n\n${lines.join('\n')}`;
+  await ctx.reply(message, { parse_mode: 'HTML' });
+}
+
+/** ADR-024: /status — show bot status */
+async function handleStatus(
+  ctx: Context,
+  deps: CommandDependencies
+): Promise<void> {
+  const chatId = ctx.chat?.id.toString();
+  if (chatId === undefined) return;
+
+  const isGroupChat = ctx.chat?.type !== 'private';
+
+  const statusEmoji = (s: string): string =>
+    s === 'running' ? '🟢' : s === 'stopped' ? '🔴' : s === 'error' ? '⚠️' : '⚪';
+
+  if (!isGroupChat) {
+    // Private chat: show this bot's status
+    const agent = deps.agentLoader.get(deps.agentId);
+    const name = agent?.config.name ?? deps.agentId;
+    const status = deps.getBotStatus !== undefined ? deps.getBotStatus(deps.agentId) : 'unknown';
+    const session = await getCurrentSession(ctx, deps);
+    const sessionInfo = session !== undefined ? `Session: <code>${session.sessionId}</code>` : '無 active session';
+
+    await ctx.reply(
+      `📊 <b>Bot 狀態</b>\n\n${statusEmoji(status)} <b>${escapeHtml(name)}</b> — ${status}\n${sessionInfo}`,
+      { parse_mode: 'HTML' }
+    );
+    return;
+  }
+
+  // Group chat: show all bots' status
+  if (deps.getGroupBotMembers === undefined) {
+    await ctx.reply('ℹ️ 群組狀態資訊暫時無法取得。');
+    return;
+  }
+
+  const members = deps.getGroupBotMembers(chatId);
+  if (members.length === 0) {
+    await ctx.reply('ℹ️ 此群組尚未有已註冊的 Bot 成員。');
+    return;
+  }
+
+  const lines = members.map((m) => {
+    const status = deps.getBotStatus !== undefined ? deps.getBotStatus(m.agentId) : 'unknown';
+    const username = m.username !== undefined ? `@${m.username}` : '';
+    return `${statusEmoji(status)} <b>${escapeHtml(m.name)}</b> ${username} — ${status}`;
+  });
+
+  const message = `📊 <b>群組 Bot 狀態</b>\n\n${lines.join('\n')}`;
+  await ctx.reply(message, { parse_mode: 'HTML' });
+}
+
 export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   start: handleStart,
   help: handleHelp,
   reset: handleReset,
   stop: handleStop,
   schedule: handleSchedule,
+  members: handleMembers,
+  status: handleStatus,
 };

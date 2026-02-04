@@ -67,7 +67,14 @@ npm run typecheck    # TypeScript 型別檢查
 | 修改工具事件捕捉 | `src/core/SDKQueryManager.ts` | `onToolEvent` callback |
 | 修改狀態訊息整合 | `src/core/StatusMessageManager.ts` | debounce 邏輯、`ToolEventEntry` 類型 |
 
-**目前可用指令**：`/start`、`/help`、`/reset`、`/stop`
+**目前可用指令**：`/start`、`/help`、`/reset`、`/stop`、`/schedule`、`/members`（群組）、`/status`
+
+**群組命令路由（ADR-024）**：
+- 唯讀命令（`/help`、`/status`、`/members`）：裸打 → dedup 後一個 Bot 回覆
+- 破壞性命令（`/reset`、`/stop`）：裸打 → 提示指定 `@botname` 或 `@all`
+- `@botname` → 只有指定 Bot 執行
+- `@all` → 所有 Bot 執行，一條統一回覆
+- Dedup key：`chatId:date:userId:command`（Telegram 對每個 bot 分配不同 message_id）
 
 ---
 

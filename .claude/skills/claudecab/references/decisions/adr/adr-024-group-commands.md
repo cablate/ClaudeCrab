@@ -1,6 +1,6 @@
 # ADR-024: 群組命令支援
 
-**狀態**：📋 proposed
+**狀態**：✅ accepted
 **日期**：2026-02-04
 **相關**：ADR-017, ADR-019
 
@@ -78,8 +78,27 @@
   - `/reset`（無參數）→ 不執行，提示使用者指定目標
 - [x] 需要群組專屬命令（`/members`）
 
+## 已決定（補充）
+
+- [x] 命令路由策略：**方案 C**（`/command@botname` 指定 Bot 回應）
+- [x] 命令分兩類處理：
+  - **唯讀命令**（`/status`、`/members`、`/help`）→ 裸打由一個 Bot（dedup）回覆全體摘要
+  - **破壞性命令**（`/reset`、`/cancel`）→ 裸打不執行，提示指定目標
+
+## 實作發現
+
+### Telegram `message_id` 對每個 Bot 不同
+
+Telegram Bot API 對每個 bot 分配**獨立的 `message_id`**，同一則群組訊息在不同 bot 的 `ctx.message.message_id` 不同。因此跨 bot dedup 不能使用 `chatId:messageId`，改用 `chatId:date:userId:command`（`ctx.message.date` 是伺服器端 Unix timestamp，對所有 bot 一致）。
+
+### Telegram Markdown 底線問題
+
+`@bot_username` 中的 `_` 在 Telegram Markdown 模式被解讀為斜體標記，導致 `GrammyError: can't parse entities`。群組命令的回覆改用 `parse_mode: 'HTML'` + `escapeHtml()`。
+
+### Dedup Set 共享
+
+命令層 dedup Set 儲存於 `globalThis`，確保即使 ES module 被不同 import path 載入，所有 bot 實例仍共享同一個 Set。
+
 ## 待討論
 
-- [ ] 方案 A/B/C 哪個最合適？（命令路由策略）
 - [ ] `/reset` 全體重置是否需要權限控制（如只有群組 admin）？
-- [ ] 命令 dedup 是否使用現有 GroupBroadcaster 機制？

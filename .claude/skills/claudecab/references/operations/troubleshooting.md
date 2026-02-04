@@ -350,6 +350,30 @@ this.app.use('/static', express.static(path.join(process.cwd(), 'public')));
 
 ---
 
+### Telegram Markdown 中 @username 底線造成解析失敗
+
+**症狀**：`GrammyError: Bad Request: can't parse entities`，訊息中包含 `@bot_name` 等含底線的 username
+
+**原因**：Telegram Markdown 中 `_` 被當作斜體標記，`@my_bot_name` 會被解讀為 `@my` + 斜體(`bot`) + `name`，造成格式錯誤
+
+**解決方案**：改用 `parse_mode: 'HTML'` + `escapeHtml()` 處理動態內容，避免底線衝突
+
+**相關檔案**：`src/adapters/commands/TelegramCommands.ts`（`handleMembers`、`handleStatus`）
+
+---
+
+### 群組命令 Dedup 失敗（每個 Bot 都回覆）
+
+**症狀**：群組中裸打 `/help` 或 `/members`，所有 Bot 都回覆相同內容
+
+**原因**：Telegram Bot API 對每個 bot 分配**獨立的 `message_id`**。同一則群組訊息，Bot A 看到 `message_id=134`，Bot B 看到 `message_id=1585`。因此 `chatId:messageId` 不能作為跨 bot dedup key。
+
+**解決方案**：改用 `chatId:date:userId:command` 作為 dedup key。`ctx.message.date` 是 Telegram 伺服器端 Unix timestamp（秒），對同一則訊息所有 bot 看到的值一致。Dedup Set 存於 `globalThis` 確保跨 module 實例共享。
+
+**相關檔案**：`src/adapters/commands/TelegramCommands.ts`（`isGroupCommandProcessed`）
+
+---
+
 ## 開發注意事項
 
 ### TypeScript 嚴格模式

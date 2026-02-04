@@ -6,7 +6,37 @@
 
 ## 版本歷史
 
-### v1.20.0 - ADR-021: 群組自動委派（當前版本）
+### v1.21.0 - ADR-024: 群組命令支援（當前版本）
+
+**發布日期**：2026-02-04
+
+**目標**：群組中命令的路由、dedup、新命令（`/members`、`/status`）、`@all` 支援。
+
+**核心功能**
+- **命令路由**：`routeGroupCommand()` 解析 `/cmd@botname` 格式，決定 `targeted`/`bare`/`other_bot`
+- **跨 Bot Dedup**：`isGroupCommandProcessed()` 用 `chatId:date:userId:command` 作 key（Telegram 對每個 bot 分配不同 `message_id`），儲存於 `globalThis` 確保跨實例共享
+- **命令分類**：
+  - 唯讀（`/help`、`/status`、`/members`）→ 裸打由一個 Bot dedup 回覆
+  - 破壞性（`/reset`、`/stop`）→ 裸打提示指定 `@botname` 或 `@all`
+- **`@all` 支援**：所有 Bot 靜默執行，第一個 Bot 發送統一回覆
+- **新命令 `/members`**：顯示群組 Bot 成員列表（名稱、@username、描述、運行狀態）
+- **新命令 `/status`**：私聊顯示單一 Bot 狀態；群組顯示所有 Bot 狀態
+- **群組版 `/help`**：群組中顯示群組專屬指令說明
+
+**踩坑記錄**
+- Telegram Markdown 中 `@username` 的底線 `_` 被當作斜體 → 改用 HTML parse mode + `escapeHtml()`
+- Telegram 對每個 bot 分配獨立 `message_id` → 不能用 `chatId:messageId` dedup，改用 `chatId:date:userId:command`
+
+**修改檔案**：
+- `src/adapters/commands/TelegramCommands.ts` — 群組命令路由 + dedup + 新命令
+- `src/adapters/commands/index.ts` — 新增 export
+- `src/adapters/TelegramAdapter.ts` — `setupCommandHandlers` 群組路由邏輯
+- `src/core/PlatformOrchestrator.ts` — 提供 `getGroupBotMembers` + `getBotStatus` callback
+- `tests/unit/TelegramCommands.test.ts` — mock context 補上 `chat` 屬性
+
+---
+
+### v1.20.0 - ADR-021: 群組自動委派
 
 **發布日期**：2026-02-04
 

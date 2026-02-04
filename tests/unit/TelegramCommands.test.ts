@@ -32,6 +32,10 @@ describe('TelegramCommands', () => {
         first_name: 'Test',
         last_name: 'User',
       },
+      chat: {
+        id: 12345,
+        type: 'private' as const,
+      } as Context['chat'],
       message: {
         text: '',
         message_id: 1,

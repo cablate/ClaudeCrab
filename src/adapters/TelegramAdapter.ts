@@ -16,6 +16,10 @@ import type {
 import { DEFAULT_RATE_LIMIT } from './types.js';
 import {
   COMMAND_HANDLERS,
+  routeGroupCommand,
+  isGroupCommandProcessed,
+  DESTRUCTIVE_COMMANDS,
+  isTargetAll,
   type CommandDependencies,
 } from './commands/index.js';
 import {
@@ -306,34 +310,71 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
    * Set up command handlers for the bot
    */
   private setupCommandHandlers(bot: Bot, deps: CommandDependencies): void {
-    // deps is already CommandDependencies - no conversion needed
-    // This is the proper decoupled architecture: commands module defines its dependencies,
-    // and adapters simply provide actual instances.
-
-    // Register all command handlers with security middleware
     for (const [command, handler] of Object.entries(COMMAND_HANDLERS)) {
       bot.command(command, async (ctx: Context) => {
         const from = ctx.from;
-        if (from === undefined) {
-          return;
-        }
+        if (from === undefined) return;
 
         const userId = from.id.toString();
         const chatId = ctx.chat?.id.toString() ?? '';
 
-        // Check user authorization for commands
+        // Security: check user authorization
         const validation = validateMessage('', userId, this.securityConfig);
         if (!validation.valid && validation.error === 'unauthorized') {
           auditLogger.logUnauthorizedAccess('telegram', userId, chatId);
-          this.log.warn(
-            { userId, chatId, command },
-            'Unauthorized command attempt'
-          );
+          this.log.warn({ userId, chatId, command }, 'Unauthorized command attempt');
           await ctx.reply(getSecurityErrorMessage('unauthorized'));
           return;
         }
 
-        // Log command usage
+        // ADR-024: Group command routing
+        const isGroupChat = ctx.chat?.type !== 'private';
+        if (isGroupChat) {
+          const myUsername = ctx.me.username;
+          const route = routeGroupCommand(ctx, myUsername);
+
+          if (route === 'other_bot') return;
+
+          const groupChatId = ctx.chat!.id.toString();
+          const messageDate = ctx.message?.date ?? 0;
+
+          if (route === 'bare') {
+            if (DESTRUCTIVE_COMMANDS.has(command)) {
+              // Bare destructive → prompt to specify target (dedup reply)
+              if (!isGroupCommandProcessed(groupChatId, messageDate, userId, command)) {
+                await ctx.reply(
+                  `⚠️ 群組中請指定目標：/${command}@${myUsername} 或 /${command}@all`
+                );
+              }
+              return;
+            }
+            // Bare read-only → dedup, only first bot responds
+            if (isGroupCommandProcessed(groupChatId, messageDate, userId, command)) return;
+          }
+
+          // @all destructive → all bots execute silently, first bot sends combined reply
+          if (isTargetAll(ctx) && DESTRUCTIVE_COMMANDS.has(command)) {
+            const args = ctx.message?.text?.split(' ').slice(1).join(' ');
+            auditLogger.logUserCommand('telegram', userId, command, args);
+
+            try {
+              await handler(ctx, deps);
+            } catch (error) {
+              this.log.error({ error, command }, 'Command handler error');
+            }
+
+            if (!isGroupCommandProcessed(groupChatId, messageDate, userId, command)) {
+              if (command === 'reset') {
+                await ctx.reply('🔄 所有 Bot 的對話記錄已清除。\n\n現在可以開始新的對話了！');
+              } else if (command === 'stop') {
+                await ctx.reply('🛑 已停止所有 Bot 的執行。');
+              }
+            }
+            return;
+          }
+        }
+
+        // Normal execution (private chat or targeted group command)
         const args = ctx.message?.text?.split(' ').slice(1).join(' ');
         auditLogger.logUserCommand('telegram', userId, command, args);
 

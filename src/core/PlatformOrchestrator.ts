@@ -332,6 +332,34 @@ export class PlatformOrchestrator {
       ...(this.scheduleManager !== undefined
         ? { scheduleManager: this.scheduleManager }
         : {}),
+      // ADR-024: Group command support
+      getGroupBotMembers: (chatId: string) => {
+        const memberAgentIds = this.groupBroadcaster.getGroupMembers(chatId);
+        return memberAgentIds.map((id) => {
+          const agent = this.agentLoader.get(id);
+          const tgAdapter = this.registry.get('telegram', id) as
+            | TelegramAdapter
+            | undefined;
+          const botInfo = tgAdapter?.getBotInfo();
+          const result: {
+            agentId: string;
+            name: string;
+            username?: string;
+            description?: string;
+          } = {
+            agentId: id,
+            name: agent?.config.name ?? id,
+          };
+          if (botInfo?.username !== undefined) {
+            result.username = botInfo.username;
+          }
+          if (agent?.config.description !== undefined) {
+            result.description = agent.config.description;
+          }
+          return result;
+        });
+      },
+      getBotStatus: (aid: string) => this.getBotStatusForAgent(aid),
     };
     adapter.setCommandDependencies(commandDeps);
 
