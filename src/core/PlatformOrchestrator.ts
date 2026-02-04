@@ -96,6 +96,15 @@ export class PlatformOrchestrator {
       ...(options.groupMemberRepository !== undefined
         ? { groupMemberRepository: options.groupMemberRepository }
         : {}),
+      // ADR-022: Provide delegation settings lookup from agent config
+      getDelegationSettings: (agentId: string) => {
+        const delegation = this.agentLoader.get(agentId)?.config.settings?.delegation;
+        if (delegation === undefined) return undefined;
+        const result: { inbound?: boolean; outbound?: boolean } = {};
+        if (delegation.inbound !== undefined) result.inbound = delegation.inbound;
+        if (delegation.outbound !== undefined) result.outbound = delegation.outbound;
+        return result;
+      },
     });
   }
 

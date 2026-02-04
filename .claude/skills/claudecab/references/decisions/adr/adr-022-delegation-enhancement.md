@@ -1,7 +1,8 @@
 # ADR-022: 委派機制增強（多重委派 + 可配置）
 
-**狀態**：📋 proposed
+**狀態**：✅ accepted → implemented
 **日期**：2026-02-04
+**實作日期**：2026-02-05
 **相關**：ADR-021
 
 ---
@@ -20,66 +21,62 @@ ADR-021 實現了基礎自動委派，但有兩個限制：
 
 ---
 
-## 提議
+## 已決定
+
+- [x] 多重委派：**需要**，主管分配多人的場景實際存在
+- [x] 可配置粒度：**Agent 層級**，在 `agent.json` 設定，全域生效。群組層級暫不做，但架構保持彈性可擴展
+- [x] 多重委派 depth 計算：**共用**，同一次回覆觸發的所有 target 共享相同 depth，防止鏈路指數爆炸
+
+---
+
+## 實作
 
 ### 1. 多重委派
 
-修改 `detectDelegationTarget()` 回傳陣列而非單一 agentId：
-
-```typescript
-private detectDelegationTargets(
-  response: string,
-  chatId: string,
-  senderAgentId: string,
-  delegationChain: string[]
-): string[]
-```
-
-- 每個被 @mention 的 Bot 獨立觸發（各自的 delegation depth 共用）
-- 安全限制不變：depth limit、cycle detection 對每個 target 獨立檢查
+`detectDelegationTarget()` → `detectDelegationTargets()`，回傳 `string[]`。
+所有被 @mention 的 Bot 獨立觸發，共用同一個 delegation depth。
 
 ### 2. 委派可配置
 
-在 `agent.json` 中新增設定：
+在 `agent.json` 的 `settings.delegation` 新增兩個方向性設定：
 
 ```json
 {
   "settings": {
     "delegation": {
-      "enabled": true,
-      "acceptDelegation": true,
-      "canDelegate": true
+      "inbound": true,
+      "outbound": true
     }
   }
 }
 ```
 
-- `acceptDelegation: false` → 此 Bot 不會被其他 Bot 自動觸發
-- `canDelegate: false` → 此 Bot 的回覆不會觸發委派偵測
-- 預設全部 `true`（向後相容）
+#### 設定說明（方向性命名）
 
----
+| 設定 | 方向 | 意義 | 預設 |
+|------|------|------|------|
+| `inbound` | 入站（被動） | 其他 Bot @mention 我時，是否觸發委派 | `true` |
+| `outbound` | 出站（主動） | 我的回覆 @mention 其他 Bot 時，是否觸發委派 | `true` |
 
-## 替代方案
+**白話對照**：
+- `inbound: false` → 「別人不能派工作給我」（我不接客）
+- `outbound: false` → 「我不會派工作給別人」（我不外包）
+- 預設都是 `true`（向後相容，不設定 = 完全開放）
 
-### 方案 A：維持單一委派
-- 優點：簡單、可預測
-- 缺點：限制主管 Bot 同時分配多任務的能力
-
-### 方案 B：在群組設定中配置（非 agent 層級）
-- 優點：每個群組可以有不同設定
-- 缺點：增加管理複雜度
+> **命名決策**：初版使用 `acceptDelegation` / `canDelegate`，但兩者語意相近容易混淆。
+> 改為 `inbound` / `outbound` 方向性命名，更直觀。
 
 ---
 
 ## 影響
 
-- `src/core/GroupBroadcaster.ts` — detectDelegationTarget 改為回傳陣列
-- `src/core/AgentLoader.ts` — 解析新的 delegation 設定
-- `src/types/agent.ts` — AgentConfig 新增 delegation 設定
+### 修改檔案
 
-## 待討論
+- `src/types/agent.ts` — 新增 `DelegationSettingsSchema`（`inbound`、`outbound`）
+- `src/core/GroupBroadcaster.ts` — `detectDelegationTargets` 多重回傳 + `getDelegationSettings` callback + inbound/outbound 檢查
+- `src/core/PlatformOrchestrator.ts` — 提供 `getDelegationSettings` callback
 
-- [ ] 多重委派是否需要？還是單一委派已足夠？
-- [ ] 可配置的粒度：agent 層級 vs 群組層級？
-- [ ] 多重委派的 depth 計算：共用還是獨立？
+### 未來擴展
+
+- 群組層級設定（同一 Bot 在不同群組不同行為）
+- 委派白名單（只接受特定 Bot 的委派）

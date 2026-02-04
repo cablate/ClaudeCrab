@@ -25,11 +25,22 @@ export type Model = z.infer<typeof ModelSchema>;
 /**
  * Agent settings configuration
  */
+
+/** ADR-022: Delegation settings for multi-agent collaboration */
+const DelegationSettingsSchema = z.object({
+  /** Allow inbound delegation — other bots can trigger me via @mention (default: true) */
+  inbound: z.boolean().optional(),
+  /** Allow outbound delegation — my replies with @mention can trigger other bots (default: true) */
+  outbound: z.boolean().optional(),
+});;
+
 export const AgentSettingsSchema = z.object({
   maxHistoryLength: z.number().int().positive().optional(),
   permissionMode: PermissionModeSchema.optional(),
   maxTurns: z.number().int().positive().optional(),
   maxBudgetUsd: z.number().positive().optional(),
+  /** ADR-022: Delegation settings */
+  delegation: DelegationSettingsSchema.optional(),
 });
 
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>;

@@ -31,6 +31,9 @@ export interface GroupBroadcasterOptions {
 
   /** Group member repository for persistent membership (ADR-020) */
   groupMemberRepository?: IGroupMemberRepository;
+
+  /** ADR-022: Get agent delegation settings */
+  getDelegationSettings?: (agentId: string) => { inbound?: boolean; outbound?: boolean } | undefined;
 }
 
 /**
@@ -56,6 +59,9 @@ export class GroupBroadcaster {
   private readonly groupMessageRepository: IGroupMessageRepository | undefined;
   private readonly injectionStateRepository: IInjectionStateRepository | undefined;
   private readonly groupMemberRepository: IGroupMemberRepository | undefined;
+
+  /** ADR-022: Get agent delegation settings */
+  private readonly getDelegationSettings: ((agentId: string) => { inbound?: boolean; outbound?: boolean } | undefined) | undefined;
 
   /**
    * Maps chatId to set of agentIds that are members of that group.
@@ -86,6 +92,7 @@ export class GroupBroadcaster {
     this.groupMessageRepository = options.groupMessageRepository;
     this.injectionStateRepository = options.injectionStateRepository;
     this.groupMemberRepository = options.groupMemberRepository;
+    this.getDelegationSettings = options.getDelegationSettings;
 
     // Listen to group:message events
     getEventBus().on('group:message', this.handleGroupMessage.bind(this));
@@ -388,7 +395,7 @@ export class GroupBroadcaster {
     // ADR-019: NO broadcast to other bots' DB sessions
     // Context is shared via group_messages table and Context Injection
 
-    // ADR-021: Auto-delegation — detect @mentions in bot reply
+    // ADR-021 + ADR-022: Auto-delegation with multi-target and configurable settings
     const depth = payload.delegationDepth ?? 0;
     if (depth >= MAX_DELEGATION_DEPTH) {
       this.log.debug(
@@ -399,27 +406,39 @@ export class GroupBroadcaster {
     }
 
     const chain = payload.delegationChain ?? [agentId];
-    const target = this.detectDelegationTarget(response, chatId, agentId, chain);
-    if (target !== null) {
+
+    // ADR-022: Check canDelegate for sender
+    const senderDelegationSettings = this.getDelegationSettings?.(agentId);
+    if (senderDelegationSettings?.outbound === false) {
+      this.log.info(
+        { chatId, agentId },
+        'Sender has delegation.outbound=false, skipping delegation detection (ADR-022)'
+      );
+      return;
+    }
+
+    // ADR-022: Detect all @mentioned bots (multi-delegation)
+    const targets = this.detectDelegationTargets(response, chatId, agentId, chain);
+    for (const target of targets) {
       const newChain = [...chain, target];
       this.log.info(
-        { chatId, from: agentId, to: target, depth: depth + 1, chain: newChain },
-        'Auto-delegating to mentioned bot (ADR-021)'
+        { chatId, from: agentId, to: target, depth: depth + 1, chain: newChain, totalTargets: targets.length },
+        'Auto-delegating to mentioned bot (ADR-021/022)'
       );
       await this.executeDelegation(target, payload, newChain);
     }
   }
 
   /**
-   * ADR-021: Detect if a bot's reply @mentions another bot in the group.
-   * Returns the agentId of the first matching bot, or null.
+   * ADR-021/022: Detect if a bot's reply @mentions other bots in the group.
+   * Returns all matching agentIds (ADR-022: multi-delegation support).
    */
-  private detectDelegationTarget(
+  private detectDelegationTargets(
     response: string,
     chatId: string,
     senderAgentId: string,
     delegationChain: string[]
-  ): string | null {
+  ): string[] {
     // Extract all @mentions from the response text
     const mentionRegex = /@(\w+)/g;
     let match: RegExpExecArray | null;
@@ -432,7 +451,7 @@ export class GroupBroadcaster {
     }
 
     if (mentions.length === 0) {
-      return null;
+      return [];
     }
 
     // Get sender's username to filter out self-mentions
@@ -440,6 +459,7 @@ export class GroupBroadcaster {
     const senderUsername = senderInfo?.username?.toLowerCase();
 
     const members = this.getGroupMembers(chatId);
+    const targets: string[] = [];
 
     for (const mention of mentions) {
       const mentionLower = mention.toLowerCase();
@@ -460,14 +480,29 @@ export class GroupBroadcaster {
           continue;
         }
 
+        // Skip bots already collected as targets (avoid duplicates)
+        if (targets.includes(agentId)) {
+          continue;
+        }
+
+        // ADR-022: Check acceptDelegation setting
+        const delegationSettings = this.getDelegationSettings?.(agentId);
+        if (delegationSettings?.inbound === false) {
+          this.log.info(
+            { agentId, mention },
+            'Skipping delegation target - delegation.inbound is false (ADR-022)'
+          );
+          continue;
+        }
+
         const botInfo = this.getBotInfo(agentId);
         if (botInfo && mentionLower === botInfo.username.toLowerCase()) {
-          return agentId;
+          targets.push(agentId);
         }
       }
     }
 
-    return null;
+    return targets;
   }
 
   /**

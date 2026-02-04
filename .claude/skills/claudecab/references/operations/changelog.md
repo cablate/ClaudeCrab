@@ -6,7 +6,31 @@
 
 ## 版本歷史
 
-### v1.21.0 - ADR-024: 群組命令支援（當前版本）
+### v1.22.0 - ADR-022: 委派機制增強（當前版本）
+
+**發布日期**：2026-02-05
+
+**目標**：多重委派支援 + 委派可配置（inbound/outbound）。
+
+**核心功能**
+- **多重委派**：`detectDelegationTargets()` 回傳 `string[]`，一次回覆可同時觸發多個被 @mention 的 Bot
+- **委派可配置**：`agent.json` 的 `settings.delegation` 新增 `inbound`/`outbound` 設定
+  - `inbound: false` → 此 Bot 不接受其他 Bot 的委派（不被觸發）
+  - `outbound: false` → 此 Bot 的回覆不會觸發委派偵測（不派工給別人）
+  - 預設都是 `true`（向後相容）
+- **Depth 共用**：同一次回覆觸發的所有 target 共享相同 delegation depth，防止指數爆炸
+
+**命名決策**
+- 初版 `acceptDelegation`/`canDelegate` 語意相近易混淆，改為方向性命名 `inbound`/`outbound`
+
+**修改檔案**：
+- `src/types/agent.ts` — 新增 `DelegationSettingsSchema`
+- `src/core/GroupBroadcaster.ts` — 多重委派 + getDelegationSettings callback + inbound/outbound 檢查
+- `src/core/PlatformOrchestrator.ts` — 提供 getDelegationSettings callback
+
+---
+
+### v1.21.0 - ADR-024: 群組命令支援
 
 **發布日期**：2026-02-04
 
