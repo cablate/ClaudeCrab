@@ -70,9 +70,16 @@
 - `src/adapters/TelegramAdapter.ts` — 群組命令路由
 - `src/core/GroupBroadcaster.ts` — 命令 dedup
 
+## 已決定
+
+- [x] `/reset` 群組中需明確指定目標，避免誤觸：
+  - `/reset@botname` → 只重置指定 Bot
+  - `/reset@all` → 重置所有 Bot（需明確意圖）
+  - `/reset`（無參數）→ 不執行，提示使用者指定目標
+- [x] 需要群組專屬命令（`/members`）
+
 ## 待討論
 
-- [ ] 方案 A/B/C 哪個最合適？
-- [ ] `/reset` 是否需要權限控制？
-- [ ] 是否需要群組專屬命令（如 `/members`）？
+- [ ] 方案 A/B/C 哪個最合適？（命令路由策略）
+- [ ] `/reset` 全體重置是否需要權限控制（如只有群組 admin）？
 - [ ] 命令 dedup 是否使用現有 GroupBroadcaster 機制？
