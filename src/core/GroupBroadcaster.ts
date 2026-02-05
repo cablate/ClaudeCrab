@@ -7,15 +7,13 @@ import type {
   IGroupMemberRepository,
   IQueryMetricsRepository,
 } from '../persistence/types.js';
-import type { UnifiedMessage } from '../adapters/types.js';
 import type { InitiativeSettings } from '../types/agent.js';
 import type { InitiativeEvaluator } from './InitiativeEvaluator.js';
 import { logger } from '../utils/logger.js';
 import { formatUserLabel, formatBotLabel } from '../utils/format.js';
 import { DedupTracker } from '../utils/DedupTracker.js';
-
-/** Maximum delegation depth to prevent infinite loops (ADR-021) */
-const MAX_DELEGATION_DEPTH = 3;
+import { InitiativeHandler } from './InitiativeHandler.js';
+import { DelegationHandler } from './DelegationHandler.js';
 
 /**
  * Options for GroupBroadcaster
@@ -76,26 +74,11 @@ export class GroupBroadcaster {
   private readonly injectionStateRepository: IInjectionStateRepository | undefined;
   private readonly groupMemberRepository: IGroupMemberRepository | undefined;
 
-  /** ADR-022: Get agent delegation settings */
-  private readonly getDelegationSettings: ((agentId: string) => { inbound?: boolean; outbound?: boolean } | undefined) | undefined;
+  /** ADR-023: Initiative evaluation and execution handler */
+  private readonly initiativeHandler: InitiativeHandler;
 
-  /** ADR-023: Get agent initiative settings */
-  private readonly getInitiativeSettings: ((agentId: string) => InitiativeSettings | undefined) | undefined;
-
-  /** ADR-023: Get agent description for initiative evaluation */
-  private readonly getAgentDescription: ((agentId: string) => { name: string; description?: string } | undefined) | undefined;
-
-  /** ADR-023: Initiative evaluator */
-  private readonly initiativeEvaluator: InitiativeEvaluator | undefined;
-
-  /** Query metrics repository for recording initiative evaluation costs */
-  private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
-
-  /** ADR-023: Cooldown timestamps per group per bot (key: `${chatId}:${agentId}` → timestamp) */
-  private readonly initiativeCooldowns = new Map<string, number>();
-
-  /** ADR-023: Hourly counter per group per bot */
-  private readonly initiativeHourlyCounters = new Map<string, { count: number; resetAt: number }>();
+  /** ADR-021/022: Delegation detection and execution handler */
+  private readonly delegationHandler: DelegationHandler;
 
   /**
    * Maps chatId to set of agentIds that are members of that group.
@@ -127,11 +110,23 @@ export class GroupBroadcaster {
     this.groupMessageRepository = options.groupMessageRepository;
     this.injectionStateRepository = options.injectionStateRepository;
     this.groupMemberRepository = options.groupMemberRepository;
-    this.getDelegationSettings = options.getDelegationSettings;
-    this.getInitiativeSettings = options.getInitiativeSettings;
-    this.getAgentDescription = options.getAgentDescription;
-    this.initiativeEvaluator = options.initiativeEvaluator;
-    this.queryMetricsRepository = options.queryMetricsRepository;
+
+    // Create handlers with shared dependencies
+    this.initiativeHandler = new InitiativeHandler({
+      messageProcessor: options.messageProcessor,
+      getGroupMembers: (chatId) => this.getGroupMembers(chatId),
+      ...(options.getInitiativeSettings ? { getInitiativeSettings: options.getInitiativeSettings } : {}),
+      ...(options.getAgentDescription ? { getAgentDescription: options.getAgentDescription } : {}),
+      ...(options.initiativeEvaluator ? { initiativeEvaluator: options.initiativeEvaluator } : {}),
+      ...(options.queryMetricsRepository ? { queryMetricsRepository: options.queryMetricsRepository } : {}),
+    });
+
+    this.delegationHandler = new DelegationHandler({
+      messageProcessor: options.messageProcessor,
+      getGroupMembers: (chatId) => this.getGroupMembers(chatId),
+      getBotInfo: options.getBotInfo,
+      ...(options.getDelegationSettings ? { getDelegationSettings: options.getDelegationSettings } : {}),
+    });
 
     // Listen to group:message events
     getEventBus().on('group:message', this.handleGroupMessage.bind(this));
@@ -307,7 +302,7 @@ export class GroupBroadcaster {
         'No bot should respond to this message'
       );
       // ADR-023: Evaluate initiative responses for non-@mentioned messages
-      await this.evaluateInitiatives(message, chatId, senderLabel);
+      await this.initiativeHandler.evaluateInitiatives(message, chatId, senderLabel);
       return;
     }
 
@@ -402,7 +397,7 @@ export class GroupBroadcaster {
    */
   private async handleBotReplied(payload: BotRepliedPayload): Promise<void> {
     this.recordBotReplyToGroupMessages(payload);
-    await this.processDelegation(payload);
+    await this.delegationHandler.processDelegation(payload);
   }
 
   /**
@@ -442,343 +437,6 @@ export class GroupBroadcaster {
     }
   }
 
-  /**
-   * Process auto-delegation when bot reply mentions other bots.
-   * ADR-021 + ADR-022: Multi-target delegation with cycle prevention and configurable settings.
-   */
-  private async processDelegation(payload: BotRepliedPayload): Promise<void> {
-    // ADR-023: Initiative responses do not trigger delegation chains
-    if (payload.isInitiative === true) {
-      this.log.debug(
-        { chatId: payload.chatId, agentId: payload.agentId },
-        'Skipping delegation for initiative response (ADR-023)'
-      );
-      return;
-    }
-
-    const { chatId, agentId, response } = payload;
-
-    const depth = payload.delegationDepth ?? 0;
-    if (depth >= MAX_DELEGATION_DEPTH) {
-      this.log.debug(
-        { chatId, agentId, depth },
-        'Max delegation depth reached, skipping auto-delegation'
-      );
-      return;
-    }
-
-    const chain = payload.delegationChain ?? [agentId];
-
-    // ADR-022: Check outbound setting for sender
-    const senderDelegationSettings = this.getDelegationSettings?.(agentId);
-    if (senderDelegationSettings?.outbound === false) {
-      this.log.info(
-        { chatId, agentId },
-        'Sender has delegation.outbound=false, skipping delegation detection (ADR-022)'
-      );
-      return;
-    }
-
-    // ADR-022: Detect all @mentioned bots (multi-delegation)
-    const targets = this.detectDelegationTargets(response, chatId, agentId, chain);
-    for (const target of targets) {
-      const newChain = [...chain, target];
-      this.log.info(
-        { chatId, from: agentId, to: target, depth: depth + 1, chain: newChain, totalTargets: targets.length },
-        'Auto-delegating to mentioned bot (ADR-021/022)'
-      );
-      await this.executeDelegation(target, payload, newChain);
-    }
-  }
-
-  /**
-   * ADR-021/022: Detect if a bot's reply @mentions other bots in the group.
-   * Returns all matching agentIds (ADR-022: multi-delegation support).
-   */
-  private detectDelegationTargets(
-    response: string,
-    chatId: string,
-    senderAgentId: string,
-    delegationChain: string[]
-  ): string[] {
-    // Extract all @mentions from the response text
-    const mentionRegex = /@(\w+)/g;
-    let match: RegExpExecArray | null;
-    const mentions: string[] = [];
-
-    while ((match = mentionRegex.exec(response)) !== null) {
-      if (match[1] !== undefined) {
-        mentions.push(match[1]);
-      }
-    }
-
-    if (mentions.length === 0) {
-      return [];
-    }
-
-    // Get sender's username to filter out self-mentions
-    const senderInfo = this.getBotInfo(senderAgentId);
-    const senderUsername = senderInfo?.username?.toLowerCase();
-
-    const members = this.getGroupMembers(chatId);
-    const targets: string[] = [];
-
-    for (const mention of mentions) {
-      const mentionLower = mention.toLowerCase();
-
-      // Skip self-mention
-      if (senderUsername && mentionLower === senderUsername) {
-        continue;
-      }
-
-      // Find matching bot in group members
-      for (const agentId of members) {
-        // Skip bots already in the delegation chain (cycle detection)
-        if (delegationChain.includes(agentId)) {
-          this.log.debug(
-            { agentId, mention, delegationChain },
-            'Skipping delegation target - already in chain (cycle prevention)'
-          );
-          continue;
-        }
-
-        // Skip bots already collected as targets (avoid duplicates)
-        if (targets.includes(agentId)) {
-          continue;
-        }
-
-        // ADR-022: Check acceptDelegation setting
-        const delegationSettings = this.getDelegationSettings?.(agentId);
-        if (delegationSettings?.inbound === false) {
-          this.log.info(
-            { agentId, mention },
-            'Skipping delegation target - delegation.inbound is false (ADR-022)'
-          );
-          continue;
-        }
-
-        const botInfo = this.getBotInfo(agentId);
-        if (botInfo && mentionLower === botInfo.username.toLowerCase()) {
-          targets.push(agentId);
-        }
-      }
-    }
-
-    return targets;
-  }
-
-  /**
-   * ADR-021: Execute auto-delegation by creating a synthetic message
-   * and triggering processMessage for the target bot.
-   */
-  private async executeDelegation(
-    targetAgentId: string,
-    payload: BotRepliedPayload,
-    newChain: string[]
-  ): Promise<void> {
-    const newDepth = (payload.delegationDepth ?? 0) + 1;
-
-    // Build synthetic UnifiedMessage from the bot's reply
-    const syntheticMessage: UnifiedMessage = {
-      id: `delegation-${Date.now()}-${targetAgentId}`,
-      platform: payload.platform,
-      userId: payload.chatId, // Will become group::{chatId} in processMessage
-      chatId: payload.chatId,
-      text: payload.response, // Already contains sender label from emitBotRepliedEvent
-      timestamp: new Date(),
-      metadata: {
-        isGroupChat: true,
-        isDelegation: true,
-        delegationFrom: payload.agentId,
-        delegationDepth: newDepth,
-      },
-    };
-
-    try {
-      await this.messageProcessor.processMessage(syntheticMessage, targetAgentId, {
-        isGroupChat: true,
-        delegationDepth: newDepth,
-        delegationChain: newChain,
-      });
-    } catch (error) {
-      this.log.error(
-        { error, chatId: payload.chatId, from: payload.agentId, to: targetAgentId, depth: newDepth },
-        'Auto-delegation failed'
-      );
-    }
-  }
-
-  // ─── ADR-023: Initiative Pipeline ───────────────────────────────────────
-
-  /**
-   * ADR-023: Evaluate initiative responses for all eligible bots.
-   * Called when no bot was @mentioned or replied-to.
-   *
-   * Pipeline: Gate → Throttle → Evaluate (Haiku) → Execute
-   */
-  private async evaluateInitiatives(
-    message: UnifiedMessage,
-    chatId: string,
-    senderLabel: string,
-  ): Promise<void> {
-    if (!this.initiativeEvaluator) {
-      this.log.debug({ chatId }, 'No initiative evaluator configured');
-      return;
-    }
-
-    const members = this.getGroupMembers(chatId);
-    if (members.length === 0) {
-      this.log.debug({ chatId }, 'No group members for initiative evaluation');
-      return;
-    }
-
-    // Collect bots that pass Gate + Throttle (before expensive AI evaluation)
-    const eligible: Array<{ agentId: string; name: string; description: string }> = [];
-
-    for (const agentId of members) {
-      const settings = this.getInitiativeSettings?.(agentId);
-
-      // Gate: must be explicitly enabled (opt-in)
-      if (!settings?.enabled) continue;
-
-      // Gate: v1 only supports work mode
-      if (settings.mode !== undefined && settings.mode !== 'work') {
-        this.log.debug({ agentId, mode: settings.mode }, 'Initiative mode not "work", skipping (v1)');
-        continue;
-      }
-
-      // Gate: must have description for evaluation
-      const agentInfo = this.getAgentDescription?.(agentId);
-      if (!agentInfo?.description) {
-        this.log.debug({ agentId }, 'Agent has no description, skipping initiative');
-        continue;
-      }
-
-      // Throttle: cooldown
-      const cooldownKey = `${chatId}:${agentId}`;
-      const cooldownMs = (settings.cooldown ?? 300) * 1000;
-      const lastTime = this.initiativeCooldowns.get(cooldownKey);
-      if (lastTime !== undefined && (Date.now() - lastTime) < cooldownMs) {
-        this.log.debug({ agentId, chatId }, 'Initiative on cooldown');
-        continue;
-      }
-
-      // Throttle: maxPerHour
-      const maxPerHour = settings.maxPerHour ?? 5;
-      const now = Date.now();
-      let counter = this.initiativeHourlyCounters.get(cooldownKey);
-      if (!counter || now >= counter.resetAt) {
-        counter = { count: 0, resetAt: now + 3_600_000 };
-        this.initiativeHourlyCounters.set(cooldownKey, counter);
-      }
-      if (counter.count >= maxPerHour) {
-        this.log.debug({ agentId, chatId, count: counter.count, maxPerHour }, 'Initiative hourly limit reached');
-        continue;
-      }
-
-      eligible.push({ agentId, name: agentInfo.name, description: agentInfo.description });
-    }
-
-    if (eligible.length === 0) {
-      this.log.info({ chatId, memberCount: members.length }, 'Initiative: no eligible bots (all filtered by gate/throttle)');
-      return;
-    }
-
-    this.log.info(
-      { chatId, eligibleCount: eligible.length, eligible: eligible.map(e => e.agentId) },
-      'Initiative: evaluating eligible bots (ADR-023)'
-    );
-
-    // Evaluate all eligible bots in parallel
-    const results = await Promise.allSettled(
-      eligible.map(async ({ agentId, name, description }) => {
-        const result = await this.initiativeEvaluator!.shouldRespond(message, description, name);
-        return { agentId, ...result };
-      })
-    );
-
-    // Execute for all bots that passed evaluation
-    for (const settled of results) {
-      if (settled.status === 'rejected') {
-        this.log.warn({ error: settled.reason }, 'Initiative evaluation rejected');
-        continue;
-      }
-      const { agentId, respond, reason, usage } = settled.value;
-
-      // Record evaluation cost regardless of outcome
-      if (usage && this.queryMetricsRepository) {
-        this.queryMetricsRepository.record({
-          agentId,
-          platform: message.platform,
-          chatId,
-          userId: message.userId,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          cacheReadTokens: usage.cacheReadTokens,
-          cacheCreationTokens: usage.cacheCreationTokens,
-          totalCostUsd: usage.totalCostUsd,
-          numTurns: 1,
-          durationMs: usage.durationMs,
-        });
-      }
-
-      if (!respond) {
-        this.log.info({ agentId, reason }, 'Initiative: bot declined to respond');
-        continue;
-      }
-
-      // Record cooldown and hourly count
-      const cooldownKey = `${chatId}:${agentId}`;
-      this.initiativeCooldowns.set(cooldownKey, Date.now());
-      const counter = this.initiativeHourlyCounters.get(cooldownKey);
-      if (counter) counter.count++;
-
-      this.log.info(
-        { agentId, chatId, reason },
-        'Initiative evaluation passed, executing response (ADR-023)'
-      );
-
-      await this.executeInitiative(agentId, message, chatId, senderLabel, reason);
-    }
-  }
-
-  /**
-   * ADR-023: Execute initiative response by creating a synthetic message.
-   * Reuses the delegation pattern but with initiative metadata.
-   */
-  private async executeInitiative(
-    agentId: string,
-    originalMessage: UnifiedMessage,
-    chatId: string,
-    senderLabel: string,
-    reason?: string,
-  ): Promise<void> {
-    const syntheticMessage: UnifiedMessage = {
-      id: `initiative-${Date.now()}-${agentId}`,
-      platform: originalMessage.platform,
-      userId: originalMessage.userId,
-      chatId,
-      text: `${senderLabel}: ${originalMessage.text}`,
-      timestamp: new Date(),
-      metadata: {
-        isGroupChat: true,
-        isInitiative: true,
-        initiativeReason: reason,
-      },
-    };
-
-    try {
-      await this.messageProcessor.processMessage(syntheticMessage, agentId, {
-        isGroupChat: true,
-        isInitiative: true,
-      });
-    } catch (error) {
-      this.log.error(
-        { error, chatId, agentId },
-        'Initiative response failed (ADR-023)'
-      );
-    }
-  }
 
   /**
    * Wait for a specific bot's message_id to become available.
@@ -818,9 +476,7 @@ export class GroupBroadcaster {
     this.groupMemberships.clear();
     this.perBotMessageIds.clear();
     this.processedMessages.clear();
-    // ADR-023: Initiative state cleanup
-    this.initiativeCooldowns.clear();
-    this.initiativeHourlyCounters.clear();
+    this.initiativeHandler.dispose();
     this.log.info('GroupBroadcaster disposed');
   }
 }

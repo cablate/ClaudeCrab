@@ -62,7 +62,7 @@ claudecab/
 │   │   ├── MEMORY.md      # 長期記憶
 │   │   └── memory/        # 每日日誌
 │   └── coder/             # 程式碼助手
-├── tests/                 # 284 tests, 19 files
+├── tests/                 # 386 tests, 25 files
 └── data/                  # SQLite 資料庫
 ```
 

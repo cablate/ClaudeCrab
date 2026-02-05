@@ -6,7 +6,37 @@
 
 ## 版本歷史
 
-### v1.23.0 - ADR-023: Bot 主動互動模式 v1（當前版本）
+### v1.23.2 - GroupBroadcaster SRP 拆分（當前版本）
+
+**發布日期**：2026-02-05
+
+**目標**：解決 GroupBroadcaster 826 行 god-object 問題，拆分為 3 個模組各司其職。
+
+**架構變更**
+```
+GroupBroadcaster (Facade, 516 行)
+  ├─ Core: membership, dedup, routing, recording, event handling
+  ├─ InitiativeHandler (224 行) — ADR-023 initiative 全部邏輯
+  └─ DelegationHandler (202 行) — ADR-021/022 delegation 全部邏輯
+```
+
+**設計決策**
+- `GroupBroadcasterOptions` 外部 API 完全不動，PlatformOrchestrator / AppBootstrap 零修改
+- InitiativeHandler 有狀態（cooldowns + counters），dispose 時清理
+- DelegationHandler 無狀態，不需 dispose
+- 現有 30 個 GroupBroadcaster 測試保留作為整合測試（EventBus → Facade → Handler）
+- 新增 24 個 handler 獨立單元測試（10 delegation + 14 initiative）
+
+**修改檔案**：
+- `src/core/InitiativeHandler.ts` — **新建**，evaluateInitiatives + executeInitiative + cooldown/counter
+- `src/core/DelegationHandler.ts` — **新建**，processDelegation + detectDelegationTargets + executeDelegation
+- `src/core/GroupBroadcaster.ts` — 移除 5 個 methods + 7 個 fields，委託給 handlers
+- `tests/unit/InitiativeHandler.test.ts` — **新建**，14 個測試
+- `tests/unit/DelegationHandler.test.ts` — **新建**，10 個測試
+
+---
+
+### v1.23.0 - ADR-023: Bot 主動互動模式 v1
 
 **發布日期**：2026-02-05
 

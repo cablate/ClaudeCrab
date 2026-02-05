@@ -49,3 +49,4 @@
 | [agent-skill/design.md](research/agent-skill/design.md) | Agent Skill 設計原則、核心洞察 |
 | [agent-skill/guide.md](research/agent-skill/guide.md) | Agent Skill 實踐指南 |
 | [moltbot-gap.md](research/moltbot-gap.md) | Moltbot 記憶系統差距分析 |
+| [emergent-cooperation.md](research/emergent-cooperation.md) | 湧現式協作行為觀察（最小提示 → 自發協作推理） |
