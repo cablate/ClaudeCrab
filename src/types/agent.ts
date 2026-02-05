@@ -34,6 +34,20 @@ const DelegationSettingsSchema = z.object({
   outbound: z.boolean().optional(),
 });;
 
+/** ADR-023: Initiative settings for bot proactive responses */
+const InitiativeSettingsSchema = z.object({
+  /** Enable bot initiative — bot can proactively respond to non-@mentioned messages (default: false) */
+  enabled: z.boolean().optional(),
+  /** Initiative mode: determines evaluation prompt and throttle behavior */
+  mode: z.enum(['work', 'social', 'full']).optional(),
+  /** Cooldown in seconds between initiative responses per group (default: 300) */
+  cooldown: z.number().int().positive().optional(),
+  /** Max initiative responses per hour per group (default: 5) */
+  maxPerHour: z.number().int().positive().optional(),
+});
+
+export type InitiativeSettings = z.infer<typeof InitiativeSettingsSchema>;
+
 export const AgentSettingsSchema = z.object({
   maxHistoryLength: z.number().int().positive().optional(),
   permissionMode: PermissionModeSchema.optional(),
@@ -41,6 +55,8 @@ export const AgentSettingsSchema = z.object({
   maxBudgetUsd: z.number().positive().optional(),
   /** ADR-022: Delegation settings */
   delegation: DelegationSettingsSchema.optional(),
+  /** ADR-023: Initiative settings */
+  initiative: InitiativeSettingsSchema.optional(),
 });
 
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>;

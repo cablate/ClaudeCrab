@@ -1,6 +1,6 @@
 # ADR-023: Bot 主動互動模式
 
-**狀態**：📋 proposed
+**狀態**：✅ implemented (v1 work mode)
 **日期**：2026-02-04
 **相關**：ADR-019, ADR-020, ADR-021
 

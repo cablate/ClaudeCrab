@@ -6,7 +6,37 @@
 
 ## 版本歷史
 
-### v1.22.0 - ADR-022: 委派機制增強 + 基礎設施重構（當前版本）
+### v1.23.0 - ADR-023: Bot 主動互動模式 v1（當前版本）
+
+**發布日期**：2026-02-05
+
+**目標**：讓 Bot 能在沒有被 @mention 的情況下，主動回應群組中與其專業相關的訊息。
+
+**核心功能**
+- **Initiative Pipeline**：Gate → Throttle → Evaluate (Haiku) → Execute
+- **LLM 評估器**：用 Haiku（~$0.001/次）做語意判斷，取代關鍵字規則
+- **Strategy Pattern**：`InitiativeEvaluator` 介面可抽換實作（LLM / AlwaysRespond / 未來 Embedding）
+- **Initiative Mode**：`agent.json` 設定 `settings.initiative.{enabled, mode, cooldown, maxPerHour}`
+- **v1 限制**：僅支援 `work` mode；initiative 回覆不觸發委派鏈
+
+**設計決策**
+- 棄用關鍵字預篩（維護成本高、語意理解零）→ 直接用 Haiku 評估
+- Throttle 在 Evaluate 之前（先擋再花錢）
+- cooldown 用 `Map<string, number>` 而非 DedupTracker（需 per-agent 可配置 TTL）
+
+**修改檔案**：
+- `src/types/agent.ts` — 新增 `InitiativeSettingsSchema`
+- `src/types/events.ts` — `BotRepliedPayload.isInitiative`
+- `src/core/InitiativeEvaluator.ts` — **新建**，Strategy 介面 + LLMInitiativeEvaluator
+- `src/core/GroupBroadcaster.ts` — Initiative Pipeline（evaluateInitiatives + executeInitiative + guard）
+- `src/core/PlatformOrchestrator.ts` — 注入 initiative callbacks + evaluator
+- `src/core/MessageProcessor.ts` — isInitiative 傳遞鏈
+- `tests/unit/InitiativeEvaluator.test.ts` — **新建**，5 個測試
+- `tests/unit/GroupBroadcaster.test.ts` — 新增 10 個 initiative 測試
+
+---
+
+### v1.22.0 - ADR-022: 委派機制增強 + 基礎設施重構
 
 **發布日期**：2026-02-05
 

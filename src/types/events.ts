@@ -84,6 +84,9 @@ export interface BotRepliedPayload {
 
   /** Chain of agentIds in this delegation sequence, for cycle detection (ADR-021) */
   delegationChain?: string[];
+
+  /** ADR-023: Whether this reply was triggered by bot initiative */
+  isInitiative?: boolean;
 }
 
 /**

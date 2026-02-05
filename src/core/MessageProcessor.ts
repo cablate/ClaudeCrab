@@ -154,6 +154,8 @@ export class MessageProcessor {
       delegationDepth?: number;
       /** Delegation chain for cycle detection (ADR-021) */
       delegationChain?: string[];
+      /** ADR-023: Whether this is an initiative-triggered message */
+      isInitiative?: boolean;
     }
   ): Promise<ProcessingResult> {
     const { platform, userId, chatId, text, id: messageId } = message;
@@ -903,7 +905,7 @@ export class MessageProcessor {
     agentId: string,
     platform: string,
     lastSentMessageId: string | undefined,
-    options?: { isGroupChat?: boolean; delegationDepth?: number; delegationChain?: string[] }
+    options?: { isGroupChat?: boolean; delegationDepth?: number; delegationChain?: string[]; isInitiative?: boolean }
   ): void {
     if (
       !options?.isGroupChat ||
@@ -941,6 +943,8 @@ export class MessageProcessor {
       ...(options?.delegationChain !== undefined
         ? { delegationChain: options.delegationChain }
         : {}),
+      // ADR-023: Pass initiative flag
+      ...(options?.isInitiative === true ? { isInitiative: true } : {}),
     });
   }
 

@@ -23,6 +23,7 @@ import type {
 import { AdapterRegistry } from './AdapterRegistry.js';
 import { AgentLoader } from './AgentLoader.js';
 import { GroupBroadcaster } from './GroupBroadcaster.js';
+import { LLMInitiativeEvaluator } from './InitiativeEvaluator.js';
 import { SessionManager } from './SessionManager.js';
 import { MessageProcessor } from './MessageProcessor.js';
 import { logger } from '../utils/logger.js';
@@ -108,6 +109,19 @@ export class PlatformOrchestrator {
         if (delegation.outbound !== undefined) result.outbound = delegation.outbound;
         return result;
       },
+      // ADR-023: Initiative settings and evaluator
+      getInitiativeSettings: (agentId: string) => {
+        return this.agentLoader.get(agentId)?.config.settings?.initiative;
+      },
+      getAgentDescription: (agentId: string) => {
+        const agent = this.agentLoader.get(agentId);
+        if (!agent) return undefined;
+        return {
+          name: agent.config.name,
+          ...(agent.config.description !== undefined ? { description: agent.config.description } : {}),
+        };
+      },
+      initiativeEvaluator: new LLMInitiativeEvaluator(),
     });
   }
 
