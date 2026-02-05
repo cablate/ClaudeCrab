@@ -33,6 +33,7 @@
 | [ADR-023](adr/adr-023-bot-initiative.md) | Bot 主動互動模式 | 📋 proposed | 2026-02-04 |
 | [ADR-024](adr/adr-024-group-commands.md) | 群組命令支援 | ✅ accepted | 2026-02-04 |
 | [ADR-025](adr/adr-025-dashboard-group-analytics.md) | Dashboard 群組分析與委派統計 | 📋 proposed | 2026-02-04 |
+| [ADR-026](adr/adr-026-group-infra-stabilization.md) | 群組協作基礎設施穩定化 | ✅ implemented | 2026-02-05 |
 
 ---
 
