@@ -21,39 +21,88 @@ Bot 主動互動的典型場景：
 
 ## 提議
 
-### 核心機制：「觀察 + 觸發條件」
+### 架構：Initiative Pipeline（事件驅動 + 可抽換判斷）
 
-1. **觀察模式**：Bot 透過 Context Injection 已經能「看到」群組對話歷史
-2. **主動觸發**：在 system prompt 中定義觸發條件，由 SDK 判斷是否回應
-
-### 實作方式
-
-#### 方案 A：定時輪詢（Polling-based）
+收斂方案 A/B/C 的討論後，採用 Pipeline 架構：
 
 ```
-CronScheduler → 每 N 分鐘檢查群組活動
-  → 有新訊息且符合條件 → 建立合成訊息觸發 Bot
+訊息進入 GroupBroadcaster（非 @mention 的訊息）
+  ↓
+① Gate        agent.initiative.enabled + mode 檢查
+  ↓
+② Evaluator   判斷「要不要回？」— 可抽換實作
+  ↓
+③ Throttle    cooldown / maxPerHour / cost cap
+  ↓
+④ Execute     合成訊息 → processMessage（複用 delegation 模式）
 ```
 
-- 優點：利用現有排程系統
-- 缺點：延遲高、不夠即時
+每一層獨立、可抽換。未來換判斷方法 = 換 ② 的實作，其他層不動。
 
-#### 方案 B：事件驅動（Event-based）
+### 評估方案比較（2026-02-05 討論紀錄）
 
+原始提案包含三種方案，經討論後收斂：
+
+| 方案 | 說明 | 結論 |
+|------|------|------|
+| A. 定時輪詢 | Cron 每 N 分鐘檢查 | 棄用 — 本質是 B 的低頻版 |
+| B. 事件驅動 + 規則預篩 | 引擎收到訊息 → 關鍵字 match → 送 AI | 預篩部分棄用（見下方） |
+| C. System Prompt 驅動 | 所有 Bot 都收到 → AI 自己判斷 | 成本不可控（N Bot × 每條訊息） |
+| **採用：事件驅動 + 輕量模型評估** | 引擎收到訊息 → Haiku 判斷相關性 → 通過才送主模型回覆 | ✅ |
+
+**關鍵字預篩為何棄用**：維護成本高、語意理解為零、漏判多。Haiku 單次判斷約 $0.001，5 Bot 判斷一輪 $0.005，直接用便宜模型做語意判斷更實際。
+
+### Evaluator 介面（Strategy Pattern）
+
+```typescript
+interface InitiativeEvaluator {
+  shouldRespond(
+    message: UnifiedMessage,
+    agent: AgentConfig,
+    recentHistory: GroupMessage[]
+  ): Promise<{ respond: boolean; reason?: string }>;
+}
 ```
-group:message 事件 → 所有群組 Bot 收到通知
-  → 根據設定決定是否「主動回應」
-  → 主動回應的 Bot 建立 query（不需 @mention）
+
+| Evaluator 實作 | 用途 | 成本 |
+|---|---|---|
+| `LLMEvaluator`（Haiku） | v1 預設，語意判斷 | ~$0.001/次 |
+| `AlwaysRespondEvaluator` | 測試/debug 用 | 0 |
+| 未來：`EmbeddingEvaluator` | 向量相似度 | 更低 |
+
+**v1 不做 keyword filter，直接用 LLMEvaluator。** 未來如果 Haiku 成本仍嫌高，可加回規則預篩作為 Pipeline 的額外前置層。
+
+### Initiative Mode 配置
+
+Mode 決定 Evaluator 的 prompt 和 Throttle 參數：
+
+```jsonc
+// agent.json
+{
+  "settings": {
+    "initiative": {
+      "enabled": true,
+      "mode": "work",        // "work" | "social" | "full"
+      "cooldown": 300,       // 秒，同群組冷卻
+      "maxPerHour": 5        // 每小時上限
+    }
+  }
+}
 ```
 
-- 在 `GroupBroadcaster.handleGroupMessage()` 中，除了處理被 @mention 的 Bot，額外檢查其他 Bot 是否符合「主動回應」條件
-- 條件可配置：`agent.json` 中設定 `initiative.enabled: true`、`initiative.probability: 0.1` 等
+| Mode | Evaluator prompt 傾向 | 典型觸發場景 |
+|------|----------------------|------------|
+| `work` | 只回應與專業相關的工作事項 | 「伺服器掛了」→ 工程師回 |
+| `social` | 可參與閒聊，展現個性 | 「週末去哪玩」→ 偶爾插話 |
+| `full` | 工作主動 + 閒聊偶爾 | 兩者皆有 |
 
-#### 方案 C：System Prompt 驅動
+加新 mode = 加一組 evaluator prompt + throttle 參數，不改 Pipeline。
 
-- 不改引擎層程式碼
-- 在 Context Injection 的歷史中加入提示：「如果你認為需要主動回應，請回覆」
-- 依賴 Bot 自己判斷是否回應
+### 與委派的交互
+
+- 主動回覆標記 `triggerType: 'initiative'`
+- **v1 不觸發委派鏈**，避免主動回覆 → 委派 → 無限循環
+- 未來可配置
 
 ---
 
@@ -61,22 +110,28 @@ group:message 事件 → 所有群組 Bot 收到通知
 
 | 風險 | 緩解 |
 |------|------|
-| Bot 過度活躍，瘋狂回覆 | 冷卻時間（cooldown）機制 |
+| Bot 過度活躍，瘋狂回覆 | Throttle 層：cooldown + maxPerHour |
 | 多個 Bot 同時主動回覆 | 機率控制 + 回應延遲（隨機 delay） |
-| Token 成本暴增 | 每小時 cost cap / 主動回覆次數上限 |
-| 對話品質下降 | 主動回覆用較便宜的模型先判斷是否值得回應 |
+| Token 成本暴增 | Haiku 評估（$0.001/次）+ 每小時 cost cap |
+| 對話品質下降 | Evaluator prompt 可按 mode 調校 |
+| 主動回覆觸發無限委派 | v1 initiative 不觸發委派鏈 |
 
 ---
 
 ## 影響
 
-- `src/core/GroupBroadcaster.ts` — 主動觸發邏輯
-- `src/types/agent.ts` — initiative 設定
-- Agent system prompt — 主動回應的指引
+- `src/core/GroupBroadcaster.ts` — Initiative Pipeline 主邏輯
+- `src/core/InitiativeEvaluator.ts` — **新建**，Strategy 介面 + LLMEvaluator 實作
+- `src/types/agent.ts` — `InitiativeSettingsSchema`
+- Agent system prompt — 主動回應的指引（按 mode 不同）
 
 ## 待討論
 
-- [ ] 哪個方案最適合？Event-based vs Polling vs System Prompt？
-- [ ] 主動互動的頻率如何控制？
-- [ ] 成本控制策略：cost cap vs 次數上限？
+- [x] 哪個方案最適合？→ **事件驅動 + Haiku 評估**（2026-02-05 決定）
+- [x] 關鍵字預篩 vs AI 評估？→ **棄用關鍵字，直接 Haiku**（成本可接受）
+- [x] 主動回覆是否觸發委派？→ **v1 不觸發**
+- [ ] 主動互動的頻率如何控制？（cooldown + maxPerHour 方向已定，具體數值待測試）
+- [ ] 成本控制策略：cost cap vs 次數上限？（可並行）
 - [ ] 是否需要「靜音時段」（如深夜不主動）？
+- [ ] Haiku evaluator 的 prompt 如何設計？（每個 mode 一組）
+- [ ] social mode 的機率/頻率參數如何調校？
