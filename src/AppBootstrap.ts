@@ -319,6 +319,9 @@ export class AppBootstrap {
       ...(persistence?.groupMemberRepository !== undefined
         ? { groupMemberRepository: persistence.groupMemberRepository }
         : {}),
+      ...(persistence?.queryMetricsRepository !== undefined
+        ? { queryMetricsRepository: persistence.queryMetricsRepository }
+        : {}),
     });
   }
 

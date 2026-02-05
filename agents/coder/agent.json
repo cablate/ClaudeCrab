@@ -14,6 +14,14 @@
   "telegramBotToken": "8585127707:AAExHiRF4aF7cbyXcyoN7fX4UgTqhU2u-2A",
   "settings": {
     "permissionMode": "default",
-    "maxTurns": 30
+    "delegation": {
+        "canDelegate": false
+      },
+    "initiative": {
+        "enabled": true,
+        "mode": "work",
+        "cooldown": 60,
+        "maxPerHour": 10
+      }
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type Anthropic from '@anthropic-ai/sdk';
+import type { query } from '@anthropic-ai/claude-agent-sdk';
 import { LLMInitiativeEvaluator, AlwaysRespondEvaluator } from '../../src/core/InitiativeEvaluator.js';
 import type { UnifiedMessage } from '../../src/adapters/types.js';
 
@@ -19,18 +19,50 @@ function createMessage(text: string): UnifiedMessage {
   };
 }
 
-describe('LLMInitiativeEvaluator', () => {
-  function createEvaluator(mockResponse: unknown) {
-    const mockCreate = vi.fn().mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify(mockResponse) }],
-    });
-    const mockClient = { messages: { create: mockCreate } } as unknown as Anthropic;
-    const evaluator = new LLMInitiativeEvaluator({ client: mockClient, model: 'test-model' });
-    return { evaluator, mockCreate };
-  }
+/**
+ * Create a mock queryFn that returns an async generator yielding a SDK result message.
+ */
+function createMockQueryFn(resultText: string) {
+  const mockFn = vi.fn().mockImplementation(() => {
+    async function* generator() {
+      yield {
+        type: 'result' as const,
+        subtype: 'success' as const,
+        result: resultText,
+        duration_ms: 100,
+        duration_api_ms: 80,
+        is_error: false,
+        num_turns: 1,
+        total_cost_usd: 0.001,
+        usage: { inputTokens: 50, outputTokens: 20, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+        modelUsage: {},
+        permission_denials: [],
+        uuid: 'test-uuid',
+        session_id: 'test-session',
+      };
+    }
+    return generator();
+  });
+  return mockFn as unknown as typeof query;
+}
 
+function createErrorQueryFn() {
+  const mockFn = vi.fn().mockImplementation(() => {
+    async function* generator() {
+      throw new Error('SDK connection failed');
+      // eslint-disable-next-line no-unreachable
+      yield undefined as never;
+    }
+    return generator();
+  });
+  return mockFn as unknown as typeof query;
+}
+
+describe('LLMInitiativeEvaluator', () => {
   it('should return respond=true for relevant message', async () => {
-    const { evaluator, mockCreate } = createEvaluator({ respond: true, reason: 'server issue matches engineer role' });
+    const response = JSON.stringify({ respond: true, reason: 'server issue matches engineer role' });
+    const mockQueryFn = createMockQueryFn(response);
+    const evaluator = new LLMInitiativeEvaluator({ queryFn: mockQueryFn, model: 'test-model' });
 
     const result = await evaluator.shouldRespond(
       createMessage('伺服器好像掛了'),
@@ -40,12 +72,17 @@ describe('LLMInitiativeEvaluator', () => {
 
     expect(result.respond).toBe(true);
     expect(result.reason).toBe('server issue matches engineer role');
-    expect(mockCreate).toHaveBeenCalledOnce();
-    expect(mockCreate.mock.calls[0][0]).toMatchObject({ model: 'test-model', max_tokens: 150 });
+    expect(mockQueryFn).toHaveBeenCalledOnce();
+    const callArgs = (mockQueryFn as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArgs.options.model).toBe('test-model');
+    expect(callArgs.options.maxTurns).toBe(1);
+    expect(callArgs.options.tools).toEqual([]);
   });
 
   it('should return respond=false for irrelevant message', async () => {
-    const { evaluator } = createEvaluator({ respond: false, reason: 'off-topic' });
+    const response = JSON.stringify({ respond: false, reason: 'off-topic' });
+    const mockQueryFn = createMockQueryFn(response);
+    const evaluator = new LLMInitiativeEvaluator({ queryFn: mockQueryFn });
 
     const result = await evaluator.shouldRespond(
       createMessage('晚餐吃什麼'),
@@ -58,9 +95,8 @@ describe('LLMInitiativeEvaluator', () => {
   });
 
   it('should return respond=false on API error (fail-safe)', async () => {
-    const mockCreate = vi.fn().mockRejectedValue(new Error('API timeout'));
-    const mockClient = { messages: { create: mockCreate } } as unknown as Anthropic;
-    const evaluator = new LLMInitiativeEvaluator({ client: mockClient });
+    const mockQueryFn = createErrorQueryFn();
+    const evaluator = new LLMInitiativeEvaluator({ queryFn: mockQueryFn });
 
     const result = await evaluator.shouldRespond(
       createMessage('伺服器掛了'),
@@ -73,11 +109,8 @@ describe('LLMInitiativeEvaluator', () => {
   });
 
   it('should return respond=false on malformed JSON (fail-safe)', async () => {
-    const mockCreate = vi.fn().mockResolvedValue({
-      content: [{ type: 'text', text: 'this is not json' }],
-    });
-    const mockClient = { messages: { create: mockCreate } } as unknown as Anthropic;
-    const evaluator = new LLMInitiativeEvaluator({ client: mockClient });
+    const mockQueryFn = createMockQueryFn('this is not json');
+    const evaluator = new LLMInitiativeEvaluator({ queryFn: mockQueryFn });
 
     const result = await evaluator.shouldRespond(
       createMessage('test'),

@@ -19,6 +19,7 @@ import type {
   IGroupMessageRepository,
   IInjectionStateRepository,
   IGroupMemberRepository,
+  IQueryMetricsRepository,
 } from '../persistence/types.js';
 import { AdapterRegistry } from './AdapterRegistry.js';
 import { AgentLoader } from './AgentLoader.js';
@@ -55,6 +56,8 @@ export interface PlatformOrchestratorOptions {
   injectionStateRepository?: IInjectionStateRepository;
   /** Group member repository for persistent membership (ADR-020) */
   groupMemberRepository?: IGroupMemberRepository;
+  /** Query metrics repository for recording usage (ADR-020/023) */
+  queryMetricsRepository?: IQueryMetricsRepository;
   /** Optional GroupBroadcaster instance for dependency injection (testing) */
   groupBroadcaster?: GroupBroadcaster;
 }
@@ -122,6 +125,9 @@ export class PlatformOrchestrator {
         };
       },
       initiativeEvaluator: new LLMInitiativeEvaluator(),
+      ...(options.queryMetricsRepository !== undefined
+        ? { queryMetricsRepository: options.queryMetricsRepository }
+        : {}),
     });
   }
 

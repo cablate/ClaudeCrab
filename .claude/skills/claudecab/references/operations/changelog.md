@@ -24,14 +24,23 @@
 - Throttle 在 Evaluate 之前（先擋再花錢）
 - cooldown 用 `Map<string, number>` 而非 DedupTracker（需 per-agent 可配置 TTL）
 
+**實測修正**（v1.23.1）
+- 修正 `@anthropic-ai/sdk` 誤用 → 改用 `claude-agent-sdk` 的 `query()` 呼叫 Haiku
+- 修正 Haiku 回傳 markdown code block 包裹 JSON 的解析問題
+- Model 從 `claude-haiku-4-20250514` 改為 `claude-haiku-4-5-20251001`
+- Initiative pipeline 關鍵節點 log 從 debug 拉到 info（評估進入、判定不回、全被過濾）
+- 新增 `InitiativeEvaluationUsage` 型別，evaluation 費用寫入 `query_metrics` 表（歸到被評估的 bot）
+- `GroupBroadcaster` 注入 `queryMetricsRepository`，注入鏈：AppBootstrap → PlatformOrchestrator → GroupBroadcaster
+
 **修改檔案**：
 - `src/types/agent.ts` — 新增 `InitiativeSettingsSchema`
 - `src/types/events.ts` — `BotRepliedPayload.isInitiative`
-- `src/core/InitiativeEvaluator.ts` — **新建**，Strategy 介面 + LLMInitiativeEvaluator
-- `src/core/GroupBroadcaster.ts` — Initiative Pipeline（evaluateInitiatives + executeInitiative + guard）
-- `src/core/PlatformOrchestrator.ts` — 注入 initiative callbacks + evaluator
+- `src/core/InitiativeEvaluator.ts` — **新建**，Strategy 介面 + LLMInitiativeEvaluator + usage 回傳
+- `src/core/GroupBroadcaster.ts` — Initiative Pipeline + usage 記錄 + info-level log
+- `src/core/PlatformOrchestrator.ts` — 注入 initiative callbacks + evaluator + queryMetricsRepository
 - `src/core/MessageProcessor.ts` — isInitiative 傳遞鏈
-- `tests/unit/InitiativeEvaluator.test.ts` — **新建**，5 個測試
+- `src/AppBootstrap.ts` — queryMetricsRepository 注入到 PlatformOrchestrator
+- `tests/unit/InitiativeEvaluator.test.ts` — **新建**，mock claude-agent-sdk query()
 - `tests/unit/GroupBroadcaster.test.ts` — 新增 10 個 initiative 測試
 
 ---

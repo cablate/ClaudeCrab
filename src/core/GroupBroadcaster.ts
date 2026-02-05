@@ -5,6 +5,7 @@ import type {
   IGroupMessageRepository,
   IInjectionStateRepository,
   IGroupMemberRepository,
+  IQueryMetricsRepository,
 } from '../persistence/types.js';
 import type { UnifiedMessage } from '../adapters/types.js';
 import type { InitiativeSettings } from '../types/agent.js';
@@ -46,6 +47,9 @@ export interface GroupBroadcasterOptions {
 
   /** ADR-023: Initiative evaluator (Strategy pattern) */
   initiativeEvaluator?: InitiativeEvaluator;
+
+  /** Query metrics repository for recording initiative evaluation costs */
+  queryMetricsRepository?: IQueryMetricsRepository;
 }
 
 /**
@@ -83,6 +87,9 @@ export class GroupBroadcaster {
 
   /** ADR-023: Initiative evaluator */
   private readonly initiativeEvaluator: InitiativeEvaluator | undefined;
+
+  /** Query metrics repository for recording initiative evaluation costs */
+  private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
 
   /** ADR-023: Cooldown timestamps per group per bot (key: `${chatId}:${agentId}` → timestamp) */
   private readonly initiativeCooldowns = new Map<string, number>();
@@ -124,6 +131,7 @@ export class GroupBroadcaster {
     this.getInitiativeSettings = options.getInitiativeSettings;
     this.getAgentDescription = options.getAgentDescription;
     this.initiativeEvaluator = options.initiativeEvaluator;
+    this.queryMetricsRepository = options.queryMetricsRepository;
 
     // Listen to group:message events
     getEventBus().on('group:message', this.handleGroupMessage.bind(this));
@@ -613,10 +621,16 @@ export class GroupBroadcaster {
     chatId: string,
     senderLabel: string,
   ): Promise<void> {
-    if (!this.initiativeEvaluator) return;
+    if (!this.initiativeEvaluator) {
+      this.log.debug({ chatId }, 'No initiative evaluator configured');
+      return;
+    }
 
     const members = this.getGroupMembers(chatId);
-    if (members.length === 0) return;
+    if (members.length === 0) {
+      this.log.debug({ chatId }, 'No group members for initiative evaluation');
+      return;
+    }
 
     // Collect bots that pass Gate + Throttle (before expensive AI evaluation)
     const eligible: Array<{ agentId: string; name: string; description: string }> = [];
@@ -665,11 +679,14 @@ export class GroupBroadcaster {
       eligible.push({ agentId, name: agentInfo.name, description: agentInfo.description });
     }
 
-    if (eligible.length === 0) return;
+    if (eligible.length === 0) {
+      this.log.info({ chatId, memberCount: members.length }, 'Initiative: no eligible bots (all filtered by gate/throttle)');
+      return;
+    }
 
-    this.log.debug(
+    this.log.info(
       { chatId, eligibleCount: eligible.length, eligible: eligible.map(e => e.agentId) },
-      'Evaluating initiative for eligible bots (ADR-023)'
+      'Initiative: evaluating eligible bots (ADR-023)'
     );
 
     // Evaluate all eligible bots in parallel
@@ -686,9 +703,27 @@ export class GroupBroadcaster {
         this.log.warn({ error: settled.reason }, 'Initiative evaluation rejected');
         continue;
       }
-      const { agentId, respond, reason } = settled.value;
+      const { agentId, respond, reason, usage } = settled.value;
+
+      // Record evaluation cost regardless of outcome
+      if (usage && this.queryMetricsRepository) {
+        this.queryMetricsRepository.record({
+          agentId,
+          platform: message.platform,
+          chatId,
+          userId: message.userId,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cacheReadTokens: usage.cacheReadTokens,
+          cacheCreationTokens: usage.cacheCreationTokens,
+          totalCostUsd: usage.totalCostUsd,
+          numTurns: 1,
+          durationMs: usage.durationMs,
+        });
+      }
+
       if (!respond) {
-        this.log.debug({ agentId, reason }, 'Initiative evaluation: no response');
+        this.log.info({ agentId, reason }, 'Initiative: bot declined to respond');
         continue;
       }
 
