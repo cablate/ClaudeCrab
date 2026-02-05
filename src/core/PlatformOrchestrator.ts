@@ -54,6 +54,8 @@ export interface PlatformOrchestratorOptions {
   injectionStateRepository?: IInjectionStateRepository;
   /** Group member repository for persistent membership (ADR-020) */
   groupMemberRepository?: IGroupMemberRepository;
+  /** Optional GroupBroadcaster instance for dependency injection (testing) */
+  groupBroadcaster?: GroupBroadcaster;
 }
 
 /**
@@ -77,7 +79,8 @@ export class PlatformOrchestrator {
     this.scheduleManager = options.scheduleManager;
 
     // Initialize GroupBroadcaster for multi-bot group message handling (ADR-019)
-    this.groupBroadcaster = new GroupBroadcaster({
+    // Supports dependency injection for testing
+    this.groupBroadcaster = options.groupBroadcaster ?? new GroupBroadcaster({
       messageProcessor: this.messageProcessor,
       getBotInfo: (agentId: string) => {
         // Get adapter from registry and retrieve bot info

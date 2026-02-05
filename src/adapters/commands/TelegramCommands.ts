@@ -38,6 +38,14 @@ export interface CommandDependencies {
   getBotStatus?: (agentId: string) => 'running' | 'stopped' | 'error' | 'no-token';
 }
 
+/**
+ * CommandDependencies with required scheduleManager.
+ * Used by schedule sub-commands after parent has verified scheduleManager exists.
+ */
+interface ScheduleCommandDeps extends CommandDependencies {
+  scheduleManager: ScheduleManager;
+}
+
 // ── ADR-024: Group command utilities ────────────────────────────
 
 /** Commands that modify state — require explicit @target in groups */
@@ -362,27 +370,30 @@ export async function handleSchedule(
     return;
   }
 
+  // After the check above, we know scheduleManager exists
+  const scheduleDeps = deps as ScheduleCommandDeps;
+
   switch (subcommand) {
     case 'list':
-      await handleScheduleList(ctx, deps);
+      await handleScheduleList(ctx, scheduleDeps);
       break;
     case 'info':
-      await handleScheduleInfo(ctx, deps, rest[0]);
+      await handleScheduleInfo(ctx, scheduleDeps, rest[0]);
       break;
     case 'pause':
-      await handleSchedulePause(ctx, deps, rest[0]);
+      await handleSchedulePause(ctx, scheduleDeps, rest[0]);
       break;
     case 'resume':
-      await handleScheduleResume(ctx, deps, rest[0]);
+      await handleScheduleResume(ctx, scheduleDeps, rest[0]);
       break;
     case 'run':
-      await handleScheduleRun(ctx, deps, rest[0]);
+      await handleScheduleRun(ctx, scheduleDeps, rest[0]);
       break;
     case 'delete':
-      await handleScheduleDelete(ctx, deps, rest[0]);
+      await handleScheduleDelete(ctx, scheduleDeps, rest[0]);
       break;
     case 'history':
-      await handleScheduleHistory(ctx, deps, rest[0]);
+      await handleScheduleHistory(ctx, scheduleDeps, rest[0]);
       break;
     default:
       await handleScheduleHelp(ctx);
@@ -391,9 +402,9 @@ export async function handleSchedule(
 
 async function handleScheduleList(
   ctx: Context,
-  deps: CommandDependencies
+  deps: ScheduleCommandDeps
 ): Promise<void> {
-  const schedules = await deps.scheduleManager!.getAllSchedules();
+  const schedules = await deps.scheduleManager.getAllSchedules();
 
   if (schedules.length === 0) {
     await ctx.reply('📅 目前沒有排程任務。');
@@ -419,7 +430,7 @@ async function handleScheduleList(
 
 async function handleScheduleInfo(
   ctx: Context,
-  deps: CommandDependencies,
+  deps: ScheduleCommandDeps,
   scheduleId?: string
 ): Promise<void> {
   if (!scheduleId) {
@@ -427,7 +438,7 @@ async function handleScheduleInfo(
     return;
   }
 
-  const info = await deps.scheduleManager!.getScheduleInfo(scheduleId);
+  const info = await deps.scheduleManager.getScheduleInfo(scheduleId);
   if (!info) {
     await ctx.reply(`❌ 找不到排程：${scheduleId}`);
     return;
@@ -467,7 +478,7 @@ async function handleScheduleInfo(
 
 async function handleSchedulePause(
   ctx: Context,
-  deps: CommandDependencies,
+  deps: ScheduleCommandDeps,
   scheduleId?: string
 ): Promise<void> {
   if (!scheduleId) {
@@ -475,7 +486,7 @@ async function handleSchedulePause(
     return;
   }
 
-  const success = await deps.scheduleManager!.pauseSchedule(scheduleId);
+  const success = await deps.scheduleManager.pauseSchedule(scheduleId);
   if (success) {
     await ctx.reply(`⏸️ 已暫停排程：${scheduleId}`);
   } else {
@@ -485,7 +496,7 @@ async function handleSchedulePause(
 
 async function handleScheduleResume(
   ctx: Context,
-  deps: CommandDependencies,
+  deps: ScheduleCommandDeps,
   scheduleId?: string
 ): Promise<void> {
   if (!scheduleId) {
@@ -493,7 +504,7 @@ async function handleScheduleResume(
     return;
   }
 
-  const success = await deps.scheduleManager!.resumeSchedule(scheduleId);
+  const success = await deps.scheduleManager.resumeSchedule(scheduleId);
   if (success) {
     await ctx.reply(`▶️ 已恢復排程：${scheduleId}`);
   } else {
@@ -503,7 +514,7 @@ async function handleScheduleResume(
 
 async function handleScheduleRun(
   ctx: Context,
-  deps: CommandDependencies,
+  deps: ScheduleCommandDeps,
   scheduleId?: string
 ): Promise<void> {
   if (!scheduleId) {
@@ -511,7 +522,7 @@ async function handleScheduleRun(
     return;
   }
 
-  const success = await deps.scheduleManager!.runNow(scheduleId);
+  const success = await deps.scheduleManager.runNow(scheduleId);
   if (success) {
     await ctx.reply(`🚀 已觸發排程執行：${scheduleId}`);
   } else {
@@ -521,7 +532,7 @@ async function handleScheduleRun(
 
 async function handleScheduleDelete(
   ctx: Context,
-  deps: CommandDependencies,
+  deps: ScheduleCommandDeps,
   scheduleId?: string
 ): Promise<void> {
   if (!scheduleId) {
@@ -529,7 +540,7 @@ async function handleScheduleDelete(
     return;
   }
 
-  const success = await deps.scheduleManager!.deleteSchedule(scheduleId);
+  const success = await deps.scheduleManager.deleteSchedule(scheduleId);
   if (success) {
     await ctx.reply(`🗑️ 已刪除排程：${scheduleId}`);
   } else {
@@ -539,12 +550,12 @@ async function handleScheduleDelete(
 
 async function handleScheduleHistory(
   ctx: Context,
-  deps: CommandDependencies,
+  deps: ScheduleCommandDeps,
   scheduleId?: string
 ): Promise<void> {
   const executions = scheduleId
-    ? deps.scheduleManager!.getExecutionHistory(scheduleId, 10)
-    : deps.scheduleManager!.getRecentExecutions(10);
+    ? deps.scheduleManager.getExecutionHistory(scheduleId, 10)
+    : deps.scheduleManager.getRecentExecutions(10);
 
   if (executions.length === 0) {
     await ctx.reply('📊 沒有執行記錄。');
