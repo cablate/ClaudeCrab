@@ -6,11 +6,11 @@
 
 ## 版本歷史
 
-### v1.22.0 - ADR-022: 委派機制增強（當前版本）
+### v1.22.0 - ADR-022: 委派機制增強 + 基礎設施重構（當前版本）
 
 **發布日期**：2026-02-05
 
-**目標**：多重委派支援 + 委派可配置（inbound/outbound）。
+**目標**：多重委派支援 + 委派可配置（inbound/outbound）+ 群組協作基礎設施穩定化。
 
 **核心功能**
 - **多重委派**：`detectDelegationTargets()` 回傳 `string[]`，一次回覆可同時觸發多個被 @mention 的 Bot
@@ -23,10 +23,30 @@
 **命名決策**
 - 初版 `acceptDelegation`/`canDelegate` 語意相近易混淆，改為方向性命名 `inbound`/`outbound`
 
+**基礎設施重構**
+
+經過 code review 識別 14 個改善項目，本版本完成以下重構：
+
+| Phase | 項目 | 說明 |
+|-------|------|------|
+| 1 | GroupBroadcaster 單元測試 | 19 個測試案例涵蓋 membership, dedup, routing, delegation, recording |
+| 2.1 | `groupSession.ts` | `group::` 前綴工具函數（`buildGroupUserId`, `isGroupUserId`） |
+| 2.2 | `DedupTracker.ts` | 統一 dedup 機制，支援 TTL 與自動清理 |
+| 3.1 | `dispose()` 修復 | 清理 `processedMessages` 防止記憶體洩漏 |
+| 3.2 | metadata 型別安全 | `as string` 改為 `typeof === 'string'` runtime guard |
+| 3.3 | mentionedBot 註解 | 說明 ADR-019/021/022 設計決策 |
+| 4.1 | 拆分 `handleBotReplied` | 分離 recording 與 delegation 邏輯 |
+
 **修改檔案**：
 - `src/types/agent.ts` — 新增 `DelegationSettingsSchema`
-- `src/core/GroupBroadcaster.ts` — 多重委派 + getDelegationSettings callback + inbound/outbound 檢查
+- `src/core/GroupBroadcaster.ts` — 多重委派 + DedupTracker + handleBotReplied 拆分
 - `src/core/PlatformOrchestrator.ts` — 提供 getDelegationSettings callback
+- `src/core/MessageProcessor.ts` — 使用 groupSession 工具函數
+- `src/adapters/TelegramAdapter.ts` — mentionedBot 註解
+- `src/adapters/commands/TelegramCommands.ts` — DedupTracker + groupSession
+- `src/utils/groupSession.ts` — 新增 `group::` 工具函數
+- `src/utils/DedupTracker.ts` — 新增統一 dedup 機制
+- `tests/unit/GroupBroadcaster.test.ts` — 新增 19 個測試案例
 
 ---
 
