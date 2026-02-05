@@ -36,14 +36,19 @@
 | 3.2 | metadata 型別安全 | `as string` 改為 `typeof === 'string'` runtime guard |
 | 3.3 | mentionedBot 註解 | 說明 ADR-019/021/022 設計決策 |
 | 4.1 | 拆分 `handleBotReplied` | 分離 recording 與 delegation 邏輯 |
+| 5.1 | `scheduleManager!` 移除 | `ScheduleCommandDeps` 型別縮窄，消除 non-null assertion |
+| 5.2 | GroupBroadcaster 可注入 | `PlatformOrchestratorOptions` 支援注入 GroupBroadcaster |
+
+> 完整決策紀錄：[ADR-026](../decisions/adr/adr-026-group-infra-stabilization.md)
+> 保留項目：`waitForBotMessageId` busy-wait（可接受）、`executeQueryWithSDK` 過長（風險高）
 
 **修改檔案**：
 - `src/types/agent.ts` — 新增 `DelegationSettingsSchema`
-- `src/core/GroupBroadcaster.ts` — 多重委派 + DedupTracker + handleBotReplied 拆分
-- `src/core/PlatformOrchestrator.ts` — 提供 getDelegationSettings callback
+- `src/core/GroupBroadcaster.ts` — 多重委派 + DedupTracker + handleBotReplied 拆分 + dispose 修復
+- `src/core/PlatformOrchestrator.ts` — getDelegationSettings callback + GroupBroadcaster 可注入
 - `src/core/MessageProcessor.ts` — 使用 groupSession 工具函數
-- `src/adapters/TelegramAdapter.ts` — mentionedBot 註解
-- `src/adapters/commands/TelegramCommands.ts` — DedupTracker + groupSession
+- `src/adapters/TelegramAdapter.ts` — mentionedBot 設計註解
+- `src/adapters/commands/TelegramCommands.ts` — DedupTracker + groupSession + ScheduleCommandDeps
 - `src/utils/groupSession.ts` — 新增 `group::` 工具函數
 - `src/utils/DedupTracker.ts` — 新增統一 dedup 機制
 - `tests/unit/GroupBroadcaster.test.ts` — 新增 19 個測試案例
