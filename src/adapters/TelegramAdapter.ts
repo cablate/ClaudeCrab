@@ -528,7 +528,9 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       const isReplyToBot =
         message.reply_to_message?.from?.id === this.botInfo.id;
 
-      // Extract mentioned bot username from message (e.g., "@bot_name" -> "bot_name")
+      // Extract FIRST mentioned bot username from message (e.g., "@bot_name" -> "bot_name")
+      // ADR-019: Only the first @mentioned bot responds directly. Multiple @mentions
+      // in a single message are handled by delegation (ADR-021/022), not by multi-responder routing.
       const mentionMatch = /@(\w+)/.exec(message.text);
       const mentionedBot = mentionMatch?.[1] ?? null;
 

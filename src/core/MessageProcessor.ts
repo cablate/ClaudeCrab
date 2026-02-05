@@ -25,6 +25,7 @@ import {
   type ToolEventEntry,
 } from './StatusMessageManager.js';
 import * as path from 'node:path';
+import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
 
 /**
  * Options for MessageProcessor
@@ -160,7 +161,7 @@ export class MessageProcessor {
 
     // For group chats, use chatId-based session key to share history among all members
     // For private chats, use userId-based session key
-    const effectiveUserId = isGroupChat ? `group::${chatId}` : userId;
+    const effectiveUserId = isGroupChat ? buildGroupUserId(chatId) : userId;
 
     logger.debug(
       { platform, userId, agentId, messageId, isGroupChat, effectiveUserId },
@@ -364,7 +365,7 @@ export class MessageProcessor {
 
     // ADR-020: Determine group chat ID for group memory paths
     const groupChatIdForContext = options?.isGroupChat
-      ? (userId.startsWith('group::') ? userId.slice(7) : chatId)
+      ? (isGroupUserId(userId) ? extractChatIdFromGroupUserId(userId) : chatId)
       : undefined;
 
     // Read fresh system prompt from disk (agent may have updated CLAUDE.md at runtime)
@@ -404,8 +405,8 @@ export class MessageProcessor {
       // Get messages since last query to inject as context
       let injectionContext: { formattedHistory: string; messageCount: number; lastMessageId: string | null } | null = null;
       if (options?.isGroupChat && this.contextInjector) {
-        // Extract chatId from group userId format: "group::{chatId}"
-        const groupChatId = userId.startsWith('group::') ? userId.slice(7) : chatId;
+        // Extract chatId from group userId format
+        const groupChatId = isGroupUserId(userId) ? extractChatIdFromGroupUserId(userId) : chatId;
         injectionContext = this.contextInjector.getInjectionContext(
           agentId,
           groupChatId,
@@ -787,8 +788,8 @@ export class MessageProcessor {
     platform: string
   ): void {
     if (injectionContext?.lastMessageId && this.contextInjector) {
-      const groupChatId = userId.startsWith('group::')
-        ? userId.slice(7)
+      const groupChatId = isGroupUserId(userId)
+        ? extractChatIdFromGroupUserId(userId)
         : chatId;
       this.contextInjector.updateCursor(
         agentId,

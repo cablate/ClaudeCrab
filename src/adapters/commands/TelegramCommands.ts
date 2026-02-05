@@ -4,6 +4,8 @@ import type { SessionManager } from '../../core/SessionManager.js';
 import type { MessageProcessor } from '../../core/MessageProcessor.js';
 import type { ScheduleManager } from '../../schedule/ScheduleManager.js';
 import { logger } from '../../utils/logger.js';
+import { buildGroupUserId } from '../../utils/groupSession.js';
+import { DedupTracker } from '../../utils/DedupTracker.js';
 
 /**
  * Dependencies required for command handlers
@@ -85,16 +87,19 @@ export function isTargetAll(ctx: Context): boolean {
  * so we key on `chatId:date:userId:command` instead.  `ctx.message.date` is a
  * server-side Unix timestamp (seconds) that IS identical across all bots.
  *
- * The Set lives on `globalThis` to guarantee a single instance even if the
+ * Uses globalThis + DedupTracker to guarantee a single instance even if the
  * module is resolved through different import paths.
  */
 const DEDUP_GLOBAL_KEY = '__claudecab_group_cmd_dedup__';
 if ((globalThis as Record<string, unknown>)[DEDUP_GLOBAL_KEY] === undefined) {
-  (globalThis as Record<string, unknown>)[DEDUP_GLOBAL_KEY] = new Set<string>();
+  (globalThis as Record<string, unknown>)[DEDUP_GLOBAL_KEY] = new DedupTracker({
+    maxSize: 500,
+    ttlMs: 5 * 60 * 1000, // 5 minutes TTL
+  });
 }
 const processedGroupCommands = (globalThis as Record<string, unknown>)[
   DEDUP_GLOBAL_KEY
-] as Set<string>;
+] as DedupTracker;
 
 export function isGroupCommandProcessed(
   chatId: string,
@@ -103,15 +108,10 @@ export function isGroupCommandProcessed(
   command: string
 ): boolean {
   const key = `${chatId}:${messageDate}:${userId}:${command}`;
-  if (processedGroupCommands.has(key)) {
+  // isDuplicate() checks and records in one step; handles cleanup internally
+  if (processedGroupCommands.isDuplicate(key)) {
     logger.debug({ key }, 'Group command dedup hit');
     return true;
-  }
-  processedGroupCommands.add(key);
-  // Evict oldest entries when the set grows too large
-  if (processedGroupCommands.size > 500) {
-    const toDelete = Array.from(processedGroupCommands).slice(0, 250);
-    for (const k of toDelete) processedGroupCommands.delete(k);
   }
   return false;
 }
@@ -286,7 +286,7 @@ export async function handleStop(
   const isGroupChat = ctx.chat?.type !== 'private';
 
   // For group chats, use chatId-based session key to match shared history
-  const effectiveUserId = isGroupChat && chatId ? `group::${chatId}` : userId;
+  const effectiveUserId = isGroupChat && chatId ? buildGroupUserId(chatId) : userId;
 
   try {
     const cancelled = deps.messageProcessor.cancelQueryForUser(
@@ -332,7 +332,7 @@ async function getCurrentSession(
   const isGroupChat = ctx.chat?.type !== 'private';
 
   // For group chats, use chatId-based session key to match shared history
-  const effectiveUserId = isGroupChat && chatId ? `group::${chatId}` : userId;
+  const effectiveUserId = isGroupChat && chatId ? buildGroupUserId(chatId) : userId;
 
   try {
     return await deps.sessionManager.getOrCreateSession({

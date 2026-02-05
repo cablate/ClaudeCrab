@@ -9,6 +9,7 @@ import type {
 import type { UnifiedMessage } from '../adapters/types.js';
 import { logger } from '../utils/logger.js';
 import { formatUserLabel, formatBotLabel } from '../utils/format.js';
+import { DedupTracker } from '../utils/DedupTracker.js';
 
 /** Maximum delegation depth to prevent infinite loops (ADR-021) */
 const MAX_DELEGATION_DEPTH = 3;
@@ -73,8 +74,9 @@ export class GroupBroadcaster {
    * Tracks processed message IDs to prevent duplicate processing.
    * Since each TelegramAdapter emits group:message events independently,
    * the same message can arrive multiple times.
+   * Uses DedupTracker with TTL for automatic cleanup.
    */
-  private readonly processedMessages: Set<string> = new Set();
+  private readonly processedMessages = new DedupTracker({ maxSize: 1000, ttlMs: 5 * 60 * 1000 });
 
   /**
    * Maps dedupeKey -> Map<agentId, platformMsgId>.
@@ -217,28 +219,28 @@ export class GroupBroadcaster {
       botMsgIds.set(sourceAgentId, platformMsgId);
     }
 
-    if (this.processedMessages.has(messageKey)) {
+    // DedupTracker.isDuplicate() checks and records in one step
+    if (this.processedMessages.isDuplicate(messageKey)) {
       this.log.debug(
         { messageKey, sourceAgentId },
         'Skipping duplicate group message (bot already registered)'
       );
       return;
     }
-    this.processedMessages.add(messageKey);
 
-    // Cleanup old entries to prevent memory leak (keep last 1000)
-    if (this.processedMessages.size > 1000) {
-      const toDelete = Array.from(this.processedMessages).slice(0, 500);
+    // Cleanup stale perBotMessageIds entries (DedupTracker handles processedMessages internally)
+    if (this.perBotMessageIds.size > 1000) {
+      const entries = [...this.perBotMessageIds.entries()];
+      const toDelete = entries.slice(0, 500).map(([key]) => key);
       for (const key of toDelete) {
-        this.processedMessages.delete(key);
         this.perBotMessageIds.delete(key);
       }
     }
 
     // Format sender label for the message
     const senderLabel = formatUserLabel({
-      displayName: (message.metadata?.displayName as string) || undefined,
-      username: (message.metadata?.username as string) || undefined,
+      displayName: typeof message.metadata?.displayName === 'string' ? message.metadata.displayName : undefined,
+      username: typeof message.metadata?.username === 'string' ? message.metadata.username : undefined,
       fallbackId: message.userId,
     });
 
@@ -360,9 +362,17 @@ export class GroupBroadcaster {
    * ADR-019: Only record to group_messages, no broadcast to other bots' sessions.
    */
   private async handleBotReplied(payload: BotRepliedPayload): Promise<void> {
+    this.recordBotReplyToGroupMessages(payload);
+    await this.processDelegation(payload);
+  }
+
+  /**
+   * Record bot reply to group_messages table for context injection.
+   * ADR-019: No broadcast to other sessions - context is shared via group_messages.
+   */
+  private recordBotReplyToGroupMessages(payload: BotRepliedPayload): void {
     const { chatId, agentId, response, platform, replyMessageId } = payload;
 
-    // Record bot reply to group_messages table (for context injection)
     if (replyMessageId && this.groupMessageRepository) {
       const senderLabel = formatBotLabel(this.getBotInfo(agentId), agentId);
       this.log.info(
@@ -391,11 +401,15 @@ export class GroupBroadcaster {
         'Skipping bot reply recording - missing replyMessageId or repository'
       );
     }
+  }
 
-    // ADR-019: NO broadcast to other bots' DB sessions
-    // Context is shared via group_messages table and Context Injection
+  /**
+   * Process auto-delegation when bot reply mentions other bots.
+   * ADR-021 + ADR-022: Multi-target delegation with cycle prevention and configurable settings.
+   */
+  private async processDelegation(payload: BotRepliedPayload): Promise<void> {
+    const { chatId, agentId, response } = payload;
 
-    // ADR-021 + ADR-022: Auto-delegation with multi-target and configurable settings
     const depth = payload.delegationDepth ?? 0;
     if (depth >= MAX_DELEGATION_DEPTH) {
       this.log.debug(
@@ -407,7 +421,7 @@ export class GroupBroadcaster {
 
     const chain = payload.delegationChain ?? [agentId];
 
-    // ADR-022: Check canDelegate for sender
+    // ADR-022: Check outbound setting for sender
     const senderDelegationSettings = this.getDelegationSettings?.(agentId);
     if (senderDelegationSettings?.outbound === false) {
       this.log.info(
@@ -583,6 +597,7 @@ export class GroupBroadcaster {
   dispose(): void {
     this.groupMemberships.clear();
     this.perBotMessageIds.clear();
+    this.processedMessages.clear();
     this.log.info('GroupBroadcaster disposed');
   }
 }
