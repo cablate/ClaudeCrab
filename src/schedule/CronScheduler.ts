@@ -25,14 +25,15 @@ export class CronScheduler {
    * Register a schedule for execution
    */
   register(agentId: string, spec: ScheduleSpec): void {
-    if (spec.trigger.type !== 'cron' || !spec.trigger.cron) {
-      logger.warn(`[CronScheduler] Cannot register non-cron schedule: ${spec.id}`);
+    // Resolve cron expression from trigger config
+    const cronExpr = this.resolveCronExpression(spec);
+    if (!cronExpr) {
       return;
     }
 
     // Validate cron expression
-    if (!cron.validate(spec.trigger.cron)) {
-      logger.error(`[CronScheduler] Invalid cron expression for ${spec.id}: ${spec.trigger.cron}`);
+    if (!cron.validate(cronExpr)) {
+      logger.error(`[CronScheduler] Invalid cron expression for ${spec.id}: ${cronExpr}`);
       return;
     }
 
@@ -43,7 +44,7 @@ export class CronScheduler {
 
     // Create new scheduled task
     const task = cron.schedule(
-      spec.trigger.cron,
+      cronExpr,
       async () => {
         await this.executeSchedule(spec.id);
       },
@@ -58,12 +59,70 @@ export class CronScheduler {
     }
 
     this.jobs.set(spec.id, { task, spec, agentId });
-    logger.info(`[CronScheduler] Registered schedule: ${spec.id} (${spec.trigger.cron})`);
+    const typeLabel = spec.trigger.type !== 'cron' ? ` (${spec.trigger.type} → cron)` : '';
+    logger.info(`[CronScheduler] Registered schedule: ${spec.id} (${cronExpr})${typeLabel}`);
   }
 
   /**
    * Execute a schedule immediately
    */
+
+  /**
+   * Convert trigger config to a cron expression.
+   * - cron: use as-is
+   * - once: parse `at` datetime → `min hour day month *`
+   * - interval: ms → minutes → `*\/N * * * *` (requires >= 60s)
+   */
+  private resolveCronExpression(spec: ScheduleSpec): string | null {
+    const { trigger } = spec;
+
+    switch (trigger.type) {
+      case 'cron': {
+        if (!trigger.cron) {
+          logger.warn(`[CronScheduler] Missing cron expression for: ${spec.id}`);
+          return null;
+        }
+        return trigger.cron;
+      }
+
+      case 'once': {
+        if (!trigger.at) {
+          logger.warn(`[CronScheduler] Missing 'at' datetime for once schedule: ${spec.id}`);
+          return null;
+        }
+        const date = new Date(trigger.at);
+        if (isNaN(date.getTime())) {
+          logger.error(`[CronScheduler] Invalid datetime for ${spec.id}: ${trigger.at}`);
+          return null;
+        }
+        if (date.getTime() <= Date.now()) {
+          logger.warn(`[CronScheduler] Once schedule ${spec.id} target time already passed: ${trigger.at}`);
+          return null;
+        }
+        // Convert to cron: minute hour dayOfMonth month *
+        const cronExpr = `${date.getMinutes()} ${date.getHours()} ${date.getDate()} ${date.getMonth() + 1} *`;
+        return cronExpr;
+      }
+
+      case 'interval': {
+        if (!trigger.interval || trigger.interval < 60000) {
+          logger.warn(`[CronScheduler] Interval must be >= 60000ms for ${spec.id}, got: ${trigger.interval}`);
+          return null;
+        }
+        const minutes = Math.round(trigger.interval / 60000);
+        if (minutes >= 60) {
+          const hours = Math.round(minutes / 60);
+          return `0 */${hours} * * *`;
+        }
+        return `*/${minutes} * * * *`;
+      }
+
+      default:
+        logger.warn(`[CronScheduler] Unsupported trigger type for ${spec.id}: ${(trigger as { type: string }).type}`);
+        return null;
+    }
+  }
+
   private async executeSchedule(scheduleId: string): Promise<void> {
     const job = this.jobs.get(scheduleId);
     if (!job) {
@@ -86,6 +145,12 @@ export class CronScheduler {
       logger.error({ error, scheduleId }, '[CronScheduler] Execution failed');
     } finally {
       this.runningExecutions.delete(scheduleId);
+
+      // Auto-unregister one-time schedules after execution
+      if (job.spec.trigger.type === 'once') {
+        this.unregister(scheduleId);
+        logger.info(`[CronScheduler] Auto-unregistered once schedule: ${scheduleId}`);
+      }
     }
   }
 

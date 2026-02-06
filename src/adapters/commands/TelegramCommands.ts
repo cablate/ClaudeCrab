@@ -8,6 +8,18 @@ import { buildGroupUserId } from '../../utils/groupSession.js';
 import { DedupTracker } from '../../utils/DedupTracker.js';
 
 /**
+ * Reply with Markdown parse mode, falling back to plain text if parsing fails.
+ * Use for messages containing dynamic content (agent names, schedule IDs, etc.).
+ */
+async function replyWithMarkdown(ctx: Context, text: string): Promise<void> {
+  try {
+    await ctx.reply(text, { parse_mode: 'Markdown' });
+  } catch {
+    await ctx.reply(text);
+  }
+}
+
+/**
  * Dependencies required for command handlers
  */
 export interface CommandDependencies {
@@ -173,7 +185,7 @@ export async function handleStart(
 
 直接輸入訊息即可開始對話！`;
 
-    await ctx.reply(welcomeMessage, { parse_mode: 'Markdown' });
+    await replyWithMarkdown(ctx, welcomeMessage);
 
     logger.info({ userId }, 'User started bot');
   } catch (error) {
@@ -239,7 +251,7 @@ export async function handleHelp(
 • 使用 /stop 可以中斷正在執行的 Claude 回應
 • 使用 /schedule 可以管理定時任務`;
 
-  await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+  await replyWithMarkdown(ctx, helpMessage);
 }
 
 /**
@@ -425,7 +437,7 @@ async function handleScheduleList(
     lines.push('');
   }
 
-  await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+  await replyWithMarkdown(ctx, lines.join('\n'));
 }
 
 async function handleScheduleInfo(
@@ -473,7 +485,7 @@ async function handleScheduleInfo(
     }
   }
 
-  await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+  await replyWithMarkdown(ctx, lines.join('\n'));
 }
 
 async function handleSchedulePause(
@@ -583,7 +595,7 @@ async function handleScheduleHistory(
     }
   }
 
-  await ctx.reply(lines.join('\n'), { parse_mode: 'Markdown' });
+  await replyWithMarkdown(ctx, lines.join('\n'));
 }
 
 async function handleScheduleHelp(ctx: Context): Promise<void> {

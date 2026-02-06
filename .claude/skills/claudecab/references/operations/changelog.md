@@ -26,6 +26,8 @@
 4. **Schema 容錯**：`type: "at"` 自動映射為 `"once"`，`datetime` 自動映射為 `at`（防止 agent 產出不合規 YAML）
 5. **Agent 排程文件修正**：scheduling.md 新增 Trigger 類型對照表、`once` 範例、欄位名稱警告
 6. **排程執行 Hooks**：ScheduleExecutor 加入 UserPromptSubmit（時間注入）+ PreToolUse（PathValidator 路徑隔離），與一般對話一致的安全性和 context 注入
+7. **Once/Interval trigger 支援**（ADR-028）：CronScheduler 不再 reject non-cron schedules，改為自動轉換 cron 表達式（`once` → `分 時 日 月 *`、`interval` → `*/N * * * *`）。`once` 執行後自動 unregister
+8. **TelegramCommands Markdown fallback**：含動態內容的指令回應（/start、/help 私聊、/schedule list/info/history）改用 `replyWithMarkdown()` fallback（Markdown → plain text），純靜態回應維持原樣
 
 **排程 vs 對話的 Hook 差異**：
 
@@ -49,6 +51,8 @@
 - `src/adapters/BaseAdapter.ts` — emitMessageSent 加 agentId
 - `src/AppBootstrap.ts` — message:sent → schedule sync
 - `agents/general/.claude/skills/agent-protocols/references/scheduling.md` — 完整 trigger 類型文件
+- `src/schedule/CronScheduler.ts` — once/interval→cron 轉換 + once 自動 unregister
+- `src/adapters/commands/TelegramCommands.ts` — replyWithMarkdown fallback
 
 ---
 
