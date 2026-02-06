@@ -36,6 +36,7 @@
 | [ADR-026](adr/adr-026-group-infra-stabilization.md) | 群組協作基礎設施穩定化 | ✅ implemented | 2026-02-05 |
 | [ADR-027](adr/adr-027-dashboard-config-management.md) | Dashboard 完整設定管理 | ✅ implemented | 2026-02-06 |
 | [ADR-028](adr/adr-028-schedule-trigger-types.md) | 排程 Trigger 類型支援策略 | ✅ implemented | 2026-02-06 |
+| [ADR-029](adr/adr-029-agent-structure-sync.md) | Agent 架構同步機制 | 📋 proposed | 2026-02-06 |
 
 ---
 
