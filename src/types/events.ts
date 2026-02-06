@@ -97,6 +97,7 @@ export interface MessageSentPayload {
   text: string;
   platform: string;
   userId: string;
+  agentId?: string;
 }
 
 /**

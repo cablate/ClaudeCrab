@@ -67,7 +67,7 @@ export class ScheduleExecutor {
           {
             cwd: agent.path,
             systemPrompt: agent.systemPrompt,
-            settingSources: ['local'],
+            settingSources: ['project'],
             // No resume = new session
             // Only pass maxTurns if defined
             ...(spec.execution.maxTurns !== undefined

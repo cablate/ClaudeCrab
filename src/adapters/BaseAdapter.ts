@@ -326,6 +326,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
       text,
       platform: this.platform,
       userId,
+      agentId: this.agentId,
     });
   }
 }

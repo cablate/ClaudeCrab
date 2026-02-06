@@ -275,6 +275,25 @@ export class ScheduleManager {
   }
 
   /**
+   * Sync schedules for an agent: load from disk and register any not yet registered.
+   * Used after agent queries complete (agent may have created schedule files via Write tool).
+   */
+  async syncSchedulesForAgent(agentId: string): Promise<number> {
+    const specs = await this.loader.loadForAgent(agentId);
+    let newCount = 0;
+
+    for (const spec of specs) {
+      if (spec.metadata.enabled && !this.scheduler.isRegistered(spec.id)) {
+        this.scheduler.register(agentId, spec);
+        newCount++;
+        logger.info(`[ScheduleManager] Auto-registered new schedule: ${spec.id}`);
+      }
+    }
+
+    return newCount;
+  }
+
+  /**
    * Dispose and clean up
    */
   dispose(): void {

@@ -364,6 +364,14 @@ export class AppBootstrap {
       scheduleNotifier.addAdapter(adapter.agentId, adapter);
     }
 
+    // Auto-sync schedules after agent queries (agent may create schedule files via Write tool)
+    const scheduleManager = this.scheduleManager;
+    getEventBus().on('message:sent', (payload) => {
+      if (payload.agentId) {
+        void scheduleManager.syncSchedulesForAgent(payload.agentId);
+      }
+    });
+
     logger.info('Schedule System initialized');
   }
 
