@@ -269,6 +269,10 @@ agents/general/
 ```
 
 > **重要**：使用 `settings.local.json` 而非 `settings.json`，搭配 `settingSources: ['local']` 避免 SDK 搜尋父目錄。
+>
+> **所有權**：此檔案由 SDK 管理。SDK 在 runtime 會動態寫入 `permissions.allow`（使用者核准工具時）。
+> Dashboard Edit 頁面可讀寫此檔案的 `permissions` 和 `model`（merge 式更新，不覆蓋其他欄位）。
+> 詳見 [ADR-027](../decisions/adr/adr-027-dashboard-config-management.md)。
 
 ### Output Style（僅 CLI 支援，SDK 不支援）
 
@@ -514,19 +518,35 @@ interface AgentConfig {
   extends?: string;
   model?: 'sonnet' | 'opus' | 'haiku';
   maxTokens?: number;
+  maxThinkingTokens?: number;
   telegramBotToken?: string;  // 每個 Agent 獨立的 Telegram Bot Token
-  systemPrompt?: string;
-  systemPromptFile?: string;
-  allowedTools?: string[];
-  disallowedTools?: string[];
+  systemPrompt?: string;       // 優先於 systemPromptFile 和 CLAUDE.md
+  systemPromptFile?: string;   // 優先於 CLAUDE.md
+  allowedTools?: string[];     // SDK query 層工具白名單（Dashboard 不管理，手動編輯 agent.json）
+  disallowedTools?: string[];  // SDK query 層工具黑名單（同上）
+  mcpConfigFile?: string;      // MCP 伺服器設定檔路徑（相對於 agent 目錄）
   settings?: {
-    maxHistoryLength?: number;
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
+    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'delegate' | 'dontAsk';
     maxTurns?: number;
-    maxBudgetUsd?: number;
+    maxHistoryLength?: number;  // ⚠️ schema 有定義，runtime 未串接
+    maxBudgetUsd?: number;      // ⚠️ schema 有定義，runtime 未串接
+    delegation?: {              // ADR-022: 委派設定
+      inbound?: boolean;
+      outbound?: boolean;
+    };
+    initiative?: {              // ADR-023: 主動互動設定
+      enabled?: boolean;
+      mode?: 'work' | 'social';
+      cooldown?: number;
+      maxPerHour?: number;
+    };
   };
 }
 ```
+
+> **Dashboard 設定管理**（ADR-027）：Dashboard Edit 頁面可管理上述大部分欄位，
+> 但 `systemPrompt`、`systemPromptFile`、`allowedTools`、`disallowedTools` 不在 UI 中。
+> `permissions.allow` 從 `settings.local.json` 讀寫，不在 agent.json。
 
 ### LoadedAgent
 

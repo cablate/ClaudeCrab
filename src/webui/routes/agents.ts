@@ -76,7 +76,7 @@ export function createAgentsRouter(): Router {
       return;
     }
 
-    // Read current settings.local.json for permissions and model
+    // Read settings.local.json for permissions and model
     let permissions = { allow: [] as string[], deny: [] as string[] };
     let settingsModel: string | undefined;
     try {
@@ -97,7 +97,7 @@ export function createAgentsRouter(): Router {
         }
       }
     } catch {
-      // Use default permissions
+      // Use defaults
     }
 
     // Model priority: settings.local.json > agent.json > 'sonnet'
@@ -108,10 +108,30 @@ export function createAgentsRouter(): Router {
       agent: {
         id: agent.id,
         name: agent.config.name,
-        description: agent.config.description,
+        description: agent.config.description ?? '',
         model: effectiveModel,
         telegramBotToken: agent.config.telegramBotToken ?? '',
         path: agent.path,
+        // Model parameters
+        maxTokens: agent.config.maxTokens ?? '',
+        maxThinkingTokens: agent.config.maxThinkingTokens ?? '',
+        // MCP config
+        mcpConfigFile: agent.config.mcpConfigFile ?? '',
+        // Settings
+        settings: {
+          permissionMode: agent.config.settings?.permissionMode ?? '',
+          maxTurns: agent.config.settings?.maxTurns ?? '',
+          delegation: {
+            inbound: agent.config.settings?.delegation?.inbound ?? true,
+            outbound: agent.config.settings?.delegation?.outbound ?? true,
+          },
+          initiative: {
+            enabled: agent.config.settings?.initiative?.enabled ?? false,
+            mode: agent.config.settings?.initiative?.mode ?? 'work',
+            cooldown: agent.config.settings?.initiative?.cooldown ?? 300,
+            maxPerHour: agent.config.settings?.initiative?.maxPerHour ?? 5,
+          },
+        },
       },
       permissions,
     });

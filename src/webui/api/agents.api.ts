@@ -204,26 +204,83 @@ export function createAgentsApiRouter(): Router {
     try {
       const agentDir = agent.path;
 
-      // Update agent.json if any field changed
-      if (body.name !== undefined || body.description !== undefined || body.model !== undefined || body.telegramBotToken !== undefined) {
-        const agentJsonPath = path.join(agentDir, 'agent.json');
-        const agentJson = JSON.parse(await fs.readFile(agentJsonPath, 'utf-8')) as Record<string, unknown>;
+      // Update agent.json
+      const agentJsonPath = path.join(agentDir, 'agent.json');
+      const agentJson = JSON.parse(await fs.readFile(agentJsonPath, 'utf-8')) as Record<string, unknown>;
 
-        if (body.name !== undefined) agentJson.name = body.name;
-        if (body.description !== undefined) agentJson.description = body.description;
-        if (body.model !== undefined) agentJson.model = body.model;
-        if (body.telegramBotToken !== undefined) {
-          if (body.telegramBotToken === null) {
-            delete agentJson.telegramBotToken;
+      // Basic fields
+      if (body.name !== undefined) agentJson.name = body.name;
+      if (body.description !== undefined) agentJson.description = body.description;
+      if (body.model !== undefined) agentJson.model = body.model;
+
+      // Nullable string fields (null = remove)
+      const nullableStringFields = ['telegramBotToken', 'mcpConfigFile'] as const;
+      for (const field of nullableStringFields) {
+        if (body[field] !== undefined) {
+          if (body[field] === null) {
+            delete agentJson[field];
           } else {
-            agentJson.telegramBotToken = body.telegramBotToken;
+            agentJson[field] = body[field];
+          }
+        }
+      }
+
+      // Nullable number fields
+      const nullableNumberFields = ['maxTokens', 'maxThinkingTokens'] as const;
+      for (const field of nullableNumberFields) {
+        if (body[field] !== undefined) {
+          if (body[field] === null) {
+            delete agentJson[field];
+          } else {
+            agentJson[field] = body[field];
+          }
+        }
+      }
+
+      // Settings object (merge into existing)
+      if (body.settings !== undefined) {
+        const existingSettings = (agentJson.settings as Record<string, unknown>) ?? {};
+
+        const nullableSettingsFields = ['permissionMode', 'maxTurns'] as const;
+        for (const field of nullableSettingsFields) {
+          if (body.settings[field] !== undefined) {
+            if (body.settings[field] === null) {
+              delete existingSettings[field];
+            } else {
+              existingSettings[field] = body.settings[field];
+            }
           }
         }
 
-        await fs.writeFile(agentJsonPath, JSON.stringify(agentJson, null, 2));
+        // Delegation sub-object
+        if (body.settings.delegation !== undefined) {
+          if (body.settings.delegation === null) {
+            delete existingSettings.delegation;
+          } else {
+            existingSettings.delegation = body.settings.delegation;
+          }
+        }
+
+        // Initiative sub-object
+        if (body.settings.initiative !== undefined) {
+          if (body.settings.initiative === null) {
+            delete existingSettings.initiative;
+          } else {
+            existingSettings.initiative = body.settings.initiative;
+          }
+        }
+
+        // Only write settings if non-empty
+        if (Object.keys(existingSettings).length > 0) {
+          agentJson.settings = existingSettings;
+        } else {
+          delete agentJson.settings;
+        }
       }
 
-      // Update settings.local.json if permissions or model changed
+      await fs.writeFile(agentJsonPath, JSON.stringify(agentJson, null, 2));
+
+      // Update settings.local.json (SDK-level: permissions + model)
       if (body.permissions !== undefined || body.model !== undefined) {
         const settingsPath = path.join(agentDir, '.claude', 'settings.local.json');
         let settings: Record<string, unknown> = {};

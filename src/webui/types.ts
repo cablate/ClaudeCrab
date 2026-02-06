@@ -172,9 +172,31 @@ export interface UpdateAgentRequest {
   description?: string;
   model?: 'sonnet' | 'opus' | 'haiku';
   telegramBotToken?: string | null; // null to remove
-  permissions?: {
-    allow: string[];
-    deny: string[];
+
+  // SDK permissions (settings.local.json level — auto-approve tools)
+  permissions?: { allow: string[]; deny: string[] };
+
+  // Model parameters
+  maxTokens?: number | null;
+  maxThinkingTokens?: number | null;
+
+  // MCP config
+  mcpConfigFile?: string | null;
+
+  // Agent settings
+  settings?: {
+    permissionMode?: string | null;
+    maxTurns?: number | null;
+    delegation?: {
+      inbound?: boolean;
+      outbound?: boolean;
+    } | null;
+    initiative?: {
+      enabled?: boolean;
+      mode?: string;
+      cooldown?: number;
+      maxPerHour?: number;
+    } | null;
   };
 }
 
