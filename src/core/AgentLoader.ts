@@ -134,6 +134,9 @@ export class AgentLoader implements IAgentRepository {
       // Load and parse agent.json
       const config = await this.loadConfig(agentPath, agentId);
 
+      // Sync model from settings.local.json (SDK source of truth) → config
+      await this.syncModelFromSettings(agentPath, config);
+
       // Load system prompt
       const systemPrompt = await this.loadSystemPrompt(agentPath, config);
 
@@ -206,6 +209,30 @@ export class AgentLoader implements IAgentRepository {
         agentId,
         error instanceof Error ? error : new Error(String(error))
       );
+    }
+  }
+
+  /**
+   * Sync model from settings.local.json (SDK source of truth) into agent config.
+   * settings.local.json is what the SDK actually reads, so it wins over agent.json.
+   */
+  private async syncModelFromSettings(
+    agentPath: string,
+    config: AgentConfig
+  ): Promise<void> {
+    const settingsPath = path.join(agentPath, '.claude', 'settings.local.json');
+    try {
+      const content = await fs.readFile(settingsPath, 'utf-8');
+      const settings = JSON.parse(content) as Record<string, unknown>;
+      if (typeof settings.model === 'string' && settings.model !== config.model) {
+        logger.debug(
+          { agentPath, settingsModel: settings.model, configModel: config.model },
+          'Syncing model from settings.local.json'
+        );
+        (config as Record<string, unknown>).model = settings.model;
+      }
+    } catch {
+      // settings.local.json doesn't exist or is invalid, keep agent.json value
     }
   }
 

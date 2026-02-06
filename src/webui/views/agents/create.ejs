@@ -201,7 +201,7 @@ document.getElementById('createAgentForm').addEventListener('submit', async (e) 
     
     if (response.ok && data.success) {
       // Redirect to new agent's detail page
-      window.location.href = `/agents/${data.agent.id}`;
+      window.location.href = `/agents/${data.agent.id}/edit`;
     } else {
       throw new Error(data.error || 'Failed to create agent');
     }

@@ -29,6 +29,13 @@
 7. **Once/Interval trigger 支援**（ADR-028）：CronScheduler 不再 reject non-cron schedules，改為自動轉換 cron 表達式（`once` → `分 時 日 月 *`、`interval` → `*/N * * * *`）。`once` 執行後自動 unregister
 8. **TelegramCommands Markdown fallback**：含動態內容的指令回應（/start、/help 私聊、/schedule list/info/history）改用 `replyWithMarkdown()` fallback（Markdown → plain text），純靜態回應維持原樣
 
+**WebUI UX 改善**
+9. **Create 後引導**：建立新 Agent 後直接跳轉到 Edit 頁面（原本跳到 Detail 頁），減少使用者「建完還要找哪裡設定」的摩擦
+10. **Model 設定同步**：`AgentLoader.syncModelFromSettings()` 確保 `settings.local.json`（SDK source of truth）的 model 設定覆蓋 agent.json 的值
+11. **Schedule UI 支援 once/interval**：Create Schedule Modal 新增 Trigger Type 選擇器（Cron/Once/Interval），with 對應的條件式欄位和 YAML 預覽
+12. **Memory 編輯器升級**：Modal 加寬至 `max-w-5xl`、textarea 高度 `h-[60vh]`、新增全螢幕切換按鈕
+13. **System Prompt 快速編輯**：Detail 頁 System Prompt tab 加入 Edit 按鈕，一鍵打開 CLAUDE.md 編輯器
+
 **排程 vs 對話的 Hook 差異**：
 
 | Hook | 對話 | 排程 | 理由 |
@@ -53,6 +60,9 @@
 - `agents/general/.claude/skills/agent-protocols/references/scheduling.md` — 完整 trigger 類型文件
 - `src/schedule/CronScheduler.ts` — once/interval→cron 轉換 + once 自動 unregister
 - `src/adapters/commands/TelegramCommands.ts` — replyWithMarkdown fallback
+- `src/webui/views/agents/create.ejs` — 建立後 redirect 到 edit 頁
+- `src/core/AgentLoader.ts` — syncModelFromSettings()
+- `src/webui/views/agents/detail.ejs` — Schedule create UI once/interval、Memory 編輯器升級、System Prompt Edit 按鈕
 
 ---
 

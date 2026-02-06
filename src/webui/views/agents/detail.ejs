@@ -141,7 +141,12 @@
     <div id="content-prompt" class="tab-content">
       <div class="bg-white rounded-lg shadow-sm border border-gray-200">
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-800">System Prompt (CLAUDE.md)</h3>
+          <div class="flex justify-between items-center">
+            <h3 class="text-lg font-semibold text-gray-800">System Prompt (CLAUDE.md)</h3>
+            <button onclick="openMemoryFile('CLAUDE.md')" class="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors">
+              Edit
+            </button>
+          </div>
         </div>
         <div class="p-6">
           <% if (agent.systemPrompt) { %>
@@ -271,13 +276,18 @@
 
 <!-- Memory Modal -->
 <div id="memoryModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-  <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col mx-4">
+  <div id="memoryModalInner" class="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col mx-4 transition-all duration-200">
     <div class="px-6 py-4 border-b flex justify-between items-center">
       <h3 id="modalTitle" class="text-lg font-semibold"></h3>
-      <button onclick="closeMemoryModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+      <div class="flex items-center gap-2">
+        <button onclick="toggleMemoryFullscreen()" id="fullscreenBtn" class="text-gray-400 hover:text-gray-600 text-sm px-2 py-1 rounded hover:bg-gray-100" title="Toggle fullscreen">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+        </button>
+        <button onclick="closeMemoryModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+      </div>
     </div>
     <div class="p-6 flex-1 overflow-y-auto">
-      <textarea id="memoryContent" class="w-full h-96 font-mono text-sm p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
+      <textarea id="memoryContent" class="w-full h-[60vh] font-mono text-sm p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"></textarea>
     </div>
     <div class="px-6 py-4 border-t flex justify-between items-center">
       <span id="modalMeta" class="text-sm text-gray-500"></span>
@@ -419,13 +429,15 @@
         <!-- Trigger Settings -->
         <div class="border-t pt-4">
           <h4 class="text-sm font-semibold text-gray-800 mb-3">Trigger</h4>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-2 gap-4 mb-3">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Cron Expression *</label>
-              <input type="text" id="newScheduleCron" required
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                placeholder="0 9 * * *">
-              <p id="cronDescription" class="text-xs text-gray-400 mt-1">Every day at 09:00</p>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Type *</label>
+              <select id="newScheduleTriggerType" onchange="onTriggerTypeChange()"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="cron">Cron (週期性)</option>
+                <option value="once">Once (一次性)</option>
+                <option value="interval">Interval (固定間隔)</option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
@@ -439,6 +451,29 @@
                 <option value="UTC">UTC</option>
               </select>
             </div>
+          </div>
+          <!-- Cron fields -->
+          <div id="triggerCronFields">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Cron Expression *</label>
+            <input type="text" id="newScheduleCron"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              placeholder="0 9 * * *">
+            <p id="cronDescription" class="text-xs text-gray-400 mt-1">Every day at 09:00</p>
+          </div>
+          <!-- Once fields -->
+          <div id="triggerOnceFields" class="hidden">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Date & Time *</label>
+            <input type="datetime-local" id="newScheduleAt"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <p class="text-xs text-gray-400 mt-1">執行一次後自動移除</p>
+          </div>
+          <!-- Interval fields -->
+          <div id="triggerIntervalFields" class="hidden">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Interval (minutes) *</label>
+            <input type="number" id="newScheduleIntervalMin" min="1" step="1"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="5">
+            <p class="text-xs text-gray-400 mt-1">最小 1 分鐘</p>
           </div>
         </div>
 
@@ -621,8 +656,24 @@ async function openMemoryFile(filePath) {
 }
 
 function closeMemoryModal() {
+  // Exit fullscreen if active
+  const inner = document.getElementById('memoryModalInner');
+  inner.classList.remove('fixed', 'inset-4', 'max-w-none', 'max-h-none', 'z-60');
+  inner.classList.add('max-w-5xl', 'max-h-[90vh]', 'mx-4');
   document.getElementById('memoryModal').classList.add('hidden');
   currentMemoryFile = null;
+}
+
+function toggleMemoryFullscreen() {
+  const inner = document.getElementById('memoryModalInner');
+  const isFullscreen = inner.classList.contains('fixed');
+  if (isFullscreen) {
+    inner.classList.remove('fixed', 'inset-4', 'max-w-none', 'max-h-none', 'z-60');
+    inner.classList.add('max-w-5xl', 'max-h-[90vh]', 'mx-4');
+  } else {
+    inner.classList.add('fixed', 'inset-4', 'max-w-none', 'max-h-none', 'z-60');
+    inner.classList.remove('max-w-5xl', 'max-h-[90vh]', 'mx-4');
+  }
 }
 
 async function saveMemoryFile() {
@@ -1088,9 +1139,19 @@ function openCreateScheduleModal() {
   // Reset form
   document.getElementById('createScheduleForm').reset();
   document.getElementById('newScheduleEnabled').checked = true;
+  document.getElementById('newScheduleTriggerType').value = 'cron';
+  onTriggerTypeChange();
   document.getElementById('cronDescription').textContent = 'Every day at 09:00';
   updateYamlPreview();
   document.getElementById('createScheduleModal').classList.remove('hidden');
+}
+
+function onTriggerTypeChange() {
+  const type = document.getElementById('newScheduleTriggerType').value;
+  document.getElementById('triggerCronFields').classList.toggle('hidden', type !== 'cron');
+  document.getElementById('triggerOnceFields').classList.toggle('hidden', type !== 'once');
+  document.getElementById('triggerIntervalFields').classList.toggle('hidden', type !== 'interval');
+  updateYamlPreview();
 }
 
 function closeCreateScheduleModal() {
@@ -1101,18 +1162,29 @@ function updateYamlPreview() {
   const id = document.getElementById('newScheduleId').value || 'schedule-id';
   const name = document.getElementById('newScheduleName').value || 'Schedule Name';
   const description = document.getElementById('newScheduleDescription').value || '';
-  const cron = document.getElementById('newScheduleCron').value || '0 9 * * *';
+  const triggerType = document.getElementById('newScheduleTriggerType').value;
   const timezone = document.getElementById('newScheduleTimezone').value || 'Asia/Taipei';
   const chatId = document.getElementById('newScheduleChatId').value || '-100123456789';
   const prompt = document.getElementById('newSchedulePrompt').value || 'Your prompt here';
   const enabled = document.getElementById('newScheduleEnabled').checked;
 
+  let triggerYaml = '';
+  if (triggerType === 'cron') {
+    const cron = document.getElementById('newScheduleCron').value || '0 9 * * *';
+    triggerYaml = `  type: cron\n  cron: "${cron}"\n  timezone: "${timezone}"`;
+  } else if (triggerType === 'once') {
+    const at = document.getElementById('newScheduleAt').value || '2026-02-07T09:00';
+    triggerYaml = `  type: once\n  at: "${at}"\n  timezone: "${timezone}"`;
+  } else {
+    const minutes = document.getElementById('newScheduleIntervalMin').value || '5';
+    triggerYaml = `  type: interval\n  interval: ${parseInt(minutes) * 60000}\n  timezone: "${timezone}"`;
+  }
+
   const yaml = `id: ${id}
 name: "${name}"
 ${description ? `description: "${description}"\n` : ''}
 trigger:
-  cron: "${cron}"
-  timezone: "${timezone}"
+${triggerYaml}
 
 action:
   type: send_message
@@ -1144,7 +1216,8 @@ document.getElementById('newScheduleCron')?.addEventListener('input', function(e
 
 // Update preview on any form change
 ['newScheduleId', 'newScheduleName', 'newScheduleDescription', 'newScheduleTimezone', 
- 'newScheduleChatId', 'newSchedulePrompt', 'newScheduleEnabled'].forEach(id => {
+ 'newScheduleChatId', 'newSchedulePrompt', 'newScheduleEnabled', 'newScheduleAt',
+ 'newScheduleIntervalMin', 'newScheduleTriggerType'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     el.addEventListener('input', updateYamlPreview);
@@ -1156,14 +1229,14 @@ async function createSchedule() {
   const id = document.getElementById('newScheduleId').value.trim();
   const name = document.getElementById('newScheduleName').value.trim();
   const description = document.getElementById('newScheduleDescription').value.trim();
-  const cron = document.getElementById('newScheduleCron').value.trim();
+  const triggerType = document.getElementById('newScheduleTriggerType').value;
   const timezone = document.getElementById('newScheduleTimezone').value;
   const chatId = document.getElementById('newScheduleChatId').value.trim();
   const prompt = document.getElementById('newSchedulePrompt').value.trim();
   const enabled = document.getElementById('newScheduleEnabled').checked;
 
   // Basic validation
-  if (!id || !name || !cron || !chatId || !prompt) {
+  if (!id || !name || !chatId || !prompt) {
     alert('Please fill in all required fields');
     return;
   }
@@ -1174,6 +1247,22 @@ async function createSchedule() {
     return;
   }
 
+  // Build trigger based on type
+  let trigger;
+  if (triggerType === 'cron') {
+    const cron = document.getElementById('newScheduleCron').value.trim();
+    if (!cron) { alert('Please enter a cron expression'); return; }
+    trigger = { type: 'cron', cron, timezone };
+  } else if (triggerType === 'once') {
+    const at = document.getElementById('newScheduleAt').value;
+    if (!at) { alert('Please select a date and time'); return; }
+    trigger = { type: 'once', at, timezone };
+  } else {
+    const minutes = parseInt(document.getElementById('newScheduleIntervalMin').value);
+    if (!minutes || minutes < 1) { alert('Please enter interval in minutes (minimum 1)'); return; }
+    trigger = { type: 'interval', interval: minutes * 60000, timezone };
+  }
+
   try {
     const response = await fetch('/api/agents/<%= agent.id %>/schedules', {
       method: 'POST',
@@ -1182,7 +1271,7 @@ async function createSchedule() {
         id,
         name,
         description: description || undefined,
-        trigger: { cron, timezone },
+        trigger,
         action: { type: 'send_message', chatId, prompt },
         enabled
       })
