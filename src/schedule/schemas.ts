@@ -7,12 +7,25 @@
 import { z } from 'zod/v4';
 
 // Trigger configuration schema
+// Accepts 'at' as alias for 'once' (common agent mistake)
+const TriggerTypeSchema = z.enum(['cron', 'interval', 'once', 'at']).transform(
+  (val) => (val === 'at' ? 'once' : val) as 'cron' | 'interval' | 'once'
+);
+
 export const TriggerSchema = z.object({
-  type: z.enum(['cron', 'interval', 'once']),
+  type: TriggerTypeSchema,
   cron: z.string().optional(),
   interval: z.number().positive().optional(),
-  at: z.string().optional(), // ISO datetime for 'once'
+  at: z.string().optional(),       // ISO datetime for 'once'
+  datetime: z.string().optional(), // Alias for 'at' (common agent mistake)
   timezone: z.string().default('Asia/Taipei'),
+}).transform((val) => {
+  // Normalize: merge 'datetime' into 'at'
+  if (val.datetime && !val.at) {
+    val.at = val.datetime;
+  }
+  const { datetime: _, ...rest } = val;
+  return rest;
 });
 
 // Execution configuration schema

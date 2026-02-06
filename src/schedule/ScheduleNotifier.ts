@@ -7,6 +7,7 @@
 import type { ScheduleSpec } from './schemas.js';
 import type { QueryResult } from '../core/SDKQueryManager.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
+import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
 import { logger } from '../utils/logger.js';
 
 export class ScheduleNotifier {
@@ -34,7 +35,7 @@ export class ScheduleNotifier {
     const message = this.formatCompleteMessage(spec, result);
 
     try {
-      await adapter.sendMessage(chatId, message);
+      await sendWithMarkdownFallback(adapter, chatId, message);
       logger.debug(`[ScheduleNotifier] Sent completion notification for: ${spec.id}`);
     } catch (error) {
       logger.error({ error, scheduleId: spec.id }, '[ScheduleNotifier] Failed to send notification');
@@ -62,7 +63,7 @@ export class ScheduleNotifier {
     const message = this.formatErrorMessage(spec, error);
 
     try {
-      await adapter.sendMessage(chatId, message);
+      await sendWithMarkdownFallback(adapter, chatId, message);
       logger.debug(`[ScheduleNotifier] Sent error notification for: ${spec.id}`);
     } catch (notifyError) {
       logger.error(
@@ -124,4 +125,6 @@ export class ScheduleNotifier {
   removeAdapter(agentId: string): void {
     this.adapters.delete(agentId);
   }
+
+
 }

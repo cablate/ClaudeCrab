@@ -1,0 +1,19 @@
+id: doctor-reminder-20260206
+name: 看醫生提醒
+trigger:
+  type: once
+  at: "2026-02-06T11:30:00+08:00"
+  timezone: Asia/Taipei
+execution:
+  agent: general
+  prompt: |
+    提醒 Cab：該去看醫生了
+notification:
+  onComplete: true
+  onError: false
+  platform: telegram
+  chatId: "1491057815"
+metadata:
+  createdAt: 2026-02-06T09:20:00+08:00
+  createdBy: conversation
+  enabled: true

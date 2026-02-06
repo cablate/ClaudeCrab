@@ -6,7 +6,42 @@
 
 ## 版本歷史
 
-### v1.23.2 - GroupBroadcaster SRP 拆分（當前版本）
+### v1.24.0 - Dashboard 設定管理 + Schedule 修復（當前版本）
+
+**發布日期**：2026-02-06
+
+**目標**：Dashboard Agent Edit 升級為完整設定管理介面 + 排程系統三個 bug 修復。
+
+**Dashboard 設定管理（ADR-027）**
+- Agent Edit Form 改為 4 Tab 分區（基本 / 模型參數 / 工具 / 群組協作）
+- 新增 ~15 個欄位：maxTokens、maxThinkingTokens、permissionMode、maxTurns、delegation、initiative 等
+- **Config 所有權分離**：permissions + model 寫入 `settings.local.json`（SDK 管理），其餘寫 `agent.json`
+- 工具權限改為 tag/chip UI（動態讀取 settings.local.json 現有權限）
+- 移除 allowedTools/disallowedTools（agent.json 不應介入 SDK 層級工具控制）
+
+**Schedule 修復**
+1. **對話建立排程不執行**：Agent 寫 YAML 後 CronScheduler 沒有 register → 新增 `syncSchedulesForAgent()` + `message:sent` 事件自動觸發
+2. **排程執行缺少 context**：`settingSources: ['local']` → `['project']`，確保 skills 被載入
+3. **排程通知 Markdown**：`ScheduleNotifier` 改用 `sendWithMarkdownFallback()`（MarkdownV2 → Markdown fallback），與一般對話共用同一工具函式
+4. **Schema 容錯**：`type: "at"` 自動映射為 `"once"`，`datetime` 自動映射為 `at`（防止 agent 產出不合規 YAML）
+5. **Agent 排程文件修正**：scheduling.md 新增 Trigger 類型對照表、`once` 範例、欄位名稱警告
+
+**修改檔案**：
+- `src/webui/types.ts` — 擴展 UpdateAgentRequest
+- `src/webui/api/agents.api.ts` — PUT handler 完整寫入
+- `src/webui/routes/agents.ts` — edit route 傳遞完整 config
+- `src/webui/views/agents/edit.ejs` — Tab UI + 所有新欄位
+- `src/schedule/ScheduleNotifier.ts` — 使用 sendWithMarkdownFallback
+- `src/schedule/ScheduleManager.ts` — 新增 syncSchedulesForAgent()
+- `src/schedule/schemas.ts` — trigger type/datetime alias 容錯
+- `src/types/events.ts` — MessageSentPayload 加 agentId
+- `src/adapters/BaseAdapter.ts` — emitMessageSent 加 agentId
+- `src/AppBootstrap.ts` — message:sent → schedule sync
+- `agents/general/.claude/skills/agent-protocols/references/scheduling.md` — 完整 trigger 類型文件
+
+---
+
+### v1.23.2 - GroupBroadcaster SRP 拆分
 
 **發布日期**：2026-02-05
 
