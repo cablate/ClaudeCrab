@@ -35,6 +35,7 @@
 11. **Schedule UI 支援 once/interval**：Create Schedule Modal 新增 Trigger Type 選擇器（Cron/Once/Interval），with 對應的條件式欄位和 YAML 預覽
 12. **Memory 編輯器升級**：Modal 加寬至 `max-w-5xl`、textarea 高度 `h-[60vh]`、新增全螢幕切換按鈕
 13. **System Prompt 快速編輯**：Detail 頁 System Prompt tab 加入 Edit 按鈕，一鍵打開 CLAUDE.md 編輯器
+14. **Schedule 顯示 trigger type**：Dashboard 列表和 Telegram 指令（/schedule list、/schedule info）根據 trigger type 顯示對應標籤（Cron/Once/Interval），不再一律顯示空的 cron 欄位
 
 **排程 vs 對話的 Hook 差異**：
 
