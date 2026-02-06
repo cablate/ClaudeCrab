@@ -5,12 +5,15 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import type { ScheduleSpec } from './schemas.js';
 import type { ExecutionResult } from './types.js';
 import type { ScheduleNotifier } from './ScheduleNotifier.js';
 import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import type { AgentLoader } from '../core/AgentLoader.js';
 import type { SDKQueryManager, QueryResult } from '../core/SDKQueryManager.js';
+import { buildPromptContext } from '../core/constants.js';
+import { PathValidator } from '../core/PathValidator.js';
 import { logger } from '../utils/logger.js';
 
 export class ScheduleExecutor {
@@ -75,6 +78,66 @@ export class ScheduleExecutor {
               : {}),
             additionalOptions: {
               abortController,
+              hooks: {
+                UserPromptSubmit: [
+                  {
+                    hooks: [
+                      async () => ({
+                        continue: true,
+                        hookSpecificOutput: {
+                          hookEventName: 'UserPromptSubmit' as const,
+                          additionalContext: buildPromptContext(
+                            spec.notification?.chatId ?? '',
+                            true // always new session
+                          ),
+                        },
+                      }),
+                    ],
+                  },
+                ],
+                PreToolUse: [
+                  {
+                    hooks: [
+                      async (input) => {
+                        const pathValidator = new PathValidator({
+                          agentId,
+                          workspacePath: agent.path,
+                          sharedPath: path.resolve(agent.path, '../_shared'),
+                        });
+
+                        const toolInput =
+                          (input as { tool_input?: Record<string, unknown> })
+                            .tool_input ?? {};
+                        const toolName =
+                          (input as { tool_name?: string }).tool_name ?? '';
+
+                        const result = pathValidator.validate(toolName, toolInput);
+
+                        if (!result.allowed) {
+                          const reason = result.reason ?? 'Path access denied';
+                          logger.warn(
+                            { agentId, toolName, reason, scheduleId: spec.id },
+                            '[ScheduleExecutor] Path access denied by PathValidator'
+                          );
+                          return {
+                            hookSpecificOutput: {
+                              hookEventName: 'PreToolUse' as const,
+                              permissionDecision: 'deny' as const,
+                              permissionDecisionReason: reason,
+                            },
+                          };
+                        }
+
+                        return {
+                          hookSpecificOutput: {
+                            hookEventName: 'PreToolUse' as const,
+                          },
+                        };
+                      },
+                    ],
+                  },
+                ],
+              },
             },
             // Only keep the last assistant message for notification
             onIntermediateMessage: async (text: string) => {

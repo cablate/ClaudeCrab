@@ -116,14 +116,20 @@ npm run typecheck    # TypeScript 型別檢查
 | 修改 YAML schema | `src/schedule/schemas.ts` | `src/schedule/types.ts` |
 | 修改排程載入邏輯 | `src/schedule/ScheduleLoader.ts` | - |
 | 修改 cron 觸發邏輯 | `src/schedule/CronScheduler.ts` | `node-cron` |
-| 修改任務執行邏輯 | `src/schedule/ScheduleExecutor.ts` | `SDKQueryManager.ts` |
-| 修改執行通知 | `src/schedule/ScheduleNotifier.ts` | `BaseAdapter.ts` |
+| 修改任務執行邏輯 | `src/schedule/ScheduleExecutor.ts` | `SDKQueryManager.ts`、`PathValidator.ts`、`constants.ts` |
+| 修改執行通知 | `src/schedule/ScheduleNotifier.ts` | `telegramMarkdown.ts`（sendWithMarkdownFallback） |
 | 修改排程管理 API | `src/schedule/ScheduleManager.ts` | - |
 | 修改 /schedule 指令 | `src/adapters/commands/TelegramCommands.ts` | `handleSchedule*` 函數 |
 | 修改排程資料庫操作 | `src/persistence/ScheduleRepository.ts` | `DatabaseManager.ts` |
 | 修改 Agent 排程指引 | `agents/_example/CLAUDE.md` | Scheduling System 區段 |
 
 **排程檔案位置**：`agents/{agentId}/schedules/{taskId}.yaml`
+
+**排程執行特性**：
+- 每次執行建立獨立 session（`schedule:{specId}:{uuid}`），不影響對話 session
+- Hooks：UserPromptSubmit（時間注入）+ PreToolUse（PathValidator）— 無 Stop hook、無 canUseTool
+- 通知使用 `sendWithMarkdownFallback`（MarkdownV2 → Markdown fallback）
+- Schema 容錯：`type:"at"` → `"once"`、`datetime` → `at`
 
 ---
 

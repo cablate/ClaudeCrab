@@ -25,12 +25,23 @@
 3. **排程通知 Markdown**：`ScheduleNotifier` 改用 `sendWithMarkdownFallback()`（MarkdownV2 → Markdown fallback），與一般對話共用同一工具函式
 4. **Schema 容錯**：`type: "at"` 自動映射為 `"once"`，`datetime` 自動映射為 `at`（防止 agent 產出不合規 YAML）
 5. **Agent 排程文件修正**：scheduling.md 新增 Trigger 類型對照表、`once` 範例、欄位名稱警告
+6. **排程執行 Hooks**：ScheduleExecutor 加入 UserPromptSubmit（時間注入）+ PreToolUse（PathValidator 路徑隔離），與一般對話一致的安全性和 context 注入
+
+**排程 vs 對話的 Hook 差異**：
+
+| Hook | 對話 | 排程 | 理由 |
+|------|------|------|------|
+| UserPromptSubmit（時間注入） | ✅ | ✅ | 排程需要知道今天日期 |
+| PreToolUse（PathValidator） | ✅ | ✅ | 安全性一致 |
+| Stop（記憶 checkpoint） | ✅ | ❌ | 排程 prompt 應自帶指令 |
+| canUseTool（權限審批） | ✅ | ❌ | 排程無人值守 |
 
 **修改檔案**：
 - `src/webui/types.ts` — 擴展 UpdateAgentRequest
 - `src/webui/api/agents.api.ts` — PUT handler 完整寫入
 - `src/webui/routes/agents.ts` — edit route 傳遞完整 config
 - `src/webui/views/agents/edit.ejs` — Tab UI + 所有新欄位
+- `src/schedule/ScheduleExecutor.ts` — 加入 UserPromptSubmit + PreToolUse hooks
 - `src/schedule/ScheduleNotifier.ts` — 使用 sendWithMarkdownFallback
 - `src/schedule/ScheduleManager.ts` — 新增 syncSchedulesForAgent()
 - `src/schedule/schemas.ts` — trigger type/datetime alias 容錯
