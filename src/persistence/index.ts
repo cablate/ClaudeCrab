@@ -17,6 +17,7 @@ export type {
   ConversationRow,
   GroupMessageRow,
   GroupMemberRow,
+  QueryMetricRawRow,
   QueryMetricRow,
   InjectionStateRow,
   AgentUsageStats,

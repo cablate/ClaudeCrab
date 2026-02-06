@@ -30,6 +30,7 @@ import {
   ScheduleManager,
 } from './schedule/index.js';
 import type { AppConfig } from './config.js';
+import type { IQueryMetricsRepository } from './persistence/types.js';
 
 /**
  * Manages the full lifecycle of the ClaudeCab application.
@@ -94,7 +95,8 @@ export class AppBootstrap {
 
     await this.initializeScheduleSystem(
       agentLoader,
-      persistence?.databaseManager ?? null
+      persistence?.databaseManager ?? null,
+      persistence?.queryMetricsRepository
     );
 
     await this.initializeWebUI(
@@ -327,7 +329,8 @@ export class AppBootstrap {
 
   private async initializeScheduleSystem(
     agentLoader: AgentLoader,
-    databaseManager: DatabaseManager | null
+    databaseManager: DatabaseManager | null,
+    queryMetricsRepository?: IQueryMetricsRepository
   ): Promise<void> {
     if (!this.config.schedule.enabled || this.orchestrator === null) {
       return;
@@ -347,7 +350,8 @@ export class AppBootstrap {
       agentLoader,
       sdkManager,
       scheduleNotifier,
-      scheduleRepository
+      scheduleRepository,
+      queryMetricsRepository
     );
     const cronScheduler = new CronScheduler(scheduleExecutor);
 

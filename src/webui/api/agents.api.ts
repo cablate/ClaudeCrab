@@ -1181,7 +1181,10 @@ export function createAgentsApiRouter(): Router {
       name?: string;
       description?: string;
       trigger?: {
+        type?: string;
         cron?: string;
+        at?: string;
+        interval?: number;
         timezone?: string;
       };
       action?: {
@@ -1201,10 +1204,26 @@ export function createAgentsApiRouter(): Router {
       res.status(400).json({ error: 'name is required' });
       return;
     }
-    if (!body.trigger?.cron) {
-      res.status(400).json({ error: 'trigger.cron is required' });
+    if (!body.trigger) {
+      res.status(400).json({ error: 'trigger is required' });
       return;
     }
+
+    // Validate trigger based on type
+    const triggerType = body.trigger.type || 'cron';
+    if (triggerType === 'cron' && !body.trigger.cron) {
+      res.status(400).json({ error: 'trigger.cron is required for cron type' });
+      return;
+    }
+    if (triggerType === 'once' && !body.trigger.at) {
+      res.status(400).json({ error: 'trigger.at is required for once type' });
+      return;
+    }
+    if (triggerType === 'interval' && !body.trigger.interval) {
+      res.status(400).json({ error: 'trigger.interval is required for interval type' });
+      return;
+    }
+
     if (!body.action?.chatId) {
       res.status(400).json({ error: 'action.chatId is required' });
       return;
@@ -1231,15 +1250,25 @@ export function createAgentsApiRouter(): Router {
         // Doesn't exist, good to proceed
       }
 
+      // Build trigger config based on type
+      const triggerConfig: Record<string, unknown> = {
+        type: triggerType,
+        timezone: body.trigger.timezone ?? 'Asia/Taipei',
+      };
+      if (triggerType === 'cron') {
+        triggerConfig.cron = body.trigger.cron;
+      } else if (triggerType === 'once') {
+        triggerConfig.at = body.trigger.at;
+      } else if (triggerType === 'interval') {
+        triggerConfig.interval = body.trigger.interval;
+      }
+
       // Build schedule spec
       const scheduleSpec = {
         id: body.id,
         name: body.name,
         description: body.description ?? '',
-        trigger: {
-          cron: body.trigger.cron,
-          timezone: body.trigger.timezone ?? 'Asia/Taipei',
-        },
+        trigger: triggerConfig,
         action: {
           type: body.action.type ?? 'send_message',
           chatId: body.action.chatId,

@@ -8,6 +8,7 @@ import type {
   IQueryMetricsRepository,
   AgentUsageStats,
   DailyUsageStats,
+  QueryMetricRow,
 } from './types.js';
 import { dateToString } from './types.js';
 import { logger } from '../utils/logger.js';
@@ -164,6 +165,54 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     }));
   }
 
+  getDailyStatsAll(days: number): DailyUsageStats[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as queries,
+        SUM(input_tokens) as input_tokens,
+        SUM(output_tokens) as output_tokens,
+        SUM(total_cost_usd) as cost_usd
+      FROM query_metrics
+      WHERE created_at >= DATE('now', ?)
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `);
+    const rows = stmt.all(`-${days} days`) as RawDailyRow[];
+    return rows.map((row) => ({
+      date: row.date,
+      queries: row.queries,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      costUsd: row.cost_usd,
+    }));
+  }
+
+  getRecentQueries(limit: number, offset = 0, agentId?: string): QueryMetricRow[] {
+    const sql = agentId
+      ? `SELECT * FROM query_metrics WHERE agent_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`
+      : `SELECT * FROM query_metrics ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    const stmt = this.db.prepare(sql);
+    const rows = agentId
+      ? (stmt.all(agentId, limit, offset) as RawQueryRow[])
+      : (stmt.all(limit, offset) as RawQueryRow[]);
+    return rows.map((row) => ({
+      id: row.id,
+      agentId: row.agent_id,
+      platform: row.platform,
+      chatId: row.chat_id,
+      userId: row.user_id,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cacheReadTokens: row.cache_read_tokens,
+      cacheCreationTokens: row.cache_creation_tokens,
+      totalCostUsd: row.total_cost_usd,
+      numTurns: row.num_turns,
+      durationMs: row.duration_ms,
+      createdAt: row.created_at,
+    }));
+  }
+
   private mapStatsRow(row: RawStatsRow): AgentUsageStats {
     return {
       agentId: row.agent_id,
@@ -197,4 +246,21 @@ interface RawDailyRow {
   input_tokens: number;
   output_tokens: number;
   cost_usd: number;
+}
+
+/** Raw row from individual query record */
+interface RawQueryRow {
+  id: number;
+  agent_id: string;
+  platform: string;
+  chat_id: string;
+  user_id: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  total_cost_usd: number;
+  num_turns: number;
+  duration_ms: number;
+  created_at: string;
 }

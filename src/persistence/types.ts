@@ -224,9 +224,9 @@ export interface IGroupMemberRepository {
 }
 
 /**
- * Database row type for query_metrics table (ADR-020 Phase 2)
+ * Raw database row type for query_metrics table (ADR-020 Phase 2)
  */
-export interface QueryMetricRow {
+export interface QueryMetricRawRow {
   id: number;
   agent_id: string;
   platform: string;
@@ -300,6 +300,31 @@ export interface IQueryMetricsRepository {
 
   /** Get daily stats for an agent over N days */
   getDailyStats(agentId: string, days: number): DailyUsageStats[];
+
+  /** Get daily stats across all agents over N days */
+  getDailyStatsAll(days: number): DailyUsageStats[];
+
+  /** Get recent individual query records */
+  getRecentQueries(limit: number, offset?: number, agentId?: string): QueryMetricRow[];
+}
+
+/**
+ * Individual query metric row
+ */
+export interface QueryMetricRow {
+  id: number;
+  agentId: string;
+  platform: string;
+  chatId: string;
+  userId: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalCostUsd: number;
+  numTurns: number;
+  durationMs: number;
+  createdAt: string;
 }
 
 /**

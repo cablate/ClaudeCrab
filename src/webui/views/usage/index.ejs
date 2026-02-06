@@ -1,0 +1,300 @@
+<%- include('../partials/start', { title }) %>
+
+<!-- Period Filter -->
+<div class="flex items-center justify-between mb-6">
+  <h2 class="text-2xl font-bold text-gray-800">用量總覽</h2>
+  <div class="flex gap-2">
+    <% const periods = [
+      { value: '24h', label: '24h' },
+      { value: '7d', label: '7 Days' },
+      { value: '30d', label: '30 Days' },
+      { value: 'all', label: '全部' },
+    ]; %>
+    <% for (const p of periods) { %>
+      <a href="/usage?period=<%= p.value %>"
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-colors
+          <%= period === p.value
+            ? 'bg-blue-600 text-white'
+            : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-300' %>">
+        <%= p.label %>
+      </a>
+    <% } %>
+  </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+  <!-- Total Cost -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-gray-500">總花費</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1">$<%= totalCost.toFixed(4) %></p>
+      </div>
+      <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+        <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Total Queries -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-gray-500">總查詢數</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1"><%= totalQueries.toLocaleString() %></p>
+      </div>
+      <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+        <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input Tokens -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-gray-500">輸入 Tokens</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1"><%= (totalInputTokens / 1000).toFixed(1) %>k</p>
+      </div>
+      <div class="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+        <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Output Tokens -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-sm text-gray-500">輸出 Tokens</p>
+        <p class="text-2xl font-bold text-gray-800 mt-1"><%= (totalOutputTokens / 1000).toFixed(1) %>k</p>
+      </div>
+      <div class="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
+        <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Daily Cost Trend Chart -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+  <h3 class="text-lg font-semibold text-gray-800 mb-4">每日花費趨勢</h3>
+  <div id="chart-container" style="height: 200px; position: relative;">
+    <canvas id="dailyChart" style="width: 100%; height: 100%;"></canvas>
+    <p id="chart-empty" class="hidden text-gray-400 text-center" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">尚無資料</p>
+  </div>
+</div>
+
+<!-- Two Column Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Agent Summary Table -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div class="p-4 border-b border-gray-200">
+      <h3 class="text-lg font-semibold text-gray-800">依 Agent 統計</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left font-medium text-gray-500">Agent</th>
+            <th class="px-4 py-3 text-right font-medium text-gray-500">花費</th>
+            <th class="px-4 py-3 text-right font-medium text-gray-500">查詢數</th>
+            <th class="px-4 py-3 text-right font-medium text-gray-500">IN / OUT</th>
+            <th class="px-4 py-3 text-right font-medium text-gray-500">平均時間</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          <% if (agentStats.length === 0) { %>
+            <tr>
+              <td colspan="5" class="px-4 py-8 text-center text-gray-400">尚無用量資料</td>
+            </tr>
+          <% } else { %>
+            <% for (const s of agentStats) { %>
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 font-medium text-gray-800"><%= s.agentName %></td>
+                <td class="px-4 py-3 text-right text-gray-600">$<%= s.totalCostUsd.toFixed(4) %></td>
+                <td class="px-4 py-3 text-right text-gray-600"><%= s.totalQueries %></td>
+                <td class="px-4 py-3 text-right text-gray-600">
+                  <%= (s.totalInputTokens / 1000).toFixed(1) %>k / <%= (s.totalOutputTokens / 1000).toFixed(1) %>k
+                </td>
+                <td class="px-4 py-3 text-right text-gray-600"><%= (s.avgDurationMs / 1000).toFixed(1) %>s</td>
+              </tr>
+            <% } %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent Queries -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div class="p-4 border-b border-gray-200">
+      <h3 class="text-lg font-semibold text-gray-800">近期查詢</h3>
+    </div>
+    <div id="recent-queries" class="divide-y divide-gray-200">
+      <div class="p-8 text-center text-gray-400">載入中...</div>
+    </div>
+    <div id="load-more-container" class="hidden p-4 border-t border-gray-200 text-center">
+      <button id="load-more-btn" onclick="loadMoreQueries()"
+        class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors">
+        載入更多
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Daily Chart ──
+(function() {
+  const days = '<%= period %>' === 'all' ? 30 : ('<%= period %>' === '30d' ? 30 : ('<%= period %>' === '7d' ? 7 : 7));
+
+  fetch('/api/usage/daily?days=' + days)
+    .then(r => r.json())
+    .then(data => {
+      const daily = data.daily || [];
+      if (daily.length === 0) {
+        document.getElementById('chart-empty').classList.remove('hidden');
+        return;
+      }
+      drawBarChart(daily);
+    })
+    .catch(() => {
+      document.getElementById('chart-empty').classList.remove('hidden');
+    });
+
+  function drawBarChart(daily) {
+    const canvas = document.getElementById('dailyChart');
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+
+    // Set canvas size
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = rect.height;
+    const padding = { top: 10, right: 20, bottom: 30, left: 60 };
+    const chartW = w - padding.left - padding.right;
+    const chartH = h - padding.top - padding.bottom;
+
+    const maxCost = Math.max(...daily.map(d => d.costUsd), 0.001);
+    const barWidth = Math.max(chartW / daily.length - 4, 2);
+
+    // Grid lines
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = padding.top + chartH * (1 - i / 4);
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(w - padding.right, y);
+      ctx.stroke();
+
+      // Y axis labels
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '11px system-ui';
+      ctx.textAlign = 'right';
+      ctx.fillText('$' + (maxCost * i / 4).toFixed(3), padding.left - 8, y + 4);
+    }
+
+    // Bars
+    daily.forEach((d, i) => {
+      const x = padding.left + (chartW / daily.length) * i + (chartW / daily.length - barWidth) / 2;
+      const barH = (d.costUsd / maxCost) * chartH;
+      const y = padding.top + chartH - barH;
+
+      ctx.fillStyle = '#3b82f6';
+      ctx.beginPath();
+      ctx.roundRect(x, y, barWidth, barH, [3, 3, 0, 0]);
+      ctx.fill();
+
+      // X axis labels (show every other label if too many)
+      const showLabel = daily.length <= 14 || i % Math.ceil(daily.length / 14) === 0;
+      if (showLabel) {
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '10px system-ui';
+        ctx.textAlign = 'center';
+        const label = d.date.slice(5); // MM-DD
+        ctx.fillText(label, x + barWidth / 2, h - 8);
+      }
+    });
+  }
+})();
+
+// ── Recent Queries ──
+let queryOffset = 0;
+const queryLimit = 20;
+
+function loadQueries(append) {
+  fetch('/api/usage/recent?limit=' + queryLimit + '&offset=' + queryOffset)
+    .then(r => r.json())
+    .then(data => {
+      const container = document.getElementById('recent-queries');
+      const loadMoreContainer = document.getElementById('load-more-container');
+
+      if (!append) {
+        container.innerHTML = '';
+      }
+
+      if (data.queries.length === 0 && queryOffset === 0) {
+        container.innerHTML = '<div class="p-8 text-center text-gray-400">尚無查詢紀錄</div>';
+        return;
+      }
+
+      data.queries.forEach(q => {
+        const time = new Date(q.createdAt).toLocaleString('zh-TW', {
+          month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+        const tokens = ((q.inputTokens + q.outputTokens) / 1000).toFixed(1);
+        const duration = (q.durationMs / 1000).toFixed(1);
+        const cost = q.totalCostUsd.toFixed(4);
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between px-4 py-3 hover:bg-gray-50 text-sm';
+        row.innerHTML =
+          '<div class="flex items-center gap-3 min-w-0">' +
+            '<span class="text-gray-400 whitespace-nowrap">' + time + '</span>' +
+            '<span class="font-medium text-gray-700 truncate">' + q.agentId + '</span>' +
+            '<span class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">' + q.platform + '</span>' +
+          '</div>' +
+          '<div class="flex items-center gap-4 text-gray-500 whitespace-nowrap">' +
+            '<span>$' + cost + '</span>' +
+            '<span>' + tokens + 'k</span>' +
+            '<span>' + duration + 's</span>' +
+          '</div>';
+        container.appendChild(row);
+      });
+
+      queryOffset += data.queries.length;
+
+      if (data.hasMore) {
+        loadMoreContainer.classList.remove('hidden');
+      } else {
+        loadMoreContainer.classList.add('hidden');
+      }
+    });
+}
+
+function loadMoreQueries() {
+  loadQueries(true);
+}
+
+// Initial load
+loadQueries(false);
+</script>
+
+<%- include('../partials/end') %>

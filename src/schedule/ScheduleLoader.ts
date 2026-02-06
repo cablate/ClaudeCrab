@@ -61,6 +61,16 @@ export class ScheduleLoader {
           const content = await fs.readFile(filePath, 'utf-8');
           const parsed = parseYaml(content);
           const spec = validateScheduleSpec(parsed);
+
+          // Canonical ID = filename without extension
+          const filenameId = file.replace(/\.ya?ml$/, '');
+          if (spec.id !== filenameId) {
+            logger.warn(
+              `[ScheduleLoader] Schedule ID mismatch: file="${file}" has id="${spec.id}", using filename "${filenameId}" as canonical ID`
+            );
+            spec.id = filenameId;
+          }
+
           schedules.push(spec);
           logger.debug(`[ScheduleLoader] Loaded schedule: ${spec.id} from ${agentId}`);
         } catch (error) {
@@ -86,7 +96,10 @@ export class ScheduleLoader {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       const parsed = parseYaml(content);
-      return validateScheduleSpec(parsed);
+      const spec = validateScheduleSpec(parsed);
+      // Ensure ID matches filename
+      spec.id = scheduleId;
+      return spec;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         logger.error({ error, scheduleId }, '[ScheduleLoader] Failed to load schedule');

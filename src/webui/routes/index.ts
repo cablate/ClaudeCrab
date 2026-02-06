@@ -9,6 +9,8 @@ import { createSystemRouter } from './system.js';
 import { createAgentsApiRouter } from '../api/agents.api.js';
 import { createSessionsApiRouter } from '../api/sessions.api.js';
 import { createSystemApiRouter } from '../api/system.api.js';
+import { createUsageRouter } from './usage.js';
+import { createUsageApiRouter } from '../api/usage.api.js';
 
 /**
  * Create the main router with all routes
@@ -28,11 +30,13 @@ export function createRouter(): Router {
   router.use('/sessions', createSessionsRouter());
   router.use('/conversations', createConversationsRouter());
   router.use('/system', createSystemRouter());
+  router.use('/usage', createUsageRouter());
 
   // API routes
   router.use('/api/agents', createAgentsApiRouter());
   router.use('/api/sessions', createSessionsApiRouter());
   router.use('/api/system', createSystemApiRouter());
+  router.use('/api/usage', createUsageApiRouter());
 
   // Root redirect
   router.get('/', (_req, res) => {

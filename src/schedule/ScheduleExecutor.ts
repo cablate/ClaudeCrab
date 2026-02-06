@@ -10,6 +10,7 @@ import type { ScheduleSpec } from './schemas.js';
 import type { ExecutionResult } from './types.js';
 import type { ScheduleNotifier } from './ScheduleNotifier.js';
 import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
+import type { IQueryMetricsRepository } from '../persistence/types.js';
 import type { AgentLoader } from '../core/AgentLoader.js';
 import type { SDKQueryManager, QueryResult } from '../core/SDKQueryManager.js';
 import { buildPromptContext } from '../core/constants.js';
@@ -21,7 +22,8 @@ export class ScheduleExecutor {
     private agentLoader: AgentLoader,
     private sdkManager: SDKQueryManager,
     private notifier: ScheduleNotifier,
-    private repository?: ScheduleRepository
+    private repository?: ScheduleRepository,
+    private queryMetricsRepository?: IQueryMetricsRepository
   ) {}
 
   /**
@@ -163,6 +165,23 @@ export class ScheduleExecutor {
             success: true,
             duration,
             resultSummary: this.summarizeResult(finalResponse),
+          });
+        }
+
+        // Record query metrics
+        if (this.queryMetricsRepository && result.usage) {
+          this.queryMetricsRepository.record({
+            agentId,
+            platform: 'schedule',
+            chatId: spec.id,
+            userId: 'system',
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            cacheReadTokens: result.usage.cacheReadInputTokens ?? 0,
+            cacheCreationTokens: result.usage.cacheCreationInputTokens ?? 0,
+            totalCostUsd: result.totalCostUsd ?? result.usage.costUsd ?? 0,
+            numTurns: result.numTurns ?? 0,
+            durationMs: result.durationMs ?? duration,
           });
         }
 
