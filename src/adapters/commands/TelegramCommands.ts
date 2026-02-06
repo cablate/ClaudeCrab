@@ -20,6 +20,25 @@ async function replyWithMarkdown(ctx: Context, text: string): Promise<void> {
 }
 
 /**
+ * Format trigger info for display in Telegram messages.
+ */
+function formatTriggerText(trigger: { type?: string | undefined; cron?: string | undefined; at?: string | undefined; interval?: number | undefined; timezone?: string | undefined }): string {
+  const tz = trigger.timezone || 'UTC';
+  switch (trigger.type) {
+    case 'once':
+      return `Once: \`${trigger.at || 'N/A'}\` (${tz})`;
+    case 'interval': {
+      const ms = trigger.interval || 0;
+      const min = Math.round(ms / 60000);
+      const label = min >= 60 ? `${Math.round(min / 60)}h` : `${min}m`;
+      return `Interval: every ${label} (${tz})`;
+    }
+    default:
+      return `Cron: \`${trigger.cron || 'N/A'}\` (${tz})`;
+  }
+}
+
+/**
  * Dependencies required for command handlers
  */
 export interface CommandDependencies {
@@ -433,7 +452,7 @@ async function handleScheduleList(
       : '⏸️ 暫停';
     lines.push(`• **${info.spec.name}** (${info.spec.id})`);
     lines.push(`  ${status} | Agent: ${info.agentId}`);
-    lines.push(`  Cron: \`${info.spec.trigger.cron}\``);
+    lines.push(`  ${formatTriggerText(info.spec.trigger)}`);
     lines.push('');
   }
 
@@ -468,8 +487,7 @@ async function handleScheduleInfo(
     `ID: \`${info.spec.id}\``,
     `狀態：${status}`,
     `Agent：${info.agentId}`,
-    `Cron：\`${info.spec.trigger.cron}\``,
-    `時區：${info.spec.trigger.timezone}`,
+    `觸發：${formatTriggerText(info.spec.trigger)}`,
   ];
 
   if (info.spec.description) {

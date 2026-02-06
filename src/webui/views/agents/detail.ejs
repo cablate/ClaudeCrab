@@ -916,6 +916,22 @@ async function loadSchedules() {
   }
 }
 
+function formatTriggerDisplay(trigger) {
+  const tz = trigger.timezone || 'UTC';
+  switch (trigger.type) {
+    case 'once':
+      return `<span class="font-medium">Once:</span> ${trigger.at ? new Date(trigger.at).toLocaleString('zh-TW') : 'N/A'} (${tz})`;
+    case 'interval': {
+      const ms = trigger.interval || 0;
+      const min = Math.round(ms / 60000);
+      const label = min >= 60 ? `${Math.round(min / 60)}h` : `${min}m`;
+      return `<span class="font-medium">Interval:</span> every ${label} (${tz})`;
+    }
+    default:
+      return `<span class="font-medium">Cron:</span> ${trigger.cron || 'N/A'} (${tz})`;
+  }
+}
+
 function renderSchedules(schedules) {
   const container = document.getElementById('schedulesList');
 
@@ -954,7 +970,7 @@ function renderSchedules(schedules) {
                 <p class="text-sm text-gray-500 mt-1">${spec.description || 'No description'}</p>
                 <div class="mt-2 space-y-1">
                   <p class="text-xs text-gray-400">
-                    <span class="font-medium">Cron:</span> ${spec.trigger.cron || 'N/A'} (${spec.trigger.timezone || 'UTC'})
+                    ${formatTriggerDisplay(spec.trigger)}
                   </p>
                   <p class="text-xs text-gray-400">
                     <span class="font-medium">Next run:</span> ${nextRun}
