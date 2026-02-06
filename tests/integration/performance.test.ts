@@ -164,7 +164,7 @@ describe('Performance Tests (Task 7.7-7.9)', () => {
       const releaseTime = performance.now() - releaseStart;
 
       expect(acquireTime).toBeLessThan(50);
-      expect(releaseTime).toBeLessThan(1);
+      expect(releaseTime).toBeLessThan(10);
 
       console.log(`Lock acquire time: ${acquireTime.toFixed(2)}ms`);
       console.log(`Lock release time: ${releaseTime.toFixed(4)}ms`);

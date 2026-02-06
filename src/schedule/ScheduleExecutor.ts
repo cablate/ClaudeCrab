@@ -14,8 +14,20 @@ import type { IQueryMetricsRepository } from '../persistence/types.js';
 import type { AgentLoader } from '../core/AgentLoader.js';
 import type { SDKQueryManager, QueryResult } from '../core/SDKQueryManager.js';
 import { buildPromptContext } from '../core/constants.js';
+import { retryAsync, shouldRetryError } from '../utils/retry.js';
+import type { RetryOptions } from '../utils/retry.js';
 import { PathValidator } from '../core/PathValidator.js';
 import { logger } from '../utils/logger.js';
+
+/** Schedule-specific retry options: more conservative than chat */
+const SCHEDULE_RETRY_OPTIONS: RetryOptions = {
+  maxAttempts: 3,
+  initialDelayMs: 5000,    // 5s (schedules are not time-sensitive)
+  maxDelayMs: 60000,       // 60s cap
+  backoffMultiplier: 3,    // 5s → 15s → 45s
+  jitterFactor: 0.2,
+  isRetryable: shouldRetryError,
+};
 
 export class ScheduleExecutor {
   constructor(
@@ -58,92 +70,109 @@ export class ScheduleExecutor {
       }
 
       try {
-        // Generate a unique session ID for this execution
-        const scheduleSessionId = `schedule:${spec.id}:${executionId}`;
-
         // Track only the last assistant message for notification
         let lastMessage = '';
 
-        // Execute query with new session (no resume ID)
-        const result = await this.sdkManager.executeQuery(
-          scheduleSessionId,
-          spec.execution.prompt,
-          agent,
-          {
-            cwd: agent.path,
-            systemPrompt: agent.systemPrompt,
-            settingSources: ['project'],
-            // No resume = new session
-            // Only pass maxTurns if defined
-            ...(spec.execution.maxTurns !== undefined
-              ? { maxTurns: spec.execution.maxTurns }
-              : {}),
-            additionalOptions: {
-              abortController,
-              hooks: {
-                UserPromptSubmit: [
-                  {
-                    hooks: [
-                      async () => ({
-                        continue: true,
-                        hookSpecificOutput: {
-                          hookEventName: 'UserPromptSubmit' as const,
-                          additionalContext: buildPromptContext(
-                            spec.notification?.chatId ?? '',
-                            true // always new session
-                          ),
-                        },
-                      }),
-                    ],
-                  },
-                ],
-                PreToolUse: [
-                  {
-                    hooks: [
-                      async (input) => {
-                        const pathValidator = new PathValidator({
-                          agentId,
-                          workspacePath: agent.path,
-                          sharedPath: path.resolve(agent.path, '../_shared'),
-                        });
-
-                        const toolInput =
-                          (input as { tool_input?: Record<string, unknown> })
-                            .tool_input ?? {};
-                        const toolName =
-                          (input as { tool_name?: string }).tool_name ?? '';
-
-                        const result = pathValidator.validate(toolName, toolInput);
-
-                        if (!result.allowed) {
-                          const reason = result.reason ?? 'Path access denied';
-                          logger.warn(
-                            { agentId, toolName, reason, scheduleId: spec.id },
-                            '[ScheduleExecutor] Path access denied by PathValidator'
-                          );
-                          return {
+        // Execute query with retry (fresh session ID per attempt)
+        const result = await retryAsync(
+          async () => {
+            const retrySessionId = `schedule:${spec.id}:${randomUUID()}`;
+            return await this.sdkManager.executeQuery(
+              retrySessionId,
+              spec.execution.prompt,
+              agent,
+              {
+                cwd: agent.path,
+                systemPrompt: agent.systemPrompt,
+                settingSources: ['project'],
+                ...(spec.execution.maxTurns !== undefined
+                  ? { maxTurns: spec.execution.maxTurns }
+                  : {}),
+                additionalOptions: {
+                  abortController,
+                  hooks: {
+                    UserPromptSubmit: [
+                      {
+                        hooks: [
+                          async () => ({
+                            continue: true,
                             hookSpecificOutput: {
-                              hookEventName: 'PreToolUse' as const,
-                              permissionDecision: 'deny' as const,
-                              permissionDecisionReason: reason,
+                              hookEventName: 'UserPromptSubmit' as const,
+                              additionalContext: buildPromptContext(
+                                spec.notification?.chatId ?? '',
+                                true // always new session
+                              ),
                             },
-                          };
-                        }
+                          }),
+                        ],
+                      },
+                    ],
+                    PreToolUse: [
+                      {
+                        hooks: [
+                          async (input) => {
+                            const pathValidator = new PathValidator({
+                              agentId,
+                              workspacePath: agent.path,
+                              sharedPath: path.resolve(agent.path, '../_shared'),
+                            });
 
-                        return {
-                          hookSpecificOutput: {
-                            hookEventName: 'PreToolUse' as const,
+                            const toolInput =
+                              (input as { tool_input?: Record<string, unknown> })
+                                .tool_input ?? {};
+                            const toolName =
+                              (input as { tool_name?: string }).tool_name ?? '';
+
+                            const validationResult = pathValidator.validate(toolName, toolInput);
+
+                            if (!validationResult.allowed) {
+                              const reason = validationResult.reason ?? 'Path access denied';
+                              logger.warn(
+                                { agentId, toolName, reason, scheduleId: spec.id },
+                                '[ScheduleExecutor] Path access denied by PathValidator'
+                              );
+                              return {
+                                hookSpecificOutput: {
+                                  hookEventName: 'PreToolUse' as const,
+                                  permissionDecision: 'deny' as const,
+                                  permissionDecisionReason: reason,
+                                },
+                              };
+                            }
+
+                            return {
+                              hookSpecificOutput: {
+                                hookEventName: 'PreToolUse' as const,
+                              },
+                            };
                           },
-                        };
+                        ],
                       },
                     ],
                   },
-                ],
-              },
-            },
-            // Only keep the last assistant message for notification
-            onIntermediateMessage: async (text: string) => {
-              lastMessage = text;
+                },
+                onIntermediateMessage: async (text: string) => {
+                  lastMessage = text;
+                },
+              }
+            );
+          },
+          {
+            ...SCHEDULE_RETRY_OPTIONS,
+            onRetry: (attempt: number, err: unknown, delayMs: number) => {
+              // Reset timeout on retry
+              if (timeoutId) {
+                clearTimeout(timeoutId);
+              }
+              if (spec.execution.timeout) {
+                timeoutId = setTimeout(() => {
+                  abortController.abort(new Error('Schedule execution timeout'));
+                }, spec.execution.timeout);
+              }
+              logger.warn({
+                scheduleId: spec.id, executionId, attempt, delayMs,
+                error: err instanceof Error ? err.message : String(err),
+              }, '[ScheduleExecutor] Retrying after transient error');
             },
           }
         );

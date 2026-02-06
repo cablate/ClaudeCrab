@@ -353,7 +353,18 @@ export class AppBootstrap {
       scheduleRepository,
       queryMetricsRepository
     );
-    const cronScheduler = new CronScheduler(scheduleExecutor);
+    const cronScheduler = new CronScheduler(
+      scheduleExecutor,
+      async (scheduleId, agentId, spec, failureCount) => {
+        // Auto-pause: update YAML and notify
+        if (this.scheduleManager) {
+          await this.scheduleManager.pauseSchedule(scheduleId);
+        }
+        await scheduleNotifier.notifyAutoPaused(spec, failureCount);
+        logger.warn({ scheduleId, agentId, failureCount },
+          '[Schedule] Auto-paused schedule after consecutive failures');
+      }
+    );
 
     this.scheduleManager = new ScheduleManager(
       scheduleLoader,

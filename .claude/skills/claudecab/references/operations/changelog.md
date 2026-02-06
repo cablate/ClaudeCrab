@@ -6,7 +6,50 @@
 
 ## 版本歷史
 
-### v1.24.0 - Dashboard 設定管理 + Schedule 修復（當前版本）
+### v1.25.0 - 用量頁面 + 排程韌性強化（當前版本）
+
+**發布日期**：2026-02-06
+
+**目標**：新增 Usage 用量統計頁面、修復排程 ID 不一致 bug、為排程執行加入 retry + circuit breaker。
+
+**Usage 用量頁面**
+- 新增 `/usage` 頁面：期間篩選（24h/7d/30d/全部）、4 張統計卡片（總花費/總查詢數/輸入 Tokens/輸出 Tokens）
+- 每日花費趨勢圖（Canvas bar chart）、Agent 用量摘要表、近期查詢列表（分頁載入）
+- API：`GET /api/usage/daily`、`GET /api/usage/recent`
+- 全繁體中文介面
+
+**Schedule ID 修復**
+- `ScheduleLoader.loadForAgent()` / `loadById()`：以檔名為 canonical ID，自動修正 YAML 內 `spec.id` 不一致問題
+- 修復 Dashboard「Schedule not found」bug（YAML 檔名 vs 內部 id 不符）
+- Create schedule API 支援 once/interval trigger type（原本硬編碼只支援 cron）
+
+**排程 Retry + Circuit Breaker**
+- `isTransientError()` 新增 3 個 pattern：`'529'`、`'overloaded'`、`'tool_use ids must be unique'`
+- `ScheduleExecutor.execute()`：用 `retryAsync()` 包住 `executeQuery()`，3 次重試、5s→15s→45s backoff、每次 retry 新 session ID
+- `CronScheduler`：新增 `consecutiveFailures` 追蹤，連續失敗 3 次自動暫停 + 呼叫 `onAutoPause` callback
+- `ScheduleNotifier.notifyAutoPaused()`：發送自動暫停 Telegram 通知，含恢復指令
+- `AppBootstrap`：串接 auto-pause callback（pauseSchedule + notifyAutoPaused）
+
+**修改檔案**：
+- `src/utils/retry.ts` — isTransientError 擴充
+- `src/schedule/ScheduleExecutor.ts` — retryAsync 包裝 executeQuery
+- `src/schedule/CronScheduler.ts` — consecutiveFailures + onAutoPause callback
+- `src/schedule/ScheduleNotifier.ts` — notifyAutoPaused()
+- `src/schedule/ScheduleManager.ts` — （被 callback 呼叫 pauseSchedule）
+- `src/schedule/ScheduleLoader.ts` — 檔名為 canonical ID
+- `src/AppBootstrap.ts` — 傳入 onAutoPause callback
+- `src/webui/routes/usage.ts` — 用量頁面 route（新增）
+- `src/webui/api/usage.api.ts` — 用量 API endpoints（新增）
+- `src/webui/views/usage/index.ejs` — 用量頁面模板（新增）
+- `src/webui/views/partials/sidebar.ejs` — 用量 nav link
+- `src/webui/routes/index.ts` — 註冊 usage routes
+- `src/webui/api/agents.api.ts` — create schedule 支援 once/interval
+- `src/persistence/types.ts` — QueryMetricRawRow rename
+- `tests/integration/performance.test.ts` — 修復 flaky lock release 閾值
+
+---
+
+### v1.24.0 - Dashboard 設定管理 + Schedule 修復
 
 **發布日期**：2026-02-06
 

@@ -130,6 +130,9 @@ npm run typecheck    # TypeScript 型別檢查
 - Hooks：UserPromptSubmit（時間注入）+ PreToolUse（PathValidator）— 無 Stop hook、無 canUseTool
 - 通知使用 `sendWithMarkdownFallback`（MarkdownV2 → Markdown fallback）
 - Schema 容錯：`type:"at"` → `"once"`、`datetime` → `at`
+- **Retry**：`retryAsync()` 包裝 executeQuery，3 次重試（5s→15s→45s backoff），每次 retry 新 session ID
+- **Circuit Breaker**：CronScheduler 追蹤連續失敗次數，達 3 次自動暫停 + Telegram 通知
+- **ID 規則**：檔名為 canonical ID，YAML 內 `spec.id` 不一致時自動修正為檔名
 
 ---
 

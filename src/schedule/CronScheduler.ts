@@ -15,11 +15,24 @@ interface ScheduledJob {
   agentId: string;
 }
 
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+export type OnAutoPauseCallback = (
+  scheduleId: string,
+  agentId: string,
+  spec: ScheduleSpec,
+  failureCount: number
+) => Promise<void>;
+
 export class CronScheduler {
   private jobs: Map<string, ScheduledJob> = new Map();
   private runningExecutions: Set<string> = new Set();
+  private consecutiveFailures: Map<string, number> = new Map();
 
-  constructor(private executor: ScheduleExecutor) {}
+  constructor(
+    private executor: ScheduleExecutor,
+    private onAutoPause?: OnAutoPauseCallback
+  ) {}
 
   /**
    * Register a schedule for execution
@@ -140,9 +153,41 @@ export class CronScheduler {
 
     try {
       logger.info(`[CronScheduler] Executing schedule: ${scheduleId}`);
-      await this.executor.execute(job.agentId, job.spec);
+      const result = await this.executor.execute(job.agentId, job.spec);
+
+      if (result.success) {
+        // Reset consecutive failure count on success
+        this.consecutiveFailures.delete(scheduleId);
+      } else {
+        // Increment failure count
+        const count = (this.consecutiveFailures.get(scheduleId) ?? 0) + 1;
+        this.consecutiveFailures.set(scheduleId, count);
+
+        if (count >= MAX_CONSECUTIVE_FAILURES) {
+          logger.warn({ scheduleId, count },
+            '[CronScheduler] Auto-pausing schedule after consecutive failures');
+          this.pause(scheduleId);
+          if (this.onAutoPause) {
+            await this.onAutoPause(scheduleId, job.agentId, job.spec, count);
+          }
+          this.consecutiveFailures.delete(scheduleId);
+        }
+      }
     } catch (error) {
+      // executor.execute() should not throw (internal catch), but handle defensively
       logger.error({ error, scheduleId }, '[CronScheduler] Execution failed');
+      const count = (this.consecutiveFailures.get(scheduleId) ?? 0) + 1;
+      this.consecutiveFailures.set(scheduleId, count);
+
+      if (count >= MAX_CONSECUTIVE_FAILURES) {
+        logger.warn({ scheduleId, count },
+          '[CronScheduler] Auto-pausing schedule after consecutive failures');
+        this.pause(scheduleId);
+        if (this.onAutoPause) {
+          await this.onAutoPause(scheduleId, job.agentId, job.spec, count);
+        }
+        this.consecutiveFailures.delete(scheduleId);
+      }
     } finally {
       this.runningExecutions.delete(scheduleId);
 

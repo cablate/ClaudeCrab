@@ -74,6 +74,42 @@ export class ScheduleNotifier {
   }
 
   /**
+   * Notify that a schedule has been auto-paused due to consecutive failures
+   */
+  async notifyAutoPaused(spec: ScheduleSpec, failureCount: number): Promise<void> {
+    const agentId = spec.execution.agent;
+    const adapter = this.adapters.get(agentId);
+
+    if (!adapter) {
+      logger.warn(`[ScheduleNotifier] Adapter not found for agent: ${agentId}`);
+      return;
+    }
+
+    const chatId = spec.notification?.chatId;
+    if (!chatId) {
+      logger.warn(`[ScheduleNotifier] No chatId configured for schedule: ${spec.id}`);
+      return;
+    }
+
+    const message = [
+      `⚠️ 排程已自動暫停：${spec.name}`,
+      '',
+      `連續失敗 ${failureCount} 次，已自動暫停。`,
+      `請檢查排程設定後使用 /schedule resume ${spec.id} 恢復。`,
+    ].join('\n');
+
+    try {
+      await sendWithMarkdownFallback(adapter, chatId, message);
+      logger.info(`[ScheduleNotifier] Sent auto-pause notification for: ${spec.id}`);
+    } catch (notifyError) {
+      logger.error(
+        { error: notifyError, scheduleId: spec.id },
+        '[ScheduleNotifier] Failed to send auto-pause notification'
+      );
+    }
+  }
+
+  /**
    * Format completion message
    */
   private formatCompleteMessage(spec: ScheduleSpec, result: QueryResult): string {

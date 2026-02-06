@@ -193,7 +193,10 @@ export function isTransientError(error: unknown): boolean {
       message.includes('socket') ||
       message.includes('503') ||
       message.includes('502') ||
-      message.includes('500')
+      message.includes('500') ||
+      message.includes('529') ||
+      message.includes('overloaded') ||
+      message.includes('tool_use ids must be unique')
     );
   }
   return false;
