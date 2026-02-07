@@ -35,54 +35,118 @@ ClaudeCab 已經是一個多 agent 協作框架。**Telegram 群組就是 team**
 Agent Teams 讓多個 Claude Code instance 作為一個 team 協作。一個 session 作為 **team lead**，負責分工、協調、綜合結果。其餘 **teammates** 各自在獨立 context window 工作，可直接互相通訊。
 
 **與 Subagent 的關鍵差異**：
-- **Subagent**：在單一 session 內執行，只能回報給主 agent（單向、串行）
-- **Teammate**：獨立 session，可以互相傳訊、挑戰彼此發現、自主協調（雙向、並行）
+
+|  | Subagent | Teammate |
+|--|----------|----------|
+| **Context** | 獨立 context window，結果回傳 caller | 獨立 context window，完全獨立 |
+| **通訊** | 只能回報給主 agent（單向） | 可互相傳訊、挑戰彼此發現（雙向） |
+| **協調** | 主 agent 管理一切 | 共享任務清單 + 自主認領 |
+| **適用** | 只需要結果的聚焦任務 | 需要討論、挑戰和協調的複雜工作 |
+| **Token 成本** | 較低（結果摘要回主 context） | 較高（每個 teammate 獨立 Claude instance） |
+
+### Lead 機制（關鍵）
+
+**Lead = 建立 team 的那個 session。固定不變，整個 team 生命週期都是它。**
+
+Lead 的產生方式：
+1. **使用者主動要求**：「Create an agent team to...」→ 當前 session 成為 lead
+2. **Claude 自己判斷**：Claude 認為任務適合並行 → 向使用者提議 → 確認後建立
+
+Lead 的職責：
+
+| 職責 | 說明 |
+|------|------|
+| **分工** | 拆任務、建立 shared task list |
+| **派工** | 明確指派 or 讓 teammate 自行認領 |
+| **協調** | 監控進度、重新分配卡住的任務 |
+| **綜合** | 收集所有結果、產出最終回覆 |
+
+**Delegate Mode**：按 Shift+Tab 啟用，限制 lead 只能用協調工具（spawn、message、shutdown、task），不能自己寫 code。確保 lead 專注於 orchestration。
 
 ### 工具架構
 
-| 工具 | 操作 | 說明 |
-|------|------|------|
-| **TeammateTool** | `spawnTeam` | 建立 team，產生 team 配置目錄 |
-| | `cleanup` | 清理 team 資源 |
-| **SendMessage** | `message` | 向特定 teammate 發送訊息 |
-| | `broadcast` | 向所有 teammate 廣播 |
-| | `shutdown_request` / `response` | 優雅關閉 teammate |
-| | `plan_approval_response` | 回應 teammate 的計畫審批請求 |
-| **TaskList** | 共享任務清單 | 所有 agent 可見，可認領、更新狀態 |
+13 個操作，分三個功能域：
 
-### 檔案結構
+| 域 | 工具 | 操作 | 說明 |
+|----|------|------|------|
+| **Team 生命週期** | TeammateTool | `spawnTeam` | 建立 team，產生配置目錄 |
+| | | `discoverTeams` | 發現已存在的 team |
+| | | `cleanup` | 清理 team 資源 |
+| | | `requestJoin` / `approveJoin` / `rejectJoin` | 加入 team 請求 |
+| **協調** | SendMessage | `write` | 點對點訊息（向特定 teammate） |
+| | | `broadcast` | 向所有 teammate 廣播 |
+| | | `approvePlan` / `rejectPlan` | 審批 teammate 的計畫 |
+| **優雅關閉** | | `requestShutdown` / `approveShutdown` / `rejectShutdown` | 關閉 teammate |
+| **任務** | TaskList | 共享任務清單 | 所有 agent 可見，可認領、更新狀態 |
+
+### 檔案結構（Filesystem-based State Model）
 
 ```
 ~/.claude/
 ├── teams/{team-name}/
-│   ├── config.json          # team metadata、成員清單
-│   └── messages/            # inter-agent mailbox（檔案系統）
-└── tasks/{team-name}/       # team-scoped 共享任務
+│   ├── config.json              # team metadata、members 陣列（name, agentId, agentType）
+│   └── messages/{session-id}/   # per-session mailbox（非同步，無共享記憶體）
+└── tasks/{team-name}/           # team-scoped 共享任務（file locking 防競爭）
 ```
+
+環境變數標識 agent 身份：`CLAUDE_CODE_TEAM_NAME`、`CLAUDE_CODE_AGENT_ID`、`CLAUDE_CODE_AGENT_TYPE`
+
+### 任務系統
+
+- **狀態**：pending → in progress → completed
+- **相依性**：任務可依賴其他任務，被 block 的任務不能被認領
+- **認領方式**：Lead 明確指派 or teammate 自行認領下一個未被認領、未被 block 的任務
+- **競爭控制**：file locking 防止多個 teammate 同時認領同一任務
+- **自動解鎖**：teammate 完成任務後，依賴它的其他任務自動 unblock
 
 ### 通訊機制
 
 - **自動訊息傳遞**：teammate 發送的訊息自動送達收件者，lead 不需要輪詢
 - **閒置通知**：teammate 完成工作後自動通知 lead
-- **共享任務清單**：所有 agent 可以看到任務狀態並認領可用工作
+- **直接互動**：使用者可直接跟任何 teammate 對話（不需經過 lead）
+
+### 計畫審批（Plan Approval）
+
+對於複雜或高風險任務，可要求 teammate 先規劃再實作：
+1. Teammate 進入 read-only plan mode
+2. 完成規劃後向 lead 提交計畫
+3. Lead 審批（approve → 開始實作）或退回（reject + feedback → 修改後重提）
+4. Lead 的審批決策是自主的，可透過 prompt 影響判斷標準
+
+### 品質控制 Hooks
+
+| Hook | 觸發時機 | 作用 |
+|------|----------|------|
+| `TeammateIdle` | Teammate 即將閒置 | exit code 2 = 發 feedback 讓 teammate 繼續工作 |
+| `TaskCompleted` | 任務即將標記完成 | exit code 2 = 阻止完成並發 feedback |
 
 ### 顯示模式
 
 - **In-process**（預設）：所有 teammate 在同一 terminal 內，Shift+Up/Down 切換
 - **Split panes**：每個 teammate 獨立 terminal pane，需 tmux 或 iTerm2
+- 設定 `"auto"`（預設）= 在 tmux 內自動用 split，否則 in-process
 
 ### 最佳使用場景
 
-1. **研究與審查**：多個 teammate 同時調查不同面向
-2. **新模組/功能**：每個 teammate 負責一個獨立的部分
-3. **競爭假說除錯**：多個 teammate 平行測試不同理論
+1. **研究與審查**：多個 teammate 同時調查不同面向，互相挑戰發現
+2. **新模組/功能**：每個 teammate 負責一個獨立的部分，不互相踩踏
+3. **競爭假說除錯**：多個 teammate 平行測試不同理論，存活的理論最可能是真因
 4. **跨層協調**：前端、後端、測試各由不同 teammate 負責
+
+### 任務粒度建議
+
+- **太小**：協調 overhead > 收益
+- **太大**：teammate 工作太久沒 check-in，浪費風險增加
+- **剛好**：自包含的單位，產出明確交付物（function、test file、review）
+- 建議每個 teammate 5-6 個任務，保持產能並讓 lead 可重新分配
 
 ### 已知限制
 
-- Session resumption 不完整
-- 不支援巢狀 team（team 裡的 team）
-- 關閉行為有已知問題
+- **Lead 固定**：不能換人、不能 promote teammate 為 lead
+- **不支援 session resumption**（in-process teammates）
+- **不支援巢狀 team**（teammate 不能 spawn 自己的 team）
+- **每個 session 只能管一個 team**
+- **Permission 在 spawn 時固定**（繼承 lead 的 permission，之後可個別改但不能在 spawn 時指定）
 - 仍為 experimental（需 `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`）
 
 ### 參考來源
