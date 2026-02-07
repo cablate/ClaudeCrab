@@ -6,13 +6,23 @@
 
 ## 背景
 
-ClaudeCab 目前是一個功能完整的**單人多 agent Telegram bot 框架**，但不是一個 **agent 協作平台**。Agent 間的互動僅限於：
+ClaudeCab 已經是一個多 agent 協作框架。**Telegram 群組就是 team**：多個 bot 作為 peers 在群組中交流、協作，這跟 Claude Code Agent Teams 用檔案系統做 mailbox 是同一層概念 — Telegram 是通訊平台，不是仲裁者。
 
-- **Delegation**（ADR-021/022）：串行委派 — 一個 agent 做不了的事交給另一個，透過 Telegram group
-- **Initiative**（ADR-023）：agent 主動發話，但仍然是面向使用者
-- **Group Broadcast**：多 agent 在同一 Telegram 群組交流，但是面向使用者的對話
+### 現有協作機制
 
-缺少的是：**Agent 間直接通訊**和**並行任務協調**。
+| 機制 | 說明 | 對標 Claude Code |
+|------|------|------------------|
+| **Telegram 群組** | Bot 之間的通訊平台 | ≈ 檔案系統 mailbox |
+| **GroupBroadcaster** | 訊息路由、@mention、去重 | ≈ SendMessage（broadcast） |
+| **Delegation**（ADR-021/022） | 一個 bot 請另一個 bot 處理 | ≈ Task assignment |
+| **Initiative**（ADR-023） | Bot 主動發話 | ≈ Idle notification |
+
+### 現有機制的局限
+
+1. **Delegation 是串行的**：A 交給 B，B 做完回來。不支援「A 同時請 B 和 C 各做一部分」
+2. **缺少結構化任務追蹤**：群組裡的 bot 不知道彼此「正在做什麼」，沒有共享任務清單
+3. **缺少結果綜合**：多個 bot 各自回覆，沒有人負責把結果合在一起
+4. **協作是被動的**：bot 只在被 @mention 或 delegation 時參與，缺少主動認領任務的機制
 
 ---
 
@@ -88,112 +98,131 @@ Agent Teams 讓多個 Claude Code instance 作為一個 team 協作。一個 ses
 
 ## ClaudeCab 現況盤點
 
-### 已有的（可複用）
+### 通訊層：Telegram 群組 = Team 的通訊平台
 
-| 元件 | 現況 | 與 Team Mode 的關係 |
-|------|------|---------------------|
-| **SDKQueryManager** | 可對任意 agent 發起獨立 session，已支援並行 | Teammate 執行基礎 |
-| **DelegationHandler** | 一個 agent 委託另一個做事，走 Telegram | 串行委派概念，但不是並行協作 |
-| **GroupBroadcaster** | 多 agent 在同一群組交流 | 面向使用者，不是 agent 間直接通訊 |
-| **ScheduleExecutor** | 無使用者介入下驅動 agent 執行 | 證明 agent 可脫離使用者獨立運作 |
-| **Session 管理** | SessionManager 管理對話狀態 | 可擴展支援 team session |
-| **DB 持久化** | SQLite + Repository pattern | 可擴充 task table、message table |
-| **EventBus** | 事件驅動架構 | 可用於 team 事件通知 |
+ClaudeCab 的群組已經是 team mode 的基礎設施：
 
-### 缺少的
+- **Telegram 群組**就是 agent 的通訊平台（≈ Claude Code 的檔案系統 mailbox）
+- Bot 在群組中以平等的 **peers** 身份交流，不是「一個主 agent 管一堆下屬」
+- 訊息是廣播式的（群組裡的所有 bot 都能看到），也支援 @mention 定向
 
-| 缺口 | 複雜度 | 說明 |
-|------|--------|------|
-| **Agent Mailbox** | 中 | Agent 間直接傳訊通道，不經 Telegram。可用 SQLite table 或記憶體 Map |
-| **Team Lifecycle** | 中 | spawnTeam → assign tasks → coordinate → cleanup。需 TeamManager |
-| **Shared Task System** | 低 | 擴充現有 DB：每個 task 有 owner、status、team scope |
-| **Parallel Execution** | 低 | SDKQueryManager 已支援並行，缺的是 orchestrator 層 |
-| **Team Lead Protocol** | 中 | Lead agent 需特殊 system prompt，告知 teammate 清單、分派方式、收集機制 |
-| **結果綜合** | 低 | Lead 收到所有 teammate 結果後，產出最終回覆 |
+**不需要另建「Agent Mailbox」**— Telegram 群組已經是 mailbox。
+
+### 已有的協作元件
+
+| 元件 | 現況 | 重新理解 |
+|------|------|----------|
+| **GroupBroadcaster** | 多 bot 在群組交流、路由、去重 | **已經是 team 通訊層** |
+| **DelegationHandler** | 一個 bot 委託另一個做事 | 已有任務分派概念，但是串行的 |
+| **Initiative** | Bot 主動發話 | Bot 可以主動參與，不只被動等 |
+| **SDKQueryManager** | 並行 session 執行 | 底層已支援多 agent 同時運作 |
+| **EventBus** | 事件驅動 | 可用於協調事件（任務完成、結果回報） |
+
+### 真正缺少的
+
+| 缺口 | 說明 |
+|------|------|
+| **並行委派** | Delegation 目前是串行的（A→B→回來），不支援「A 同時給 B 和 C 各分一部分」 |
+| **共享任務感知** | Bot 之間不知道彼此在做什麼，沒有共享的 task list |
+| **結果綜合** | 多個 bot 各自完成後，沒有人負責合併結果 |
+| **主動認領** | Bot 不會看到「有待做的事」然後主動認領，只被動等 @mention 或 delegation |
+| **協作品質** | 群組互動偏「輪流發言」，缺少結構化的分工和收斂 |
 
 ---
 
 ## 關鍵架構決策（待討論）
 
-### 1. ClaudeCab 的 Team Mode 服務誰？
+### 1. ClaudeCab vs Claude Code 的根本差異
 
-- **Claude Code 的 team mode**：開發者在 terminal 裡看多個 agent 並行寫 code
-- **ClaudeCab 的 team mode 可能是**：使用者在 Telegram 發一個訊息 → 背後多個 agent 協作 → 回覆一個綜合結果
+| | Claude Code Agent Teams | ClaudeCab |
+|---|---|---|
+| **Agent 本質** | 臨時 session，用完即棄 | 持久實體，有記憶、人格、角色 |
+| **Team 定義** | 為特定任務臨時 spawn | **群組本身就是 team**，bot 是長期 peers |
+| **通訊平台** | 檔案系統 mailbox | Telegram 群組 |
+| **使用者可見性** | 在 terminal 看到過程 | 在 Telegram 群組看到過程 |
+| **Lead** | 明確的一個 session | 待決定 |
 
-```
-User (Telegram) → Lead Agent
-                    ├→ Teammate A (research)  ──→ mailbox → Lead
-                    ├→ Teammate B (analysis)  ──→ mailbox → Lead
-                    └→ Teammate C (writing)   ──→ mailbox → Lead
-                  Lead synthesizes → Reply to User
-```
+核心洞察：**ClaudeCab 不需要 spawn team，team 已經存在（群組）。需要的是讓群組裡的 bot 更聰明地協作。**
 
-這跟現有 delegation 的差異：delegation 是「我做不了，交給你」（**串行**），team mode 是「分頭做，一起交」（**並行**）。
+### 2. 通訊：不需要新通道
 
-### 2. 通訊通道選擇
+Telegram 群組已經是通訊平台。不需要另建 Agent Mailbox。
+使用者本來就在群組裡看到 bot 之間的交流，這是 feature 不是 bug。
 
-| 方案 | 優點 | 缺點 |
-|------|------|------|
-| **SQLite mailbox** | 持久化、可查詢歷史 | 需要輪詢或事件通知 |
-| **記憶體 Map + EventBus** | 低延遲、即時 | 重啟後消失 |
-| **檔案系統**（Claude Code 做法） | 簡單、與 Claude Code 一致 | 需要 watch 或輪詢 |
-| **複用 Telegram** | 零開發成本 | 使用者會看到 agent 間對話 |
+問題不是「通訊通道」，而是**通訊的結構和品質**。
 
-### 3. Team Scope
+### 3. 並行 vs 串行
 
-- Team 是**臨時的**（為一個任務建立，完成後解散）還是**持久的**（固定的 agent 組合）？
-- ClaudeCab 的 agent 是持久實體（有自己的記憶、人格），這跟 Claude Code 的臨時 teammate 不同
+目前 delegation 是串行的。需要討論：
+- **一對多委派**：一個 bot 同時請多個 bot 各做一部分
+- **結果收集**：怎麼知道所有人都完成了？怎麼合併？
+- **誰來綜合**？發起委派的那個 bot？還是讓每個 bot 直接回覆群組？
 
-### 4. Lead 選擇
+### 4. 任務感知
 
-- 誰是 lead？使用者直接對話的那個 agent？還是系統自動選？
-- 還是需要一個專門的 orchestrator（不是任何一個 agent）？
+Bot 之間缺少「我們正在做什麼」的共享視圖：
+- 是否需要 DB-backed 的 shared task list？
+- 還是透過群組訊息本身就足夠（bot 讀到前文就知道大家在幹嘛）？
+- Bot 能否主動認領未完成的任務？
 
-### 5. 使用者可見性
+### 5. 使用者角色
 
-- 使用者看得到 team 運作過程嗎？還是只看到最終結果？
-- 是否需要在 Telegram 顯示「正在協調 3 個 agent 處理你的請求...」？
+- 使用者在群組裡看得到整個協作過程（透明）
+- 使用者可以隨時介入、糾正方向
+- 這跟 Claude Code 的 team mode 不同 — Claude Code 的使用者需要切換 tab 看不同 agent
 
 ---
 
 ## 可能的實作路徑
 
-### 路徑 A：漸進式 — 先做 Agent Mailbox
+### 路徑 A：強化現有群組協作（漸進式，推薦）
 
-1. **Phase 1**：Agent Mailbox（agent 間直接通訊，不走 Telegram）
-2. **Phase 2**：Parallel Task Dispatch（一個 prompt 分拆多個子任務並行）
-3. **Phase 3**：Team Orchestrator（完整 team lifecycle）
+基於「群組就是 team」的認知，不另建通訊層，而是強化群組內的協作品質：
 
-### 路徑 B：直接整合 Claude Code Agent Teams
+1. **Phase 1：並行委派** — DelegationHandler 支援一對多委派，同時請多個 bot 各做一部分
+2. **Phase 2：共享任務感知** — 群組內的 bot 有結構化的方式知道「我們正在做什麼」（DB-backed 或群組訊息本身）
+3. **Phase 3：結果收斂** — 發起者收集所有委派結果後綜合回覆
 
-如果 ClaudeCab 的 agent 本質上就是 Claude Code session，可能可以直接利用 Claude Code 的 TeammateTool？需要確認 `claude-agent-sdk` 是否暴露 team 相關 API。
+**優點**：複用現有 Telegram 通訊層，使用者可見整個過程
+**影響範圍**：DelegationHandler、GroupBroadcaster、可能擴充 DB
 
-### 路徑 C：Lightweight Coordination
+### 路徑 B：混合 — 群組協作 + 背景並行
 
-不做完整 team mode，而是強化現有 delegation：
-- 支援**一對多委派**（一個 agent 同時委派給多個 agent）
-- 委派結果自動收集和綜合
-- 本質上是把 delegation 從串行變並行
+部分任務在群組裡公開協作（使用者可見），部分任務在背景並行執行（類似 ScheduleExecutor）：
+
+- 簡單的協作 → 群組內 delegation（透明）
+- 重型的並行任務 → 背景 SDKQueryManager 並行執行 → 結果匯入群組
+
+**優點**：兼顧透明度和效率
+**影響範圍**：需要 orchestrator 決定哪些走前台、哪些走背景
+
+### 路徑 C：整合 Claude Code Agent Teams API
+
+如果 `claude-agent-sdk` 暴露了 TeammateTool 相關 API，可以直接利用：
+
+- ClaudeCab 的 bot 作為 Claude Code 的 team lead
+- 子任務透過 Claude Code 原生 team 機制並行執行
+- 結果回傳到 Telegram 群組
+
+**優點**：省開發成本，用官方成熟機制
+**前提**：需確認 SDK 支援程度
 
 ---
 
-## 影響範圍（預估）
-
-如果走路徑 A：
+## 影響範圍（預估，路徑 A）
 
 | 檔案 | 操作 |
 |------|------|
-| `src/core/AgentMailbox.ts` | 新增：agent 間訊息佇列 |
-| `src/core/TeamManager.ts` | 新增：team 生命週期管理 |
-| `src/persistence/TeamRepository.ts` | 新增：team + task DB 操作 |
-| `src/core/SDKQueryManager.ts` | 修改：支援 team context 注入 |
-| `src/adapters/BaseAdapter.ts` | 修改：支援並行任務觸發 |
-| DB schema | 新增：teams, team_tasks, agent_messages tables |
+| `src/groups/DelegationHandler.ts` | 修改：支援一對多並行委派 |
+| `src/groups/GroupBroadcaster.ts` | 修改：支援結果收集與綜合 |
+| `src/persistence/` | 可能新增：共享任務追蹤 |
+| Agent skills / protocols | 修改：教 bot 如何主動認領任務 |
 
 ## 待解決問題
 
-1. ClaudeCab team mode 的實際使用場景是什麼？（vs 現有 delegation 的差異）
-2. `claude-agent-sdk` 是否支援 team 相關 API？
-3. Agent 間通訊的延遲容忍度？（即時 vs 非同步）
-4. 成本控制：並行 agent 的 token 消耗如何管理？
-5. 使用者觸發方式：自動偵測需要協作？手動指定？Telegram 指令？
+1. **並行委派的觸發**：bot 自己判斷何時需要並行？還是使用者指定？
+2. **結果綜合的歸屬**：誰負責合併結果？發起者？還是群組裡自然收斂？
+3. **任務感知的實作方式**：DB-backed task list vs 群組訊息上下文（bot 讀前文就知道）？
+4. **成本控制**：並行 agent 的 token 消耗如何管理？
+5. **`claude-agent-sdk` 是否暴露 team API**？如果有，路徑 C 可能最務實
+6. **與現有 delegation 的關係**：是擴充 delegation 還是新建一個平行機制？
