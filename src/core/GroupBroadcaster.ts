@@ -94,6 +94,9 @@ export class GroupBroadcaster {
    */
   private readonly processedMessages = new DedupTracker({ maxSize: 1000, ttlMs: 5 * 60 * 1000 });
 
+  /** ADR-030 Tier 1.2: Track chats with active delegation to suppress initiative */
+  private readonly delegationActive = new Set<string>();
+
   /**
    * Maps dedupeKey -> Map<agentId, platformMsgId>.
    * In regular Telegram groups, each bot sees a different message_id for the
@@ -301,6 +304,15 @@ export class GroupBroadcaster {
         { chatId, mentionedBot, isReplyToBot, sourceAgentId },
         'No bot should respond to this message'
       );
+      // ADR-030 Tier 1.2: Suppress initiative during active delegation
+      if (this.delegationActive.has(chatId)) {
+        this.log.info(
+          { chatId },
+          'Suppressing initiative evaluation - delegation in progress (ADR-030 Tier 1.2)'
+        );
+        return;
+      }
+
       // ADR-023: Evaluate initiative responses for non-@mentioned messages
       await this.initiativeHandler.evaluateInitiatives(message, chatId, senderLabel);
       return;
@@ -397,7 +409,14 @@ export class GroupBroadcaster {
    */
   private async handleBotReplied(payload: BotRepliedPayload): Promise<void> {
     this.recordBotReplyToGroupMessages(payload);
-    await this.delegationHandler.processDelegation(payload);
+
+    // ADR-030 Tier 1.2: Mark delegation as active for this chat
+    this.delegationActive.add(payload.chatId);
+    try {
+      await this.delegationHandler.processDelegation(payload);
+    } finally {
+      this.delegationActive.delete(payload.chatId);
+    }
   }
 
   /**

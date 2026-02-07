@@ -6,7 +6,27 @@
 
 ## 版本歷史
 
-### v1.25.0 - 用量頁面 + 排程韌性強化（當前版本）
+### v1.26.0 - 並行委派 + 結果收斂 + 協作失控防護（當前版本）
+
+**發布日期**：2026-02-07
+
+**目標**：ADR-030 Tier 1 — 群組中多 bot 並行委派 + 協調者自動綜合結果；Tier 1.1~1.3 — 協作失控防護。
+
+**並行委派（ADR-030 Tier 1）**
+- `DelegationHandler.processDelegation()`：2+ targets 時改用 `Promise.allSettled()` 並行執行，單一 target 維持串行路徑
+- 新增 `executeParallelDelegation()`：並行執行所有委派，收集結果後注入 synthesis prompt 給協調者
+- 新增 `buildSynthesisPrompt()`：建立綜合提示，包含各 bot 回覆或失敗標記
+- `executeDelegation()` 回傳 `{ agentId, response?, success }` 以支援結果收集
+- `isSynthesis` 安全旗標：仿照 `isInitiative` 模式，防止綜合回覆觸發二次委派
+- `BotRepliedPayload`、`processMessage` options、`emitBotRepliedEvent` 皆傳遞 `isSynthesis`
+- 邊界：部分失敗仍綜合、全部失敗跳過綜合、synthesis 回覆不觸發新委派
+
+**協作失控防護（ADR-030 Tier 1.1~1.3）**
+- **Tier 1.1**：被委派 bot（`delegationDepth > 0`）的回覆不再觸發 @mention 委派掃描，防止禮貌性 @mention 造成 cascade
+- **Tier 1.2**：`GroupBroadcaster` 追蹤 `delegationActive` 狀態，委派進行中抑制 Initiative 評估，避免旁觀 bot 插嘴
+- **Tier 1.3**：`ContextInjector.formatHistory()` 加入群組行為規範 prompt，指示 bot 不在群組回報內部操作（記憶寫入、工具狀態等）
+
+### v1.25.0 - 用量頁面 + 排程韌性強化
 
 **發布日期**：2026-02-06
 

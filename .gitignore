@@ -74,3 +74,4 @@ data/*.db-shm
 # Test/personal agents (not part of the project)
 agents/nitterbot/
 agents/test/
+agents/leader/

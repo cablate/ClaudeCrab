@@ -29,7 +29,7 @@ export function buildMemoryStopCheckpoint(groupChatId?: string): string {
   if (!groupChatId) {
     return MEMORY_STOP_CHECKPOINT;
   }
-  return `【記憶檢查】這是群組對話。結束前檢查這輪有沒有該記的內容。群組事件、共識、討論請寫入群組記憶（groups/${groupChatId}/），不要寫到個人日誌（memory/*.md）。個人層級只更新 MEMORY.md（持久事實）或 CLAUDE.md（教訓）。`;
+  return `【記憶檢查（靜默模式）】這是群組對話。有需要記錄的群組事件就直接寫入 groups/${groupChatId}/，沒有就直接結束。不要輸出任何文字——不要分析、不要列檢查項目、不要回報結果。靜默執行工具操作或直接結束。`;
 }
 
 const TAIPEI_TZ = 'Asia/Taipei';
@@ -63,6 +63,7 @@ export function buildPromptContext(
     // Group chat: point diary path to group memory, not personal
     context += `\n【群組日誌路徑】groups/${groupChatId}/${todayDate}.md`;
     context += `\n【群組記憶】groups/${groupChatId}/MEMORY.md`;
+    context += `\n【群組行為規範】你正在群組中回覆。不要回報內部操作過程（如記憶寫入結果、工具呼叫狀態、檔案讀寫紀錄）。只回覆對使用者有實質意義的內容。`;
   } else {
     context += `\n【日誌路徑】今天: memory/${todayDate}.md | 昨天: memory/${yesterdayDate}.md`;
   }
@@ -71,7 +72,12 @@ export function buildPromptContext(
     context += `\n${STARTUP_PROTOCOL_REMINDER}`;
   }
 
-  context += `\n${MEMORY_CHECKPOINT_CONTEXT}`;
+  if (groupChatId) {
+    // Group chat: silent memory — do the work but don't talk about it
+    context += `\n【記憶】遵循 memory-system 規範，靜默執行記憶操作。不要在回覆中提及記憶寫入過程或結果。`;
+  } else {
+    context += `\n${MEMORY_CHECKPOINT_CONTEXT}`;
+  }
 
   if (chatId) {
     context += `\n【當前對話】platform: telegram, chatId: ${chatId}`;

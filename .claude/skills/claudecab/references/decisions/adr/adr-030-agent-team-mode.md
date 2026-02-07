@@ -1,7 +1,7 @@
 # ADR-030: Agent Team Mode — 多 Agent 並行協作
 
 **日期**：2026-02-06
-**狀態**：📋 proposed（待討論）
+**狀態**：✅ implemented (Tier 1 + Tier 1.1~1.3)
 **關聯**：SDKQueryManager、GroupBroadcaster、DelegationHandler、ScheduleExecutor
 
 ## 背景
@@ -425,8 +425,184 @@ Bot A 收到 → 判斷需要三個面向
 
 ---
 
+## 協調者自動選擇：Initiative 機制改進提案
+
+### 現況問題
+
+目前 `getRespondingBot()` 在無 @mention、無 reply-to 時 return null（沒有 bot 回應），
+接著走 ADR-023 的 `InitiativeHandler.evaluateInitiatives()`。
+
+但 Initiative 機制的設計目標是「讓相關 bot 主動加入討論」，不是「選一個協調者」：
+
+| | Initiative（ADR-023 現有） | 協調者自動選擇（提案） |
+|---|---|---|
+| **目的** | 讓相關 bot 主動加入討論 | 選一個 bot 負責分工協調 |
+| **Query 數量** | N 個 bot × N 次 `evaluator.shouldRespond()` | **1 次** centralized query |
+| **輸入** | 單一 bot 的 description + 訊息 | **所有 bot 的 descriptions** + 訊息 |
+| **輸出** | 每個 bot 各自 true/false | **排序結果**：最適合的 1 個 bot |
+| **回應數** | 0~N 個 bot 各自回覆 | **只有 1 個** bot 回覆 |
+| **isInitiative** | true（阻擋委派鏈） | **false**（走正常路徑，可觸發委派） |
+| **Token 成本** | O(N) 次 query | O(1) 次 query |
+| **後續行為** | 各 bot 獨立回覆，互不關聯 | 被選中 bot 可分工 @mention → 並行委派 |
+
+### 提案：Centralized Responder Selection
+
+在 `getRespondingBot()` 的 Case 3（無 @mention、無 reply-to）加入：
+
+```
+1 次 LLM query，輸入：
+  - 使用者訊息
+  - 群組所有 bot 的 { agentId, name, description }
+
+輸出：
+  - respondingAgentId: string（最適合的 bot）
+  - reason: string（為什麼選它）
+
+→ 該 bot 成為正式 respondingBot
+→ 走正常 processMessage 路徑（非 isInitiative）
+→ 可觸發委派（如果回覆中 @mention 其他 bot）
+```
+
+### 與 Initiative 的關係
+
+- Initiative 機制不刪除，保留作為「輔助加入」（某 bot 被選為協調者後，其他 bot 仍可主動補充）
+- Centralized selection 優先級高於 Initiative（先選協調者 → 若選中則不走 Initiative）
+- 若 centralized selection 判斷「沒有 bot 適合回應」→ fallback 到 Initiative 機制
+
+### 工作模式 vs 閒聊模式（設計備忘）
+
+Centralized Selection 不應完全取代 Initiative。兩種情境需要相反的行為：
+
+- **工作請求**（「幫我分析 X」「請大家報告」）→ 選 1 個 coordinator 統籌，其他人閉嘴等委派
+- **閒聊**（「大家覺得怎樣」「今天天氣好」）→ 多 bot 自由參與，像真人群聊
+
+設計方向：Centralized Selection 的 query 可回傳「不需指定一人，讓大家自由聊」→ fallback 到 Initiative。或在 query 中同時判斷訊息意圖（work vs chat）再分流。
+
+### 實作時機
+
+此改動屬於 **Tier 1.5**（介於 Tier 1 和 Tier 2 之間），可在驗證 Tier 1 並行委派穩定後立即進行。
+
+---
+
+## 已知限制
+
+### Synthesis 不等子委派（Tier 1 設計取捨）
+
+```
+leader → 並行委派 coder + general
+  coder 回覆「分析如下...@bot-x 請補充」→ processMessage return
+    └─ bot:replied → bot-x 子委派（背景執行）
+  general 回覆 → processMessage return
+leader synthesis 開始 ← 此時 bot-x 可能還沒完成
+```
+
+- `executeParallelDelegation` 的 `Promise.allSettled()` 只等直接被委派 bot 的 `processMessage()` return
+- 不追蹤子委派樹（bot:replied 觸發的後續委派是 fire-and-forget）
+- Synthesis 拿到的是 coder 的回覆文字（含「@bot-x 請補充」），不是 bot-x 的結果
+- bot-x 的回覆會獨立出現在群組中，使用者看得到，但不在 leader 的綜合裡
+
+**解決方案（Tier 2）**：shared task list + dependency tracking，synthesis 等整棵委派樹完成再跑。
+
+---
+
+## 實測發現的缺口：協作失控防護
+
+> 2026-02-06 基於 Tier 1 實測結果補充。原規畫聚焦「怎麼讓協作更強」，但實測暴露了「怎麼讓協作不失控」的問題。
+
+### 問題 vs 規畫涵蓋度
+
+| # | 實測觀察到的問題 | 原 Tier 涵蓋？ | 缺口說明 |
+|---|-----------------|---------------|----------|
+| G1 | **禮貌性 @mention → 非預期委派** | ❌ 無 | bot 回覆「感謝 @leader 的指派」觸發新委派鏈 |
+| G2 | **Sub-delegation 未完成，synthesis 已跑** | ✅ Tier 2 | shared task list + dependency tracking |
+| G3 | **多 bot Initiative 噪音** | ⚠️ Tier 1.5 部分 | 選了協調者後 Initiative 是否靜默？沒定義 |
+| G4 | **Delegation 進行中，Initiative 對新訊息觸發** | ⚠️ Tier 2 間接 | task awareness 存在但 Initiative 要不要看 task list 沒定義 |
+| G5 | **Bot 記憶寫入通知出現在群組** | ❌ 無 | prompt 層問題，不在架構規畫內 |
+| G6 | **被委派 bot 回覆 @mention coordinator → 二次委派** | ❌ 同 G1 | 同「禮貌性 @mention」問題 |
+
+### G1/G6：委派意圖判斷（Delegation Intent Detection）
+
+**問題根因**：`detectDelegationTargets()` 只看「回覆裡有沒有 @mention」，無法區分：
+- 「@coder 請分析這段程式碼」 → 有委派意圖
+- 「感謝 @leader 的指派，以下是結果」 → 無委派意圖（禮貌性）
+- 「@leader 我已完成」 → 無委派意圖（回報）
+
+**解決方向**：
+
+| 方案 | 說明 | 複雜度 | 準確度 |
+|------|------|--------|--------|
+| **A. 啟發式規則** | 回覆開頭/結尾的 @mention 不算委派；delegation 回覆中 @mention coordinator 不算委派 | 低 | 中 |
+| **B. isDelegationResponse flag** | 被委派的 bot 回覆自動帶 flag，DelegationHandler 對帶 flag 的回覆不再掃描 @mention | 低 | 高（針對 G6） |
+| **C. LLM 意圖判斷** | 用小模型判斷 @mention 是否有委派意圖 | 中 | 高 |
+| **D. 混合** | B（系統層阻擋回報性 @mention）+ A（啟發式過濾禮貌性 @mention） | 低-中 | 高 |
+
+**建議**：方案 D — 先用 B 解決最明確的 G6（delegation response 不再觸發委派），再用 A 的啟發式規則處理一般禮貌性 @mention。
+
+**優先級**：🔴 高 — 這是目前最嚴重的 cascade 源。
+
+### G3/G4：Initiative 與 Delegation 的狀態隔離
+
+**問題根因**：Initiative 和 Delegation 是兩套獨立機制，互不感知。
+
+- 場景 A：coordinator 已選定並開始委派 → Initiative 仍對同一訊息評估 → 額外 bot 回覆（噪音）
+- 場景 B：delegation 進行中 → 使用者發新訊息 → Initiative 照常觸發 → 可能與進行中的委派衝突
+
+**解決方向**：
+
+| 方案 | 說明 | 複雜度 |
+|------|------|--------|
+| **A. Delegation 期間靜默 Initiative** | GroupBroadcaster 追蹤「chatId 有進行中的 delegation」→ 期間 Initiative 不觸發 | 低 |
+| **B. Centralized Selection 取代 Initiative（Tier 1.5）** | 選了協調者就不走 Initiative | 中 |
+| **C. Initiative 查 task list（Tier 2）** | Initiative 啟動前查 `team_tasks`，有進行中的任務就跳過 | 中 |
+
+**建議**：方案 A 作為短期修復（在 GroupBroadcaster 加 delegation-in-progress 狀態），方案 B 作為中期替代。
+
+**優先級**：🟡 中 — 產生噪音但不會造成迴圈。
+
+### G5：群組噪音控制（Group Noise Control）
+
+**問題根因**：bot 的 LLM 回覆中包含記憶寫入通知（如「📝 已記錄到 MEMORY.md」）、工具呼叫狀態更新等，這些在私聊有用但在群組是噪音。
+
+**解決方向**：
+
+| 方案 | 說明 | 複雜度 |
+|------|------|--------|
+| **A. Prompt 層指示** | 在群組 context injection 中加入「群組中不要回報記憶操作結果」 | 低 |
+| **B. ContextInjector 群組模式** | 注入群組專用行為指示，包含噪音過濾規則 | 低 |
+| **C. 回覆後處理** | MessageProcessor 在發送前過濾掉已知噪音 pattern | 中 |
+
+**建議**：方案 A+B — 在 ContextInjector 的群組 context 中加入行為指示，零程式碼改動，靠 prompt 解決。
+
+**優先級**：🟢 低 — 不影響功能，純粹使用者體驗。
+
+### 修訂後的實作路線圖
+
+```
+Tier 1   ✅ 並行委派 + 結果收斂 + isSynthesis（已完成）
+  │
+  ├─ Tier 1.1  🔴 委派意圖判斷（G1/G6）
+  │    └─ isDelegationResponse flag + 啟發式規則
+  │
+  ├─ Tier 1.2  🟡 Delegation 期間靜默 Initiative（G3/G4 短期）
+  │    └─ GroupBroadcaster delegation-in-progress 狀態追蹤
+  │
+  ├─ Tier 1.3  🟢 群組噪音控制（G5）
+  │    └─ ContextInjector 群組行為指示
+  │
+  ├─ Tier 1.5  協調者自動選擇（取代 Initiative 的 N 查詢）
+  │
+Tier 2   結構化任務感知（task list + dependency + 認領）
+  │
+Tier 3   進階協作（plan approval + delegate mode + quality hooks）
+```
+
+---
+
 ## 待解決問題
 
 1. **成本控制**：並行 agent 的 token 消耗如何管理？
 2. **`claude-agent-sdk` 是否暴露 team API**？如果有，可考慮整合
 3. **Tier 2 時機**：何時從群組訊息感知升級到 DB-backed task list？
+4. **Centralized Responder Selection 的 evaluator 設計**：用 haiku 壓成本？prompt 怎麼寫？
+5. **isDelegationResponse flag 的傳遞路徑**：需要穿過 processMessage → emitBotRepliedEvent → bot:replied payload
+6. **delegation-in-progress 狀態的生命週期**：何時開始、何時結束？parallel delegation 的 Promise.allSettled 完成算結束嗎？synthesis 完成才算？

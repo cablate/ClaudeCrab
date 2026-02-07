@@ -43,5 +43,12 @@ export async function sendWithMarkdownFallback(
     });
   }
 
+  // Final fallback: plain text (no parse_mode) to ensure message is always delivered
+  if (!result.success) {
+    result = await adapter.sendMessage(chatId, text, {
+      ...sendOpts,
+    });
+  }
+
   return result;
 }

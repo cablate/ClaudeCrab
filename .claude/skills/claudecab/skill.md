@@ -43,6 +43,7 @@ ClaudeCab 是**輕量級多代理框架**，讓 Claude Code 成為可被遠端�
 | **系統** | |
 | 詳細架構設計、模組說明、資料流 | [system/overview.md](references/system/overview.md) |
 | 共享知識區架構（跨 bot 知識共享） | [system/shared-knowledge.md](references/system/shared-knowledge.md) |
+| 觸發機制全覽（事件流、cascade 分析） | [system/trigger-mechanism-map.md](references/system/trigger-mechanism-map.md) |
 | **決策** | |
 | 決策追蹤（ADR + 功能故事） | [decisions/_index.md](references/decisions/_index.md) |
 | **操作** | |

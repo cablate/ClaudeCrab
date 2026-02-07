@@ -156,6 +156,7 @@ export class MessageProcessor {
       delegationChain?: string[];
       /** ADR-023: Whether this is an initiative-triggered message */
       isInitiative?: boolean;
+    isSynthesis?: boolean;
     }
   ): Promise<ProcessingResult> {
     const { platform, userId, chatId, text, id: messageId } = message;
@@ -702,7 +703,9 @@ export class MessageProcessor {
       this.emitBotRepliedEvent(fullResponse, chatId, agentId, platform, lastSentMessageId, options);
       await statusManager?.finalizeAll();
 
-      return result.response;
+      // Return fullResponse (intermediate + final) instead of just result.response,
+      // because streaming sends content via onIntermediateMessage leaving result.response empty.
+      return fullResponse;
     } finally {
       // Clean up interaction handler (deny any pending requests)
       interactionHandler.dispose();
@@ -905,7 +908,7 @@ export class MessageProcessor {
     agentId: string,
     platform: string,
     lastSentMessageId: string | undefined,
-    options?: { isGroupChat?: boolean; delegationDepth?: number; delegationChain?: string[]; isInitiative?: boolean }
+    options?: { isGroupChat?: boolean; delegationDepth?: number; delegationChain?: string[]; isInitiative?: boolean; isSynthesis?: boolean }
   ): void {
     if (
       !options?.isGroupChat ||
@@ -945,6 +948,8 @@ export class MessageProcessor {
         : {}),
       // ADR-023: Pass initiative flag
       ...(options?.isInitiative === true ? { isInitiative: true } : {}),
+      // ADR-030: Pass synthesis flag
+      ...(options?.isSynthesis === true ? { isSynthesis: true } : {}),
     });
   }
 

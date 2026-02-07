@@ -87,6 +87,9 @@ export interface BotRepliedPayload {
 
   /** ADR-023: Whether this reply was triggered by bot initiative */
   isInitiative?: boolean;
+
+  /** ADR-030: Whether this reply is a synthesis of parallel delegation results */
+  isSynthesis?: boolean;
 }
 
 /**

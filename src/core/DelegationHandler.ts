@@ -50,9 +50,30 @@ export class DelegationHandler {
       return;
     }
 
+    // ADR-030: Synthesis responses do not trigger delegation chains
+    if (payload.isSynthesis === true) {
+      this.log.debug(
+        { chatId: payload.chatId, agentId: payload.agentId },
+        'Skipping delegation for synthesis response (ADR-030)'
+      );
+      return;
+    }
+
     const { chatId, agentId, response } = payload;
 
     const depth = payload.delegationDepth ?? 0;
+
+    // ADR-030 Tier 1.1: Delegation responses do not trigger further delegations.
+    // Bots responding to a delegation (depth > 0) are "submitting work", not dispatching.
+    // Sub-delegation will be re-enabled in Tier 2 via structured task list.
+    if (depth > 0) {
+      this.log.debug(
+        { chatId, agentId, depth },
+        'Skipping delegation scan for delegation response (ADR-030 Tier 1.1)'
+      );
+      return;
+    }
+
     if (depth >= MAX_DELEGATION_DEPTH) {
       this.log.debug(
         { chatId, agentId, depth },
@@ -75,13 +96,20 @@ export class DelegationHandler {
 
     // ADR-022: Detect all @mentioned bots (multi-delegation)
     const targets = this.detectDelegationTargets(response, chatId, agentId, chain);
-    for (const target of targets) {
-      const newChain = [...chain, target];
-      this.log.info(
-        { chatId, from: agentId, to: target, depth: depth + 1, chain: newChain, totalTargets: targets.length },
-        'Auto-delegating to mentioned bot (ADR-021/022)'
-      );
-      await this.executeDelegation(target, payload, newChain);
+
+    if (targets.length <= 1) {
+      // Single target: existing serial path (no synthesis overhead)
+      for (const target of targets) {
+        const newChain = [...chain, target];
+        this.log.info(
+          { chatId, from: agentId, to: target, depth: depth + 1, chain: newChain, totalTargets: targets.length },
+          'Auto-delegating to mentioned bot (ADR-021/022)'
+        );
+        await this.executeDelegation(target, payload, newChain);
+      }
+    } else {
+      // ADR-030: Multiple targets → parallel execution + synthesis
+      await this.executeParallelDelegation(targets, payload, chain);
     }
   }
 
@@ -161,13 +189,123 @@ export class DelegationHandler {
   }
 
   /**
+   * ADR-030: Execute multiple delegations in parallel and synthesize results.
+   * The coordinator (payload.agentId) will receive a synthesis prompt after all delegations complete.
+   */
+  private async executeParallelDelegation(
+    targets: string[],
+    payload: BotRepliedPayload,
+    chain: string[]
+  ): Promise<void> {
+    const { chatId, agentId } = payload;
+    const depth = payload.delegationDepth ?? 0;
+
+    this.log.info(
+      { chatId, coordinator: agentId, targets, depth },
+      'Starting parallel delegation (ADR-030)'
+    );
+
+    // Launch all delegations in parallel
+    const delegationPromises = targets.map(target => {
+      const newChain = [...chain, target];
+      this.log.info(
+        { chatId, from: agentId, to: target, depth: depth + 1, chain: newChain, totalTargets: targets.length },
+        'Auto-delegating to mentioned bot in parallel (ADR-030)'
+      );
+      return this.executeDelegation(target, payload, newChain);
+    });
+
+    const results = await Promise.allSettled(delegationPromises);
+
+    // Collect results
+    const delegationResults: Array<{ agentId: string; response?: string; success: boolean }> = [];
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        delegationResults.push(result.value);
+      } else {
+        // Promise.allSettled shouldn't reject (executeDelegation catches errors),
+        // but handle gracefully
+        delegationResults.push({ agentId: 'unknown', success: false });
+      }
+    }
+
+    const successCount = delegationResults.filter(r => r.success).length;
+    const failCount = delegationResults.filter(r => !r.success).length;
+
+    this.log.info(
+      { chatId, coordinator: agentId, successCount, failCount, total: targets.length },
+      'Parallel delegations completed, preparing synthesis (ADR-030)'
+    );
+
+    // Skip synthesis if all delegations failed
+    if (successCount === 0) {
+      this.log.warn(
+        { chatId, coordinator: agentId },
+        'All parallel delegations failed, skipping synthesis (ADR-030)'
+      );
+      return;
+    }
+
+    // Build synthesis prompt
+    const synthesisPrompt = this.buildSynthesisPrompt(delegationResults);
+
+    // Send synthesis to coordinator
+    const syntheticMessage: UnifiedMessage = {
+      id: `synthesis-${Date.now()}-${agentId}`,
+      platform: payload.platform,
+      userId: payload.chatId,
+      chatId: payload.chatId,
+      text: synthesisPrompt,
+      timestamp: new Date(),
+      metadata: {
+        isGroupChat: true,
+        isSynthesis: true,
+      },
+    };
+
+    try {
+      await this.messageProcessor.processMessage(syntheticMessage, agentId, {
+        isGroupChat: true,
+        isSynthesis: true,
+      });
+    } catch (error) {
+      this.log.error(
+        { error, chatId, coordinator: agentId },
+        'Synthesis message processing failed (ADR-030)'
+      );
+    }
+  }
+
+  /**
+   * Build a synthesis prompt containing all delegation results for the coordinator.
+   */
+  private buildSynthesisPrompt(
+    results: Array<{ agentId: string; response?: string; success: boolean }>
+  ): string {
+    const resultSections = results.map(r => {
+      const botInfo = this.getBotInfo?.(r.agentId);
+      const label = botInfo?.username ? `@${botInfo.username}` : r.agentId;
+      if (r.success) {
+        return `### ${label}\n${r.response || '（已完成處理）'}`;
+      }
+      return `### ${label}\n（未能完成回覆）`;
+    });
+
+    return [
+      '以下是各位成員的回覆結果，請綜合整理後給出完整回覆：',
+      '',
+      ...resultSections,
+    ].join('\n');
+  }
+
+  /**
    * Execute delegation to a specific target bot.
    */
   private async executeDelegation(
     targetAgentId: string,
     payload: BotRepliedPayload,
     newChain: string[]
-  ): Promise<void> {
+  ): Promise<{ agentId: string; response?: string; success: boolean }> {
     const newDepth = (payload.delegationDepth ?? 0) + 1;
 
     // Build synthetic UnifiedMessage from the bot's reply
@@ -187,16 +325,22 @@ export class DelegationHandler {
     };
 
     try {
-      await this.messageProcessor.processMessage(syntheticMessage, targetAgentId, {
+      const result = await this.messageProcessor.processMessage(syntheticMessage, targetAgentId, {
         isGroupChat: true,
         delegationDepth: newDepth,
         delegationChain: newChain,
       });
+      return {
+        agentId: targetAgentId,
+        ...(result.response !== undefined ? { response: result.response } : {}),
+        success: result.success,
+      };
     } catch (error) {
       this.log.error(
         { error, chatId: payload.chatId, from: payload.agentId, to: targetAgentId, depth: newDepth },
         'Auto-delegation failed'
       );
+      return { agentId: targetAgentId, success: false };
     }
   }
 }

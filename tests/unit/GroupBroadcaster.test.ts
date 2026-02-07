@@ -292,7 +292,8 @@ describe('GroupBroadcaster', () => {
 
       await getEventBus().emit('bot:replied', payload);
 
-      expect(mockProcessMessage).toHaveBeenCalledTimes(2);
+      // 2 parallel delegations + 1 synthesis to coordinator = 3 calls (ADR-030)
+      expect(mockProcessMessage).toHaveBeenCalledTimes(3);
       expect(mockProcessMessage).toHaveBeenCalledWith(
         expect.anything(),
         'bot-b',
@@ -302,6 +303,12 @@ describe('GroupBroadcaster', () => {
         expect.anything(),
         'bot-c',
         expect.any(Object)
+      );
+      // Third call is synthesis to coordinator (bot-a)
+      expect(mockProcessMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        'bot-a',
+        expect.objectContaining({ isSynthesis: true })
       );
     });
 

@@ -20,6 +20,7 @@
 | 文件 | 用途 |
 |------|------|
 | [overview.md](system/overview.md) | 技術架構、技術棧、目錄結構 |
+| [trigger-mechanism-map.md](system/trigger-mechanism-map.md) | 事件流、觸發路徑、cascade 風險分析 |
 
 ---
 

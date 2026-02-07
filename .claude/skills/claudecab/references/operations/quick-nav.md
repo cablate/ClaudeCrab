@@ -69,6 +69,12 @@ npm run typecheck    # TypeScript 型別檢查
 
 **目前可用指令**：`/start`、`/help`、`/reset`、`/stop`、`/schedule`、`/members`（群組）、`/status`
 
+**群組委派與並行協作（ADR-021/022/030）**：
+- 委派核心：`src/core/DelegationHandler.ts`（`processDelegation`、`executeDelegation`、`executeParallelDelegation`、`buildSynthesisPrompt`）
+- 廣播入口：`src/core/GroupBroadcaster.ts`（`handleBotReplied` → `processDelegation`）
+- 事件型別：`src/types/events.ts`（`BotRepliedPayload`：`isSynthesis`、`isInitiative`）
+- 測試：`tests/unit/DelegationHandler.test.ts`
+
 **群組命令路由（ADR-024）**：
 - 唯讀命令（`/help`、`/status`、`/members`）：裸打 → dedup 後一個 Bot 回覆
 - 破壞性命令（`/reset`、`/stop`）：裸打 → 提示指定 `@botname` 或 `@all`
