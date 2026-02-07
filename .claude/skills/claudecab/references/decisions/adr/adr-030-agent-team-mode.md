@@ -63,21 +63,24 @@ Lead 的職責：
 
 **Delegate Mode**：按 Shift+Tab 啟用，限制 lead 只能用協調工具（spawn、message、shutdown、task），不能自己寫 code。確保 lead 專注於 orchestration。
 
+> **注意**：官方承認 lead 有時會自己動手實作而不是等 teammate。delegate mode 就是為了解決這個問題。如果發現 lead 在做事：「Wait for your teammates to complete their tasks before proceeding」。
+
 ### 工具架構
 
-13 個操作，分三個功能域：
+官方文檔公開的操作：
 
 | 域 | 工具 | 操作 | 說明 |
 |----|------|------|------|
 | **Team 生命週期** | TeammateTool | `spawnTeam` | 建立 team，產生配置目錄 |
-| | | `discoverTeams` | 發現已存在的 team |
-| | | `cleanup` | 清理 team 資源 |
-| | | `requestJoin` / `approveJoin` / `rejectJoin` | 加入 team 請求 |
-| **協調** | SendMessage | `write` | 點對點訊息（向特定 teammate） |
-| | | `broadcast` | 向所有 teammate 廣播 |
-| | | `approvePlan` / `rejectPlan` | 審批 teammate 的計畫 |
-| **優雅關閉** | | `requestShutdown` / `approveShutdown` / `rejectShutdown` | 關閉 teammate |
+| | | `cleanup` | 清理 team 資源（lead 專用，需先關閉所有 teammate） |
+| **通訊** | SendMessage | `message` | 點對點訊息（向特定 teammate） |
+| | | `broadcast` | 向所有 teammate 廣播（謹慎使用，token 成本隨 team 人數線性增長） |
+| **計畫審批** | | `approvePlan` / `rejectPlan` | Lead 審批 teammate 的計畫 |
+| **優雅關閉** | | `requestShutdown` | 請求關閉 teammate（teammate 可批准或拒絕） |
 | **任務** | TaskList | 共享任務清單 | 所有 agent 可見，可認領、更新狀態 |
+
+> **逆向工程補充**（來自 [paddo.dev](https://paddo.dev/blog/claude-code-hidden-swarm/)，未經官方確認）：
+> 二進位分析發現共 13 個操作，除上述外還包括 `discoverTeams`、`requestJoin`/`approveJoin`/`rejectJoin`、`approveShutdown`/`rejectShutdown` 等。這些可能是內部操作或已移除的功能。
 
 ### 檔案結構（Filesystem-based State Model）
 
@@ -103,7 +106,13 @@ Lead 的職責：
 
 - **自動訊息傳遞**：teammate 發送的訊息自動送達收件者，lead 不需要輪詢
 - **閒置通知**：teammate 完成工作後自動通知 lead
-- **直接互動**：使用者可直接跟任何 teammate 對話（不需經過 lead）
+- **直接互動**：使用者可直接跟任何 teammate 對話（不需經過 lead）。這意味著 **teammate 不只是 worker** — 使用者可以繞過 lead 直接介入、給額外指示、問後續問題或改變方向
+
+### Context 繼承
+
+- Teammate spawn 時載入與一般 session 相同的專案 context：**CLAUDE.md、MCP servers、skills**
+- 同時收到 lead 的 **spawn prompt**（任務描述）
+- **不繼承 lead 的對話歷史** — 這是與 subagent 的關鍵差異之一
 
 ### 計畫審批（Plan Approval）
 
