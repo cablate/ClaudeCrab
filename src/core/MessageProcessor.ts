@@ -246,9 +246,26 @@ export class MessageProcessor {
             const queryOptions: {
               isGroupChat?: boolean;
               replyToMessageId?: string;
+              delegationDepth?: number;
+              delegationChain?: string[];
+              isInitiative?: boolean;
+              isSynthesis?: boolean;
             } = {};
             if (options?.isGroupChat === true) {
               queryOptions.isGroupChat = true;
+            }
+            // Forward event flags for emitBotRepliedEvent propagation
+            if (options?.delegationDepth !== undefined) {
+              queryOptions.delegationDepth = options.delegationDepth;
+            }
+            if (options?.delegationChain !== undefined) {
+              queryOptions.delegationChain = options.delegationChain;
+            }
+            if (options?.isInitiative === true) {
+              queryOptions.isInitiative = true;
+            }
+            if (options?.isSynthesis === true) {
+              queryOptions.isSynthesis = true;
             }
 
             // Use replyToMessageId from options if provided, otherwise from metadata.
@@ -347,6 +364,11 @@ export class MessageProcessor {
     options?: {
       isGroupChat?: boolean;
       replyToMessageId?: string;
+      /** Event flags forwarded from processMessage for emitBotRepliedEvent */
+      delegationDepth?: number;
+      delegationChain?: string[];
+      isInitiative?: boolean;
+      isSynthesis?: boolean;
     }
   ): Promise<string> {
     // Get internal session for agent info
