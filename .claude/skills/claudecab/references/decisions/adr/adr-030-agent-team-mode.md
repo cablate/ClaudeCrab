@@ -118,15 +118,17 @@ ClaudeCab 的群組已經是 team mode 的基礎設施：
 | **SDKQueryManager** | 並行 session 執行 | 底層已支援多 agent 同時運作 |
 | **EventBus** | 事件驅動 | 可用於協調事件（任務完成、結果回報） |
 
-### 真正缺少的
+### 核心差距
 
-| 缺口 | 說明 |
-|------|------|
-| **並行委派** | Delegation 目前是串行的（A→B→回來），不支援「A 同時給 B 和 C 各分一部分」 |
-| **共享任務感知** | Bot 之間不知道彼此在做什麼，沒有共享的 task list |
-| **結果綜合** | 多個 bot 各自完成後，沒有人負責合併結果 |
-| **主動認領** | Bot 不會看到「有待做的事」然後主動認領，只被動等 @mention 或 delegation |
-| **協作品質** | 群組互動偏「輪流發言」，缺少結構化的分工和收斂 |
+**群組收到一個複雜請求時，目前只有一個 bot 在跑，其他 bot 閒著。**
+
+差三層：
+
+| 層 | 說明 | 現況 |
+|----|------|------|
+| **並行觸發** | 一個訊息進來 → 拆成子任務 → 同時啟動多個 bot 的 SDK session | ❌ 一次只有一個 bot 處理 |
+| **任務感知** | Bot 之間知道「誰在做什麼」，避免重工 | ❌ Bot 彼此不知道對方的工作狀態 |
+| **收斂機制** | 所有人做完後，由某個角色綜合回覆 | ❌ 各自回覆，無人合併 |
 
 ---
 
@@ -170,6 +172,132 @@ Bot 之間缺少「我們正在做什麼」的共享視圖：
 - 使用者在群組裡看得到整個協作過程（透明）
 - 使用者可以隨時介入、糾正方向
 - 這跟 Claude Code 的 team mode 不同 — Claude Code 的使用者需要切換 tab 看不同 agent
+
+---
+
+## 在現有基礎設施上的業務邏輯概念
+
+基於「群組就是 team、Telegram 就是通訊平台」的前提，以下描述如何用現有元件填補三層差距。
+
+### Layer 1：並行觸發 — 從「一人回應」到「一人協調、多人工作」
+
+**現狀**：GroupBroadcaster 的 `shouldRespondToMessage` 決定哪個 bot 回應 → 只有一個 bot 啟動 SDK session。
+
+**概念**：
+
+收到複雜請求時，**回應的 bot 成為協調者**（不是管理者），它做兩件事：
+1. **拆任務** — 判斷這個請求需要哪些能力 → 對應到哪些 bot
+2. **扇出委派** — 透過 DelegationHandler 同時向多個 bot 發起委派，每個委派各自啟動獨立的 SDK session
+
+```
+使用者：「分析這個產品的市場、技術、財務」
+    ↓
+Bot A 收到 → 判斷需要三個面向
+    ├─ 委派 Bot B：「分析市場定位」 → SDK session B
+    ├─ 委派 Bot C：「分析技術可行性」 → SDK session C
+    └─ 自己處理：「分析財務模型」    → SDK session A
+    （三個 session 並行跑）
+```
+
+**關鍵設計**：
+- 協調者的選擇：就是 `shouldRespondToMessage` 決定的那個 bot（已有邏輯）
+- 拆任務：由 bot 的 LLM 自行判斷（skill/protocol 裡教它怎麼判斷）
+- 執行層：SDKQueryManager 已支援多 session 並行，不需改動
+
+**與現有 delegation 的關係**：現有 delegation 是串行的一對一。需要擴充為「一對多扇出」，本質相同、只是並行化。
+
+### Layer 2：任務感知 — Bot 之間知道「我們正在做什麼」
+
+**現狀**：Bot 彼此不知道其他 bot 的工作狀態。
+
+**概念**：
+
+兩個層次的感知：
+
+**a) 輕量級：群組訊息即感知**
+
+協調者在群組裡公告任務分派：
+```
+Bot A：「收到，我來協調。任務分配：
+  @BotB 負責市場分析
+  @BotC 負責技術評估
+  我負責財務模型
+  各位完成後在群組回報。」
+```
+其他 bot 透過群組上下文就能知道誰在做什麼。**不需要額外基礎設施。**
+
+**b) 結構化：DB-backed 任務追蹤（可選，Phase 2+）**
+
+如果場景變複雜（多個並行任務交錯、需要持久化追蹤），可用 DB 記錄：
+- `team_tasks` 表：task_id、group_id、initiator_bot_id、assignee_bot_id、description、status、result
+- Bot 啟動 session 前查詢「這個群組有什麼進行中的任務？」避免重工
+- 對標 Claude Code 的 TaskList 概念
+
+**判斷**：Phase 1 先用群組訊息（零成本），如果不夠再加 DB。
+
+### Layer 3：收斂機制 — 從「各自回覆」到「綜合回覆」
+
+**現狀**：每個 bot 的回覆獨立發到群組，沒人合併。
+
+**概念**：
+
+**由協調者負責收斂。** 流程：
+
+1. 協調者發出扇出委派後，進入「等待收集」狀態
+2. 每個被委派的 bot 完成後，將結果回傳給協調者（透過群組回覆或 delegation response）
+3. 協調者收到所有結果（或超時）後，啟動自己的 SDK session 做綜合
+4. 綜合後在群組發出最終回覆
+
+```
+Bot B 完成 → 「@BotA 市場分析結果：...」
+Bot C 完成 → 「@BotA 技術評估結果：...」
+Bot A 自己完成財務模型
+    ↓
+Bot A：所有結果到齊 → 綜合
+    ↓
+Bot A：「綜合分析結果：
+  📊 市場：...
+  🔧 技術：...
+  💰 財務：...
+  📝 結論：...」
+```
+
+**關鍵設計**：
+- **超時處理**：設定合理超時（如 5 分鐘），超時的任務標記為未完成，仍然綜合已有結果
+- **回傳方式**：被委派 bot 用 @mention 協調者 → GroupBroadcaster 已支援路由
+- **觸發綜合**：EventBus 監聽 `delegation:complete` 事件，全部到齊後觸發綜合
+
+### 完整流程串接（以路徑 A 為例）
+
+```
+[使用者發訊息到群組]
+        ↓
+[GroupBroadcaster 路由] → shouldRespondToMessage → Bot A 回應
+        ↓
+[Bot A 的 SDK session 分析] → 判斷需要多 bot 協作
+        ↓
+[DelegationHandler.delegateToMultiple()]
+    ├─ Bot B: SDKQueryManager.executeQuery(sessionB)
+    ├─ Bot C: SDKQueryManager.executeQuery(sessionC)
+    └─ Bot A: 自己繼續處理
+        ↓ （並行執行）
+[各 bot 完成 → 結果回傳到群組 @mention 協調者]
+        ↓
+[EventBus: all-delegations-complete]
+        ↓
+[Bot A 綜合 → 發出最終回覆]
+```
+
+### 需要修改 / 新增的元件
+
+| 元件 | 修改內容 | 複雜度 |
+|------|----------|--------|
+| **DelegationHandler** | 新增 `delegateToMultiple()` — 並行發起多個委派，追蹤完成狀態 | 中 |
+| **GroupBroadcaster** | 識別「delegation response」類型的訊息，路由給協調者 | 低 |
+| **EventBus** | 新增事件：`delegation:started`、`delegation:complete`、`delegation:all-complete` | 低 |
+| **Agent Skills / Protocols** | 教 bot 如何判斷「這個任務需要拆分」以及「如何綜合結果」 | 中（prompt 設計） |
+| **SDKQueryManager** | **不需修改** — 已支援並行 session | — |
+| **Telegram 群組** | **不需修改** — 已經是通訊平台 | — |
 
 ---
 
