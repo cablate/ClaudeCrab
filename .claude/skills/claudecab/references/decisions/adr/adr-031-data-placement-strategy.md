@@ -56,11 +56,11 @@ ClaudeCab 採用 Skill-Based Character System，把 MMORPG 角色養成機制搬
 
 | 檔案路徑 | 內容 | 更新時機 |
 |---------|------|---------|
-| `system/proficiency/references/levels.md` | 各 domain skill 的使用次數與等級 | 使用 domain skill 後批次更新 |
-| `system/equipment/references/loadout.md` | 當前裝備的 skills 和 MCP servers | 安裝/移除工具時 |
-| `system/achievements/references/unlocked.md` | 已解鎖的成就列表 | 達成里程碑時 |
-| `system/achievements/references/progress.md` | 進行中的成就進度 | 每天批次更新 |
-| `system/character-sheet/references/stats.md` | 聚合數據（活躍天數、對話次數等） | 定期聚合（每日/每週） |
+| `sys-proficiency/references/levels.md` | 各 domain skill 的使用次數與等級 | 使用 domain skill 後批次更新 |
+| `sys-equipment/references/loadout.md` | 當前裝備的 skills 和 MCP servers | 安裝/移除工具時 |
+| `sys-achievements/references/unlocked.md` | 已解鎖的成就列表 | 達成里程碑時 |
+| `sys-achievements/references/progress.md` | 進行中的成就進度 | 每天批次更新 |
+| `sys-character-sheet/references/stats.md` | 聚合數據（活躍天數、對話次數等） | 定期聚合（每日/每週） |
 | `persona/soul.md` | 通用人格特質（價值觀、說話風格） | 發現通用人格升級時 |
 
 **核心邏輯**：這些是 Bot 本身的屬性。換一個使用者，Bot 還是 Lv.50 的射箭手、還是裝備鐵劍+3、還是屠龍者成就持有者。
@@ -81,10 +81,10 @@ ClaudeCab 採用 Skill-Based Character System，把 MMORPG 角色養成機制搬
 
 | 檔案路徑 | 內容 | 性質 |
 |---------|------|------|
-| `system/memory-system/references/rules.md` | 記憶寫入規則（什麼寫到哪、何時寫） | 靜態規則 |
-| `system/proficiency/SKILL.md` | 等級定義（★☆☆☆☆ 到 ★★★★★） | 靜態定義 |
-| `system/equipment/SKILL.md` | 裝備欄結構、容量上限 | 靜態定義 |
-| `system/achievements/SKILL.md` | 成就定義、解鎖條件 | 靜態定義 |
+| `sys-agent-protocols/references/memory-system.md` | 記憶寫入規則（什麼寫到哪、何時寫） | 靜態規則 |
+| `sys-proficiency/SKILL.md` | 等級定義（★☆☆☆☆ 到 ★★★★★） | 靜態定義 |
+| `sys-equipment/SKILL.md` | 裝備欄結構、容量上限 | 靜態定義 |
+| `sys-achievements/SKILL.md` | 成就定義、解鎖條件 | 靜態定義 |
 
 **核心邏輯**：這些是遊戲規則。不會變。
 
@@ -192,29 +192,22 @@ skills/references/（動態）= 角色數值面板
 
 ### 遷移現有 Agent（如 general）
 
-**Phase 1: 建立資料夾結構**
+**Phase 1: 扁平化 + 命名前綴**（Claude Code 只支援一層目錄）
 ```bash
 .claude/skills/
-├── system/              ← 新建
-│   ├── agent-protocols/ ← 移動
-│   └── equipment/       ← equip 改名並移動
-├── persona/            ← 維持原位
-└── domain/             ← 新建
-    ├── agent-browser/  ← 移動
-    ├── find-skills/    ← 移動
-    └── find-mcp/       ← 移動
+├── sys-agent-protocols/ ← 移動 + 加前綴
+├── sys-equipment/       ← equip 改名 + 加前綴
+├── sys-proficiency/     ← 新建
+├── sys-achievements/    ← 新建
+├── sys-character-sheet/ ← 新建
+├── persona/             ← 維持原位
+├── dom-agent-browser/   ← 移動 + 加前綴
+├── dom-find-skills/     ← 移動 + 加前綴
+└── dom-find-mcp/        ← 移動 + 加前綴
 ```
 
-**Phase 2: 新增 Bot 狀態追蹤 Skills**
-```bash
-system/
-├── proficiency/        ← 新建，追蹤 domain skill 使用
-├── achievements/       ← 新建，追蹤里程碑
-└── character-sheet/    ← 新建，聚合數據
-```
-
-**Phase 3: 動態資料分流**
-- `EQUIPMENT.md` → 移到 `system/equipment/references/loadout.md`
+**Phase 2: 動態資料分流**
+- `EQUIPMENT.md` → 移到 `sys-equipment/references/loadout.md`
 - 根目錄其他檔案（MEMORY.md, USER.md, ACTIVE.md, memory/）保持不動
 
 ### Stop Hook 更新提醒

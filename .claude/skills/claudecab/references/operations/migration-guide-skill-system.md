@@ -6,7 +6,9 @@
 
 ## 目標
 
-將現有 agent 從扁平 skill 結構遷移到三層架構（system/persona/domain），並加入 Bot 狀態追蹤機制（proficiency, achievements, character-sheet）。
+將現有 agent 從扁平 skill 結構遷移到「扁平 + 命名前綴」架構（`sys-*` / `persona` / `dom-*`），並加入 Bot 狀態追蹤機制（proficiency, achievements, character-sheet）。
+
+> **重要限制**：Claude Code 只支援一層目錄（`.claude/skills/<name>/SKILL.md`）。巢狀目錄中的 SKILL.md 不會被發現。因此用命名前綴代替子目錄來表達三層概念。資料夾名稱不影響 SKILL.md 的 `name` 欄位。
 
 ---
 
@@ -32,60 +34,52 @@ cp -r agents/general agents/general.backup.$(date +%Y%m%d)
 
 ---
 
-## Phase 1：建立資料夾結構（10 分鐘）
+## Phase 1：重新命名資料夾（10 分鐘）
 
 ### 目標
 
-從扁平結構變成三層分類，不改任何 SKILL.md 內容。
+從扁平結構變成「扁平 + 命名前綴」分類，不改任何 SKILL.md 的 `name` 欄位。
 
 ### 操作步驟
 
-**1. 建立三個主資料夾**
+**1. 重新命名現有 skills**
 
 ```bash
 cd agents/general/.claude/skills
-mkdir -p system persona domain
-```
 
-**2. 移動現有 skills**
+# 系統協議 → sys- 前綴
+mv agent-protocols sys-agent-protocols
 
-```bash
-# 系統協議 → system/
-mv agent-protocols system/
+# 裝備系統 → sys- 前綴（需改名）
+mv equip sys-equipment
 
-# 裝備系統 → system/（需改名）
-mv equip system/equipment
-
-# 人格 → 維持頂層（不移動到 system 裡）
+# 人格 → 維持原名（不加前綴）
 # persona 已經在正確位置
 
-# 實際能力 → domain/
-mv agent-browser domain/
-mv find-skills domain/
-mv find-mcp domain/
+# 實際能力 → dom- 前綴
+mv agent-browser dom-agent-browser
+mv find-skills dom-find-skills
+mv find-mcp dom-find-mcp
+```
+
+**2. 更新 equipment skill 名稱**
+
+```bash
+# 編輯 sys-equipment/SKILL.md
+# 把 name: equip 改成 name: equipment
 ```
 
 **3. 驗證結構**
 
 ```bash
-tree -L 2
+ls
 # 應該看到：
-# .claude/skills/
-# ├── system/
-# │   ├── agent-protocols/
-# │   └── equipment/
-# ├── persona/
-# └── domain/
-#     ├── agent-browser/
-#     ├── find-skills/
-#     └── find-mcp/
-```
-
-**4. 更新 equipment skill 名稱**
-
-```bash
-# 編輯 system/equipment/SKILL.md
-# 把 name: equip 改成 name: equipment
+# dom-agent-browser/
+# dom-find-mcp/
+# dom-find-skills/
+# persona/
+# sys-agent-protocols/
+# sys-equipment/
 ```
 
 ### 驗證
@@ -93,7 +87,7 @@ tree -L 2
 啟動 bot，執行 `/agent-protocols`，確認：
 - [ ] 能正常載入 agent-protocols
 - [ ] 能正常載入 persona
-- [ ] 能正常使用 domain skills
+- [ ] 能正常使用 domain skills（`/agent-browser` 等）
 
 ---
 
@@ -104,7 +98,7 @@ tree -L 2
 **建立目錄結構**
 
 ```bash
-mkdir -p system/proficiency/references
+mkdir -p sys-proficiency/references
 ```
 
 **建立 SKILL.md**
@@ -113,7 +107,7 @@ mkdir -p system/proficiency/references
 ---
 name: proficiency
 description: >
-  技能熟練度追蹤。記錄 domain/ 裡每個技能的使用次數與等級。
+  技能熟練度追蹤。記錄 dom-* 裡每個技能的使用次數與等級。
   定義等級（★☆☆☆☆ 到 ★★★★★）、升級條件。
   觸發時機：使用 domain skill 後、session 啟動時查看。
 ---
@@ -169,7 +163,7 @@ description: >
 **建立目錄結構**
 
 ```bash
-mkdir -p system/achievements/references
+mkdir -p sys-achievements/references
 ```
 
 **建立 SKILL.md**
@@ -239,7 +233,7 @@ description: >
 **建立目錄結構**
 
 ```bash
-mkdir -p system/character-sheet/references
+mkdir -p sys-character-sheet/references
 ```
 
 **建立 SKILL.md**
@@ -316,7 +310,7 @@ memory-system 跟其他 system skill 有根本性差異：
 
 ### 實作
 
-不需要操作。memory-system.md 維持在 `system/agent-protocols/references/memory-system.md`。
+不需要操作。memory-system.md 維持在 `sys-agent-protocols/references/memory-system.md`。
 
 > 詳見設計文件：[skill-based-character-system.md](../system/skill-based-character-system.md) §2 memory-system 章節
 
@@ -367,10 +361,10 @@ memory-system 跟其他 system skill 有根本性差異：
 export const MEMORY_STOP_CHECKPOINT =
   '【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。...\n\n' +
   '【系統更新（批次）】\n' +
-  '- 使用了 domain skill？→ 更新 .claude/skills/system/proficiency/references/levels.md 的使用次數\n' +
+  '- 使用了 domain skill？→ 更新 .claude/skills/sys-proficiency/references/levels.md 的使用次數\n' +
   '- 學到通用規則？→ 更新 .claude/skills/persona/references/soul.md\n' +
   '- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned\n' +
-  '- 達成里程碑？→ 更新 .claude/skills/system/achievements/references/unlocked.md';
+  '- 達成里程碑？→ 更新 .claude/skills/sys-achievements/references/unlocked.md';
 ```
 
 > **注意**：此常數影響所有 agent。未遷移的 agent 會收到不存在路徑的提示，但 bot 會自行忽略（不存在就跳過）。待全部 agent 遷移完成後此問題自然消失。
@@ -387,7 +381,7 @@ export const MEMORY_STOP_CHECKPOINT =
 - [ ] `/agent-protocols` 正常載入
 - [ ] `/persona` 正常載入
 - [ ] Domain skills 正常使用（如 `/agent-browser`）
-- [ ] 資料夾結構清晰（system/persona/domain）
+- [ ] 資料夾結構清晰（sys-*/persona/dom-*）
 
 ### Phase 2 完成後
 
@@ -414,9 +408,9 @@ export const MEMORY_STOP_CHECKPOINT =
 
 ### Q1: 移動 skill 後，bot 找不到？
 
-**A**: Claude Code 支援子目錄。確認：
-1. SKILL.md 的 name 欄位正確
-2. 沒有拼寫錯誤
+**A**: Claude Code **只支援一層目錄**（`.claude/skills/<name>/SKILL.md`）。巢狀目錄不行。確認：
+1. SKILL.md 直接在 `.claude/skills/<folder>/SKILL.md`（一層）
+2. SKILL.md 的 name 欄位正確（不需要跟資料夾名稱一樣）
 3. 重啟 bot 讓 skill 重新載入
 
 ### Q2: proficiency 如何追蹤使用次數？
@@ -434,7 +428,7 @@ export const MEMORY_STOP_CHECKPOINT =
 
 ### Q4: 根目錄的 EQUIPMENT.md 要刪嗎？
 
-**A**: 可以移到 `system/equipment/references/loadout.md`，因為這是「bot 狀態」不是「關係資料」。
+**A**: 可以移到 `sys-equipment/references/loadout.md`，因為這是「bot 狀態」不是「關係資料」。
 
 ---
 
@@ -444,7 +438,7 @@ export const MEMORY_STOP_CHECKPOINT =
 
 ```typescript
 // 讀取 character-sheet
-const statsPath = path.join(agentPath, '.claude/skills/system/character-sheet/references/stats.md');
+const statsPath = path.join(agentPath, '.claude/skills/sys-character-sheet/references/stats.md');
 const stats = await fs.readFile(statsPath, 'utf-8');
 
 // 解析 markdown，渲染成 UI

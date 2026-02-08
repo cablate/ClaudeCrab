@@ -51,7 +51,7 @@ proficiency 要更新等級就更新自己的 references/levels.md，不用動�
 
 **3. 最大化可攜性**
 
-想帶技能？複製 `domain/seo-writing/`。想帶整套角色系統？複製整個 `system/` 目錄。甚至帶到非 ClaudeCab 的 Claude Code 專案也行。
+想帶技能？複製 `dom-seo-writing/`。想帶整套角色系統？複製所有 `sys-*` 目錄。甚至帶到非 ClaudeCab 的 Claude Code 專案也行。
 
 **4. 協議與狀態分離**
 
@@ -64,37 +64,40 @@ proficiency 要更新等級就更新自己的 references/levels.md，不用動�
 ```
 agents/{agentId}/.claude/skills/
 │
-├── system/                        ← 角色系統（所有 bot 通用模板）
-│   ├── agent-protocols/           統一啟動協議，引導載入所有模組
-│   │   └── references/
-│   │       ├── startup-protocol.md   啟動流程
-│   │       ├── memory-system.md      記憶寫入協議（跨界協議，非獨立 skill）
-│   │       ├── safety.md, guidelines.md, ...
-│   │       └── scheduling.md
-│   ├── proficiency/               熟練度追蹤與等級定義
-│   ├── achievements/              成就里程碑定義與進度
-│   ├── character-sheet/           屬性面板與聚合數據
-│   └── equipment/                 裝備管理與容量控制
+│  ⚠️ Claude Code 只支援一層目錄（.claude/skills/<name>/SKILL.md）
+│  用命名前綴表達三層概念：sys-*（系統）、persona（人格）、dom-*（領域技能）
+│
+├── sys-agent-protocols/           ← 統一啟動協議，引導載入所有模組
+│   └── references/
+│       ├── startup-protocol.md       啟動流程
+│       ├── memory-system.md          記憶寫入協議（跨界協議，非獨立 skill）
+│       ├── safety.md, guidelines.md, ...
+│       └── scheduling.md
+├── sys-proficiency/               ← 熟練度追蹤與等級定義
+├── sys-achievements/              ← 成就里程碑定義與進度
+├── sys-character-sheet/           ← 屬性面板與聚合數據
+├── sys-equipment/                 ← 裝備管理與容量控制
 │
 ├── persona/                       ← 人格（who the bot is）
 │   ├── SKILL.md
 │   └── references/
-│       ├── soul.md                價值觀、世界觀
-│       └── identity.md            名字、角色、定位
+│       ├── soul.md                   價值觀、世界觀
+│       └── identity.md               名字、角色、定位
 │
-└── domain/                        ← 裝備技能（what the bot can do）
-    ├── seo-writing/               領域技能 A
-    ├── meeting-notes/             領域技能 B
-    └── code-review/               領域技能 C
+├── dom-seo-writing/               ← 領域技能 A
+├── dom-meeting-notes/             ← 領域技能 B
+└── dom-code-review/               ← 領域技能 C
 ```
+
+> **為什麼是扁平？** Claude Code 的 skill 發現機制只掃描 `.claude/skills/` 下一層目錄。巢狀目錄（如 `system/agent-protocols/`）中的 SKILL.md 不會被載入。資料夾名稱不影響 SKILL.md 的 `name` 欄位——`sys-agent-protocols/SKILL.md` 裡 `name: agent-protocols`，slash command 仍是 `/agent-protocols`。
 
 ### 層級關係
 
 | 層級 | 作用 | 相互關係 | MMORPG 對應 |
 |------|------|---------|------------|
-| `system/` | 定義角色系統規則 | agent-protocols 是母 skill，載入其他子 skill | 遊戲引擎（所有角色共用） |
-| `persona/` | 定義角色身份 | 獨立，不屬於 system 家族 | 角色外觀/性格 |
-| `domain/` | 提供實際能力 | 被 equipment 管理，被 proficiency 追蹤 | 職業技能樹 |
+| `sys-*` | 定義角色系統規則 | agent-protocols 是母 skill，載入其他子 skill | 遊戲引擎（所有角色共用） |
+| `persona` | 定義角色身份 | 獨立，不屬於 system 家族 | 角色外觀/性格 |
+| `dom-*` | 提供實際能力 | 被 equipment 管理，被 proficiency 追蹤 | 職業技能樹 |
 
 **母子關係實現方式**：不需要技術上的 parent-child 機制，透過語義連結實現：
 
@@ -199,11 +202,11 @@ agents/{agentId}/.claude/skills/
 
 | 檔案 | 內容範例 | 判斷 |
 |------|---------|------|
-| `system/proficiency/references/levels.md` | agent-browser: 287 次，★★★★☆ | ✅ Bot 的技能等級 |
-| `system/equipment/references/loadout.md` | 裝備 3 skills + 3 MCPs | ✅ Bot 的裝備配置 |
-| `system/achievements/references/unlocked.md` | 🎯 連續服務 30 天 | ✅ Bot 的成就 |
-| `system/achievements/references/progress.md` | 👑 Master 級: 287/500 | ✅ Bot 的成長進度 |
-| `system/character-sheet/references/stats.md` | 活躍 47 天、對話 342 次 | ✅ Bot 的歷史數據 |
+| `sys-proficiency/references/levels.md` | agent-browser: 287 次，★★★★☆ | ✅ Bot 的技能等級 |
+| `sys-equipment/references/loadout.md` | 裝備 3 skills + 3 MCPs | ✅ Bot 的裝備配置 |
+| `sys-achievements/references/unlocked.md` | 🎯 連續服務 30 天 | ✅ Bot 的成就 |
+| `sys-achievements/references/progress.md` | 👑 Master 級: 287/500 | ✅ Bot 的成長進度 |
+| `sys-character-sheet/references/stats.md` | 活躍 47 天、對話 342 次 | ✅ Bot 的歷史數據 |
 | `persona/soul.md` | 簡短、emoji 極少 | ✅ Bot 的通用人格 |
 
 **RPG 類比**：角色數值面板（等級、裝備、成就、性格）
@@ -224,9 +227,9 @@ agents/{agentId}/.claude/skills/
 
 | 檔案 | 內容範例 |
 |------|---------|
-| `system/agent-protocols/references/memory-system.md` | 什麼寫到 MEMORY.md、何時寫 |
-| `system/proficiency/SKILL.md` | ★★★☆☆ = 50-199 次使用 |
-| `system/equipment/SKILL.md` | Domain skills 容量 5 個 |
+| `sys-agent-protocols/references/memory-system.md` | 什麼寫到 MEMORY.md、何時寫 |
+| `sys-proficiency/SKILL.md` | ★★★☆☆ = 50-199 次使用 |
+| `sys-equipment/SKILL.md` | Domain skills 容量 5 個 |
 
 **RPG 類比**：遊戲規則書（不會變）
 
@@ -282,10 +285,10 @@ Session 開始時依序執行 Startup Protocol，載入人格、協議、系統�
 
 由 Startup Protocol 引導載入：
 
-- [/equipment](../equipment/SKILL.md) — 裝備管理（domain skills + MCP servers）
-- [/proficiency](../proficiency/SKILL.md) — 技能熟練度追蹤
-- [/achievements](../achievements/SKILL.md) — 成就里程碑
-- [/character-sheet](../character-sheet/SKILL.md) — 角色屬性面板
+- [/equipment](../sys-equipment/SKILL.md) — 裝備管理（domain skills + MCP servers）
+- [/proficiency](../sys-proficiency/SKILL.md) — 技能熟練度追蹤
+- [/achievements](../sys-achievements/SKILL.md) — 成就里程碑
+- [/character-sheet](../sys-character-sheet/SKILL.md) — 角色屬性面板
 ```
 
 #### references/startup-protocol.md（設計範例）
@@ -750,12 +753,12 @@ description: >
 
 **步驟**：
 1. 在 `agents/_shared/system-template/` 建立標準模板
-2. 包含 5 個 system skills（agent-protocols、proficiency、achievements、character-sheet、equipment）的 SKILL.md + references/
-3. memory-system 作為 agent-protocols/references/memory-system.md 內含（非獨立 skill）
+2. 包含 5 個 system skills（sys-agent-protocols、sys-proficiency、sys-achievements、sys-character-sheet、sys-equipment）的 SKILL.md + references/
+3. memory-system 作為 sys-agent-protocols/references/memory-system.md 內含（非獨立 skill）
 4. references/ 裡的動態檔案用佔位符（如 `# [Bot will populate this]`）
 5. 靜態檔案（rules.md 等）寫好完整內容
 
-**驗證**：新 bot 可以直接複製 `system-template/` 到 `.claude/skills/system/`，啟動即可用。
+**驗證**：新 bot 可以直接複製所有 `sys-*` 目錄到 `.claude/skills/`，啟動即可用。
 
 **已完成**：✅ general agent 已遷移（2026-02-08）。
 
@@ -782,7 +785,7 @@ description: >
 **目標**：在 Dashboard 展示角色面板。
 
 **步驟**：
-1. WebUI 掃描 `.claude/skills/system/*/references/*.md`
+1. WebUI 掃描 `.claude/skills/sys-*/references/*.md`
 2. 解析 markdown 內容
 3. 渲染成角色面板 UI（參考 MMORPG 設計）
 
@@ -861,8 +864,8 @@ references/ = 隨時間變化的實際數據
 
 ### 6. 可攜性最大化
 
-- 想帶記憶規則？agent-protocols/references/memory-system.md 已包含
-- 想帶整套角色系統？複製整個 `system/`
+- 想帶記憶規則？sys-agent-protocols/references/memory-system.md 已包含
+- 想帶整套角色系統？複製所有 `sys-*` 目錄
 - 想帶到非 ClaudeCab 專案（純 Claude Code）？也可以，因為全是標準 skill
 
 甚至可以發展成：

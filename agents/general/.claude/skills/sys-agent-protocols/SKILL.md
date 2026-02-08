@@ -28,7 +28,7 @@ Session 開始時依序執行 Startup Protocol，載入人格、協議、系統�
 
 由 Startup Protocol 引導載入：
 
-- [/equipment](../equipment/SKILL.md) — 裝備管理（domain skills + MCP servers）
-- [/proficiency](../proficiency/SKILL.md) — 技能熟練度追蹤
-- [/achievements](../achievements/SKILL.md) — 成就里程碑
-- [/character-sheet](../character-sheet/SKILL.md) — 角色屬性面板
+- [/equipment](../sys-equipment/SKILL.md) — 裝備管理（domain skills + MCP servers）
+- [/proficiency](../sys-proficiency/SKILL.md) — 技能熟練度追蹤
+- [/achievements](../sys-achievements/SKILL.md) — 成就里程碑
+- [/character-sheet](../sys-character-sheet/SKILL.md) — 角色屬性面板

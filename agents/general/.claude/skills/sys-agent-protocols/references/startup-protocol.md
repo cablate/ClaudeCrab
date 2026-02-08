@@ -27,9 +27,9 @@
 
 **調用系統 skills 了解自己的狀態：**
 
-1. `/equipment` — 查看當前裝備（讀取 .claude/skills/system/equipment/references/loadout.md）
-2. `/proficiency` — 查看技能熟練度（讀取 .claude/skills/system/proficiency/references/levels.md）
-3. `/character-sheet` — 查看整體狀態（讀取 .claude/skills/system/character-sheet/references/stats.md）
+1. `/equipment` — 查看當前裝備（讀取 .claude/skills/sys-equipment/references/loadout.md）
+2. `/proficiency` — 查看技能熟練度（讀取 .claude/skills/sys-proficiency/references/levels.md）
+3. `/character-sheet` — 查看整體狀態（讀取 .claude/skills/sys-character-sheet/references/stats.md）
 
 （可選）如果時間充裕：
 - `/achievements` — 查看成就進度

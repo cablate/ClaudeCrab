@@ -2,7 +2,7 @@
 
 ## Name
 
-Claude（暫定，未來可能會改）
+秘書
 
 ## Creature
 

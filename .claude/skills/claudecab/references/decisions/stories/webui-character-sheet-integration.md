@@ -105,10 +105,10 @@ async function getCharacterSheet(agentId: string) {
   const agentPath = path.join(process.cwd(), 'agents', agentId);
   
   // Read all sources
-  const statsPath = path.join(agentPath, '.claude/skills/system/character-sheet/references/stats.md');
-  const proficiencyPath = path.join(agentPath, '.claude/skills/system/proficiency/references/levels.md');
-  const achievementsUnlockedPath = path.join(agentPath, '.claude/skills/system/achievements/references/unlocked.md');
-  const achievementsProgressPath = path.join(agentPath, '.claude/skills/system/achievements/references/progress.md');
+  const statsPath = path.join(agentPath, '.claude/skills/sys-character-sheet/references/stats.md');
+  const proficiencyPath = path.join(agentPath, '.claude/skills/sys-proficiency/references/levels.md');
+  const achievementsUnlockedPath = path.join(agentPath, '.claude/skills/sys-achievements/references/unlocked.md');
+  const achievementsProgressPath = path.join(agentPath, '.claude/skills/sys-achievements/references/progress.md');
   
   // Parse markdown files and extract structured data
   const stats = await parseStatsMarkdown(await readFile(statsPath, 'utf-8'));
