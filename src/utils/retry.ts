@@ -196,7 +196,8 @@ export function isTransientError(error: unknown): boolean {
       message.includes('500') ||
       message.includes('529') ||
       message.includes('overloaded') ||
-      message.includes('tool_use ids must be unique')
+      message.includes('tool_use ids must be unique') ||
+      message.includes('concurrency')
     );
   }
   return false;
