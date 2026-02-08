@@ -4,9 +4,11 @@
       "Read",
       "Glob",
       "Grep",
-      "Bash"
+      "Bash",
+      "Edit",
+      "Write"
     ],
     "deny": []
   },
-  "model": "opus"
+  "model": "sonnet"
 }

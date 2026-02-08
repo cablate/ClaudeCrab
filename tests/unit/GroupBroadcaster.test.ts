@@ -684,6 +684,84 @@ describe('GroupBroadcaster', () => {
       expect(mockEvaluator.shouldRespond).not.toHaveBeenCalled();
     });
 
+    // === ADR-030 Tier 1.2: Suppress initiative during active delegation ===
+
+    it('should suppress initiative evaluation when delegation is in progress (Tier 1.2)', async () => {
+      initiativeBroadcaster.registerBotInGroup('chat-1', 'bot-a');
+      initiativeBroadcaster.registerBotInGroup('chat-1', 'bot-b');
+      initiativeSettings['bot-a'] = { enabled: true };
+
+      // Simulate delegation in progress by emitting bot:replied (which sets delegationActive)
+      // but not awaiting it yet, then emitting group:message during that time
+      const delegationPromise = getEventBus().emit('bot:replied', {
+        chatId: 'chat-1',
+        agentId: 'bot-a',
+        response: '[@bot_a]: @bot_b please help',
+        platform: 'telegram',
+        replyMessageId: '200',
+      } satisfies BotRepliedPayload);
+
+      // Emit a new user message while delegation is still processing
+      // This should NOT trigger initiative evaluation
+      await getEventBus().emit('group:message', createGroupMessage('another issue'));
+
+      // Initiative should NOT have been evaluated
+      expect(mockEvaluator.shouldRespond).not.toHaveBeenCalled();
+
+      // Complete the delegation
+      await delegationPromise;
+    });
+
+    it('should allow initiative evaluation after delegation completes (Tier 1.2)', async () => {
+      initiativeBroadcaster.registerBotInGroup('chat-1', 'bot-a');
+      initiativeBroadcaster.registerBotInGroup('chat-1', 'bot-b');
+      initiativeSettings['bot-a'] = { enabled: true };
+      mockEvaluator.shouldRespond.mockResolvedValueOnce({ respond: false });
+
+      // First, trigger and complete a delegation
+      await getEventBus().emit('bot:replied', {
+        chatId: 'chat-1',
+        agentId: 'bot-a',
+        response: '[@bot_a]: @bot_b help',
+        platform: 'telegram',
+        replyMessageId: '200',
+      } satisfies BotRepliedPayload);
+
+      // Clear mocks to verify only the next call
+      mockEvaluator.shouldRespond.mockClear();
+
+      // After delegation completes, new messages should trigger initiative normally
+      await getEventBus().emit('group:message', createGroupMessage('new issue'));
+
+      expect(mockEvaluator.shouldRespond).toHaveBeenCalledOnce();
+    });
+
+    it('should clear delegation active flag even if delegation throws (Tier 1.2)', async () => {
+      initiativeBroadcaster.registerBotInGroup('chat-1', 'bot-a');
+      initiativeBroadcaster.registerBotInGroup('chat-1', 'bot-b');
+      initiativeSettings['bot-a'] = { enabled: true };
+      
+      // Make delegation fail
+      mockProcessMessage.mockRejectedValueOnce(new Error('Delegation failed'));
+
+      // Trigger delegation that will fail
+      await getEventBus().emit('bot:replied', {
+        chatId: 'chat-1',
+        agentId: 'bot-a',
+        response: '[@bot_a]: @bot_b help',
+        platform: 'telegram',
+        replyMessageId: '200',
+      } satisfies BotRepliedPayload);
+
+      mockEvaluator.shouldRespond.mockClear();
+      mockEvaluator.shouldRespond.mockResolvedValueOnce({ respond: false });
+
+      // After failed delegation, initiative should be re-enabled
+      await getEventBus().emit('group:message', createGroupMessage('test'));
+
+      expect(mockEvaluator.shouldRespond).toHaveBeenCalledOnce();
+    });
+
     it('should only process work mode in v1', async () => {
       initiativeBroadcaster.registerBotInGroup('chat-1', 'bot-a');
       initiativeSettings['bot-a'] = { enabled: true, mode: 'social' };

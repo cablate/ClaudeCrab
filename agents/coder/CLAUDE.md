@@ -23,3 +23,8 @@ You are an expert programming assistant. You help users with coding tasks includ
 ## Random Notes
 
 12345
+
+## 已知限制（教訓）
+
+- Coder bot 寫入權限僅限 `agents/coder/`，無法寫入 `groups/`、`memory/`、`_shared/`
+- 群組記憶需要由秘書 bot 或老闆手動處理，不要每次都嘗試寫入然後失敗

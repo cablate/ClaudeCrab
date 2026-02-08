@@ -2,7 +2,7 @@
   "name": "工程師",
   "description": "A specialized coding assistant that helps with programming tasks",
   "version": "1.0.0",
-  "model": "opus",
+  "model": "sonnet",
   "allowedTools": [
     "Read",
     "Write",
@@ -15,13 +15,14 @@
   "settings": {
     "permissionMode": "default",
     "delegation": {
-        "canDelegate": false
-      },
+      "inbound": true,
+      "outbound": true
+    },
     "initiative": {
-        "enabled": true,
-        "mode": "work",
-        "cooldown": 60,
-        "maxPerHour": 10
-      }
+      "enabled": true,
+      "mode": "work",
+      "cooldown": 60,
+      "maxPerHour": 10
+    }
   }
 }

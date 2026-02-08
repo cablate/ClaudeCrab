@@ -2,10 +2,16 @@
   "name": "閒聊好朋友",
   "description": "A helpful general-purpose AI assistant",
   "version": "1.0.0",
-  "model": "opus",
+  "model": "sonnet",
   "telegramBotToken": "8085979533:AAEZ7EVcE1SdhN22LvJBbepmts358Je2af8",
   "settings": {
     "permissionMode": "default",
-    "maxTurns": 20
+    "delegation": {
+      "inbound": true,
+      "outbound": true
+    },
+    "initiative": {
+      "enabled": false
+    }
   }
 }

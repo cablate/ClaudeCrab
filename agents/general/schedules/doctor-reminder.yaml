@@ -2,7 +2,7 @@ id: doctor-reminder-20260206
 name: 看醫生提醒
 trigger:
   type: once
-  at: "2026-02-06T11:30:00+08:00"
+  at: "2026-02-06T12:30:00+08:00"
   timezone: Asia/Taipei
 execution:
   agent: general

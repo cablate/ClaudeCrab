@@ -1,0 +1,20 @@
+id: morning-summary
+name: 早晨前日摘要
+trigger:
+  type: cron
+  cron: "0 8 * * *"  # 每天早上 8 點
+  timezone: Asia/Taipei
+execution:
+  agent: general
+  prompt: |
+    讀取昨天的日誌（memory/昨天日期.md），簡單總結前一天都做了什麼。
+    簡短扼要，不超過 3-5 個重點。
+notification:
+  onComplete: true
+  onError: true
+  platform: telegram
+  chatId: "1491057815"
+metadata:
+  createdAt: 2026-02-06T02:50:00+08:00
+  createdBy: conversation
+  enabled: true
