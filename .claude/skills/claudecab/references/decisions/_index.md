@@ -46,3 +46,4 @@
 | 文件 | 描述 |
 |------|------|
 | [agent-specialization.md](stories/agent-specialization.md) | Agent 專門化支援（MCP + Skills）提案 |
+| [webui-character-sheet-integration.md](stories/webui-character-sheet-integration.md) | WebUI 角色面板整合（RPG 風格 Bot 狀態視覺化） |

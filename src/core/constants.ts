@@ -20,7 +20,7 @@ export const MEMORY_CHECKPOINT_CONTEXT = `【記憶】遵循 memory-system 規�
  * Final check before ending the conversation turn.
  */
 export const MEMORY_STOP_CHECKPOINT =
-  '【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md），再結束。';
+  '【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md），再結束。\n\n【系統更新（批次）】\n- 使用了 domain skill？→ 更新 .claude/skills/system/proficiency/references/levels.md 的使用次數\n- 學到通用規則？→ 更新 .claude/skills/persona/references/soul.md\n- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned\n- 達成里程碑？→ 更新 .claude/skills/system/achievements/references/unlocked.md';
 
 /**
  * Build memory stop checkpoint with optional group memory hint (ADR-020).

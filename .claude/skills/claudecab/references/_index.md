@@ -12,6 +12,8 @@
 |------|------|
 | [vision.md](product/vision.md) | 產品定位、核心概念、路線圖 |
 | [principle.md](product/principle.md) | 功能開發原則、設計原則 |
+| [strategy-analysis.md](product/strategy-analysis.md) | **產品策略分析報告**：市場定位、OpenClaw 競品對比、差異化策略、行動建議 |
+| [mmorpg-skill-system.md](product/mmorpg-skill-system.md) | **MMORPG 化 Skill 管理設計**：遊戲化 bot 管理概念、裝備系統、熟練度、角色面板 |
 
 ---
 
@@ -21,6 +23,7 @@
 |------|------|
 | [overview.md](system/overview.md) | 技術架構、技術棧、目錄結構 |
 | [trigger-mechanism-map.md](system/trigger-mechanism-map.md) | 事件流、觸發路徑、cascade 風險分析 |
+| [skill-based-character-system.md](system/skill-based-character-system.md) | **Skill-Based Character System 完整設計**：system/persona/domain 三層架構、5 個獨立 system skills + 內嵌協議（memory-system）、存儲演化策略、實作指南 |
 
 ---
 
@@ -28,8 +31,10 @@
 
 | 文件 | 用途 |
 |------|------|
-| [_index.md](decisions/_index.md) | 架構決策紀錄（ADR-001 ~ ADR-013） |
+| [_index.md](decisions/_index.md) | 架構決策紀錄總覽（ADR-001 ~ ADR-031） |
+| [adr/adr-031-data-placement-strategy.md](decisions/adr/adr-031-data-placement-strategy.md) | **資料配置策略 ADR**：Bot 狀態 vs 關係資料分離、存儲演化路徑（files → RAG） |
 | [stories/agent-specialization.md](decisions/stories/agent-specialization.md) | Agent 專門化功能提案 |
+| [stories/skill-system-story.md](decisions/stories/skill-system-story.md) | Skill-Based Character System 功能提案 |
 
 ---
 
@@ -38,6 +43,7 @@
 | 文件 | 用途 |
 |------|------|
 | [quick-nav.md](operations/quick-nav.md) | 「做 X 看哪些檔案」快速導航 |
+| [migration-guide-skill-system.md](operations/migration-guide-skill-system.md) | **Skill System 遷移指南**：Phase 1~5 step-by-step 操作與驗證清單 |
 | [troubleshooting.md](operations/troubleshooting.md) | 常見問題與解法 |
 | [changelog.md](operations/changelog.md) | 版本歷史 (v0.1.0 ~ v1.11.0) |
 

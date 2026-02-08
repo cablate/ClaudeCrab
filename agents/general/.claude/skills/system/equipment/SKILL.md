@@ -1,9 +1,9 @@
 ---
-name: equip
+name: equipment
 description: 自我配置技能。根據職責定位搜尋、安裝、記錄適合的 skills 和 MCP servers。觸發：「幫我配置」、「裝備新技能」、「我想成為 X 專家」、「更新我的能力」。
 ---
 
-# Equip - 系統化能力配置
+# Equipment — 系統化能力配置
 
 ## 流程概覽
 
@@ -50,7 +50,7 @@ description: 自我配置技能。根據職責定位搜尋、安裝、記錄適�
 
 ### 3. 盤點現況
 
-讀取 `EQUIPMENT.md`，列出已安裝的 skills 和 MCP servers。
+讀取 `references/loadout.md`，列出已安裝的 skills 和 MCP servers。
 
 記錄現有工作流程及其支援的能力。
 
@@ -146,7 +146,7 @@ claude plugin install {plugin-name} --scope local
    - **Skills**：`npx skills add {owner/repo@skill} -g -y`
    - **MCPs**：`claude mcp add --scope local --transport {type} {name} {url/command}`
    - **Plugins**：`claude plugin install {plugin-name} --scope local`
-4. 更新 `EQUIPMENT.md` 記錄新安裝的工具
+4. 更新 `references/loadout.md` 記錄新安裝的工具
 
 ---
 
@@ -163,7 +163,7 @@ Phase 2 產出 agent 能力框架的檔案。首次執行時產出；後續執�
 ## 相依項目
 
 - `/persona` skill - 角色定義
-- `EQUIPMENT.md` - 當前工具清單
+- `references/loadout.md` - 當前工具清單
 - `/find-skills` skill - Skills 探索
 - `/find-mcp` skill - MCP server 探索
 

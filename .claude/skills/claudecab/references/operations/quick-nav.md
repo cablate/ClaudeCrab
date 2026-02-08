@@ -142,21 +142,45 @@ npm run typecheck    # TypeScript 型別檢查
 
 ---
 
-## Agent Skills（v1.11.0）
+## Agent Skills — 三層架構（system/persona/domain）
+
+> 設計文件：[skill-based-character-system.md](../system/skill-based-character-system.md)
+> 資料配置策略：[ADR-031](../decisions/adr/adr-031-data-placement-strategy.md)
+> 遷移指南：[migration-guide-skill-system.md](./migration-guide-skill-system.md)
+
+### system/ — 系統協議與 Bot 狀態
 
 | 要做什麼 | 主要檔案 | 相關檔案 |
 |----------|----------|----------|
-| 修改 Agent 啟動協議 | `agents/general/.claude/skills/agent-protocols/references/startup-protocol.md` | `SKILL.md` |
-| 修改記憶寫入規則 | `agents/general/.claude/skills/agent-protocols/references/memory-system.md` | — |
-| 修改安全規則 | `agents/general/.claude/skills/agent-protocols/references/safety.md` | — |
-| 修改排程建立指引 | `agents/general/.claude/skills/agent-protocols/references/scheduling.md` | — |
-| 修改回覆準則 | `agents/general/.claude/skills/agent-protocols/references/guidelines.md` | — |
-| 修改輸出格式（📝 標記） | `agents/general/.claude/skills/agent-protocols/references/output-style.md` | — |
+| 修改 Agent 啟動協議 | `agents/general/.claude/skills/system/agent-protocols/references/startup-protocol.md` | `SKILL.md` |
+| 修改記憶寫入規則 | `agents/general/.claude/skills/system/agent-protocols/references/memory-system.md` | — |
+| 修改安全規則 | `agents/general/.claude/skills/system/agent-protocols/references/safety.md` | — |
+| 修改排程建立指引 | `agents/general/.claude/skills/system/agent-protocols/references/scheduling.md` | — |
+| 修改回覆準則 | `agents/general/.claude/skills/system/agent-protocols/references/guidelines.md` | — |
+| 修改輸出格式（📝 標記） | `agents/general/.claude/skills/system/agent-protocols/references/output-style.md` | — |
+| 修改裝備欄（能力配置） | `agents/general/.claude/skills/system/equipment/references/loadout.md` | `SKILL.md` |
+| 查看/更新技能熟練度 | `agents/general/.claude/skills/system/proficiency/references/levels.md` | `SKILL.md`（等級定義） |
+| 查看/更新成就進度 | `agents/general/.claude/skills/system/achievements/references/progress.md` | `unlocked.md`、`SKILL.md` |
+| 查看/更新角色屬性面板 | `agents/general/.claude/skills/system/character-sheet/references/stats.md` | `SKILL.md`（屬性定義） |
+
+### persona/ — 人格定義
+
+| 要做什麼 | 主要檔案 | 相關檔案 |
+|----------|----------|----------|
 | 修改 Agent 人格（soul） | `agents/general/.claude/skills/persona/references/soul.md` | Core Truths、Boundaries、Vibe、Voice Guide |
 | 修改 AI 身份（identity） | `agents/general/.claude/skills/persona/references/identity.md` | 名字、角色、定位 |
 | 複製人格到其他 Agent | 複製 `agents/general/.claude/skills/persona/` | — |
 
+### domain/ — 實際能力
+
+| 要做什麼 | 主要檔案 | 相關檔案 |
+|----------|----------|----------|
+| 修改瀏覽器能力 | `agents/general/.claude/skills/domain/agent-browser/` | `SKILL.md` |
+| 修改 Skill 搜尋能力 | `agents/general/.claude/skills/domain/find-skills/` | `SKILL.md` |
+| 修改 MCP 搜尋能力 | `agents/general/.claude/skills/domain/find-mcp/` | `SKILL.md` |
+
 > **Skill 觸發**：Agent 在 session 開始時透過 Skill 工具調用 `/agent-protocols` 和 `/persona`。
+> **資料分流原則**：Bot 狀態（skill/references/）vs 關係資料（根目錄），詳見 ADR-031。
 
 ---
 
