@@ -306,7 +306,7 @@ memory-system 跟其他 system skill 有根本性差異：
 
 - **proficiency、equipment、achievements** 的資料完全在自己的 references/ 裡自洽
 - **memory-system** 管的是「寫入規則」，但寫入目標是根目錄的關係資料（MEMORY.md、USER.md、memory/）
-- 它本質上是一份「寫入協議」，跟 safety.md、guidelines.md 同性質——都是行為規範，不是自治模組
+- 它本質上是一份「寫入協議」，跟 behavior.md 同性質——都是行為規範，不是自治模組
 
 ### 實作
 

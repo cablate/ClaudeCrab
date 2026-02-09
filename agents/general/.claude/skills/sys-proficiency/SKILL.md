@@ -3,7 +3,8 @@ name: proficiency
 description: >
   技能熟練度追蹤。記錄 dom-* 裡每個技能的使用次數與等級。
   定義等級（★☆☆☆☆ 到 ★★★★★）、升級條件、衰退規則。
-  觸發時機：使用 domain skill 後、session 啟動時查看。
+  觸發時機：使用 domain skill 後記錄、想了解技能成長時查看。
+  主動更新時機：使用 domain skill 後批次更新 references/levels.md。
 ---
 
 # Proficiency System

@@ -1,6 +1,10 @@
 ---
 name: equipment
-description: 自我配置技能。根據職責定位搜尋、安裝、記錄適合的 skills 和 MCP servers。觸發：「幫我配置」、「裝備新技能」、「我想成為 X 專家」、「更新我的能力」。
+description: >
+  能力配置精靈。執行 7 階段評估流程：角色定義 → 能力框架 → 現況盤點 → 缺口分析 → 工具搜尋 → 建議 → 安裝。
+  觸發：「幫我配置」、「裝備新技能」、「我想成為 X 專家」、「更新我的能力」。
+  查看當前裝備：直接讀取 references/loadout.md。
+  主動更新時機：安裝或移除 skill/MCP 後更新 loadout.md。
 ---
 
 # Equipment — 系統化能力配置

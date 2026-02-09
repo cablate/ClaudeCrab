@@ -79,11 +79,9 @@ agent-protocols/
 ├── SKILL.md
 └── references/
     ├── startup-protocol.md   # 啟動流程
+    ├── behavior.md           # 行為規範（安全+準則+輸出格式）
     ├── memory-system.md      # 記憶寫入規則
-    ├── safety.md             # 安全規則
-    ├── scheduling.md         # 排程建立指引
-    ├── guidelines.md         # 回覆準則
-    └── output-style.md       # 輸出格式
+    └── scheduling.md         # 排程建立指引
 ```
 
 ### persona

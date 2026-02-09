@@ -155,15 +155,11 @@ npm run typecheck    # TypeScript 型別檢查
 | 要做什麼 | 主要檔案 | 相關檔案 |
 |----------|----------|----------|
 | 修改 Agent 啟動協議 | `agents/general/.claude/skills/sys-agent-protocols/references/startup-protocol.md` | `SKILL.md` |
+| 修改行為規範（安全+準則+輸出格式） | `agents/general/.claude/skills/sys-agent-protocols/references/behavior.md` | — |
 | 修改記憶寫入規則 | `agents/general/.claude/skills/sys-agent-protocols/references/memory-system.md` | — |
-| 修改安全規則 | `agents/general/.claude/skills/sys-agent-protocols/references/safety.md` | — |
 | 修改排程建立指引 | `agents/general/.claude/skills/sys-agent-protocols/references/scheduling.md` | — |
-| 修改回覆準則 | `agents/general/.claude/skills/sys-agent-protocols/references/guidelines.md` | — |
-| 修改輸出格式 | `agents/general/.claude/skills/sys-agent-protocols/references/output-style.md` | — |
 | 修改裝備欄（能力配置） | `agents/general/.claude/skills/sys-equipment/references/loadout.md` | `SKILL.md` |
 | 查看/更新技能熟練度 | `agents/general/.claude/skills/sys-proficiency/references/levels.md` | `SKILL.md`（等級定義） |
-| 查看/更新成就進度 | `agents/general/.claude/skills/sys-achievements/references/progress.md` | `unlocked.md`、`SKILL.md` |
-| 查看/更新角色屬性面板 | `agents/general/.claude/skills/sys-character-sheet/references/stats.md` | `SKILL.md`（屬性定義） |
 
 ### persona/ — 人格定義
 

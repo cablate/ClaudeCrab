@@ -70,13 +70,11 @@ agents/{agentId}/.claude/skills/
 ├── sys-agent-protocols/           ← 統一啟動協議，引導載入所有模組
 │   └── references/
 │       ├── startup-protocol.md       啟動流程
+│       ├── behavior.md               行為規範（安全+準則+輸出格式）
 │       ├── memory-system.md          記憶寫入協議（跨界協議，非獨立 skill）
-│       ├── safety.md, guidelines.md, ...
 │       └── scheduling.md
 ├── sys-proficiency/               ← 熟練度追蹤與等級定義
-├── sys-achievements/              ← 成就里程碑定義與進度
-├── sys-character-sheet/           ← 屬性面板與聚合數據
-├── sys-equipment/                 ← 裝備管理與容量控制
+├── sys-equipment/                 ← 能力配置精靈
 │
 ├── persona/                       ← 人格（who the bot is）
 │   ├── SKILL.md
@@ -275,20 +273,16 @@ Session 開始時依序執行 Startup Protocol，載入人格、協議、系統�
 
 ## 行為規範
 
+- [Behavior](references/behavior.md) — 安全、回覆準則、輸出格式
 - [Memory System](references/memory-system.md) — 記憶寫入規則
-- [Safety](references/safety.md) — 安全邊界
-- [Guidelines](references/guidelines.md) — 回覆準則
-- [Output Style](references/output-style.md) — 輸出格式
 - [Scheduling](references/scheduling.md) — 排程建立
 
 ## 子系統（System Skills）
 
-由 Startup Protocol 引導載入：
+透過 metadata 按需載入：
 
-- [/equipment](../sys-equipment/SKILL.md) — 裝備管理（domain skills + MCP servers）
+- [/equipment](../sys-equipment/SKILL.md) — 能力配置精靈
 - [/proficiency](../sys-proficiency/SKILL.md) — 技能熟練度追蹤
-- [/achievements](../sys-achievements/SKILL.md) — 成就里程碑
-- [/character-sheet](../sys-character-sheet/SKILL.md) — 角色屬性面板
 ```
 
 #### references/startup-protocol.md（設計範例）
@@ -333,7 +327,7 @@ memory-system 跟其他 system skill 有根本性差異：
 | 性質 | 自治模組（管自己的 state） | 寫入協議（定義規則，操作別人的檔案） |
 | 可攜性 | 複製目錄 = 帶走能力 + 狀態 | 複製目錄只帶走規則，資料在外面 |
 
-它本質上是一份「記憶寫入的行為規範」，跟 safety.md、guidelines.md 同性質——都是協議，不是自治模組。所以留在 `agent-protocols/references/memory-system.md`。
+它本質上是一份「記憶寫入的行為規範」，跟 behavior.md 同性質——都是協議，不是自治模組。所以留在 `agent-protocols/references/memory-system.md`。
 
 #### 內容結構（在 agent-protocols/references/memory-system.md）
 
@@ -753,7 +747,7 @@ description: >
 
 **步驟**：
 1. 在 `agents/_shared/system-template/` 建立標準模板
-2. 包含 5 個 system skills（sys-agent-protocols、sys-proficiency、sys-achievements、sys-character-sheet、sys-equipment）的 SKILL.md + references/
+2. 包含 system skills 的 SKILL.md + references/（目前已實作：sys-agent-protocols、sys-proficiency、sys-equipment；待有真實數據後加回：sys-achievements、sys-character-sheet）
 3. memory-system 作為 sys-agent-protocols/references/memory-system.md 內含（非獨立 skill）
 4. references/ 裡的動態檔案用佔位符（如 `# [Bot will populate this]`）
 5. 靜態檔案（rules.md 等）寫好完整內容
