@@ -25,6 +25,7 @@ import { AdapterRegistry } from './AdapterRegistry.js';
 import { AgentLoader } from './AgentLoader.js';
 import { GroupBroadcaster } from './GroupBroadcaster.js';
 import { LLMInitiativeEvaluator } from './InitiativeEvaluator.js';
+import { LLMSocialEvaluator } from './SocialEvaluator.js';
 import { SessionManager } from './SessionManager.js';
 import { MessageProcessor } from './MessageProcessor.js';
 import { logger } from '../utils/logger.js';
@@ -125,6 +126,11 @@ export class PlatformOrchestrator {
         };
       },
       initiativeEvaluator: new LLMInitiativeEvaluator(),
+      // ADR-030: Social settings and evaluator
+      getSocialSettings: (agentId: string) => {
+        return this.agentLoader.get(agentId)?.config.settings?.social;
+      },
+      socialEvaluator: new LLMSocialEvaluator(),
       ...(options.queryMetricsRepository !== undefined
         ? { queryMetricsRepository: options.queryMetricsRepository }
         : {}),

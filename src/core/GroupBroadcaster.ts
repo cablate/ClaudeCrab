@@ -7,13 +7,15 @@ import type {
   IGroupMemberRepository,
   IQueryMetricsRepository,
 } from '../persistence/types.js';
-import type { InitiativeSettings } from '../types/agent.js';
+import type { InitiativeSettings, SocialSettings } from '../types/agent.js';
 import type { InitiativeEvaluator } from './InitiativeEvaluator.js';
+import type { SocialEvaluator } from './SocialEvaluator.js';
 import { logger } from '../utils/logger.js';
 import { formatUserLabel, formatBotLabel } from '../utils/format.js';
 import { DedupTracker } from '../utils/DedupTracker.js';
 import { InitiativeHandler } from './InitiativeHandler.js';
 import { DelegationHandler } from './DelegationHandler.js';
+import { SocialHandler } from './SocialHandler.js';
 
 /**
  * Options for GroupBroadcaster
@@ -48,6 +50,12 @@ export interface GroupBroadcasterOptions {
 
   /** Query metrics repository for recording initiative evaluation costs */
   queryMetricsRepository?: IQueryMetricsRepository;
+
+  /** ADR-030: Get agent social settings */
+  getSocialSettings?: (agentId: string) => SocialSettings | undefined;
+
+  /** ADR-030: Social evaluator (Strategy pattern) */
+  socialEvaluator?: SocialEvaluator;
 }
 
 /**
@@ -76,6 +84,7 @@ export class GroupBroadcaster {
 
   /** ADR-023: Initiative evaluation and execution handler */
   private readonly initiativeHandler: InitiativeHandler;
+  private readonly socialHandler: SocialHandler;
 
   /** ADR-021/022: Delegation detection and execution handler */
   private readonly delegationHandler: DelegationHandler;
@@ -121,6 +130,15 @@ export class GroupBroadcaster {
       ...(options.getInitiativeSettings ? { getInitiativeSettings: options.getInitiativeSettings } : {}),
       ...(options.getAgentDescription ? { getAgentDescription: options.getAgentDescription } : {}),
       ...(options.initiativeEvaluator ? { initiativeEvaluator: options.initiativeEvaluator } : {}),
+      ...(options.queryMetricsRepository ? { queryMetricsRepository: options.queryMetricsRepository } : {}),
+    });
+
+    this.socialHandler = new SocialHandler({
+      messageProcessor: options.messageProcessor,
+      getGroupMembers: (chatId) => this.getGroupMembers(chatId),
+      ...(options.getSocialSettings ? { getSocialSettings: options.getSocialSettings } : {}),
+      ...(options.getAgentDescription ? { getAgentDescription: options.getAgentDescription } : {}),
+      ...(options.socialEvaluator ? { socialEvaluator: options.socialEvaluator } : {}),
       ...(options.queryMetricsRepository ? { queryMetricsRepository: options.queryMetricsRepository } : {}),
     });
 
@@ -304,6 +322,9 @@ export class GroupBroadcaster {
         { chatId, mentionedBot, isReplyToBot, sourceAgentId },
         'No bot should respond to this message'
       );
+      // ADR-030: Human message resets social energy
+      this.socialHandler.resetEnergy(chatId);
+
       // ADR-030 Tier 1.2: Suppress initiative during active delegation
       if (this.delegationActive.has(chatId)) {
         this.log.info(
@@ -313,8 +334,13 @@ export class GroupBroadcaster {
         return;
       }
 
-      // ADR-023: Evaluate initiative responses for non-@mentioned messages
-      await this.initiativeHandler.evaluateInitiatives(message, chatId, senderLabel);
+      // ADR-023: Evaluate initiative responses for non-@mentioned messages (work mode first)
+      const initiativeHandled = await this.initiativeHandler.evaluateInitiatives(message, chatId, senderLabel);
+
+      // ADR-030: If initiative didn't handle it, try social mode
+      if (!initiativeHandled) {
+        await this.socialHandler.evaluateSocial(message, chatId, senderLabel);
+      }
       return;
     }
 
@@ -410,6 +436,9 @@ export class GroupBroadcaster {
   private async handleBotReplied(payload: BotRepliedPayload): Promise<void> {
     this.recordBotReplyToGroupMessages(payload);
 
+    // ADR-030: Decay social energy on any bot reply
+    this.socialHandler.decayEnergy(payload.chatId);
+
     // ADR-030 Tier 1.2: Mark delegation as active for this chat
     this.delegationActive.add(payload.chatId);
     try {
@@ -496,6 +525,7 @@ export class GroupBroadcaster {
     this.perBotMessageIds.clear();
     this.processedMessages.clear();
     this.initiativeHandler.dispose();
+    this.socialHandler.dispose();
     this.log.info('GroupBroadcaster disposed');
   }
 }

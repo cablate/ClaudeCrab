@@ -59,6 +59,15 @@ export class DelegationHandler {
       return;
     }
 
+    // ADR-030: Social responses do not trigger delegation chains
+    if (payload.isSocial === true) {
+      this.log.debug(
+        { chatId: payload.chatId, agentId: payload.agentId },
+        'Skipping delegation for social response (ADR-030)'
+      );
+      return;
+    }
+
     const { chatId, agentId, response } = payload;
 
     const depth = payload.delegationDepth ?? 0;

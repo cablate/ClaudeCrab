@@ -55,17 +55,17 @@ export class InitiativeHandler {
     message: UnifiedMessage,
     chatId: string,
     senderLabel: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const evaluator = this.initiativeEvaluator;
     if (!evaluator) {
       this.log.debug({ chatId }, 'No initiative evaluator configured');
-      return;
+      return false;
     }
 
     const members = this.getGroupMembers(chatId);
     if (members.length === 0) {
       this.log.debug({ chatId }, 'No group members for initiative evaluation');
-      return;
+      return false;
     }
 
     // Collect bots that pass Gate + Throttle (before expensive AI evaluation)
@@ -117,7 +117,7 @@ export class InitiativeHandler {
 
     if (eligible.length === 0) {
       this.log.info({ chatId, memberCount: members.length }, 'Initiative: no eligible bots (all filtered by gate/throttle)');
-      return;
+      return false;
     }
 
     this.log.info(
@@ -134,6 +134,7 @@ export class InitiativeHandler {
     );
 
     // Execute for all bots that passed evaluation
+    let anyExecuted = false;
     for (const settled of results) {
       if (settled.status === 'rejected') {
         this.log.warn({ error: settled.reason }, 'Initiative evaluation rejected');
@@ -175,7 +176,9 @@ export class InitiativeHandler {
       );
 
       await this.executeInitiative(agentId, message, chatId, senderLabel, reason);
+      anyExecuted = true;
     }
+    return anyExecuted;
   }
 
   /**

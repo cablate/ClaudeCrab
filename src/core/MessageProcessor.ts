@@ -157,6 +157,7 @@ export class MessageProcessor {
       /** ADR-023: Whether this is an initiative-triggered message */
       isInitiative?: boolean;
     isSynthesis?: boolean;
+    isSocial?: boolean;
     }
   ): Promise<ProcessingResult> {
     const { platform, userId, chatId, text, id: messageId } = message;
@@ -250,6 +251,7 @@ export class MessageProcessor {
               delegationChain?: string[];
               isInitiative?: boolean;
               isSynthesis?: boolean;
+              isSocial?: boolean;
             } = {};
             if (options?.isGroupChat === true) {
               queryOptions.isGroupChat = true;
@@ -266,6 +268,9 @@ export class MessageProcessor {
             }
             if (options?.isSynthesis === true) {
               queryOptions.isSynthesis = true;
+            }
+            if (options?.isSocial === true) {
+              queryOptions.isSocial = true;
             }
 
             // Use replyToMessageId from options if provided, otherwise from metadata.
@@ -369,6 +374,7 @@ export class MessageProcessor {
       delegationChain?: string[];
       isInitiative?: boolean;
       isSynthesis?: boolean;
+      isSocial?: boolean;
     }
   ): Promise<string> {
     // Get internal session for agent info
@@ -932,7 +938,7 @@ export class MessageProcessor {
     agentId: string,
     platform: string,
     lastSentMessageId: string | undefined,
-    options?: { isGroupChat?: boolean; delegationDepth?: number; delegationChain?: string[]; isInitiative?: boolean; isSynthesis?: boolean }
+    options?: { isGroupChat?: boolean; delegationDepth?: number; delegationChain?: string[]; isInitiative?: boolean; isSynthesis?: boolean; isSocial?: boolean }
   ): void {
     if (
       !options?.isGroupChat ||
@@ -974,6 +980,8 @@ export class MessageProcessor {
       ...(options?.isInitiative === true ? { isInitiative: true } : {}),
       // ADR-030: Pass synthesis flag
       ...(options?.isSynthesis === true ? { isSynthesis: true } : {}),
+      // ADR-030: Pass social flag
+      ...(options?.isSocial === true ? { isSocial: true } : {}),
     });
   }
 

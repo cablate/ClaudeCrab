@@ -46,6 +46,22 @@ const InitiativeSettingsSchema = z.object({
   maxPerHour: z.number().int().positive().optional(),
 });
 
+/** Social mode settings — bot can chat naturally in groups without @mention */
+const SocialSettingsSchema = z.object({
+  /** Enable social mode (default: false) */
+  enabled: z.boolean().optional(),
+  /** Minimum energy score (1-5) to trigger a social response (default: 3) */
+  energyThreshold: z.number().int().min(1).max(5).optional(),
+  /** Cooldown in seconds between social responses per group (default: 600) */
+  cooldown: z.number().int().positive().optional(),
+  /** Max social responses per hour per group (default: 10) */
+  maxPerHour: z.number().int().positive().optional(),
+  /** Max consecutive bot-only turns before forced silence (default: 3) */
+  maxConsecutiveBotTurns: z.number().int().positive().optional(),
+});
+
+export type SocialSettings = z.infer<typeof SocialSettingsSchema>;
+
 export type InitiativeSettings = z.infer<typeof InitiativeSettingsSchema>;
 
 export const AgentSettingsSchema = z.object({
@@ -57,7 +73,9 @@ export const AgentSettingsSchema = z.object({
   delegation: DelegationSettingsSchema.optional(),
   /** ADR-023: Initiative settings */
   initiative: InitiativeSettingsSchema.optional(),
-});
+  /** Social mode settings */
+  social: SocialSettingsSchema.optional(),
+});;
 
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
 

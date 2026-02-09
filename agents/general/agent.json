@@ -12,6 +12,9 @@
     },
     "initiative": {
       "enabled": false
+    },
+    "social": {
+      "enabled": false
     }
   }
 }
