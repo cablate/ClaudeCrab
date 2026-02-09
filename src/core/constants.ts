@@ -20,7 +20,7 @@ export const MEMORY_CHECKPOINT_CONTEXT = `【記憶】遵循 memory-system 規�
  * Final check before ending the conversation turn.
  */
 export const MEMORY_STOP_CHECKPOINT =
-  '【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md），再結束。\n\n【系統更新（批次）】\n- 使用了 domain skill？→ 更新 .claude/skills/system/proficiency/references/levels.md 的使用次數\n- 學到通用規則？→ 更新 .claude/skills/persona/references/soul.md\n- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned\n- 達成里程碑？→ 更新 .claude/skills/system/achievements/references/unlocked.md';
+  '【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md），再結束。\n\n【系統更新（批次）】\n- 使用了 domain skill？→ 更新 .claude/skills/sys-proficiency/references/levels.md 的使用次數\n- 人格有新發現？→ 依照 evolution-guide.md 原則更新 soul.md，並在 MEMORY.md Personality Journal 記錄\n- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned';
 
 /**
  * Build memory stop checkpoint with optional group memory hint (ADR-020).
@@ -64,6 +64,7 @@ export function buildPromptContext(
     context += `\n【群組日誌路徑】groups/${groupChatId}/${todayDate}.md`;
     context += `\n【群組記憶】groups/${groupChatId}/MEMORY.md`;
     context += `\n【群組行為規範】你正在群組中回覆。不要回報內部操作過程（如記憶寫入結果、工具呼叫狀態、檔案讀寫紀錄）。只回覆對使用者有實質意義的內容。`;
+    context += `\n【群組回覆長度】群組中回覆保持簡潔，通常不超過 3-5 段。需要詳細回覆時，先給摘要，再問是否要展開。`;
   } else {
     context += `\n【日誌路徑】今天: memory/${todayDate}.md | 昨天: memory/${yesterdayDate}.md`;
   }

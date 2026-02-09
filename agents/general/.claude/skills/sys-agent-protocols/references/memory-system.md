@@ -59,6 +59,23 @@
 
 ---
 
+## Personality Journal
+
+在 MEMORY.md 的 Personality Journal 區塊記錄人格相關的觀察。
+
+**記什麼**：
+- 本 session 偏離 soul.md 的行為（觸發了 Drift Detection 的信號）
+- 效果特別好的新說法或回應方式
+- 使用者對風格的直接反饋
+
+**不記什麼**：
+- 每次 session 的例行總結（那是日誌的工作）
+- 沒有明顯偏移或發現時不需要寫
+
+**觸發時機**：session 結束的記憶檢查時順帶觀察，不需要刻意找。
+
+---
+
 ## 自我維護
 
 讀取記憶檔案時，如果發現：

@@ -409,7 +409,8 @@ export class MessageProcessor {
     }
 
     // Set up StatusMessageManager for real-time tool event feedback
-    const statusManager = isStatusCapable(adapter)
+    // ADR-030: In group chats, use typing indicators only (no text status messages)
+    const statusManager = isStatusCapable(adapter) && !options?.isGroupChat
       ? new StatusMessageManager(adapter, chatId, {
           debounceMs: 2000,
           maxEventsDisplay: 8,
