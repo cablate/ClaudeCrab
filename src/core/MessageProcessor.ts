@@ -670,13 +670,14 @@ export class MessageProcessor {
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
 
-        // Check if this is a resume-specific error (session not found, expired, etc.)
+        // Check if this is a resume-specific error (session not found, expired, corrupted, etc.)
         // vs other SDK errors (max_turns, max_budget, etc.) that should not trigger new session
         const isResumeError =
           errorMsg.includes('session') ||
           errorMsg.includes('resume') ||
           errorMsg.includes('not found') ||
-          errorMsg.includes('expired');
+          errorMsg.includes('expired') ||
+          errorMsg.includes('tool_use ids must be unique');
 
         if (internalSession.sdkSessionId !== undefined && isResumeError) {
           logger.warn(
