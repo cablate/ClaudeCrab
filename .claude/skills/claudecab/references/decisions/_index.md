@@ -47,3 +47,4 @@
 |------|------|
 | [agent-specialization.md](stories/agent-specialization.md) | Agent 專門化支援（MCP + Skills）提案 |
 | [webui-character-sheet-integration.md](stories/webui-character-sheet-integration.md) | WebUI 角色面板整合（RPG 風格 Bot 狀態視覺化） |
+| [next-evolution-plan.md](stories/next-evolution-plan.md) | 下一階段演化規劃（人格升級 + 群組 UX + 社交模式） |
