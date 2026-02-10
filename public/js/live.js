@@ -86,12 +86,10 @@ function connectSSE() {
     try {
       const event = JSON.parse(e.data);
       if (isInitialBatch) {
-        if (event.type !== 'status_change') {
-          addToFeed(event, false);
-        }
-      } else {
-        handleActivityEvent(event);
+        // Skip — loadRecentFeed() already loaded history from DB
+        return;
       }
+      handleActivityEvent(event);
     } catch (err) {
       console.error('Failed to parse SSE event:', err);
     }

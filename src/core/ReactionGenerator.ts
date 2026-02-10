@@ -125,7 +125,7 @@ ${moodHint}
   /**
    * Generate an idle mutter based on agent personality and a random scenario.
    */
-  async generateMutter(agentId: string): Promise<{ message: string; mood: ActivityMood }> {
+  async generateMutter(agentId: string, recentMessages: string[] = []): Promise<{ message: string; mood: ActivityMood }> {
     const personality = this.getAgentPersonality(agentId);
     const agentName = this.getAgentName(agentId);
     const hour = new Date().getHours();
@@ -138,9 +138,13 @@ ${moodHint}
 
     const scenario = MUTTER_SCENARIOS[Math.floor(Math.random() * MUTTER_SCENARIOS.length)];
 
+    const recentLine = recentMessages.length > 0
+      ? `\n你最近說過的碎念（不要重複類似的）：\n${recentMessages.map(m => `- ${m}`).join('\n')}`
+      : '';
+
     const prompt = `你是 ${agentName}。${personality ? `你的個性：\n${personality.substring(0, 500)}` : ''}
 
-現在是${timeContext}，${scenario}。
+現在是${timeContext}，${scenario}。${recentLine}
 用你的個性說一句內心碎念（口語化、15 字以內）。
 不要提到時間，不要說「等著」，要有趣、有個性、像真人自言自語。
 

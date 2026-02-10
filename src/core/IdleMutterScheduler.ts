@@ -102,7 +102,10 @@ export class IdleMutterScheduler {
       // Generate and emit mutter
       try {
         log.info({ agentId, idleMs }, 'Generating idle mutter');
-        const { message, mood } = await this.reactionGenerator.generateMutter(agentId);
+        // Fetch recent mutters for this agent to avoid repetition
+        const recentEvents = this.activityService.getRecent(10, { agentId, type: 'mutter' });
+        const recentMessages = recentEvents.map(e => e.message).filter(Boolean);
+        const { message, mood } = await this.reactionGenerator.generateMutter(agentId, recentMessages);
         this.activityService.emitMutter(agentId, message, mood);
         this.recordMutter(agentId, now);
         log.info({ agentId, message, mood }, 'Idle mutter emitted');
