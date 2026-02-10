@@ -1,5 +1,5 @@
 /**
- * ClaudeCab Live — Real-time agent activity display (v2.0)
+ * ClaudeCab Live — Real-time agent activity display (v3.0 Visual Upgrade)
  */
 
 // --- State ---
@@ -44,6 +44,7 @@ async function init() {
   connectSSE();
   startRelativeTimeUpdater();
   initFilters();
+  updateStats();
 }
 
 // --- Load initial agent states ---
@@ -63,37 +64,20 @@ async function loadAgentStates() {
   }
 }
 
-// --- Load recent events ---
-async function loadRecentEvents() {
-  try {
-    const res = await fetch('/api/activity/events');
-    const { events } = await res.json();
-    for (const event of events) {
-      if (event.type !== 'status_change') {
-        addToFeed(event, false);
-      }
-    }
-  } catch (err) {
-    console.error('Failed to load recent events:', err);
-  }
-}
-
 // --- SSE Connection ---
-let sseRetryDelay = 1000; // Start at 1s, exponential backoff up to 30s
+let sseRetryDelay = 1000;
 const SSE_MAX_RETRY_DELAY = 30000;
 
 function connectSSE() {
   const source = new EventSource('/api/activity/stream');
   let isInitialBatch = true;
 
-  // After 2s, treat all subsequent events as live
   setTimeout(() => { isInitialBatch = false; }, 2000);
 
   source.onmessage = (e) => {
     try {
       const event = JSON.parse(e.data);
       if (isInitialBatch) {
-        // Initial batch: only add to feed, don't update agent cards with stale data
         if (event.type !== 'status_change') {
           addToFeed(event, false);
         }
@@ -109,37 +93,48 @@ function connectSSE() {
     console.warn(`SSE connection lost, reconnecting in ${sseRetryDelay / 1000}s...`);
     source.close();
 
-    // Remove connected indicator
     const dot = document.getElementById('connection-dot');
     if (dot) dot.classList.remove('connected');
 
     setTimeout(connectSSE, sseRetryDelay);
-    // Exponential backoff: 1s → 2s → 4s → 8s → ... → 30s max
     sseRetryDelay = Math.min(sseRetryDelay * 2, SSE_MAX_RETRY_DELAY);
   };
 
-  // Update connection status
   const dot = document.getElementById('connection-dot');
   if (dot) dot.classList.add('connected');
   source.addEventListener('open', () => {
     if (dot) dot.classList.add('connected');
-    // Reset retry delay on successful connection
     sseRetryDelay = 1000;
   });
 }
 
 // --- Handle incoming activity event ---
 function handleActivityEvent(event) {
-  // Update agent card (all event types)
   updateAgentCard(event);
 
-  // Add to feed (skip status_change — only workflow + personality events)
   if (event.type !== 'status_change') {
     addToFeed(event, true);
   }
+
+  updateStats();
 }
 
-// --- Create agent card ---
+// --- Format idle duration ---
+function formatIdleDuration(ms) {
+  if (ms === Infinity || ms === undefined || ms === null) return 'never active';
+  if (ms < 60000) return 'active now';
+  if (ms < 3600000) return `idle ${Math.floor(ms / 60000)}m`;
+  if (ms < 86400000) return `idle ${Math.floor(ms / 3600000)}h`;
+  return `idle ${Math.floor(ms / 86400000)}d`;
+}
+
+// --- Truncate description for card display ---
+function truncateDescription(text, maxLen) {
+  if (!text || text.length <= maxLen) return text || '';
+  return text.substring(0, maxLen) + '...';
+}
+
+// --- Create agent card (v3.0 — employee profile style) ---
 function createAgentCard(agent) {
   const card = document.createElement('div');
   card.className = 'agent-card';
@@ -149,15 +144,24 @@ function createAgentCard(agent) {
   const phase = agent.phase || 'idle';
   const mood = agent.mood || 'neutral';
   const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
+  const modelLabel = (agent.model || 'unknown').toUpperCase();
+  const roleDesc = truncateDescription(agent.description, 60);
 
   card.innerHTML = `
     <div class="agent-header">
-      <span class="agent-avatar">${agent.avatar || ''}</span>
-      <div>
+      <div class="agent-avatar-large">${agent.avatar || '🤖'}</div>
+      <div class="agent-info">
         <div class="agent-name">${agent.name}</div>
-        <div class="agent-status ${statusInfo.class}">${statusInfo.label}</div>
+        <div class="agent-role">${escapeHtml(roleDesc) || 'AI Assistant'}</div>
       </div>
-      <span class="agent-mood">${MOOD_EMOJI[mood] || ''}</span>
+    </div>
+    <div class="agent-meta">
+      <span class="meta-badge meta-model">${modelLabel}</span>
+      <span class="meta-badge meta-idle">${formatIdleDuration(agent.idleDuration)}</span>
+    </div>
+    <div class="agent-status-row">
+      <span class="agent-mood-large">${MOOD_EMOJI[mood] || ''}</span>
+      <div class="agent-status ${statusInfo.class}">${statusInfo.label}</div>
     </div>
     <div class="agent-task" style="display: none;"></div>
     <div class="agent-bubble">
@@ -165,7 +169,6 @@ function createAgentCard(agent) {
     </div>
   `;
 
-  // Add idle breathing animation if idle
   if (phase === 'idle') {
     card.classList.add('breathing');
   }
@@ -178,21 +181,27 @@ function updateAgentCard(event) {
   const card = document.getElementById(`agent-${event.agentId}`);
   if (!card) return;
 
-  // Update status
   const phase = event.phase || 'idle';
   const mood = event.mood || 'neutral';
   const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
 
+  // Update status
   const statusEl = card.querySelector('.agent-status');
   if (statusEl) {
     statusEl.textContent = statusInfo.label;
     statusEl.className = `agent-status ${statusInfo.class}`;
   }
 
-  // Update mood
-  const moodEl = card.querySelector('.agent-mood');
+  // Update mood (large)
+  const moodEl = card.querySelector('.agent-mood-large');
   if (moodEl) {
     moodEl.textContent = MOOD_EMOJI[mood] || '';
+  }
+
+  // Update idle badge — reset to "active now" on any event
+  const idleEl = card.querySelector('.meta-idle');
+  if (idleEl) {
+    idleEl.textContent = 'active now';
   }
 
   // Update current task display (workflow events only)
@@ -231,7 +240,6 @@ function updateAgentCard(event) {
 const activeTypewriters = new WeakMap();
 
 function typewriterEffect(el, text) {
-  // Cancel any ongoing typewriter on this element
   const prev = activeTypewriters.get(el);
   if (prev) clearTimeout(prev);
 
@@ -251,7 +259,7 @@ function typewriterEffect(el, text) {
   type();
 }
 
-// --- Add event to activity feed ---
+// --- Add event to activity feed (v3.0 — enhanced) ---
 function addToFeed(event, animate) {
   const feed = document.getElementById('activity-feed');
   if (!feed) return;
@@ -263,7 +271,6 @@ function addToFeed(event, animate) {
   item.dataset.eventType = isWorkflow ? 'workflow' : 'personality';
   item.dataset.agentId = event.agentId || '';
 
-  // Apply current filter
   if (!matchesFilter(item)) {
     item.style.display = 'none';
   }
@@ -275,14 +282,20 @@ function addToFeed(event, animate) {
 
   if (isWorkflow) {
     const phaseIcon = WORKFLOW_ICONS[event.phase] || '▸';
+    const toolBadge = event.metadata?.toolName
+      ? `<span class="tool-badge">${escapeHtml(String(event.metadata.toolName))}</span>`
+      : '';
     item.innerHTML = `
       <span class="feed-workflow-icon">${phaseIcon}</span>
       <span class="feed-name" style="color: ${color}">${name}</span>
+      ${toolBadge}
       <span class="feed-workflow-message">${escapeHtml(event.message)}</span>
       <span class="feed-time">${relativeTime(event.timestamp)}</span>
     `;
   } else {
+    const typeIcon = event.type === 'mutter' ? '💭' : '💬';
     item.innerHTML = `
+      <span class="feed-type-icon">${typeIcon}</span>
       <span class="feed-avatar" style="color: ${color}">${avatar}</span>
       <span class="feed-name" style="color: ${color}">${name}</span>
       <span class="feed-message">${escapeHtml(event.message)}</span>
@@ -290,10 +303,8 @@ function addToFeed(event, animate) {
     `;
   }
 
-  // Prepend (newest first)
   feed.prepend(item);
 
-  // Limit feed size
   while (feed.children.length > MAX_FEED_ITEMS) {
     feed.removeChild(feed.lastChild);
   }
@@ -302,6 +313,33 @@ function addToFeed(event, animate) {
   if (activityFeed.length > MAX_FEED_ITEMS) {
     activityFeed.pop();
   }
+}
+
+// --- Stats (client-side) ---
+function updateStats() {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayMs = todayStart.getTime();
+
+  let eventsToday = 0;
+  let personalityEvents = 0;
+  for (const e of activityFeed) {
+    if (new Date(e.timestamp).getTime() >= todayMs) {
+      eventsToday++;
+      if (e.type === 'reaction' || e.type === 'mutter') {
+        personalityEvents++;
+      }
+    }
+  }
+
+  const activeAgents = Object.values(agentCards).filter(a => a.phase && a.phase !== 'idle').length;
+
+  const el1 = document.getElementById('stat-events-today');
+  const el2 = document.getElementById('stat-active-agents');
+  const el3 = document.getElementById('stat-personality-events');
+  if (el1) el1.textContent = eventsToday;
+  if (el2) el2.textContent = activeAgents;
+  if (el3) el3.textContent = personalityEvents;
 }
 
 // --- Utility functions ---
@@ -339,7 +377,6 @@ function initFilters() {
   const container = document.getElementById('feed-filters');
   if (!container) return;
 
-  // Add per-agent filter buttons after agent cards are loaded
   const agentIds = Object.keys(agentCards);
   for (const id of agentIds) {
     const agent = agentCards[id];
@@ -351,7 +388,6 @@ function initFilters() {
     container.appendChild(btn);
   }
 
-  // Click handler for all filter buttons
   container.addEventListener('click', (e) => {
     const btn = e.target.closest('.filter-btn');
     if (!btn) return;

@@ -55,8 +55,11 @@ export function createActivityApiRouter(
       return {
         id: agentId,
         name: (config?.name as string) ?? agentId,
+        description: (config?.description as string) ?? '',
+        model: (config?.model as string) ?? 'unknown',
         avatar: display?.avatar ?? '🤖',
         color: display?.color ?? '#6B7280',
+        idleDuration: activityService.getIdleDuration(agentId),
         ...state,
       };
     });
