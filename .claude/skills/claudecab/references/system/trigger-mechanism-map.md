@@ -270,6 +270,49 @@ bot:replied 事件
 
 ---
 
+## 五．五、Activity System + IdleMutterScheduler 觸發鏈
+
+### Activity 事件產生路徑
+
+```
+MessageProcessor.processMessage()
+    │
+    ├─ task_received → ActivityService.emitWorkflow('task_received')
+    ├─ working       → ActivityService.emitWorkflow('working')
+    ├─ tool_use      → ActivityService.emitWorkflow('tool_use')
+    ├─ completed     → ActivityService.emitWorkflow('completed')
+    │                    └─ 5 秒後自動推 idle
+    └─ error         → ActivityService.emitWorkflow('error')
+                         └─ 5 秒後自動推 idle
+
+ActivityService.emitWorkflow()
+    │
+    ├─ 更新 agentState（phase, mood）
+    ├─ 寫入 write queue → batch flush 到 ActivityRepository（2 秒/20 筆）
+    ├─ SSEBroadcaster.broadcast() → Live page 即時更新
+    └─ ReactionGenerator.generateReaction() → 產生 personality 事件
+        └─ ActivityService.emitPersonality() → 同上路徑
+```
+
+### IdleMutterScheduler 觸發鏈
+
+```
+setInterval(5 分鐘)
+    │
+    ├─ hasActiveViewers() === false → skip（無人看時零成本）
+    │
+    └─ 遍歷 trackedAgents
+        ├─ idleDuration < 2 分鐘 → skip
+        ├─ isHourlyCapped(3 次/小時) → skip
+        ├─ Math.random() > 0.3 → skip
+        └─ ReactionGenerator.generateMutter()
+            └─ ActivityService.emitMutter() → SSE broadcast + DB persist
+```
+
+**成本控制**：5 min interval × 30% chance × 3/hr cap × viewers-only gate ≈ $0.10/天（2 agents）
+
+---
+
 ## 六、排程觸發（ADR-028）
 
 ```

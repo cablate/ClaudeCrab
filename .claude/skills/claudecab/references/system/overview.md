@@ -48,7 +48,7 @@ claudecab/
 │   │   └── views/         # EJS 模板（元件化）
 │   ├── types/             # TypeScript 型別定義
 │   └── utils/             # logger, security, audit, retry, format
-├── public/                # 靜態資源 (JS)
+├── public/                # 靜態資源 (JS, CSS)
 ├── agents/                # Agent 配置（每個子目錄 = 一個代理）
 │   ├── general/           # 通用助手（含記憶系統 workspace）
 │   │   ├── .claude/

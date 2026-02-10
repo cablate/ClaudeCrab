@@ -6,11 +6,11 @@
 
 ## 版本歷史
 
-### v1.27.0 - Activity System v2.0 架構重構 + Live Page（當前版本）
+### v1.27.0 - Activity System v2.0 架構重構 + Live Page 虛擬辦公室（當前版本）
 
 **發布日期**：2026-02-10
 
-**目標**：Activity System 架構重構（God class 拆分）、SQLite 持久化、前端篩選 UI、穩定性修復。
+**目標**：Activity System 架構重構（God class 拆分）、SQLite 持久化、前端篩選 UI、穩定性修復、Live Page 虛擬辦公室視覺升級。
 
 **Phase 1: ReactionGenerator 抽取**
 - 新增 `src/core/ReactionGenerator.ts`：統一 Haiku AI 呼叫邏輯（`generateReaction()`、`generateMutter()`）
@@ -40,13 +40,50 @@
 - `live.js` typewriter effect：用 WeakMap 追蹤 timer，新動畫取消舊動畫防止字元交錯
 - `recordMessage` 重複寫入：已知的 `INSERT OR IGNORE` 行為，不影響功能
 
+**Live Page 虛擬辦公室視覺升級**
+- 兩欄佈局：左側員工卡片（hero）+ 右側活動動態（sidebar 340px）
+- 員工檔案風格卡片：大頭像（2.75rem emoji + radial gradient glow）、角色描述、model badge、idle 時長
+- Mood emoji 映射（😐😆😤😩🧐😪）+ 2.25rem 大尺寸顯示
+- 卡片色彩個性：頂部 accent bar + `::after` radial-gradient 背景 tint（5% opacity）
+- 內心獨白氣泡（speech bubble with triangle pointer）+ typewriter 效果
+- Compact header：inline mini-stats（💬 訊息 / ✅ 完成 / 🧠 獨白）+ 辦公室時鐘（週X HH:MM）
+- 全中文介面：狀態標籤、時間格式（剛剛/N 分鐘前）、idle 時長
+- Feed 增強：workflow 事件 tool badge、personality 事件 type icon（💬/💭）、personality 允許換行
+- DB 統計 API：`/api/activity/stats` 回傳 messagesHandled、tasksCompleted、personality
+- Stats 30 秒自動 poll + 事件驅動 debounce 更新
+- 頁面初始化從 DB 撈最近 20 則歷史事件填入 feed
+- 初始 bubble 基於時段顯示預設語（早安/下午了啊）
+- Idle badge 每 60 秒自動更新
+- 工作中持續顯示當前任務（task_received → working → tool_use 期間保持）
+- Flash 效果改用 CSS transition（不與 breathing animation 衝突）
+- Responsive：mobile 端自動堆疊（sidebar 變 100% 寬度）
+
+**Personality 系統調優**
+- `ReactionGenerator` prompt 從回應摘要改為內心獨白風格（15 字以內口語化碎碎念）
+- 新增 `PHASE_MOOD_HINTS`：per-phase 情緒引導（避免 88% focused 問題）
+- 情緒多樣性：completed→excited/bored、error→annoyed/tired、idle→bored/tired
+
+**IdleMutterScheduler 啟用**
+- 成本優化設定：5 分鐘檢查間隔、30% 觸發機率、3 次/小時/agent 上限
+- `hasActiveViewers` gate：僅 SSE 有連線時才檢查（無人看時零成本）
+- `mutterHistory` Map 追蹤每 agent 每小時 mutter 次數
+- 預估成本 ~$0.10/天（2 agents）
+
+**穩定性修復**
+- SSEBroadcaster：30 秒心跳（`:heartbeat\n\n`）+ `dispose()` 方法
+- 前端 SSE：指數退避重連（1s → 2s → 4s → ... → 30s max）
+- `ActivityRepository.getStats()`：SQL COUNT 聚合（messagesHandled、tasksCompleted）
+- `ActivityService.getStats()`：查詢前先 flush write queue
+
 **新增檔案**
 - `src/core/ReactionGenerator.ts`
+- `src/core/IdleMutterScheduler.ts`（前次已建立，本次重寫）
 - `src/persistence/ActivityRepository.ts`
 - `src/webui/api/activity.api.ts`（前次已建立，本次修改）
-- `src/webui/services/SSEBroadcaster.ts`（前次已建立）
-- `public/js/live.js`、`public/css/live.css`（前次已建立，本次修改）
-- `src/webui/views/live/index.ejs`（前次已建立，本次修改）
+- `src/webui/services/SSEBroadcaster.ts`（前次已建立，本次修改）
+- `public/js/live.js`（前次已建立，本次重寫為 v4.0）
+- `public/css/live.css`（前次已建立，本次重寫為 v4.0）
+- `src/webui/views/live/index.ejs`（前次已建立，本次重寫）
 - `start-dev.bat`：`chcp 65001` + `npm run dev`（修正 Windows 終端中文亂碼）
 
 ### v1.26.0 - 並行委派 + 結果收斂 + 協作失控防護

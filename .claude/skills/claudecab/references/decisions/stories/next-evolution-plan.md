@@ -1,7 +1,7 @@
 # ClaudeCab Next Evolution — 綜合規劃文件
 
 **類型**：跨領域規劃文件  
-**狀態**：📋 proposed  
+**狀態**：✅ Phase 1~3 核心全部完成（僅 Phase 4 驗證迭代為持續進行）  
 **日期**：2026-02-09  
 **涵蓋範圍**：人格升級、系統健康、群組 UX、Bot 社交模式
 
@@ -143,47 +143,28 @@
 
 ### 待改善
 
-#### B1. 記憶寫入的「📝 已更新」殘留
+#### B1. 記憶寫入的「📝 已更新」殘留 ✅ 已完成
 
-**問題**：behavior.md（合併自 output-style.md）仍然指示 bot 在每次回覆結尾標記「📝 已更新：[檔案清單]」。這在群組中會造成噪音。
+> **完成時間**：v1.26 期間  
+> **實作位置**：`behavior.md` line 34 已有「群組中不輸出任何記憶操作標記」
 
-**現況分析**：
-- `buildPromptContext()` 已注入群組行為規範：「不要回報內部操作過程」
-- `buildMemoryStopCheckpoint()` 已區分群組/私聊模式
-- 但 behavior.md 的「輸出標記」規則沒有區分模式
+~~**問題**：behavior.md（合併自 output-style.md）仍然指示 bot 在每次回覆結尾標記「📝 已更新：[檔案清單]」。這在群組中會造成噪音。~~
 
-**方向**：
-- **選項 A**（推薦）：在 behavior.md 的輸出標記規則中加上「群組中不標記」的例外
-- **選項 B**：完全移除輸出標記規則，改由 prompt context 動態控制
+已採用選項 A：在 behavior.md 中明確指示群組中不標記。
 
-#### B2. Personality Journal 整合到 MEMORY.md
+#### B2. Personality Journal 整合到 MEMORY.md ✅ 已完成
 
-**目的**：讓 soul.md 的演化有據可查
+> **完成時間**：v1.26 人格升級期間  
+> **實作位置**：`memory-system.md` line 62 已有 Personality Journal 區塊定義
 
-**新增區塊**（在 memory-system.md 中定義）：
-```
-## Personality Journal
-### 風格觀察
-- 本 session 偏離 soul.md 的行為
-- 效果好的新說法
+已整合至記憶系統協議，bot 會在 session 結束時視需要記錄人格觀察。
 
-### Pattern
-- 重複出現的人格特徵變化
-```
+#### B3. 共享知識區的實際使用狀況 ✅ 已完成
 
-**觸發時機**：
-- Stop hook 的記憶檢查點中，加入「人格觀察」提示
-- 不強制每次寫入，只在有明顯偏移時記錄
+> **完成時間**：v1.26 期間  
+> **實作位置**：`behavior.md` 已有 `_shared/knowledge/` 使用指引；`memory-system.md` 定義了讀寫規則
 
-#### B3. 共享知識區的實際使用狀況
-
-**現況**：`_shared/knowledge/` 目錄存在且有內容，但 bot 是否實際在使用需要驗證。
-
-**待確認**：
-- 各 bot 的 CLAUDE.md 或 behavior.md 中是否有「查閱共享知識」的指引
-- PathValidator 的 Bash 工具權限是否正確（目前允許讀取 `_shared/`）
-
-**方向**：如果共享知識區使用率低，考慮在啟動協議或相關 skill description 中增加觸發提示。
+bot 的 skill 協議已包含共享知識區的查閱與寫入指引。
 
 ---
 
@@ -225,18 +206,12 @@
 - `StatusCapableAdapter` — 新增 `sendTypingAction(chatId)` 方法
 - `TelegramAdapter` — 實作 `sendChatAction("typing")` 循環
 
-### C2. 記憶寫入噪音
+### C2. 記憶寫入噪音 ✅ 已完成
 
-**問題**：即使有群組行為規範，bot 有時仍會輸出「📝 已記錄到日誌」之類的文字。
+> **完成時間**：v1.26 期間  
+> **實作位置**：`behavior.md` 已有「群組中不輸出任何記憶操作標記」；`buildPromptContext()` 已注入群組行為規範
 
-**現況分析**：
-- `buildPromptContext()` 已注入：「不要回報內部操作過程」
-- `buildMemoryStopCheckpoint()` 已有群組靜默模式
-- behavior.md 的「📝 已更新」規則未區分模式
-
-**方向**：
-1. behavior.md 中明確標註：「群組中不輸出任何記憶操作標記」
-2. 考慮在 `buildPromptContext()` 的群組規範中加強語氣：「絕對不輸出任何以 📝 開頭的標記」
+兩層防護均已到位：agent skill 協議 + runtime prompt injection。
 
 ### C3. 群組回覆長度控制
 
@@ -483,21 +458,24 @@ Social mode 的效果高度依賴人格設計（A 區塊）：
 ## 實施優先級
 
 ```
-Phase 1：人格升級（A）
-    └─ P0: General soul.md 重寫
-    └─ P1: Nitterbot + Leader soul.md
+Phase 1：人格升級（A）— ✅ 已完成
+    └─ ✅ P0: General soul.md 重寫（七層架構）
+    └─ ✅ P1: Nitterbot + Leader soul.md
     
-Phase 2：群組 UX（C）+ 系統健康（B）
-    └─ C1: StatusMessageManager 群組模式（typing only）
-    └─ C2: 記憶噪音清理（behavior.md + prompt 強化）
-    └─ C3: 群組回覆長度引導
-    └─ B1: 📝 標記模式區分
-    └─ B2: Personality Journal 整合
+Phase 2：群組 UX（C）+ 系統健康（B）— ✅ 全部完成
+    └─ ✅ B1: 📝 標記模式區分（behavior.md 已處理）
+    └─ ✅ B2: Personality Journal 整合（memory-system.md 已定義）
+    └─ ✅ B3: 共享知識區使用指引（behavior.md 已加入）
+    └─ ✅ C1: StatusMessageManager 群組模式（typing only）— ADR-030 已實作
+    └─ ✅ C2: 記憶噪音清理（behavior.md + prompt 雙層防護）
+    └─ ✅ C3: 群組回覆長度引導（buildPromptContext 已注入）
     
-Phase 3：社交模式（D）
-    └─ D1-D3: SocialHandler 實作 + 防迴圈
-    └─ D4: 配置結構
-    └─ D5-D6: 邊界隔離 + payload 擴展
+Phase 3：社交模式（D）— ✅ 核心已完成（ADR-030）
+    └─ ✅ D1: SocialHandler + SocialEvaluator 已實作
+    └─ ✅ D2: Haiku 評估 + energy 機制
+    └─ ✅ D3: 防迴圈（energy decay + rate limit + hard cutoff）
+    └─ ✅ D4: agent.json social 配置
+    └─ ✅ D5-D6: isSocial flag + DelegationHandler 跳過
     
 Phase 4：驗證與迭代
     └─ 人格一致性測試（20 輪對話）
@@ -509,35 +487,36 @@ Phase 4：驗證與迭代
 
 ## 修改檔案預估
 
-### Phase 1（人格）
+### Phase 1（人格）— ✅ 已完成
 
-| 檔案 | 操作 |
-|------|------|
-| `agents/general/.claude/skills/persona/references/soul.md` | 重寫 |
-| `agents/nitterbot/.claude/skills/persona/references/soul.md` | 重寫 |
-| `agents/leader/.claude/skills/persona/references/soul.md` | 重寫（從空模板） |
-| `agents/leader/.claude/skills/persona/references/identity.md` | 重寫（從空模板） |
-| `agents/_example/.claude/skills/persona/references/soul.md` | 更新模板 |
+| 檔案 | 操作 | 狀態 |
+|------|------|------|
+| `agents/general/.claude/skills/persona/references/soul.md` | 重寫（七層架構） | ✅ |
+| `agents/nitterbot/.claude/skills/persona/references/soul.md` | 重寫 | ✅ |
+| `agents/leader/.claude/skills/persona/references/soul.md` | 重寫（從空模板） | ✅ |
+| `agents/leader/.claude/skills/persona/references/identity.md` | 重寫（從空模板） | ✅ |
+| `agents/_example/.claude/skills/persona/references/soul.md` | 更新模板 | ✅ |
 
-### Phase 2（UX + 健康）
+### Phase 2（UX + 健康）— 僅 C1 待實作
 
-| 檔案 | 操作 |
-|------|------|
-| `agents/general/.claude/skills/sys-agent-protocols/references/behavior.md` | 更新📝標記規則 |
-| `agents/general/.claude/skills/sys-agent-protocols/references/memory-system.md` | 新增 Personality Journal |
-| `src/core/StatusMessageManager.ts` | 新增群組模式判斷 |
-| `src/core/MessageProcessor.ts` | `buildPromptContext()` 強化群組提示 |
-| `src/adapters/TelegramAdapter.ts` | 新增 typing action 方法 |
+| 檔案 | 操作 | 狀態 |
+|------|------|------|
+| `agents/general/.claude/skills/sys-agent-protocols/references/behavior.md` | 更新📝標記規則 | ✅ 已完成 |
+| `agents/general/.claude/skills/sys-agent-protocols/references/memory-system.md` | 新增 Personality Journal | ✅ 已完成 |
+| `src/core/StatusMessageManager.ts` | 群組中跳過（MessageProcessor line 465） | ✅ 已完成 |
+| `src/core/MessageProcessor.ts` | `buildPromptContext()` 強化群組提示 + 群組 typing only | ✅ 已完成 |
+| `src/adapters/TelegramAdapter.ts` | `sendTypingIndicator()` 已存在 | ✅ 已完成 |
 
-### Phase 3（社交）
+### Phase 3（社交）— ✅ 核心已完成（ADR-030）
 
-| 檔案 | 操作 |
-|------|------|
-| `src/core/SocialHandler.ts` | **新建** |
-| `src/core/GroupBroadcaster.ts` | 新增 social 評估入口 |
-| `src/types/events.ts` | BotRepliedPayload 新增 isSocial |
-| `src/core/DelegationHandler.ts` | 新增 isSocial 跳過 |
-| `src/types/agent.ts` | AgentConfig 新增 social 設定 |
+| 檔案 | 操作 | 狀態 |
+|------|------|------|
+| `src/core/SocialHandler.ts` | 新建 | ✅ |
+| `src/core/SocialEvaluator.ts` | 新建（Haiku 評估） | ✅ |
+| `src/core/GroupBroadcaster.ts` | 新增 social 評估入口 | ✅ |
+| `src/types/events.ts` | BotRepliedPayload 新增 isSocial | ✅ |
+| `src/core/DelegationHandler.ts` | 新增 isSocial 跳過 | ✅ |
+| `src/types/agent.ts` | AgentConfig 新增 social 設定 | ✅ |
 
 ---
 

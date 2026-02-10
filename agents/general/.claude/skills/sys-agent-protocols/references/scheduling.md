@@ -83,6 +83,21 @@ metadata:
 - 一次性排程用 `type: once` + `at`（**不是** `type: at`，**不是** `datetime`）
 - 週期性排程用 `type: cron` + `cron`
 
+## 建立檔案的正確方式
+
+**使用 Write 工具**，不要用 Bash 的 cat 或 echo：
+
+```
+Write tool:
+  file_path: F:\_Program\OwnProject\ClaudeCab\agents\general\schedules\<task-id>.yaml
+  content: <YAML 內容>
+```
+
+**路徑說明**：
+- 完整路徑：`F:\_Program\OwnProject\ClaudeCab\agents\general\schedules/`
+- 相對於工作目錄：`schedules/`（你的工作目錄是 `agents/general/`）
+- **不要**放在 `agents/general/` 直接底下，要放在 `schedules/` 子目錄內
+
 ## 注意事項
 
 - 排程任務會在**獨立 session** 執行，不會延續當前對話
