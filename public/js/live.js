@@ -10,12 +10,12 @@ let activeFilter = 'all'; // 'all' | 'workflow' | 'personality' | 'agent:{id}'
 
 // Mood emoji mapping
 const MOOD_EMOJI = {
-  neutral: '',
-  excited: '',
-  annoyed: '',
-  tired: '',
-  focused: '',
-  bored: '',
+  neutral: '😐',
+  excited: '😆',
+  annoyed: '😤',
+  tired: '😩',
+  focused: '🧐',
+  bored: '😪',
 };
 
 // Phase status mapping
@@ -43,6 +43,7 @@ async function init() {
   await loadAgentStates();
   connectSSE();
   startRelativeTimeUpdater();
+  startClock();
   initFilters();
   updateStats();
 }
@@ -54,6 +55,10 @@ async function loadAgentStates() {
     const { agents } = await res.json();
     const container = document.getElementById('agent-cards');
     container.innerHTML = '';
+    if (agents.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><p>尚未有員工進駐</p></div>';
+      return;
+    }
     for (const agent of agents) {
       const card = createAgentCard(agent);
       container.appendChild(card);
@@ -204,15 +209,23 @@ function updateAgentCard(event) {
     idleEl.textContent = '剛剛活躍';
   }
 
-  // Update current task display (workflow events only)
+  // Update current task display — persist during working phases
   const taskEl = card.querySelector('.agent-task');
   if (taskEl) {
     if (event.type === 'workflow' && event.phase === 'task_received' && event.metadata?.taskContent) {
       const preview = String(event.metadata.taskContent);
-      taskEl.textContent = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
+      const truncated = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
+      taskEl.textContent = truncated;
       taskEl.style.display = 'block';
+      // Remember current task
+      if (agentCards[event.agentId]) agentCards[event.agentId].currentTask = truncated;
     } else if (event.phase === 'completed' || event.phase === 'idle') {
       taskEl.style.display = 'none';
+      if (agentCards[event.agentId]) agentCards[event.agentId].currentTask = null;
+    } else if (agentCards[event.agentId]?.currentTask) {
+      // working / tool_use — keep showing the task
+      taskEl.textContent = agentCards[event.agentId].currentTask;
+      taskEl.style.display = 'block';
     }
   }
 
@@ -352,11 +365,11 @@ function relativeTime(timestamp) {
   const then = new Date(timestamp).getTime();
   const diff = Math.floor((now - then) / 1000);
 
-  if (diff < 10) return 'just now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return new Date(timestamp).toLocaleDateString();
+  if (diff < 10) return '剛剛';
+  if (diff < 60) return `${diff} 秒前`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分鐘前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小時前`;
+  return new Date(timestamp).toLocaleDateString('zh-TW');
 }
 
 function startRelativeTimeUpdater() {
@@ -368,6 +381,24 @@ function startRelativeTimeUpdater() {
       }
     });
   }, 10000);
+}
+
+// --- Clock ---
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+
+function startClock() {
+  updateClock();
+  setInterval(updateClock, 60000);
+}
+
+function updateClock() {
+  const el = document.getElementById('header-clock');
+  if (!el) return;
+  const now = new Date();
+  const day = WEEKDAYS[now.getDay()];
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  el.textContent = `週${day} ${h}:${m}`;
 }
 
 // --- Filters ---

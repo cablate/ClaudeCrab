@@ -74,6 +74,12 @@ body {
   box-shadow: 0 0 6px #22c55e80;
 }
 
+.header-clock {
+  margin-left: 0.5rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Header inline stats */
 .header-stats {
   display: flex;
@@ -486,6 +492,7 @@ body {
 
 .feed-personality .feed-message {
   font-style: italic;
+  white-space: normal;
 }
 
 .feed-type-icon {
