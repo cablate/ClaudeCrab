@@ -41,9 +41,12 @@ const WORKFLOW_ICONS = {
 // --- Initialize ---
 async function init() {
   await loadAgentStates();
+  await loadRecentFeed();
   connectSSE();
   startRelativeTimeUpdater();
+  startIdleBadgeUpdater();
   startClock();
+  startStatsPoller();
   initFilters();
   updateStats();
 }
@@ -124,6 +127,51 @@ function handleActivityEvent(event) {
   updateStats();
 }
 
+// --- Default bubble text based on time of day ---
+function defaultBubble() {
+  const h = new Date().getHours();
+  if (h < 6) return '深夜了...還沒睡';
+  if (h < 9) return '早安，又是新的一天';
+  if (h < 12) return '上午好...';
+  if (h < 14) return '午餐時間到了嗎';
+  if (h < 18) return '下午了啊...';
+  if (h < 22) return '晚上好...';
+  return '夜深了...';
+}
+
+// --- Load recent feed history from DB ---
+async function loadRecentFeed() {
+  try {
+    const res = await fetch('/api/activity/events?limit=20');
+    const { events } = await res.json();
+    const feed = document.getElementById('activity-feed');
+    if (!feed || !events || events.length === 0) {
+      showFeedEmpty();
+      return;
+    }
+    // Events come newest-first, render in order (newest on top)
+    for (const event of events) {
+      if (event.type !== 'status_change') {
+        addToFeed(event, false);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load recent feed:', err);
+    showFeedEmpty();
+  }
+}
+
+function showFeedEmpty() {
+  const feed = document.getElementById('activity-feed');
+  if (!feed || feed.children.length > 0) return;
+  feed.innerHTML = '<div class="feed-empty">暫無動態</div>';
+}
+
+function clearFeedEmpty() {
+  const el = document.querySelector('.feed-empty');
+  if (el) el.remove();
+}
+
 // --- Format idle duration ---
 function formatIdleDuration(ms) {
   if (ms === Infinity || ms === undefined || ms === null) return '尚未上線';
@@ -170,7 +218,7 @@ function createAgentCard(agent) {
     </div>
     <div class="agent-task" style="display: none;"></div>
     <div class="agent-bubble">
-      <span class="bubble-text">${agent.lastEvent?.message || '...'}</span>
+      <span class="bubble-text">${agent.lastEvent?.message || defaultBubble()}</span>
     </div>
   `;
 
@@ -276,6 +324,7 @@ function typewriterEffect(el, text) {
 function addToFeed(event, animate) {
   const feed = document.getElementById('activity-feed');
   if (!feed) return;
+  clearFeedEmpty();
 
   const item = document.createElement('div');
   const isWorkflow = event.type === 'workflow';
@@ -399,6 +448,28 @@ function updateClock() {
   const h = String(now.getHours()).padStart(2, '0');
   const m = String(now.getMinutes()).padStart(2, '0');
   el.textContent = `週${day} ${h}:${m}`;
+}
+
+// --- Idle badge auto-updater (every 60s) ---
+function startIdleBadgeUpdater() {
+  setInterval(() => {
+    for (const [id, agent] of Object.entries(agentCards)) {
+      const card = document.getElementById(`agent-${id}`);
+      if (!card) continue;
+      const idleEl = card.querySelector('.meta-idle');
+      if (!idleEl) continue;
+      // Increment idle duration by 60s if agent is idle
+      if (agent.phase === 'idle' || !agent.phase) {
+        agent.idleDuration = (agent.idleDuration || 0) + 60000;
+        idleEl.textContent = formatIdleDuration(agent.idleDuration);
+      }
+    }
+  }, 60000);
+}
+
+// --- Stats periodic poll (every 30s) ---
+function startStatsPoller() {
+  setInterval(fetchStats, 30000);
 }
 
 // --- Filters ---
