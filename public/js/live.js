@@ -28,7 +28,7 @@ const PHASE_STATUS = {
   idle: { label: '休息中', class: 'status-idle' },
 };
 
-// Workflow phase icons (for structured log entries)
+// Workflow phase icons + labels (for feed entries)
 const WORKFLOW_ICONS = {
   task_received: '📩',
   working: '⚡',
@@ -36,6 +36,15 @@ const WORKFLOW_ICONS = {
   completed: '✅',
   error: '❌',
   idle: '💤',
+};
+
+const WORKFLOW_LABELS = {
+  task_received: '收到任務',
+  working: '處理中',
+  tool_use: '使用工具',
+  completed: '回覆完成',
+  error: '發生錯誤',
+  idle: '進入休息',
 };
 
 // --- Initialize ---
@@ -49,6 +58,7 @@ async function init() {
   startStatsPoller();
   initFilters();
   updateStats();
+  updatePageTitle();
 }
 
 // --- Load initial agent states ---
@@ -123,6 +133,7 @@ function handleActivityEvent(event) {
   }
 
   updateStats();
+  updatePageTitle();
 }
 
 // --- Default bubble text based on time of day ---
@@ -342,14 +353,22 @@ function addToFeed(event, animate) {
 
   if (isWorkflow) {
     const phaseIcon = WORKFLOW_ICONS[event.phase] || '▸';
+    const label = WORKFLOW_LABELS[event.phase] || event.message;
     const toolBadge = event.metadata?.toolName
       ? `<span class="tool-badge">${escapeHtml(String(event.metadata.toolName))}</span>`
       : '';
+    // For task_received, show truncated task content
+    let detail = '';
+    if (event.phase === 'task_received' && event.metadata?.taskContent) {
+      const content = String(event.metadata.taskContent);
+      detail = `「${escapeHtml(content.length > 30 ? content.substring(0, 30) + '...' : content)}」`;
+    }
     item.innerHTML = `
       <span class="feed-workflow-icon">${phaseIcon}</span>
+      <span class="feed-avatar">${avatar}</span>
       <span class="feed-name" style="color: ${color}">${name}</span>
       ${toolBadge}
-      <span class="feed-workflow-message">${escapeHtml(event.message)}</span>
+      <span class="feed-workflow-message">${label}${detail ? ' ' + detail : ''}</span>
       <span class="feed-time">${relativeTime(event.timestamp)}</span>
     `;
   } else {
@@ -468,6 +487,17 @@ function startIdleBadgeUpdater() {
 // --- Stats periodic poll (every 30s) ---
 function startStatsPoller() {
   setInterval(fetchStats, 30000);
+}
+
+// --- Dynamic page title ---
+function updatePageTitle() {
+  const active = Object.values(agentCards).filter(a => a.phase && a.phase !== 'idle' && a.phase !== 'completed').length;
+  const total = Object.keys(agentCards).length;
+  if (active > 0) {
+    document.title = `ClaudeCab Live (${active} 工作中)`;
+  } else {
+    document.title = `ClaudeCab Live (${total} 員工)`;
+  }
 }
 
 // --- Filters ---
