@@ -266,6 +266,7 @@ export class SocialHandler {
     senderLabel: string,
     reason?: string,
   ): Promise<void> {
+    const TIMEOUT_MS = 120_000;
     const syntheticMessage: UnifiedMessage = {
       id: `social-${Date.now()}-${agentId}`,
       platform: originalMessage.platform,
@@ -281,10 +282,15 @@ export class SocialHandler {
     };
 
     try {
-      await this.messageProcessor.processMessage(syntheticMessage, agentId, {
+      const processPromise = this.messageProcessor.processMessage(syntheticMessage, agentId, {
         isGroupChat: true,
         isSocial: true,
       });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Social response timed out after ${TIMEOUT_MS}ms`)), TIMEOUT_MS),
+      );
+
+      await Promise.race([processPromise, timeoutPromise]);
     } catch (error) {
       this.log.error(
         { error, chatId, agentId },

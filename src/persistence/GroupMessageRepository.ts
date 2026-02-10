@@ -60,7 +60,7 @@ export class GroupMessageRepository implements IGroupMessageRepository {
         'recordMessage: SUCCESS - message inserted'
       );
     } else {
-      this.log.warn(
+      this.log.debug(
         { platform, chatId, platformMsgId, senderType, senderId },
         'recordMessage: SKIPPED - duplicate or constraint violation (INSERT OR IGNORE)'
       );
