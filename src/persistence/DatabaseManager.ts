@@ -166,9 +166,26 @@ CREATE TABLE IF NOT EXISTS query_metrics (
 -- Query metrics indexes
 CREATE INDEX IF NOT EXISTS idx_query_metrics_agent ON query_metrics(agent_id);
 CREATE INDEX IF NOT EXISTS idx_query_metrics_created ON query_metrics(created_at);
+
+-- Activity events table (v2.0)
+CREATE TABLE IF NOT EXISTS activity_events (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    phase TEXT,
+    message TEXT NOT NULL,
+    mood TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_events_agent ON activity_events(agent_id);
+CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
+CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
 `;
 
-const SCHEMA_VERSION = '7';
+const SCHEMA_VERSION = '8';
 
 /**
  * Migration SQL from v1 to v2:
@@ -364,6 +381,25 @@ CREATE INDEX IF NOT EXISTS idx_query_metrics_agent ON query_metrics(agent_id);
 CREATE INDEX IF NOT EXISTS idx_query_metrics_created ON query_metrics(created_at);
 `;
 
+const MIGRATION_V7_TO_V8 = `
+-- Activity events table (v2.0: workflow visibility + personality reactions)
+CREATE TABLE IF NOT EXISTS activity_events (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    phase TEXT,
+    message TEXT NOT NULL,
+    mood TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_events_agent ON activity_events(agent_id);
+CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
+CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
+`;
+
 /**
  * Database manager options
  */
@@ -515,6 +551,12 @@ export class DatabaseManager {
     if (currentVersion === '6') {
       this.db.exec(MIGRATION_V6_TO_V7);
       logger.info('Migration v6 → v7 completed');
+      currentVersion = '7';
+    }
+
+    if (currentVersion === '7') {
+      this.db.exec(MIGRATION_V7_TO_V8);
+      logger.info('Migration v7 → v8 completed');
     }
 
     // Update schema version

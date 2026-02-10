@@ -41,6 +41,9 @@ export interface EventMap {
 
   /** Fired when a bot replies in a group chat (for broadcasting to other bots) */
   'bot:replied': BotRepliedPayload;
+
+  /** Fired when an agent activity occurs (v2.0 Characters Come Alive) */
+  'activity': import('./activity.js').ActivityEvent;
 }
 
 /**

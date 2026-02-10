@@ -6,7 +6,50 @@
 
 ## 版本歷史
 
-### v1.26.0 - 並行委派 + 結果收斂 + 協作失控防護（當前版本）
+### v1.27.0 - Activity System v2.0 架構重構 + Live Page（當前版本）
+
+**發布日期**：2026-02-10
+
+**目標**：Activity System 架構重構（God class 拆分）、SQLite 持久化、前端篩選 UI、穩定性修復。
+
+**Phase 1: ReactionGenerator 抽取**
+- 新增 `src/core/ReactionGenerator.ts`：統一 Haiku AI 呼叫邏輯（`generateReaction()`、`generateMutter()`）
+- 共享方法：`callHaiku()`、`parseResponse()`、`inferMood()`
+- 從 `ActivityService` 和 `IdleMutterScheduler` 移除重複的 AI 呼叫邏輯
+
+**Phase 2: 模組瘦身 + 接線**
+- `ActivityService`：移除 AI 邏輯，降為 thin facade（事件建立 + 推送 + 狀態管理）
+- `IdleMutterScheduler`：從 177 行瘦到 ~90 行，只負責排程邏輯
+- `AppBootstrap`：新增 `buildPersonalityReader()` 消除重複的 personality 讀取邏輯
+
+**Phase 3: ActivityRepository + Migration v7→v8**
+- 新增 `src/persistence/ActivityRepository.ts`：activity_events 表的 CRUD
+- `DatabaseManager` migration v7→v8：新增 `activity_events` 表 + 索引
+
+**Phase 4: API 篩選 + 前端 UI**
+- `/api/activity/events` 支援 `agentId`、`type`、`since`、`limit` 查詢參數
+- `getRecent()` 有 repository 時優先從 DB 查詢（重啟後歷史資料可見）
+- 前端篩選按鈕：All / Workflow / Personality / per-agent（client-side filter）
+- SSE 初始批次不更新 agent card（防止舊資料覆蓋乾淨初始狀態）
+
+**穩定性修復**
+- `SocialEvaluator`：新增 30 秒 timeout（`Promise.race`），防止 API hang 卡住整個系統
+- `SocialEvaluator`：JSON parse 改用 `match(/\{[\s\S]*?\}/)` 提取，容忍 Haiku 在 JSON 前後加文字
+- `ActivityService.getAgentState()`：60 秒 auto-expire stale phase + mood，防止 agent card 卡在過時狀態
+- `ActivityService.emitWorkflow()`：completed/error 後 5 秒自動推 idle 事件
+- `live.js` typewriter effect：用 WeakMap 追蹤 timer，新動畫取消舊動畫防止字元交錯
+- `recordMessage` 重複寫入：已知的 `INSERT OR IGNORE` 行為，不影響功能
+
+**新增檔案**
+- `src/core/ReactionGenerator.ts`
+- `src/persistence/ActivityRepository.ts`
+- `src/webui/api/activity.api.ts`（前次已建立，本次修改）
+- `src/webui/services/SSEBroadcaster.ts`（前次已建立）
+- `public/js/live.js`、`public/css/live.css`（前次已建立，本次修改）
+- `src/webui/views/live/index.ejs`（前次已建立，本次修改）
+- `start-dev.bat`：`chcp 65001` + `npm run dev`（修正 Windows 終端中文亂碼）
+
+### v1.26.0 - 並行委派 + 結果收斂 + 協作失控防護
 
 **發布日期**：2026-02-07
 

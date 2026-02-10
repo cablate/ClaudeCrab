@@ -49,7 +49,12 @@ ClaudeCab
 │           ├── settings.local.json
 │           └── skills/       # Skills（SDK 自動載入）
 │
-├── 💬 通訊層
+├── 📡 Activity Event Layer（v2.0 新增）
+│   ├── 結構化事件流（所有 bot 行為 → 事件）
+│   ├── 人格化反應（任務吐槽、工作嘀咕、閒置碎念）
+│   └── SSE/WebSocket 串流（前端即時訂閱）
+│
+├── 💬 通訊層（事件消費者之一）
 │   ├── Telegram Bot（主要）
 │   └── 未來擴展（Discord、Slack...）
 │
@@ -58,7 +63,8 @@ ClaudeCab
 │   ├── 任務理解（主動/被動）
 │   └── Cron 排程（定時任務）
 │
-└── 🌐 WebUI
+└── 🌐 展示層（事件消費者之二）
+    ├── Virtual Office 前端（agent 即時狀態 + 活動流）
     └── Agent 管理介面
 ```
 
@@ -108,7 +114,13 @@ SDK 整合層只接收 `systemPrompt` + `cwd`，不注入任何業務邏輯。�
 - [ ] 任務 Queue 管理
 - [ ] 事件驅動喚醒
 
-### Phase 3：生態整合
+### Phase 3：角色活起來（Demo Day 衝刺）🔥 當前
+- [ ] Activity Event Layer（所有 bot 行為變成結構化事件）
+- [ ] 人格化反應（接到任務吐槽、工作中嘀咕、完成後感想）
+- [ ] 前端展示層（Web UI 渲染 agent 即時狀態與活動）
+- [ ] Idle 生命感（閒置時三不五時冒出碎碎念）
+
+### Phase 4：生態整合
 - [ ] 更多通訊平台支援
 - [ ] MCP Server 市集整合
 - [ ] Skills 安裝簡化
@@ -190,9 +202,11 @@ Skill 的可移植性：
 - **v1.10** - 排程系統：Agent-Driven Scheduling
 - **v1.11** - Skill 系統：協議與人格模組化
 - **v1.22** - 群組協作基礎設施（ADR-026）
-- **v1.26** - 並行委派 + 協作失控防護（ADR-030）（當前）
-- **v2.0** - 生態整合（規劃中）
+- **v1.26** - 並行委派 + 協作失控防護（ADR-030）
+- **v1.27** - Social Mode + 噪音過濾
+- **v2.0** - 角色活起來：Activity Event Layer + 展示層前端（當前衝刺）
+- **v3.0** - 生態整合（規劃中）
 
 ---
 
-*最後更新：2026-02-08*
+*最後更新：2026-02-09*

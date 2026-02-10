@@ -24,6 +24,7 @@ import {
   isStatusCapable,
   type ToolEventEntry,
 } from './StatusMessageManager.js';
+import type { ActivityService } from './ActivityService.js';
 import * as path from 'node:path';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
 
@@ -73,6 +74,11 @@ export interface MessageProcessorOptions {
    * Query metrics repository for token usage tracking (ADR-020 Phase 2).
    */
   queryMetricsRepository?: IQueryMetricsRepository;
+
+  /**
+   * Activity service for personality-driven lifecycle reactions (v2.0).
+   */
+  activityService?: ActivityService;
 }
 
 /**
@@ -93,6 +99,24 @@ export interface ProcessingResult {
 
   /** Session ID used for processing */
   sessionId?: string;
+}
+
+/**
+ * Noise response patterns that should not be sent to users.
+ * Matches SDK placeholders, stop-hook memory checkpoint outputs, etc.
+ */
+const NOISE_PATTERNS = [
+  /^No response requested\.?$/i,
+  /^No significant events?\b/i,
+  /^Nothing (?:significant|notable|important) to (?:record|note|report)\b/i,
+  /^沒有(?:重要|顯著|值得).*(?:記錄|紀錄|回報)/,
+];
+
+/** Returns true if the text is a noise/no-op response that should be suppressed. */
+function isNoiseResponse(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return true;
+  return NOISE_PATTERNS.some(pattern => pattern.test(trimmed));
 }
 
 /**
@@ -119,6 +143,7 @@ export class MessageProcessor {
   private readonly eventBus: EventBus | undefined;
   private readonly contextInjector: ContextInjector | undefined;
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
+  private readonly activityService: ActivityService | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -132,6 +157,7 @@ export class MessageProcessor {
     this.eventBus = options.eventBus;
     this.contextInjector = options.contextInjector;
     this.queryMetricsRepository = options.queryMetricsRepository;
+    this.activityService = options.activityService;
 
     logger.info('MessageProcessor initialized');
   }
@@ -183,6 +209,18 @@ export class MessageProcessor {
     ) {
       logger.debug({ messageId }, 'Skipping duplicate message');
       return { success: true, skipped: true };
+    }
+
+    // v2.0: Workflow log (factual, sync)
+    const taskPreview = text.length > 40 ? text.substring(0, 40) + '...' : text;
+    this.activityService?.emitWorkflow(agentId, 'task_received', `收到訊息「${taskPreview}」`, { taskContent: text });
+
+    // v2.0: Emit task_received reaction (fire-and-forget, Haiku personality)
+    // Skip Haiku for delegated messages — workflow event is sufficient
+    if ((options?.delegationDepth ?? 0) === 0) {
+      this.activityService?.emitReaction(agentId, 'task_received', {
+        taskContent: text,
+      });
     }
 
     // Get or create session
@@ -342,6 +380,15 @@ export class MessageProcessor {
         'Failed to process message'
       );
 
+      // v2.0: Workflow log (factual, sync)
+      const errorPreview = err.message.length > 60 ? err.message.substring(0, 60) + '...' : err.message;
+      this.activityService?.emitWorkflow(agentId, 'error', `發生錯誤: ${errorPreview}`, { error: err.message });
+
+      // v2.0: Emit error reaction (fire-and-forget, Haiku personality)
+      this.activityService?.emitReaction(agentId, 'error', {
+        error: err.message,
+      });
+
       // Send error message to user
       await this.sendErrorToUser(adapter, chatId, err);
 
@@ -432,6 +479,8 @@ export class MessageProcessor {
       const intermediateMessages: string[] = [];
       // Track the last sent message ID (for bot:replied event in group chats)
       let lastSentMessageId: string | undefined;
+      // v2.0: Only emit one tool_use reaction per query to avoid noise
+      let toolUseReacted = false;
 
       // Context injection for multi-bot group chats (ADR-019)
       // Get messages since last query to inject as context
@@ -484,6 +533,12 @@ export class MessageProcessor {
                   : {}),
                 resume: resumeId,
                 onIntermediateMessage: async (text: string): Promise<void> => {
+                  // Filter noise responses (SDK placeholders, stop-hook outputs)
+                  if (isNoiseResponse(text)) {
+                    logger.debug({ chatId, agentId, text: text.substring(0, 80) }, 'Suppressed noise intermediate message');
+                    return;
+                  }
+
                   // Finalize current status message before sending assistant message
                   await statusManager?.finalizeCurrentBatch();
 
@@ -515,6 +570,12 @@ export class MessageProcessor {
                   statusManager?.markNeedNewMessage();
                 },
                 onToolEvent: async (event) => {
+                  // v2.0: Status change only for tool_use (no Haiku, just update phase)
+                  if (event.type === 'tool_use' && !toolUseReacted) {
+                    toolUseReacted = true;
+                    this.activityService?.emitStatusChange(agentId, 'tool_use', 'focused');
+                  }
+
                   if (statusManager === null) return;
 
                   // Build tool event entry for status display
@@ -729,6 +790,12 @@ export class MessageProcessor {
         lastSentMessageId = finalMessageId;
       }
 
+      // v2.0: Workflow log (factual, sync)
+      this.activityService?.emitWorkflow(agentId, 'completed', '回覆完成');
+
+      // v2.0: Status change only for completed (no Haiku)
+      this.activityService?.emitStatusChange(agentId, 'completed', 'neutral');
+
       // Broadcast to other bots and finalize
       this.emitBotRepliedEvent(fullResponse, chatId, agentId, platform, lastSentMessageId, options);
       await statusManager?.finalizeAll();
@@ -895,7 +962,8 @@ export class MessageProcessor {
     agentId: string,
     options?: { isGroupChat?: boolean; replyToMessageId?: string }
   ): Promise<string | undefined> {
-    if (response.length === 0) return undefined;
+    // Skip noise responses (empty, SDK placeholders, stop-hook outputs)
+    if (isNoiseResponse(response)) return undefined;
 
     const sendOpts: SendOptions = {};
     if (options?.isGroupChat && options?.replyToMessageId) {

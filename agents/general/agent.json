@@ -1,5 +1,9 @@
 {
   "name": "閒聊好朋友",
+  "display": {
+    "avatar": "📝",
+    "color": "#F59E0B"
+  },
   "description": "A helpful general-purpose AI assistant",
   "version": "1.0.0",
   "model": "sonnet",
@@ -14,7 +18,10 @@
       "enabled": false
     },
     "social": {
-      "enabled": false
+      "enabled": true,
+      "energyThreshold": 2,
+      "cooldown": 120,
+      "maxPerHour": 30
     }
   }
 }

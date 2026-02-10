@@ -56,6 +56,12 @@ export interface GroupBroadcasterOptions {
 
   /** ADR-030: Social evaluator (Strategy pattern) */
   socialEvaluator?: SocialEvaluator;
+
+  /** v2.0: ActivityService for workflow event emissions in delegation */
+  activityService?: import('./ActivityService.js').ActivityService;
+
+  /** v2.0: Get agent display name by ID */
+  getAgentName?: (agentId: string) => string;
 }
 
 /**
@@ -147,6 +153,8 @@ export class GroupBroadcaster {
       getGroupMembers: (chatId) => this.getGroupMembers(chatId),
       getBotInfo: options.getBotInfo,
       ...(options.getDelegationSettings ? { getDelegationSettings: options.getDelegationSettings } : {}),
+      ...(options.activityService ? { activityService: options.activityService } : {}),
+      ...(options.getAgentName ? { getAgentName: options.getAgentName } : {}),
     });
 
     // Listen to group:message events
@@ -314,6 +322,9 @@ export class GroupBroadcaster {
       );
     }
 
+    // ADR-030: Any human message resets social energy (regardless of @mention)
+    this.socialHandler.resetEnergy(chatId);
+
     // Determine which bot should respond (ADR-019: only one bot processes)
     const respondingBot = this.getRespondingBot(chatId, mentionedBot, isReplyToBot, sourceAgentId);
 
@@ -322,9 +333,6 @@ export class GroupBroadcaster {
         { chatId, mentionedBot, isReplyToBot, sourceAgentId },
         'No bot should respond to this message'
       );
-      // ADR-030: Human message resets social energy
-      this.socialHandler.resetEnergy(chatId);
-
       // ADR-030 Tier 1.2: Suppress initiative during active delegation
       if (this.delegationActive.has(chatId)) {
         this.log.info(
@@ -445,6 +453,26 @@ export class GroupBroadcaster {
       await this.delegationHandler.processDelegation(payload);
     } finally {
       this.delegationActive.delete(payload.chatId);
+    }
+
+    // ADR-030: Bot-to-bot social chaining
+    // After a bot replies, let other bots evaluate if they want to socially respond.
+    // Energy decay + cooldown + maxConsecutiveBotTurns prevent infinite loops.
+    if (!this.delegationActive.has(payload.chatId)) {
+      const botInfo = this.getBotInfo(payload.agentId);
+      const botLabel = botInfo ? `@${botInfo.username}` : payload.agentId;
+
+      const syntheticMessage: import('../adapters/types.js').UnifiedMessage = {
+        id: `bot-social-${Date.now()}-${payload.agentId}`,
+        platform: payload.platform,
+        userId: payload.agentId,
+        chatId: payload.chatId,
+        text: payload.response,
+        timestamp: new Date(),
+        metadata: { isGroupChat: true },
+      };
+
+      await this.socialHandler.evaluateSocial(syntheticMessage, payload.chatId, botLabel);
     }
   }
 

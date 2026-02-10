@@ -1,10 +1,39 @@
 # 觸發機制全覽（Trigger Mechanism Map）
 
-> 最後更新：2026-02-06
-> 版本：v1.26.0（ADR-030 Tier 1 實作後）
+> 最後更新：2026-02-10
+> 版本：v1.27.0（Activity System v2.0 重構後）
 
 本文件記錄 ClaudeCab 系統中**所有事件、觸發路徑、保護機制**，
 用於規畫 swarm 流程、避免 cascade 問題、設計新功能時參考。
+
+---
+
+## 快速總覽：群組訊息回覆優先級
+
+```
+群組訊息進入
+    │
+    ├─ 1st: @mention / reply-to → 指定 bot 直接回覆
+    │       └─ bot 回覆 → DelegationHandler 掃描 @mention → 委派鏈
+    │
+    ├─ 2nd: Initiative（工作導向）
+    │       └─ N 個 bot 獨立評估、獨立回覆（不觸發委派）
+    │
+    └─ 3rd: Social（社交導向）— 只在 Initiative 沒回覆時觸發
+            └─ 只有 1 個 energy 最高的 bot 回覆（不觸發委派）
+                └─ Bot-to-bot chaining（energy decay 自然終止）
+```
+
+### 觸發模式對照
+
+| | @mention/reply | Delegation | Initiative | Social |
+|--|---|---|---|---|
+| **觸發條件** | 使用者指名 | Bot 回覆含 @mention | 無指名，工作相關 | 無指名，Initiative 沒回 |
+| **回覆數量** | 1 bot | 1-N bot（串/並行） | N bot（各自獨立） | 1 bot（最高 energy） |
+| **觸發委派** | ✅ | 看 depth | ❌ | ❌ |
+| **LLM 評估** | 不需要 | 不需要 | Haiku per bot | Haiku per bot |
+| **Rate limit** | 無 | depth ≤ 3 | cooldown + maxPerHour | cooldown + maxPerHour + energy |
+| **Bot-to-bot** | 透過委派鏈 | 透過深度遞增 | ❌ | ✅（energy decay） |
 
 ---
 
@@ -13,7 +42,7 @@
 | 事件 | 發射者 | 監聽者 | 效果 |
 |------|--------|--------|------|
 | **`group:message`** | TelegramAdapter.handleTextMessage | GroupBroadcaster.handleGroupMessage | 去重 → 判斷回覆者 → 處理訊息或走 Initiative |
-| **`bot:replied`** | MessageProcessor.emitBotRepliedEvent | GroupBroadcaster.handleBotReplied | 記錄訊息到 DB + 委派檢查 |
+| **`bot:replied`** | MessageProcessor.emitBotRepliedEvent | GroupBroadcaster.handleBotReplied | 記錄訊息到 DB + 委派檢查 + energy decay + bot-to-bot social |
 | **`message:received`** | BaseAdapter.emitMessage | *無明確監聯者* | 目前未使用 |
 | **`message:sent`** | BaseAdapter.emitMessageSent | AppBootstrap（排程同步）、WebUIServer（監控） | 排程 auto-sync + dashboard 監控 |
 | **`agent:loaded`** | AgentLoader.loadAgent | WebUIServer（監控） | dashboard 更新 |
@@ -42,10 +71,13 @@ Telegram 訊息進入
     │
     ├─ 群組文字訊息 → emit group:message
     │   → GroupBroadcaster.handleGroupMessage()
+    │   → socialHandler.resetEnergy(chatId)  ← 每條人類訊息都重置
     │   → getRespondingBot()
     │       ├─ Case 1（@mention）→ 對應 bot processMessage
     │       ├─ Case 2（reply-to）→ sourceAgentId processMessage
-    │       └─ Case 3（null）→ InitiativeHandler.evaluateInitiatives()
+    │       └─ Case 3（null）→ 依序嘗試：
+    │           ├─ 1st: InitiativeHandler.evaluateInitiatives()（工作優先）
+    │           └─ 2nd: SocialHandler.evaluateSocial()（Initiative 沒回才跑）
     │
     └─ 私聊文字訊息 → emitMessage() → messageHandlers → processMessage
 ```
@@ -74,6 +106,7 @@ Telegram 訊息進入
 |--------|------|-----------|
 | GroupBroadcaster.handleGroupMessage | @mention / reply-to 的 bot | `isGroupChat: true` |
 | InitiativeHandler.executeInitiative | Initiative 主動回覆 | `isInitiative: true` |
+| SocialHandler.executeSocial | Social 社交回覆 | `isSocial: true` |
 | DelegationHandler.executeDelegation | 串行委派 | `delegationDepth`, `delegationChain` |
 | DelegationHandler.executeParallelDelegation | 並行委派後綜合注入 coordinator | `isSynthesis: true` |
 | ScheduleExecutor.execute | 排程觸發 | 無特殊 flag |
@@ -97,6 +130,7 @@ bot:replied 事件
     → delegationActive.delete(chatId)（finally：清除標記）
         │
         ├─ isInitiative === true → 🚫 跳過（ADR-023）
+        ├─ isSocial === true → 🚫 跳過（ADR-030 Social）
         ├─ isSynthesis === true → 🚫 跳過（ADR-030）
         ├─ depth > 0 → 🚫 跳過（ADR-030 Tier 1.1：被委派 bot 不觸發新委派）
         ├─ depth >= 3 → 🚫 跳過（MAX_DELEGATION_DEPTH，depth 0 才走到這）
@@ -159,6 +193,83 @@ getRespondingBot() === null（無 @mention、非 reply-to）
 
 ---
 
+## 五之二、Social 評估流程（ADR-030 Phase D）
+
+Social 讓 bot 像朋友一樣自然插話，與 Initiative（工作導向）互補。
+
+```
+Initiative 沒有 bot 回覆
+    └─ SocialHandler.evaluateSocial()
+        │
+        ├─ Gate: socialEvaluator 存在
+        ├─ Gate: groupEnergy > 0（energy 耗盡 → 全部停）
+        ├─ Gate: social.enabled === true（opt-in）
+        ├─ Gate: consecutiveBotTurns < maxConsecutiveBotTurns（預設 3）
+        ├─ Gate: agent 有 description
+        ├─ Throttle: cooldown（預設 120s）
+        ├─ Throttle: maxPerHour（預設 30）
+        │
+        └─ 通過 Gate+Throttle 的 eligible bots
+            → evaluator.shouldRespondSocially()（N 次 AI query，Haiku，並行）
+            → 篩選：respond === true && energy >= energyThreshold
+            → 多 bot 都想說 → 選 energy 最高的（只有一個贏家）
+            → executeSocial() → processMessage({ isSocial: true })
+            → bot:replied 事件（isSocial 傳遞）→ 委派被阻擋
+```
+
+### Energy Decay 機制
+
+```
+                         ┌─ 人類訊息 → energy = 5, consecutiveBotTurns = 0
+                         │
+groupEnergy 初始值 = 5   │  Bot 回覆（任何模式）→ energy -= 2, consecutiveBotTurns++
+                         │
+                         └─ energy ≤ 0 → 所有 bot 停止社交回覆
+```
+
+- `resetEnergy(chatId)`：在 `handleGroupMessage` 開頭，每條人類訊息都呼叫
+- `decayEnergy(chatId)`：在 `handleBotReplied` 中呼叫
+
+### Bot-to-bot 社交鏈
+
+```
+bot:replied 事件
+    → handleBotReplied()
+    → decayEnergy(chatId)
+    → delegationActive 檢查（委派中不觸發）
+    → 用 bot 的回覆建立 syntheticMessage
+    → evaluateSocial(syntheticMessage, chatId, botLabel)
+    → 如果有 bot 通過評估 → 再回覆 → 再觸發 bot:replied → 再 decay...
+    → 自然終止條件：energy ≤ 0 或 consecutiveBotTurns ≥ max 或 cooldown
+```
+
+### 關鍵特性
+
+- **單一贏家**：與 Initiative 不同，Social 只選 energy 最高的一個 bot 回覆
+- **Initiative 優先**：Initiative 先跑，有回覆就不跑 Social
+- **Anti-cascade**：isSocial=true 阻擋 delegation；energy decay + cooldown + maxConsecutiveBotTurns 三重保護
+- **Bot-to-bot**：bot 回覆後其他 bot 可以接話，但 energy 會持續衰減
+- **30 秒 Timeout**（v1.27.0）：`LLMSocialEvaluator` 使用 `Promise.race` 包裝 SDK 呼叫，超時自動放棄（`evaluation_error`），防止 API hang 卡住系統
+- **JSON 容錯**（v1.27.0）：Haiku 回傳的 JSON 用 regex `match(/\{[\s\S]*?\}/)` 提取，容忍 JSON 前後的額外文字
+
+### agent.json 配置
+
+```json
+{
+  "settings": {
+    "social": {
+      "enabled": true,
+      "energyThreshold": 2,    // 1-5，LLM 回傳的 energy 需 >= 此值
+      "cooldown": 120,          // 秒，每個 bot 在每個群組的冷卻時間
+      "maxPerHour": 30,         // 每小時上限
+      "maxConsecutiveBotTurns": 3  // 連續 bot 回覆上限
+    }
+  }
+}
+```
+
+---
+
 ## 六、排程觸發（ADR-028）
 
 ```
@@ -183,6 +294,7 @@ CronScheduler（支援 cron / once / interval）
 | Flag | 設定位置 | 傳遞方式 | 效果 |
 |------|----------|----------|------|
 | `isInitiative: true` | InitiativeHandler.executeInitiative | processMessage options → emitBotRepliedEvent → bot:replied payload | 阻擋 DelegationHandler |
+| `isSocial: true` | SocialHandler.executeSocial | processMessage options → emitBotRepliedEvent → bot:replied payload | 阻擋 DelegationHandler |
 | `isSynthesis: true` | DelegationHandler.executeParallelDelegation | processMessage options → emitBotRepliedEvent → bot:replied payload | 阻擋 DelegationHandler |
 | `isDelegation: true` | DelegationHandler.executeDelegation | UnifiedMessage.metadata（僅標記） | 目前僅標記，未阻擋任何流程 |
 | `delegationDepth` | DelegationHandler 遞增傳入 | processMessage options → emitBotRepliedEvent → bot:replied payload | >= MAX_DELEGATION_DEPTH(3) 時阻擋 |
@@ -190,6 +302,7 @@ CronScheduler（支援 cron / once / interval）
 | `delegation.outbound: false` | agent.json 設定 | DelegationHandler 查詢 | 該 bot 的回覆不觸發向外委派 |
 | `delegation.inbound: false` | agent.json 設定 | DelegationHandler 檢查 | 該 bot 不接受被委派 |
 | `initiative.enabled: false` | agent.json 設定 | InitiativeHandler 檢查 | 該 bot 不參與 Initiative 評估 |
+| `social.enabled: false` | agent.json 設定 | SocialHandler 檢查 | 該 bot 不參與 Social 評估 |
 
 ---
 
@@ -205,6 +318,9 @@ CronScheduler（支援 cron / once / interval）
 | ~~多 bot 同時通過 Initiative → 在委派中插嘴~~ | `delegationActive` Set 抑制 Initiative（Tier 1.2） | ✅ 已修復 | 委派進行中新訊息不觸發 Initiative |
 | **多 bot 同時通過 Initiative → 各自回覆（非委派期間）** | 無協調機制 | ⚠️ 噪音源 | N 個 bot 獨立決策、獨立回覆（Tier 1.5 解決） |
 | ~~Bot 記憶寫入通知出現在群組~~ | ContextInjector 群組行為規範 prompt（Tier 1.3） | ✅ 已修復 | prompt 層指示 bot 不回報內部操作 |
+| Social → bot 回覆 → delegation 檢查 | `isSocial=true` 阻擋 delegation | ✅ 安全 | |
+| Social bot-to-bot 無限迴圈 | energy decay（每次 -2）+ cooldown + maxConsecutiveBotTurns | ✅ 安全 | 最多 2-3 輪後 energy 歸零 |
+| SDK/Stop-hook 噪音訊息洩漏到群組 | `isNoiseResponse()` 統一過濾器 | ✅ 已修復 | 攔截 onIntermediateMessage + sendFinalResponse |
 
 ### 改進路線（對應 ADR-030 修訂路線圖）
 
@@ -262,3 +378,84 @@ CronScheduler（支援 cron / once / interval）
   - secretary 回覆
   - leader 綜合回覆
 ```
+
+### 典型 Social 場景
+
+```
+使用者在群組隨口說：「今天好累喔」
+
+1. Telegram → emit group:message
+   → GroupBroadcaster.handleGroupMessage()
+   → socialHandler.resetEnergy(chatId) → energy = 5
+
+2. getRespondingBot() === null（無 @mention、非 reply-to）
+
+3. InitiativeHandler.evaluateInitiatives()
+   → 非工作相關 → 無 bot 回覆 → return false
+
+4. SocialHandler.evaluateSocial()
+   → eligible bots: [general, coder, leader]
+   → LLM 評估（Haiku，並行）
+   → general: respond=true, energy=4
+   → coder: respond=true, energy=2（< threshold? 看設定）
+   → leader: respond=false
+   → 贏家 = general（energy 最高）
+
+5. executeSocial('general', ...)
+   → processMessage({ isSocial: true })
+   → general 回覆「辛苦啦！做什麼做到這麼累」
+   → emitBotRepliedEvent({ isSocial: true })
+
+6. handleBotReplied()
+   → decayEnergy(chatId) → energy = 5 - 2 = 3
+   → DelegationHandler: isSocial=true → 跳過
+   → Bot-to-bot social chaining:
+     → evaluateSocial(general 的回覆, chatId, @general_bot)
+     → coder: respond=true, energy=3 → 通過！
+     → executeSocial('coder', ...)
+     → coder 回覆「+1 我也是」
+
+7. handleBotReplied()（coder 的回覆）
+   → decayEnergy → energy = 3 - 2 = 1
+   → Bot-to-bot social chaining:
+     → energy(1) > 0，但所有 bot 的 energyThreshold=2
+     → 沒有 bot 通過 threshold → 停止
+
+最終群組看到：
+  - general：「辛苦啦！做什麼做到這麼累」
+  - coder：「+1 我也是」
+  （自然結束，沒有無限迴圈）
+```
+
+---
+
+## 十、噪音過濾機制
+
+### 問題
+
+SDK / Stop-hook 會產出不應送給使用者的回應文字，例如：
+- `"No response requested."` — SDK 佔位符（bot 判斷不需回覆時）
+- `"No significant events to record..."` — Stop-hook 記憶檢查的輸出
+
+### 解法
+
+`MessageProcessor.ts` 中的 `isNoiseResponse()` 統一過濾器，套用到兩條輸出路徑：
+
+```
+SDK 回應
+    ├─ onIntermediateMessage(text)
+    │   └─ isNoiseResponse(text) → true → 丟棄，不送出
+    │
+    └─ sendFinalResponse(response)
+        └─ isNoiseResponse(response) → true → return undefined
+```
+
+### 匹配的 Pattern
+
+| Pattern | 攔截目標 |
+|---------|----------|
+| `/^No response requested\.?$/i` | SDK placeholder |
+| `/^No significant events?\b/i` | Stop-hook 記憶檢查「沒事」回應 |
+| `/^Nothing (significant\|notable\|important) to (record\|note\|report)\b/i` | 同上英文變體 |
+| `/^沒有(重要\|顯著\|值得).*(記錄\|紀錄\|回報)/` | 同上中文變體 |
+| 空字串 / 純空白 | 空回應 |

@@ -236,11 +236,12 @@ Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 ### Persistence 層 (`src/persistence/`)
 
 SQLite 持久化：
-- `DatabaseManager.ts` - 連線管理、Schema 初始化（v7）、WAL 模式、線性 migration 鏈（v1→v7）
+- `DatabaseManager.ts` - 連線管理、Schema 初始化（v8）、WAL 模式、線性 migration 鏈（v1→v8）
 - `SessionRepository.ts` - Session CRUD、過期清理、`sdkSessionId` 存儲（UNIQUE: platform + agent_id + user_id）
 - `ConversationRepository.ts` - 對話歷史 CRUD（SDK 訊息持久化，供 WebUI 查看）
 - `GroupMemberRepository.ts`（v1.18.0）- 群組成員持久化（platform + chat_id + agent_id），供重啟後還原成員關係
 - `QueryMetricsRepository.ts`（v1.19.0）- 每次 SDK query 的 token 用量、成本、回應時間追蹤；提供 per-agent 聚合統計和每日統計
+- `ActivityRepository.ts`（v1.27.0）- Activity events 持久化（重啟後 Live page 歷史可見）；支援 agentId/type/since 篩選查詢
 
 ---
 

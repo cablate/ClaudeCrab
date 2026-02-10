@@ -29,6 +29,13 @@ import {
   ScheduleNotifier,
   ScheduleManager,
 } from './schedule/index.js';
+import { ActivityService } from './core/ActivityService.js';
+import { IdleMutterScheduler } from './core/IdleMutterScheduler.js';
+import { ReactionGenerator } from './core/ReactionGenerator.js';
+import { ActivityRepository } from './persistence/ActivityRepository.js';
+import { SSEBroadcaster } from './webui/services/SSEBroadcaster.js';
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import type { AppConfig } from './config.js';
 import type { IQueryMetricsRepository } from './persistence/types.js';
 
@@ -52,6 +59,8 @@ export class AppBootstrap {
   private databaseManager: DatabaseManager | null = null;
   private webUIServer: WebUIServer | null = null;
   private scheduleManager: ScheduleManager | null = null;
+  private idleMutterScheduler: IdleMutterScheduler | null = null;
+  private _reactionGenerator: ReactionGenerator | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -75,12 +84,16 @@ export class AppBootstrap {
       logger.info({ restoredSessions }, 'Session restoration complete');
     }
 
+        // v2.0: Create ActivityService for personality-driven lifecycle reactions
+    const activityService = this.createActivityService(agentLoader, persistence);
+
     const messageProcessor = this.createMessageProcessor(
       sessionManager,
       agentLoader,
       persistence?.conversationRepository,
       persistence?.contextInjector,
-      persistence?.queryMetricsRepository
+      persistence?.queryMetricsRepository,
+      activityService
     );
 
     this.orchestrator = this.createOrchestrator(
@@ -88,7 +101,8 @@ export class AppBootstrap {
       sessionManager,
       messageProcessor,
       securityConfig,
-      persistence
+      persistence,
+      activityService
     );
 
     await this.orchestrator.startAll();
@@ -102,8 +116,18 @@ export class AppBootstrap {
     await this.initializeWebUI(
       agentLoader,
       sessionManager,
-      persistence
+      persistence,
+      activityService
     );
+
+    // v2.0: Start idle mutter scheduler
+    // TODO: Re-enable when idle mutter is tuned
+    // this.initializeIdleMutterScheduler(activityService);
+
+    // v2.0: Track all agents for activity (so idle detection works from startup)
+    for (const agentId of agentLoader.list()) {
+      activityService.trackActivity(agentId);
+    }
 
     this.logStartupSummary(agentLoader);
   }
@@ -117,6 +141,10 @@ export class AppBootstrap {
     try {
       if (this.webUIServer !== null) {
         await this.webUIServer.stop();
+      }
+
+      if (this.idleMutterScheduler !== null) {
+        this.idleMutterScheduler.stop();
       }
 
       if (this.scheduleManager !== null) {
@@ -262,7 +290,8 @@ export class AppBootstrap {
     agentLoader: AgentLoader,
     conversationRepository: ConversationRepository | undefined,
     contextInjector: ContextInjector | undefined,
-    queryMetricsRepository: QueryMetricsRepository | undefined
+    queryMetricsRepository: QueryMetricsRepository | undefined,
+    activityService?: ActivityService,
   ): MessageProcessor {
     // Note: getAdapter and getBotInfo reference orchestrator via closure (lazy resolution)
     return new MessageProcessor({
@@ -289,6 +318,7 @@ export class AppBootstrap {
       },
       eventBus: getEventBus(),
       ...(contextInjector !== undefined ? { contextInjector } : {}),
+      ...(activityService !== undefined ? { activityService } : {}),
     });
   }
 
@@ -297,7 +327,8 @@ export class AppBootstrap {
     sessionManager: SessionManager,
     messageProcessor: MessageProcessor,
     securityConfig: ReturnType<typeof loadSecurityConfig>,
-    persistence: PersistenceLayer | null
+    persistence: PersistenceLayer | null,
+    activityService?: ActivityService
   ): PlatformOrchestrator {
     logger.info('Initializing PlatformOrchestrator...');
 
@@ -306,6 +337,7 @@ export class AppBootstrap {
       sessionManager,
       messageProcessor,
       securityConfig,
+      ...(activityService !== undefined ? { activityService } : {}),
       ...(this.scheduleManager !== null
         ? { scheduleManager: this.scheduleManager }
         : {}),
@@ -393,7 +425,8 @@ export class AppBootstrap {
   private async initializeWebUI(
     agentLoader: AgentLoader,
     sessionManager: SessionManager,
-    persistence: PersistenceLayer | null
+    persistence: PersistenceLayer | null,
+    activityService?: ActivityService,
   ): Promise<void> {
     if (!this.config.webui.enabled) {
       return;
@@ -414,6 +447,16 @@ export class AppBootstrap {
       queryMetricsRepository: persistence?.queryMetricsRepository,
     });
 
+    // v2.0: Register activity API + SSE (before auth, publicly accessible for live display)
+    if (activityService) {
+      const { SSEBroadcaster: SSEBroadcasterClass } = await import('./webui/services/SSEBroadcaster.js');
+      const { createActivityApiRouter } = await import('./webui/api/activity.api.js');
+      const sseBroadcaster = new SSEBroadcasterClass();
+      const activityRouter = createActivityApiRouter(sseBroadcaster, activityService, agentLoader);
+      this.webUIServer.getApp().use('/api/activity', activityRouter);
+      logger.info('Activity API + SSE broadcaster registered');
+    }
+
     await this.webUIServer.start();
     logger.info({ port, url: `http://localhost:${port}` }, 'WebUI started');
   }
@@ -432,6 +475,81 @@ export class AppBootstrap {
       'ClaudeCab initialized successfully'
     );
     logger.info('Bot is now running. Press Ctrl+C to stop.');
+  }
+
+  // --- v2.0: Activity system helpers ---
+
+  /**
+   * Create ActivityService with agent name/personality resolvers.
+   */
+  private createActivityService(agentLoader: AgentLoader, persistence: PersistenceLayer | null): ActivityService {
+    const getAgentName = (agentId: string) => agentLoader.get(agentId)?.config.name ?? agentId;
+    const readPersonality = this.buildPersonalityReader(agentLoader);
+
+    const reactionGenerator = new ReactionGenerator({
+      getAgentName,
+      getAgentPersonality: readPersonality,
+    });
+
+    // Store for IdleMutterScheduler to reuse
+    this._reactionGenerator = reactionGenerator;
+
+    // Create ActivityRepository if persistence is available
+    let activityRepository: ActivityRepository | undefined;
+    if (persistence) {
+      activityRepository = new ActivityRepository(persistence.databaseManager.getDatabase());
+      logger.info('ActivityRepository enabled (events will be persisted)');
+    }
+
+    return new ActivityService({
+      getAgentName,
+      reactionGenerator,
+      activityRepository,
+      bufferSize: 200,
+    });
+  }
+
+  /**
+   * Build a cached personality reader (shared by ReactionGenerator).
+   */
+  private buildPersonalityReader(agentLoader: AgentLoader): (agentId: string) => string | undefined {
+    const personalityCache = new Map<string, string | undefined>();
+
+    return (agentId: string): string | undefined => {
+      if (personalityCache.has(agentId)) return personalityCache.get(agentId);
+
+      const agent = agentLoader.get(agentId);
+      if (!agent) return undefined;
+
+      const soulPath = path.join(agent.path, '.claude', 'skills', 'persona', 'references', 'soul.md');
+      try {
+        const content = readFileSync(soulPath, 'utf-8');
+        personalityCache.set(agentId, content);
+        return content;
+      } catch {
+        const desc = agent.config.description;
+        personalityCache.set(agentId, desc);
+        return desc;
+      }
+    };
+  }
+
+  /**
+   * Initialize idle mutter scheduler.
+   */
+  private initializeIdleMutterScheduler(
+    activityService: ActivityService,
+  ): void {
+    if (!this._reactionGenerator) {
+      logger.warn('ReactionGenerator not available, skipping IdleMutterScheduler');
+      return;
+    }
+
+    this.idleMutterScheduler = new IdleMutterScheduler({
+      activityService,
+      reactionGenerator: this._reactionGenerator,
+    });
+    this.idleMutterScheduler.start();
   }
 }
 

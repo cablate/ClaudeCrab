@@ -1,6 +1,7 @@
 import type { MessageProcessor } from './MessageProcessor.js';
 import type { BotRepliedPayload } from '../types/events.js';
 import type { UnifiedMessage } from '../adapters/types.js';
+import type { ActivityService } from './ActivityService.js';
 import { logger } from '../utils/logger.js';
 
 /** Maximum delegation depth to prevent infinite loops (ADR-021) */
@@ -14,6 +15,10 @@ export interface DelegationHandlerOptions {
   getGroupMembers: (chatId: string) => string[];
   getBotInfo: (agentId: string) => { username: string; id: number } | null;
   getDelegationSettings?: (agentId: string) => { inbound?: boolean; outbound?: boolean } | undefined;
+  /** ActivityService for workflow event emissions */
+  activityService?: ActivityService;
+  /** Get agent display name by ID */
+  getAgentName?: (agentId: string) => string;
 }
 
 /**
@@ -29,12 +34,16 @@ export class DelegationHandler {
   private readonly getGroupMembers: (chatId: string) => string[];
   private readonly getBotInfo: (agentId: string) => { username: string; id: number } | null;
   private readonly getDelegationSettings: ((agentId: string) => { inbound?: boolean; outbound?: boolean } | undefined) | undefined;
+  private readonly activityService?: ActivityService | undefined;
+  private readonly getAgentName?: ((agentId: string) => string) | undefined;
 
   constructor(options: DelegationHandlerOptions) {
     this.messageProcessor = options.messageProcessor;
     this.getGroupMembers = options.getGroupMembers;
     this.getBotInfo = options.getBotInfo;
     this.getDelegationSettings = options.getDelegationSettings;
+    this.activityService = options.activityService;
+    this.getAgentName = options.getAgentName;
   }
 
   /**
@@ -214,6 +223,13 @@ export class DelegationHandler {
       'Starting parallel delegation (ADR-030)'
     );
 
+    // v2.0: Emit parallel delegation workflow event
+    const targetNames = targets.map(t => this.getAgentName?.(t) ?? t).join(', ');
+    this.activityService?.emitWorkflow(agentId, 'working', `同時委派給 ${targetNames}`, {
+      delegationTargets: targets,
+      delegationDepth: depth + 1,
+    });
+
     // Launch all delegations in parallel
     const delegationPromises = targets.map(target => {
       const newChain = [...chain, target];
@@ -245,6 +261,9 @@ export class DelegationHandler {
       { chatId, coordinator: agentId, successCount, failCount, total: targets.length },
       'Parallel delegations completed, preparing synthesis (ADR-030)'
     );
+
+    // v2.0: Emit delegation results workflow event
+    this.activityService?.emitWorkflow(agentId, 'working', `委派完成 (${successCount} 成功)，準備綜合回覆`);
 
     // Skip synthesis if all delegations failed
     if (successCount === 0) {
@@ -316,6 +335,18 @@ export class DelegationHandler {
     newChain: string[]
   ): Promise<{ agentId: string; response?: string; success: boolean }> {
     const newDepth = (payload.delegationDepth ?? 0) + 1;
+
+    // v2.0: Emit delegation workflow events
+    const targetName = this.getAgentName?.(targetAgentId) ?? targetAgentId;
+    const sourceName = this.getAgentName?.(payload.agentId) ?? payload.agentId;
+    this.activityService?.emitWorkflow(payload.agentId, 'working', `委派任務給 ${targetName}`, {
+      delegationTo: targetAgentId,
+      delegationDepth: newDepth,
+    });
+    this.activityService?.emitWorkflow(targetAgentId, 'task_received', `收到 ${sourceName} 的委派`, {
+      delegationFrom: payload.agentId,
+      delegationDepth: newDepth,
+    });
 
     // Build synthetic UnifiedMessage from the bot's reply
     const syntheticMessage: UnifiedMessage = {

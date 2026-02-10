@@ -21,6 +21,11 @@ export function createRouter(): Router {
   // Auth routes (no authentication required)
   router.use('/', createAuthRouter());
 
+  // Live page (no authentication — public demo display, v2.0)
+  router.get('/live', (_req, res) => {
+    res.render('live/index');
+  });
+
   // Apply auth middleware to all other routes
   router.use(authMiddleware);
 

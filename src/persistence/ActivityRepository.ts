@@ -1,0 +1,115 @@
+import type { Database as DatabaseType } from 'better-sqlite3';
+import type { ActivityEvent } from '../types/activity.js';
+
+/**
+ * SQLite repository for activity events.
+ * Follows the same pattern as SessionRepository, ConversationRepository, etc.
+ */
+export class ActivityRepository {
+  private readonly db: DatabaseType;
+
+  constructor(db: DatabaseType) {
+    this.db = db;
+  }
+
+  /** Insert a single activity event */
+  insert(event: ActivityEvent): void {
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO activity_events
+        (id, agent_id, agent_name, type, phase, message, mood, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      event.id,
+      event.agentId,
+      event.agentName,
+      event.type,
+      event.phase ?? null,
+      event.message,
+      event.mood ?? null,
+      event.metadata ? JSON.stringify(event.metadata) : null,
+      event.timestamp,
+    );
+  }
+
+  /** Query recent events with optional filters */
+  getRecent(limit: number, filters?: {
+    agentId?: string;
+    type?: string;
+    since?: string;
+  }): ActivityEvent[] {
+    let sql = 'SELECT * FROM activity_events WHERE 1=1';
+    const params: unknown[] = [];
+
+    if (filters?.agentId) {
+      sql += ' AND agent_id = ?';
+      params.push(filters.agentId);
+    }
+    if (filters?.type) {
+      sql += ' AND type = ?';
+      params.push(filters.type);
+    }
+    if (filters?.since) {
+      sql += ' AND created_at >= ?';
+      params.push(filters.since);
+    }
+
+    sql += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(limit);
+
+    const rows = this.db.prepare(sql).all(...params) as ActivityEventRow[];
+    return rows.map(rowToEvent);
+  }
+
+  /** Get recent reaction messages for a specific agent (for ReactionGenerator continuity) */
+  getRecentReactionMessages(agentId: string, limit: number): string[] {
+    const rows = this.db.prepare(`
+      SELECT message FROM activity_events
+      WHERE agent_id = ? AND type = 'reaction'
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(agentId, limit) as Array<{ message: string }>;
+    return rows.map(r => r.message);
+  }
+
+  /** Delete events older than given ISO date */
+  deleteOlderThan(isoDate: string): number {
+    const result = this.db.prepare(
+      'DELETE FROM activity_events WHERE created_at < ?'
+    ).run(isoDate);
+    return result.changes;
+  }
+}
+
+// --- Internal ---
+
+interface ActivityEventRow {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  type: string;
+  phase: string | null;
+  message: string;
+  mood: string | null;
+  metadata: string | null;
+  created_at: string;
+}
+
+function rowToEvent(row: ActivityEventRow): ActivityEvent {
+  const event: ActivityEvent = {
+    id: row.id,
+    agentId: row.agent_id,
+    agentName: row.agent_name,
+    type: row.type as ActivityEvent['type'],
+    message: row.message,
+    timestamp: row.created_at,
+  };
+  if (row.phase !== null) event.phase = row.phase as NonNullable<ActivityEvent['phase']>;
+  if (row.mood !== null) event.mood = row.mood as NonNullable<ActivityEvent['mood']>;
+  if (row.metadata) {
+    try {
+      event.metadata = JSON.parse(row.metadata) as Record<string, unknown>;
+    } catch { /* ignore parse errors */ }
+  }
+  return event;
+}

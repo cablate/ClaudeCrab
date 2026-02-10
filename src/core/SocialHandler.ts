@@ -4,6 +4,13 @@ import type { UnifiedMessage } from '../adapters/types.js';
 import type { SocialSettings } from '../types/agent.js';
 import type { SocialEvaluator } from './SocialEvaluator.js';
 import { logger } from '../utils/logger.js';
+import { appendFileSync } from 'node:fs';
+
+// Temporary debug log for social mode diagnosis
+function socialDebug(msg: string): void {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  try { appendFileSync('social-debug.log', line); } catch { /* ignore */ }
+}
 
 /** Default social settings */
 const DEFAULTS = {
@@ -91,21 +98,25 @@ export class SocialHandler {
     chatId: string,
     senderLabel: string,
   ): Promise<boolean> {
+    socialDebug(`evaluateSocial called: chatId=${chatId}, sender=${senderLabel}, text=${message.text.substring(0, 80)}`);
+
     const evaluator = this.socialEvaluator;
     if (!evaluator) {
-      this.log.debug({ chatId }, 'No social evaluator configured');
+      socialDebug('BLOCKED: no social evaluator configured');
       return false;
     }
 
     // Energy gate: if group energy is depleted, skip all social evaluation
     const energy = this.groupEnergy.get(chatId) ?? DEFAULTS.initialEnergy;
     if (energy <= 0) {
-      this.log.debug({ chatId, energy }, 'Social: group energy depleted, skipping');
+      socialDebug(`BLOCKED: energy depleted (energy=${energy})`);
       return false;
     }
 
     const members = this.getGroupMembers(chatId);
+    socialDebug(`energy=${energy}, consecutiveBotTurns=${this.consecutiveBotTurns.get(chatId) ?? 0}, members=${JSON.stringify(members)}`);
     if (members.length === 0) {
+      socialDebug('BLOCKED: no members');
       return false;
     }
 
@@ -159,9 +170,11 @@ export class SocialHandler {
     }
 
     if (eligible.length === 0) {
-      this.log.debug({ chatId, memberCount: members.length }, 'Social: no eligible bots');
+      socialDebug(`BLOCKED: no eligible bots (total members=${members.length})`);
       return false;
     }
+
+    socialDebug(`eligible bots: ${eligible.map(e => e.agentId).join(', ')}`);
 
     this.log.info(
       { chatId, eligibleCount: eligible.length, eligible: eligible.map(e => e.agentId) },
@@ -204,14 +217,15 @@ export class SocialHandler {
       }
 
       if (!respond) {
-        this.log.info({ agentId, reason }, 'Social: bot declined to respond');
+        socialDebug(`LLM DECLINED: ${agentId} reason=${reason}`);
         continue;
       }
 
       const threshold = settings.energyThreshold ?? DEFAULTS.energyThreshold;
       const botEnergy = evalEnergy ?? 1;
+      socialDebug(`LLM PASSED: ${agentId} respond=true energy=${botEnergy} threshold=${threshold} reason=${reason}`);
       if (botEnergy < threshold) {
-        this.log.info({ agentId, botEnergy, threshold, reason }, 'Social: bot energy below threshold');
+        socialDebug(`BLOCKED: ${agentId} energy(${botEnergy}) < threshold(${threshold})`);
         continue;
       }
 
@@ -221,9 +235,11 @@ export class SocialHandler {
     }
 
     if (!best) {
-      this.log.info({ chatId }, 'Social: no bot passed evaluation + threshold');
+      socialDebug('RESULT: no bot passed evaluation + threshold');
       return false;
     }
+
+    socialDebug(`RESULT: winner=${best.agentId} energy=${best.energy} reason=${best.reason}`);
 
     // Record cooldown and hourly count for winner
     const cooldownKey = `${chatId}:${best.agentId}`;

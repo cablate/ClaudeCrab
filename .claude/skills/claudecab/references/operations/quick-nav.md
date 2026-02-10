@@ -196,6 +196,21 @@ npm run typecheck    # TypeScript 型別檢查
 
 ---
 
+## Activity System / Live Page（v1.27.0）
+
+| 要做什麼 | 主要檔案 | 相關檔案 |
+|----------|----------|----------|
+| 修改 AI 反應生成邏輯 | `src/core/ReactionGenerator.ts` | `callHaiku()`、`parseResponse()`、`inferMood()` |
+| 修改 Activity 事件管理 | `src/core/ActivityService.ts` | thin facade：事件建立 + 推送 + 狀態管理 |
+| 修改 Idle Mutter 排程 | `src/core/IdleMutterScheduler.ts` | 只負責排程邏輯，AI 委託 ReactionGenerator |
+| 修改 Activity 持久化 | `src/persistence/ActivityRepository.ts` | `DatabaseManager.ts`（schema v8） |
+| 修改 Activity API | `src/webui/api/activity.api.ts` | `/events`、`/agents`、`/stream` |
+| 修改 SSE 推播 | `src/webui/services/SSEBroadcaster.ts` | `activity.api.ts` |
+| 修改 Live 前端頁面 | `public/js/live.js`、`public/css/live.css` | `src/webui/views/live/index.ejs` |
+| 修改 Activity 接線（初始化） | `src/AppBootstrap.ts` | `createActivityService()`、`buildPersonalityReader()` |
+
+---
+
 ## 持久化相關
 
 | 要做什麼 | 主要檔案 | 相關檔案 |

@@ -61,6 +61,8 @@ export interface PlatformOrchestratorOptions {
   queryMetricsRepository?: IQueryMetricsRepository;
   /** Optional GroupBroadcaster instance for dependency injection (testing) */
   groupBroadcaster?: GroupBroadcaster;
+  /** v2.0: ActivityService for workflow visibility in delegation */
+  activityService?: import('./ActivityService.js').ActivityService;
 }
 
 /**
@@ -134,6 +136,11 @@ export class PlatformOrchestrator {
       ...(options.queryMetricsRepository !== undefined
         ? { queryMetricsRepository: options.queryMetricsRepository }
         : {}),
+      // v2.0: Activity workflow visibility for delegation
+      ...(options.activityService !== undefined
+        ? { activityService: options.activityService }
+        : {}),
+      getAgentName: (agentId: string) => this.agentLoader.get(agentId)?.config.name ?? agentId,
     });
   }
 
