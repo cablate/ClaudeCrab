@@ -76,34 +76,33 @@ export class ReactionGenerator {
     const agentName = this.getAgentName(agentId);
     const phaseDesc = PHASE_DESCRIPTIONS[phase];
 
-    // Build context from metadata
-    let contextLine = '';
-    if (metadata?.responseContent) {
-      const content = String(metadata.responseContent);
-      contextLine = `你剛才回覆了：「${content.substring(0, 80)}」`;
-    } else if (metadata?.toolName) {
-      contextLine = `工具名稱：${metadata.toolName}`;
-    } else if (metadata?.taskContent) {
+    // Build context hint (brief, not the full content)
+    let contextHint = '';
+    if (metadata?.taskContent) {
       const content = String(metadata.taskContent);
-      contextLine = `任務內容：${content.substring(0, 100)}`;
+      contextHint = `（任務大概是關於：${content.substring(0, 40)}）`;
+    } else if (metadata?.toolName) {
+      contextHint = `（用了 ${metadata.toolName}）`;
     } else if (metadata?.error) {
-      contextLine = `錯誤：${String(metadata.error).substring(0, 100)}`;
+      contextHint = `（遇到的問題：${String(metadata.error).substring(0, 40)}）`;
     }
 
     const recentLine = recentMessages.length > 0
-      ? `\n你最近說過的話（不要重複）：\n${recentMessages.map(m => `- ${m}`).join('\n')}`
+      ? `\n你最近的內心獨白（不要重複類似的）：\n${recentMessages.map(m => `- ${m}`).join('\n')}`
       : '';
 
-    const prompt = `你是 ${agentName}。${personality ? `你的個性：\n${personality.substring(0, 500)}` : ''}
+    const prompt = `你是 ${agentName}，一個虛擬辦公室裡的員工。${personality ? `你的個性：\n${personality.substring(0, 500)}` : ''}
 
-現在發生了：${phaseDesc}
-${contextLine ? contextLine : ''}${recentLine}
+現在的狀況：${phaseDesc}${contextHint}${recentLine}
 
-用一句話表達你此刻的反應（口語化、簡短 15 字以內、符合你的個性）。
-不要重複之前說過的話，要有新意。
-同時判斷你現在的心情。
+請寫一句「內心獨白」——不是在跟別人說話，而是你心裡的碎碎念、自言自語。
+要求：
+- 口語化、有個性、像真人的內心 OS
+- 15 字以內
+- 不要對外回應、不要摘要任務內容
+- 要有情緒，像「又來了...」「搞定，爽！」「這什麼鬼」
 
-回覆 JSON：{"message": "你的反應", "mood": "neutral|excited|annoyed|tired|focused|bored"}
+回覆 JSON：{"message": "你的內心獨白", "mood": "neutral|excited|annoyed|tired|focused|bored"}
 只回覆 JSON，不要其他內容。`;
 
     const responseText = await this.callHaiku(prompt);
