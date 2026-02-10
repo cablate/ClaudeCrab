@@ -14,6 +14,16 @@ const PHASE_DESCRIPTIONS: Record<ActivityPhase, string> = {
   idle: '目前閒置中，沒什麼事做',
 };
 
+/** Mood diversity hints — nudge Haiku away from always picking "focused" */
+const PHASE_MOOD_HINTS: Partial<Record<ActivityPhase, string>> = {
+  task_received: '- mood 建議偏向：neutral、annoyed（又有事了）、excited（有趣的任務）',
+  working: '- mood 不要總是 focused，可以是 tired（好累）、annoyed（好煩）、neutral',
+  tool_use: '- mood 建議偏向：focused 或 neutral',
+  completed: '- mood 建議偏向：excited（搞定了！）、neutral（還好啦）、bored（太簡單）',
+  error: '- mood 建議偏向：annoyed（又壞了）、tired（不想處理）',
+  idle: '- mood 建議偏向：bored、tired、neutral',
+};
+
 /** Random scenarios for idle mutters */
 const MUTTER_SCENARIOS = [
   '你剛滑了一下手機',
@@ -87,6 +97,9 @@ export class ReactionGenerator {
       contextHint = `（遇到的問題：${String(metadata.error).substring(0, 40)}）`;
     }
 
+    // Mood hint based on phase — guide Haiku toward diverse emotions
+    const moodHint = PHASE_MOOD_HINTS[phase] ?? '';
+
     const recentLine = recentMessages.length > 0
       ? `\n你最近的內心獨白（不要重複類似的）：\n${recentMessages.map(m => `- ${m}`).join('\n')}`
       : '';
@@ -101,7 +114,7 @@ export class ReactionGenerator {
 - 15 字以內
 - 不要對外回應、不要摘要任務內容
 - 要有情緒，像「又來了...」「搞定，爽！」「這什麼鬼」
-
+${moodHint}
 回覆 JSON：{"message": "你的內心獨白", "mood": "neutral|excited|annoyed|tired|focused|bored"}
 只回覆 JSON，不要其他內容。`;
 

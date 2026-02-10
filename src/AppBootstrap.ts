@@ -62,6 +62,7 @@ export class AppBootstrap {
   private idleMutterScheduler: IdleMutterScheduler | null = null;
   private _reactionGenerator: ReactionGenerator | null = null;
   private activityService: ActivityService | null = null;
+  private sseBroadcaster: SSEBroadcaster | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -122,9 +123,8 @@ export class AppBootstrap {
       activityService
     );
 
-    // v2.0: Start idle mutter scheduler
-    // TODO: Re-enable when idle mutter is tuned
-    // this.initializeIdleMutterScheduler(activityService);
+    // v2.0: Start idle mutter scheduler (cost-optimized: 5min interval, 30% chance, 3/hr cap, viewers-only)
+    this.initializeIdleMutterScheduler(activityService);
 
     // v2.0: Track all agents for activity (so idle detection works from startup)
     for (const agentId of agentLoader.list()) {
@@ -160,6 +160,10 @@ export class AppBootstrap {
 
       if (this.sessionManager !== null) {
         this.sessionManager.dispose();
+      }
+
+      if (this.sseBroadcaster !== null) {
+        this.sseBroadcaster.dispose();
       }
 
       if (this.activityService !== null) {
@@ -457,8 +461,8 @@ export class AppBootstrap {
     if (activityService) {
       const { SSEBroadcaster: SSEBroadcasterClass } = await import('./webui/services/SSEBroadcaster.js');
       const { createActivityApiRouter } = await import('./webui/api/activity.api.js');
-      const sseBroadcaster = new SSEBroadcasterClass();
-      const activityRouter = createActivityApiRouter(sseBroadcaster, activityService, agentLoader);
+      this.sseBroadcaster = new SSEBroadcasterClass();
+      const activityRouter = createActivityApiRouter(this.sseBroadcaster, activityService, agentLoader);
       this.webUIServer.getApp().use('/api/activity', activityRouter);
       logger.info('Activity API + SSE broadcaster registered');
     }
@@ -551,9 +555,11 @@ export class AppBootstrap {
       return;
     }
 
+    const broadcaster = this.sseBroadcaster;
     this.idleMutterScheduler = new IdleMutterScheduler({
       activityService,
       reactionGenerator: this._reactionGenerator,
+      hasActiveViewers: () => (broadcaster?.clientCount ?? 0) > 0,
     });
     this.idleMutterScheduler.start();
   }
