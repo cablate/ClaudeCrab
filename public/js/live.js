@@ -1,5 +1,5 @@
 /**
- * ClaudeCab Live — Real-time agent activity display (v3.0 Visual Upgrade)
+ * ClaudeCab Live — Virtual Office (v4.0)
  */
 
 // --- State ---
@@ -332,15 +332,9 @@ async function fetchStats() {
     const elMsg = document.getElementById('stat-messages');
     const elCompleted = document.getElementById('stat-completed');
     const elPersonality = document.getElementById('stat-personality');
-    const elActive = document.getElementById('stat-active-agents');
-
     if (elMsg) elMsg.textContent = data.messagesHandled || 0;
     if (elCompleted) elCompleted.textContent = data.tasksCompleted || 0;
     if (elPersonality) elPersonality.textContent = data.personality || 0;
-    if (elActive) {
-      const active = Object.values(agentCards).filter(a => a.phase && a.phase !== 'idle').length;
-      elActive.textContent = active;
-    }
   } catch (err) {
     console.error('Failed to fetch stats:', err);
   }

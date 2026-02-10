@@ -11,62 +11,47 @@
 <body>
   <!-- Header -->
   <header class="live-header">
-    <h1>ClaudeCab Live</h1>
-    <div class="subtitle">
-      <span id="connection-dot" class="connection-dot"></span>
-      <span>Virtual Office Monitor</span>
+    <div class="header-left">
+      <h1>ClaudeCab <span class="header-accent">Live</span></h1>
+      <div class="subtitle">
+        <span id="connection-dot" class="connection-dot"></span>
+        <span>虛擬辦公室</span>
+      </div>
+    </div>
+    <div class="header-stats">
+      <div class="mini-stat"><span class="mini-stat-icon">💬</span><span class="mini-stat-value" id="stat-messages">0</span><span class="mini-stat-label">訊息</span></div>
+      <div class="mini-stat"><span class="mini-stat-icon">✅</span><span class="mini-stat-value" id="stat-completed">0</span><span class="mini-stat-label">完成</span></div>
+      <div class="mini-stat"><span class="mini-stat-icon">🧠</span><span class="mini-stat-value" id="stat-personality">0</span><span class="mini-stat-label">獨白</span></div>
     </div>
   </header>
 
-  <!-- Stats Dashboard -->
-  <section class="stats-dashboard">
-    <div class="stat-card">
-      <div class="stat-icon">💬</div>
-      <div class="stat-value" id="stat-messages">0</div>
-      <div class="stat-label">則訊息處理</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon">✅</div>
-      <div class="stat-value" id="stat-completed">0</div>
-      <div class="stat-label">個任務完成</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon">🧠</div>
-      <div class="stat-value" id="stat-personality">0</div>
-      <div class="stat-label">則內心獨白</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-icon">👥</div>
-      <div class="stat-value" id="stat-active-agents">0</div>
-      <div class="stat-label">位員工工作中</div>
-    </div>
-  </section>
-
-  <!-- Section: Employee Status -->
-  <section class="section-block">
-    <h2 class="section-title">🏢 員工狀態</h2>
-    <div class="agent-cards" id="agent-cards">
-      <div class="empty-state">
-        <div class="icon">...</div>
-        <p>Loading agents...</p>
+  <!-- Main Layout: Characters (hero) + Feed (sidebar) -->
+  <main class="office-layout">
+    <!-- Left: Employee Cards (hero area) -->
+    <section class="office-main">
+      <div class="agent-cards" id="agent-cards">
+        <div class="empty-state">
+          <div class="icon">🏢</div>
+          <p>辦公室準備中...</p>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Section: Activity Feed -->
-  <section class="section-block feed-section">
-    <div class="feed-header">
-      <h2 class="section-title">📋 辦公室動態</h2>
-      <div class="feed-filters" id="feed-filters">
-        <button class="filter-btn active" data-filter="all">全部</button>
-        <button class="filter-btn" data-filter="workflow">工作</button>
-        <button class="filter-btn" data-filter="personality">心聲</button>
+    <!-- Right: Activity Feed (sidebar) -->
+    <aside class="office-sidebar">
+      <div class="sidebar-header">
+        <h2 class="sidebar-title">📋 辦公室動態</h2>
+        <div class="feed-filters" id="feed-filters">
+          <button class="filter-btn active" data-filter="all">全部</button>
+          <button class="filter-btn" data-filter="workflow">工作</button>
+          <button class="filter-btn" data-filter="personality">心聲</button>
+        </div>
       </div>
-    </div>
-    <div class="feed-container" id="activity-feed">
-      <!-- Events will be added here -->
-    </div>
-  </section>
+      <div class="feed-container" id="activity-feed">
+        <!-- Events will be added here -->
+      </div>
+    </aside>
+  </main>
 
   <script src="/static/js/live.js"></script>
 </body>
