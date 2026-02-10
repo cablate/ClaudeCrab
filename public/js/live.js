@@ -20,12 +20,12 @@ const MOOD_EMOJI = {
 
 // Phase status mapping
 const PHASE_STATUS = {
-  task_received: { label: 'new task', class: 'status-working' },
-  working: { label: 'working', class: 'status-working' },
-  tool_use: { label: 'using tool', class: 'status-working' },
-  completed: { label: 'done', class: 'status-idle' },
-  error: { label: 'error', class: 'status-error' },
-  idle: { label: 'idle', class: 'status-idle' },
+  task_received: { label: '收到任務', class: 'status-working' },
+  working: { label: '工作中', class: 'status-working' },
+  tool_use: { label: '使用工具', class: 'status-working' },
+  completed: { label: '完成', class: 'status-idle' },
+  error: { label: '出錯', class: 'status-error' },
+  idle: { label: '休息中', class: 'status-idle' },
 };
 
 // Workflow phase icons (for structured log entries)
@@ -121,11 +121,11 @@ function handleActivityEvent(event) {
 
 // --- Format idle duration ---
 function formatIdleDuration(ms) {
-  if (ms === Infinity || ms === undefined || ms === null) return 'never active';
-  if (ms < 60000) return 'active now';
-  if (ms < 3600000) return `idle ${Math.floor(ms / 60000)}m`;
-  if (ms < 86400000) return `idle ${Math.floor(ms / 3600000)}h`;
-  return `idle ${Math.floor(ms / 86400000)}d`;
+  if (ms === Infinity || ms === undefined || ms === null) return '尚未上線';
+  if (ms < 60000) return '剛剛活躍';
+  if (ms < 3600000) return `休息 ${Math.floor(ms / 60000)} 分鐘`;
+  if (ms < 86400000) return `休息 ${Math.floor(ms / 3600000)} 小時`;
+  return `休息 ${Math.floor(ms / 86400000)} 天`;
 }
 
 // --- Truncate description for card display ---
@@ -201,7 +201,7 @@ function updateAgentCard(event) {
   // Update idle badge — reset to "active now" on any event
   const idleEl = card.querySelector('.meta-idle');
   if (idleEl) {
-    idleEl.textContent = 'active now';
+    idleEl.textContent = '剛剛活躍';
   }
 
   // Update current task display (workflow events only)
@@ -329,17 +329,18 @@ async function fetchStats() {
     const res = await fetch('/api/activity/stats');
     const data = await res.json();
 
-    const el1 = document.getElementById('stat-events-today');
-    const el2 = document.getElementById('stat-active-agents');
-    const el3 = document.getElementById('stat-personality-events');
+    const elMsg = document.getElementById('stat-messages');
+    const elCompleted = document.getElementById('stat-completed');
+    const elPersonality = document.getElementById('stat-personality');
+    const elActive = document.getElementById('stat-active-agents');
 
-    if (el1) el1.textContent = data.total || 0;
-    if (el2) {
-      // Active agents: count from client state (DB doesn't track live phase)
+    if (elMsg) elMsg.textContent = data.messagesHandled || 0;
+    if (elCompleted) elCompleted.textContent = data.tasksCompleted || 0;
+    if (elPersonality) elPersonality.textContent = data.personality || 0;
+    if (elActive) {
       const active = Object.values(agentCards).filter(a => a.phase && a.phase !== 'idle').length;
-      el2.textContent = active;
+      elActive.textContent = active;
     }
-    if (el3) el3.textContent = data.personality || 0;
   } catch (err) {
     console.error('Failed to fetch stats:', err);
   }

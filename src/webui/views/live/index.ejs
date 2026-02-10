@@ -14,42 +14,53 @@
     <h1>ClaudeCab Live</h1>
     <div class="subtitle">
       <span id="connection-dot" class="connection-dot"></span>
-      <span>Real-time Agent Activity</span>
+      <span>Virtual Office Monitor</span>
     </div>
   </header>
 
   <!-- Stats Dashboard -->
   <section class="stats-dashboard">
     <div class="stat-card">
-      <div class="stat-value" id="stat-events-today">0</div>
-      <div class="stat-label">Events Today</div>
+      <div class="stat-icon">💬</div>
+      <div class="stat-value" id="stat-messages">0</div>
+      <div class="stat-label">則訊息處理</div>
     </div>
     <div class="stat-card">
+      <div class="stat-icon">✅</div>
+      <div class="stat-value" id="stat-completed">0</div>
+      <div class="stat-label">個任務完成</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🧠</div>
+      <div class="stat-value" id="stat-personality">0</div>
+      <div class="stat-label">則內心獨白</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">👥</div>
       <div class="stat-value" id="stat-active-agents">0</div>
-      <div class="stat-label">Active Agents</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value" id="stat-personality-events">0</div>
-      <div class="stat-label">Personality</div>
+      <div class="stat-label">位員工工作中</div>
     </div>
   </section>
 
-  <!-- Agent Cards -->
-  <section class="agent-cards" id="agent-cards">
-    <div class="empty-state">
-      <div class="icon">...</div>
-      <p>Loading agents...</p>
+  <!-- Section: Employee Status -->
+  <section class="section-block">
+    <h2 class="section-title">🏢 員工狀態</h2>
+    <div class="agent-cards" id="agent-cards">
+      <div class="empty-state">
+        <div class="icon">...</div>
+        <p>Loading agents...</p>
+      </div>
     </div>
   </section>
 
-  <!-- Activity Feed -->
-  <section class="feed-section">
+  <!-- Section: Activity Feed -->
+  <section class="section-block feed-section">
     <div class="feed-header">
-      <h2 class="feed-title">Activity Feed</h2>
+      <h2 class="section-title">📋 辦公室動態</h2>
       <div class="feed-filters" id="feed-filters">
-        <button class="filter-btn active" data-filter="all">All</button>
-        <button class="filter-btn" data-filter="workflow">Workflow</button>
-        <button class="filter-btn" data-filter="personality">Personality</button>
+        <button class="filter-btn active" data-filter="all">全部</button>
+        <button class="filter-btn" data-filter="workflow">工作</button>
+        <button class="filter-btn" data-filter="personality">心聲</button>
       </div>
     </div>
     <div class="feed-container" id="activity-feed">
