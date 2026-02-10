@@ -105,6 +105,32 @@ export class ActivityRepository {
     ).run(isoDate);
     return result.changes;
   }
+
+  /** Get aggregated stats since a given ISO date */
+  getStats(sinceIso: string): { total: number; workflow: number; personality: number; byAgent: Array<{ agentId: string; agentName: string; count: number }> } {
+    const totalRow = this.db.prepare(
+      'SELECT COUNT(*) as cnt FROM activity_events WHERE created_at >= ?'
+    ).get(sinceIso) as { cnt: number };
+
+    const workflowRow = this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM activity_events WHERE created_at >= ? AND type = 'workflow'"
+    ).get(sinceIso) as { cnt: number };
+
+    const personalityRow = this.db.prepare(
+      "SELECT COUNT(*) as cnt FROM activity_events WHERE created_at >= ? AND type IN ('reaction', 'mutter')"
+    ).get(sinceIso) as { cnt: number };
+
+    const byAgent = this.db.prepare(
+      'SELECT agent_id as agentId, agent_name as agentName, COUNT(*) as count FROM activity_events WHERE created_at >= ? GROUP BY agent_id ORDER BY count DESC'
+    ).all(sinceIso) as Array<{ agentId: string; agentName: string; count: number }>;
+
+    return {
+      total: totalRow.cnt,
+      workflow: workflowRow.cnt,
+      personality: personalityRow.cnt,
+      byAgent,
+    };
+  }
 }
 
 // --- Internal ---

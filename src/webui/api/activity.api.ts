@@ -66,5 +66,19 @@ export function createActivityApiRouter(
     res.json({ agents: states });
   });
 
+  // Today's stats (aggregated from DB)
+  router.get('/stats', (_req, res) => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const sinceIso = todayStart.toISOString();
+
+    const stats = activityService.getStats(sinceIso);
+    if (!stats) {
+      res.json({ total: 0, workflow: 0, personality: 0, byAgent: [] });
+      return;
+    }
+    res.json(stats);
+  });
+
   return router;
 }

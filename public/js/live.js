@@ -315,31 +315,34 @@ function addToFeed(event, animate) {
   }
 }
 
-// --- Stats (client-side) ---
+// --- Stats (from DB API) ---
+let statsDebounceTimer = null;
+
 function updateStats() {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayMs = todayStart.getTime();
+  // Debounce: don't hammer API on rapid events
+  if (statsDebounceTimer) clearTimeout(statsDebounceTimer);
+  statsDebounceTimer = setTimeout(fetchStats, 1000);
+}
 
-  let eventsToday = 0;
-  let personalityEvents = 0;
-  for (const e of activityFeed) {
-    if (new Date(e.timestamp).getTime() >= todayMs) {
-      eventsToday++;
-      if (e.type === 'reaction' || e.type === 'mutter') {
-        personalityEvents++;
-      }
+async function fetchStats() {
+  try {
+    const res = await fetch('/api/activity/stats');
+    const data = await res.json();
+
+    const el1 = document.getElementById('stat-events-today');
+    const el2 = document.getElementById('stat-active-agents');
+    const el3 = document.getElementById('stat-personality-events');
+
+    if (el1) el1.textContent = data.total || 0;
+    if (el2) {
+      // Active agents: count from client state (DB doesn't track live phase)
+      const active = Object.values(agentCards).filter(a => a.phase && a.phase !== 'idle').length;
+      el2.textContent = active;
     }
+    if (el3) el3.textContent = data.personality || 0;
+  } catch (err) {
+    console.error('Failed to fetch stats:', err);
   }
-
-  const activeAgents = Object.values(agentCards).filter(a => a.phase && a.phase !== 'idle').length;
-
-  const el1 = document.getElementById('stat-events-today');
-  const el2 = document.getElementById('stat-active-agents');
-  const el3 = document.getElementById('stat-personality-events');
-  if (el1) el1.textContent = eventsToday;
-  if (el2) el2.textContent = activeAgents;
-  if (el3) el3.textContent = personalityEvents;
 }
 
 // --- Utility functions ---

@@ -285,6 +285,13 @@ export class ActivityService {
   }
 
   /** Clean shutdown: flush pending writes and clear timers */
+  /** Get aggregated stats from DB (since a given ISO date) */
+  getStats(sinceIso: string): { total: number; workflow: number; personality: number; byAgent: Array<{ agentId: string; agentName: string; count: number }> } | null {
+    // Flush pending writes first so stats are up-to-date
+    this.flushWriteQueue();
+    return this.activityRepository?.getStats(sinceIso) ?? null;
+  }
+
   dispose(): void {
     if (this.flushTimer !== null) {
       clearInterval(this.flushTimer);
