@@ -50,11 +50,27 @@ export class ActivityService {
   /** Track current mood per agent */
   private readonly agentMood = new Map<string, ActivityMood>();
 
+  /** Batch write queue for DB persistence */
+  private writeQueue: ActivityEvent[] = [];
+  private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+  private static readonly FLUSH_INTERVAL_MS = 2_000;
+  private static readonly FLUSH_THRESHOLD = 20;
+  private static readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1_000; // 1 hour
+  private static readonly RETENTION_DAYS = 7;
+
   constructor(options: ActivityServiceOptions) {
     this.getAgentName = options.getAgentName;
     this.reactionGenerator = options.reactionGenerator;
     this.activityRepository = options.activityRepository;
     this.maxSize = options.bufferSize ?? 200;
+
+    if (this.activityRepository) {
+      this.flushTimer = setInterval(() => this.flushWriteQueue(), ActivityService.FLUSH_INTERVAL_MS);
+      this.cleanupTimer = setInterval(() => this.cleanupOldEvents(), ActivityService.CLEANUP_INTERVAL_MS);
+      this.cleanupOldEvents(); // run once at startup
+    }
   }
 
   /**
@@ -229,17 +245,57 @@ export class ActivityService {
     // Emit to EventBus for SSE broadcast
     this.eventBus.emitSync('activity', event);
 
-    // Persist to SQLite (fire-and-forget)
-    try {
-      this.activityRepository?.insert(event);
-    } catch (err) {
-      log.warn({ err, eventId: event.id }, 'Failed to persist activity event');
+    // Queue for batch persistence
+    if (this.activityRepository) {
+      this.writeQueue.push(event);
+      if (this.writeQueue.length >= ActivityService.FLUSH_THRESHOLD) {
+        this.flushWriteQueue();
+      }
     }
 
     log.debug(
       { agentId: event.agentId, type: event.type, phase: event.phase, message: event.message.substring(0, 50) },
       'Activity event emitted',
     );
+  }
+
+  /** Flush queued events to DB in a single transaction */
+  private flushWriteQueue(): void {
+    if (this.writeQueue.length === 0 || !this.activityRepository) return;
+    const batch = this.writeQueue.splice(0);
+    try {
+      this.activityRepository.insertBatch(batch);
+    } catch (err) {
+      log.warn({ err, count: batch.length }, 'Failed to persist activity batch');
+    }
+  }
+
+  /** Delete events older than retention period */
+  private cleanupOldEvents(): void {
+    if (!this.activityRepository) return;
+    try {
+      const cutoff = new Date(Date.now() - ActivityService.RETENTION_DAYS * 24 * 60 * 60 * 1_000).toISOString();
+      const deleted = this.activityRepository.deleteOlderThan(cutoff);
+      if (deleted > 0) {
+        log.info({ deleted, retentionDays: ActivityService.RETENTION_DAYS }, 'Cleaned up old activity events');
+      }
+    } catch (err) {
+      log.warn({ err }, 'Failed to cleanup old activity events');
+    }
+  }
+
+  /** Clean shutdown: flush pending writes and clear timers */
+  dispose(): void {
+    if (this.flushTimer !== null) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (this.cleanupTimer !== null) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+    this.flushWriteQueue();
+    log.info('ActivityService disposed');
   }
 
 }

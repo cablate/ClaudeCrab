@@ -32,6 +32,32 @@ export class ActivityRepository {
     );
   }
 
+  /** Batch insert using a single transaction (one disk sync for all events) */
+  insertBatch(events: ActivityEvent[]): void {
+    if (events.length === 0) return;
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO activity_events
+        (id, agent_id, agent_name, type, phase, message, mood, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const runBatch = this.db.transaction((items: ActivityEvent[]) => {
+      for (const event of items) {
+        stmt.run(
+          event.id,
+          event.agentId,
+          event.agentName,
+          event.type,
+          event.phase ?? null,
+          event.message,
+          event.mood ?? null,
+          event.metadata ? JSON.stringify(event.metadata) : null,
+          event.timestamp,
+        );
+      }
+    });
+    runBatch(events);
+  }
+
   /** Query recent events with optional filters */
   getRecent(limit: number, filters?: {
     agentId?: string;

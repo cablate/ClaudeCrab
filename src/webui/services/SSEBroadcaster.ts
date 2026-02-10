@@ -11,10 +11,25 @@ const log = logger.child({ module: 'SSEBroadcaster' });
  */
 export class SSEBroadcaster {
   private readonly clients = new Set<Response>();
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+  private static readonly HEARTBEAT_INTERVAL_MS = 30_000;
 
   constructor() {
     const eventBus = getEventBus();
     eventBus.on('activity', (event: ActivityEvent) => this.broadcast(event));
+
+    // Send periodic heartbeat to keep connections alive through proxies
+    this.heartbeatTimer = setInterval(() => {
+      for (const client of this.clients) {
+        try {
+          client.write(':heartbeat\n\n');
+        } catch {
+          this.clients.delete(client);
+        }
+      }
+    }, SSEBroadcaster.HEARTBEAT_INTERVAL_MS);
+
     log.info('SSEBroadcaster initialized, listening for activity events');
   }
 
@@ -62,5 +77,22 @@ export class SSEBroadcaster {
   /** Number of connected clients */
   get clientCount(): number {
     return this.clients.size;
+  }
+
+  /** Stop heartbeat and close all client connections */
+  dispose(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    for (const client of this.clients) {
+      try {
+        client.end();
+      } catch {
+        // ignore
+      }
+    }
+    this.clients.clear();
+    log.info('SSEBroadcaster disposed');
   }
 }

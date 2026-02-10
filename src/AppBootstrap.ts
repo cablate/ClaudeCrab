@@ -61,6 +61,7 @@ export class AppBootstrap {
   private scheduleManager: ScheduleManager | null = null;
   private idleMutterScheduler: IdleMutterScheduler | null = null;
   private _reactionGenerator: ReactionGenerator | null = null;
+  private activityService: ActivityService | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -85,7 +86,8 @@ export class AppBootstrap {
     }
 
         // v2.0: Create ActivityService for personality-driven lifecycle reactions
-    const activityService = this.createActivityService(agentLoader, persistence);
+    this.activityService = this.createActivityService(agentLoader, persistence);
+    const activityService = this.activityService;
 
     const messageProcessor = this.createMessageProcessor(
       sessionManager,
@@ -158,6 +160,10 @@ export class AppBootstrap {
 
       if (this.sessionManager !== null) {
         this.sessionManager.dispose();
+      }
+
+      if (this.activityService !== null) {
+        this.activityService.dispose();
       }
 
       if (this.databaseManager !== null) {

@@ -79,6 +79,9 @@ async function loadRecentEvents() {
 }
 
 // --- SSE Connection ---
+let sseRetryDelay = 1000; // Start at 1s, exponential backoff up to 30s
+const SSE_MAX_RETRY_DELAY = 30000;
+
 function connectSSE() {
   const source = new EventSource('/api/activity/stream');
   let isInitialBatch = true;
@@ -103,9 +106,16 @@ function connectSSE() {
   };
 
   source.onerror = () => {
-    console.warn('SSE connection lost, reconnecting in 3s...');
+    console.warn(`SSE connection lost, reconnecting in ${sseRetryDelay / 1000}s...`);
     source.close();
-    setTimeout(connectSSE, 3000);
+
+    // Remove connected indicator
+    const dot = document.getElementById('connection-dot');
+    if (dot) dot.classList.remove('connected');
+
+    setTimeout(connectSSE, sseRetryDelay);
+    // Exponential backoff: 1s → 2s → 4s → 8s → ... → 30s max
+    sseRetryDelay = Math.min(sseRetryDelay * 2, SSE_MAX_RETRY_DELAY);
   };
 
   // Update connection status
@@ -113,6 +123,8 @@ function connectSSE() {
   if (dot) dot.classList.add('connected');
   source.addEventListener('open', () => {
     if (dot) dot.classList.add('connected');
+    // Reset retry delay on successful connection
+    sseRetryDelay = 1000;
   });
 }
 
