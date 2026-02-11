@@ -6,7 +6,25 @@
 
 ## 版本歷史
 
-### v1.28.0 - System Prompt Preset Append（當前版本）
+### v1.29.0 - Agent 模板現代化（當前版本）
+
+**發布日期**：2026-02-11
+
+**目標**：讓新建 agent 起步即正確，_example 模板升級到 general 的最佳實踐水準
+
+**模板升級**：
+- 刪除舊版 skills（`agent-protocols`、`equip`、`find-mcp`、`find-skills`）和 `EQUIPMENT.md`
+- 新增 4 個現代化 skills：`sys-agent-protocols`、`persona`、`dom-find-mcp`、`dom-find-skills`
+- persona 的 identity.md / soul.md 使用 `{{AGENT_NAME}}`、`{{AGENT_DESCRIPTION}}` 佔位符
+- CLAUDE.md 啟動協議引用更新為 `/sys-agent-protocols`
+- scheduling.md 移除硬編碼路徑，改為通用說明
+
+**建立流程**：
+- `POST /api/agents` 新增 persona identity.md / soul.md 佔位符替換
+
+---
+
+### v1.28.0 - System Prompt Preset Append
 
 **發布日期**：2026-02-11
 

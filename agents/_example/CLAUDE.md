@@ -9,7 +9,7 @@
 <STRICTLY_IMPORTANT>
 每次 session 開始時，**在回覆使用者之前**，你必須：
 
-1. 使用 Skill 工具調用 `/agent-protocols`
+1. 使用 Skill 工具調用 `/sys-agent-protocols`
 2. 依照 Startup Protocol 的指示完成所有步驟
 3. 完成後才能回覆使用者
 
@@ -24,7 +24,7 @@
 
 ### 重新校準
 
-當你發現以下情況時，重新調用 `/agent-protocols` 和 `/persona` skill：
+當你發現以下情況時，重新調用 `/sys-agent-protocols` 和 `/persona` skill：
 
 - 對話已經很長，你不確定自己的行為是否符合協議
 - 你對自己的人格、說話風格感到模糊
@@ -34,7 +34,7 @@
 
 ### 後續更新
 
-協議更新以 `agent-protocols` skill 為準，人格更新以 `persona` skill 為準。這份 CLAUDE.md 只負責告訴你「去讀 skill」。
+協議更新以 `sys-agent-protocols` skill 為準，人格更新以 `persona` skill 為準。這份 CLAUDE.md 只負責告訴你「去讀 skill」。
 
 ---
 

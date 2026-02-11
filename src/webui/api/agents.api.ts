@@ -103,6 +103,22 @@ export function createAgentsApiRouter(): Router {
       claudeMd = claudeMd.replace(/\{\{AGENT_NAME\}\}/g, body.name);
       await fs.writeFile(claudeMdPath, claudeMd);
 
+      // Update persona identity.md and soul.md placeholders
+      const personaFiles = [
+        path.join(targetDir, '.claude', 'skills', 'persona', 'references', 'identity.md'),
+        path.join(targetDir, '.claude', 'skills', 'persona', 'references', 'soul.md'),
+      ];
+      for (const personaFile of personaFiles) {
+        try {
+          let content = await fs.readFile(personaFile, 'utf-8');
+          content = content.replace(/\{\{AGENT_NAME\}\}/g, body.name);
+          content = content.replace(/\{\{AGENT_DESCRIPTION\}\}/g, body.description);
+          await fs.writeFile(personaFile, content);
+        } catch {
+          // Persona file doesn't exist in template, skip
+        }
+      }
+
       // Update settings.local.json if custom permissions provided
       if (body.permissions) {
         const settingsPath = path.join(targetDir, '.claude', 'settings.local.json');
