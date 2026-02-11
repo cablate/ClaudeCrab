@@ -6,7 +6,17 @@
 
 ## 版本歷史
 
-### v1.29.1 - WebUI 對齊 + Skill 優化（當前版本）
+### v1.29.2 - Agent 記憶搜尋指引（當前版本）
+
+**發布日期**：2026-02-11
+
+**general agent CLAUDE.md**：
+- 新增記憶搜尋指引，使用 Serena `search_for_pattern` 搜尋 memory/knowledge/groups
+- 評估並放棄 qmd（SQLite FTS5 不支援中文 2 字搜尋）
+
+---
+
+### v1.29.1 - WebUI 對齊 + Skill 優化
 
 **發布日期**：2026-02-11
 
