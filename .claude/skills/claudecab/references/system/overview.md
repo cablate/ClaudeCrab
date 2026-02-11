@@ -75,7 +75,7 @@ claudecab/
 - **配置驅動**：透過 JSON 配置 Agent，降低使用門檻
 - **模組化設計**：便於擴充與測試
 - **依賴反轉**：介面優先
-- **SDKQueryManager 可獨立抽離**：SDKQueryManager 只負責接收 `systemPrompt` 字串 + `cwd` 路徑並呼叫 SDK `query()`，不注入任何業務邏輯（如記憶系統）。設計目標是可以從 ClaudeCab 中整個帶走到其他專案使用
+- **SDKQueryManager 可獨立抽離**：SDKQueryManager 只負責接收 `systemPrompt` 字串 + `cwd` 路徑並呼叫 SDK `query()`，不注入任何業務邏輯（如記憶系統）。系統使用 SDK 的 preset append 模式（`{ type: 'preset', preset: 'claude_code', append: systemPrompt }`），保留 Claude Code 內建 prompt 並附加自訂指令。設計目標是可以從 ClaudeCab 中整個帶走到其他專案使用
 - **Agent 自主管理**：記憶、人格等進階功能完全由 Agent 透過 CLAUDE.md 指令自行操作，引擎層（`src/`）零感知。不建立「組裝層」注入記憶內容到 systemPrompt
 
 ---
@@ -117,8 +117,8 @@ interface IAgentRepository {
 
 **關鍵設計（Agent Isolation + Skills）**：
 - `settingSources: ['project']` - 載入 agent 的設定檔（`.claude/settings.local.json`）**和 skills**（`.claude/skills/`）
-- `systemPrompt` 參數 - 明確傳遞 agent 的 CLAUDE.md 內容（覆蓋 SDK 搜尋到的）
-- **原因**：`'local'` 無法載入 skills；改用 `'project'` 後，仍透過明確傳遞 `systemPrompt` 確保 agent isolation
+- `systemPrompt` 參數 - 使用 SDK preset append 模式（`{ type: 'preset', preset: 'claude_code', append: agentSystemPrompt }`），保留 Claude Code 內建 prompt 並附加 agent 的 CLAUDE.md 內容
+- **原因**：`'local'` 無法載入 skills；改用 `'project'` 後，仍透過明確傳遞 `systemPrompt` 確保 agent isolation。v1.28 從字串覆蓋改為 preset append，避免丟失 Claude Code 的工具規範與安全規則
 - **變更歷史**：v1.11.0 從 `['local']` 改為 `['project']`
 
 **功能**：
@@ -448,7 +448,7 @@ Agent 用 Read/Write 工具自行讀寫 workspace 檔案
 
 | 層級 | 職責 | 知道記憶系統？ |
 |------|------|:---:|
-| `SDKQueryManager` | 接收 systemPrompt + cwd，呼叫 SDK query() | ✗ |
+| `SDKQueryManager` | 接收 systemPrompt + cwd，以 preset append 呼叫 SDK query() | ✗ |
 | `MessageProcessor` | 管理訊息處理流程、Session 狀態；透過函數注入取得即時 systemPrompt | ✗ |
 | `AgentLoader` | 讀取 CLAUDE.md 內容（啟動時快取 + `readSystemPrompt()` 即時讀取） | ✗（只是讀檔案）|
 | `CLAUDE.md`（agent 層）| 定義記憶協議、啟動讀取順序、寫入規則 | ✓ |

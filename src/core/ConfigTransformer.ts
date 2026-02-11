@@ -28,8 +28,8 @@ const PERMISSION_MODE_MAP = {
  * Based on SDK's query() options
  */
 export interface SDKOptions {
-  /** System prompt for the agent */
-  systemPrompt?: string;
+  /** System prompt — preset append preserves Claude Code's built-in prompt */
+  systemPrompt?: string | { type: 'preset'; preset: 'claude_code'; append: string };
 
   /** Model to use */
   model?: string;
@@ -77,9 +77,13 @@ export class ConfigTransformer {
 
     const options: SDKOptions = {};
 
-    // System prompt
+    // System prompt — append to Claude Code's built-in prompt instead of overriding
     if (systemPrompt.length > 0) {
-      options.systemPrompt = systemPrompt;
+      options.systemPrompt = {
+        type: 'preset' as const,
+        preset: 'claude_code' as const,
+        append: systemPrompt,
+      };
     }
 
     // Model

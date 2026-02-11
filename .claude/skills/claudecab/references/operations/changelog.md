@@ -6,7 +6,19 @@
 
 ## 版本歷史
 
-### v1.27.0 - Activity System v2.0 架構重構 + Live Page 虛擬辦公室（當前版本）
+### v1.28.0 - System Prompt Preset Append（當前版本）
+
+**發布日期**：2026-02-11
+
+**修正**：SDK systemPrompt 從字串覆蓋改為 preset append 模式
+- `SDKQueryManager`：傳給 SDK 的 systemPrompt 改為 `{ type: 'preset', preset: 'claude_code', append: agentSystemPrompt }`
+- `ConfigTransformer`：`SDKOptions.systemPrompt` 型別擴展支援 preset 格式，`toSDKOptions()` 輸出同步更新
+- **影響**：agent 執行時保留 Claude Code 的內建 system prompt（工具使用規範、安全規則等），自訂 system prompt 附加在後面而非覆蓋
+- **背景**：先前使用字串模式會導致 Claude Code 的內建 prompt 被完全替換，agent 缺少工具使用規範
+
+---
+
+### v1.27.0 - Activity System v2.0 架構重構 + Live Page 虛擬辦公室
 
 **發布日期**：2026-02-10
 

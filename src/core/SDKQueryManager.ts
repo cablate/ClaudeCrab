@@ -152,8 +152,10 @@ export class SDKQueryManager {
       ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
       abortController,
       // Don't override tools - let SDK read from agent's .claude/settings.json
-      // Pass system prompt explicitly (agent isolation)
-      ...(options.systemPrompt ? { systemPrompt: options.systemPrompt } : {}),
+      // Pass system prompt as preset append to preserve Claude Code's built-in prompt
+      ...(options.systemPrompt
+        ? { systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: options.systemPrompt } }
+        : {}),
       // Resume from previous session if provided
       ...(options.resume ? { resume: options.resume } : {}),
       // Merge additional options
@@ -164,7 +166,7 @@ export class SDKQueryManager {
     const systemPromptStr = typeof sdkOptions.systemPrompt === 'string'
       ? sdkOptions.systemPrompt
       : sdkOptions.systemPrompt?.type === 'preset'
-        ? `[preset: ${sdkOptions.systemPrompt.preset}]`
+        ? `[preset: ${sdkOptions.systemPrompt.preset}+append(${(sdkOptions.systemPrompt.append ?? '').length}chars)]`
         : null;
 
     logger.info(
