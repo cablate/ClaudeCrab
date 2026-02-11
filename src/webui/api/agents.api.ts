@@ -508,7 +508,7 @@ export function createAgentsApiRouter(): Router {
           // Memory directory doesn't exist, that's fine
         }
 
-        // Also clear root memory files (USER.md, MEMORY.md, etc. but keep SOUL.md and IDENTITY.md)
+        // Also clear root memory files (USER.md, MEMORY.md)
         const filesToClear = ['USER.md', 'MEMORY.md'];
         for (const file of filesToClear) {
           try {
@@ -688,10 +688,11 @@ export function createAgentsApiRouter(): Router {
     }
 
     const coreFilesDef = [
-      { name: 'SOUL.md', path: 'SOUL.md', description: 'AI 人格定義' },
+      { name: 'soul.md', path: '.claude/skills/persona/references/soul.md', description: 'AI 人格定義' },
+      { name: 'identity.md', path: '.claude/skills/persona/references/identity.md', description: 'AI 身份' },
       { name: 'USER.md', path: 'USER.md', description: '使用者檔案' },
-      { name: 'IDENTITY.md', path: 'IDENTITY.md', description: 'AI 身份' },
       { name: 'MEMORY.md', path: 'MEMORY.md', description: '長期記憶' },
+      { name: 'CLAUDE.md', path: 'CLAUDE.md', description: '啟動協議' },
     ];
 
     // Get metadata for core files

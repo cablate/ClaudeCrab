@@ -760,26 +760,36 @@ function renderSkills(skills) {
   }
 
   container.innerHTML = `
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="divide-y divide-gray-200">
       ${skills.map(skill => `
-        <div class="border rounded-lg p-4 hover:border-blue-300 transition-colors">
-          <div class="flex justify-between items-start">
-            <div>
-              <h4 class="font-medium text-gray-900">/${skill.name}</h4>
-              <p class="text-sm text-gray-500 mt-1">${skill.description || 'No description'}</p>
-              <p class="text-xs text-gray-400 mt-2">
-                ${skill.modified ? new Date(skill.modified).toLocaleString('zh-TW') : ''}
-              </p>
+        <div class="skill-accordion">
+          <div onclick="toggleSkillAccordion(this)" class="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer select-none">
+            <div class="flex items-center gap-3 min-w-0">
+              <svg class="w-4 h-4 text-gray-400 transition-transform duration-200 accordion-arrow shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+              <span class="font-medium text-gray-900 truncate">/${skill.path}</span>
+              <span class="text-xs text-gray-400 shrink-0">${skill.modified ? new Date(skill.modified).toLocaleString('zh-TW') : ''}</span>
             </div>
-            <div class="flex gap-2">
-              <button onclick="editSkill('${skill.path}')" class="text-blue-600 hover:text-blue-800 text-sm">Edit</button>
-              <button onclick="deleteSkill('${skill.path}', '${skill.name}')" class="text-red-600 hover:text-red-800 text-sm">Delete</button>
+            <div class="flex gap-3 shrink-0 ml-4" onclick="event.stopPropagation()">
+              <button onclick="editSkill('${skill.path}')" class="text-blue-600 hover:text-blue-800 text-sm whitespace-nowrap">Edit</button>
+              <button onclick="deleteSkill('${skill.path}', '${skill.name}')" class="text-red-600 hover:text-red-800 text-sm whitespace-nowrap">Delete</button>
             </div>
+          </div>
+          <div class="accordion-content hidden px-4 pb-3 pl-11">
+            <p class="text-sm text-gray-500">${skill.description || 'No description'}</p>
           </div>
         </div>
       `).join('')}
     </div>
   `;
+}
+
+function toggleSkillAccordion(btn) {
+  const content = btn.nextElementSibling;
+  const arrow = btn.querySelector('.accordion-arrow');
+  content.classList.toggle('hidden');
+  arrow.classList.toggle('rotate-90');
 }
 
 function closeSkillUploadModal() {

@@ -6,7 +6,26 @@
 
 ## 版本歷史
 
-### v1.29.0 - Agent 模板現代化（當前版本）
+### v1.29.1 - WebUI 對齊 + Skill 優化（當前版本）
+
+**發布日期**：2026-02-11
+
+**WebUI 後台調整**：
+- Memory API coreFilesDef 路徑更新：SOUL.md/IDENTITY.md → `.claude/skills/persona/references/` 實際路徑
+- Core Files 新增 CLAUDE.md（啟動協議）
+- Clone agent 的 reset 註解修正（移除過時的 SOUL.md/IDENTITY.md 引用）
+- Skills tab 從 grid 卡片改為伸縮列表（accordion），顯示完整目錄名含 sys-/dom- 前綴
+
+**dom-find-skills 重構**（agentskill-expertise 審視）：
+- SKILL.md 精簡化（~120 行 → ~30 行），SOP 細節移到 references/cli-guide.md
+- Description 加入主動更新時機
+- 核心原則提煉為「不編造，先搜後答」
+- 安裝範圍統一為 agent 專屬（移除 `-g`）
+- general 和 _example 同步更新
+
+---
+
+### v1.29.0 - Agent 模板現代化
 
 **發布日期**：2026-02-11
 
