@@ -1,0 +1,21 @@
+{
+  "name": "總管",
+  "display": {
+    "avatar": "🏛️",
+    "color": "#6366F1"
+  },
+  "description": "Agent 管理員，負責管理所有 agent 的設定、人格、技能",
+  "version": "1.0.0",
+  "model": "sonnet",
+  "telegramBotToken": "8067054282:AAFwXyiBH-GyLYcCXeHCs1peQavlcJs-Xoc",
+  "settings": {
+    "permissionMode": "default",
+    "delegation": {
+      "inbound": true,
+      "outbound": false
+    },
+    "social": {
+      "enabled": false
+    }
+  }
+}

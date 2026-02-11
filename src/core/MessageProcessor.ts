@@ -17,7 +17,6 @@ import {
   isRateLimitError,
   isTransientError,
 } from '../utils/retry.js';
-import { PathValidator } from './PathValidator.js';
 import { ContextInjector } from './ContextInjector.js';
 import {
   StatusMessageManager,
@@ -616,59 +615,6 @@ export class MessageProcessor {
                 additionalOptions: {
                   canUseTool,
                   hooks: {
-                    PreToolUse: [
-                      {
-                        hooks: [
-                          async (input) => {
-                            // Path validation hook - enforce workspace isolation
-                            const pathValidator = new PathValidator({
-                              agentId: agent.id,
-                              workspacePath: agent.path,
-                              sharedPath: path.resolve(
-                                agent.path,
-                                '../_shared'
-                              ),
-                            });
-
-                            const toolInput =
-                              (
-                                input as {
-                                  tool_input?: Record<string, unknown>;
-                                }
-                              ).tool_input ?? {};
-                            const toolName =
-                              (input as { tool_name?: string }).tool_name ?? '';
-
-                            const result = pathValidator.validate(
-                              toolName,
-                              toolInput
-                            );
-
-                            if (!result.allowed) {
-                              const reason =
-                                result.reason ?? 'Path access denied';
-                              logger.warn(
-                                { agentId: agent.id, toolName, reason },
-                                'Path access denied by PathValidator'
-                              );
-                              return {
-                                hookSpecificOutput: {
-                                  hookEventName: 'PreToolUse' as const,
-                                  permissionDecision: 'deny' as const,
-                                  permissionDecisionReason: reason,
-                                },
-                              };
-                            }
-
-                            return {
-                              hookSpecificOutput: {
-                                hookEventName: 'PreToolUse' as const,
-                              },
-                            };
-                          },
-                        ],
-                      },
-                    ],
                     UserPromptSubmit: [
                       {
                         hooks: [

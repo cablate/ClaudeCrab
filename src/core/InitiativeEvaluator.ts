@@ -111,10 +111,14 @@ export class LLMInitiativeEvaluator implements InitiativeEvaluator {
     agentDescription: string,
     agentName: string,
   ): string {
+    // Trim personality to avoid excessive token usage (soul.md can be long)
+    const personality = agentDescription.length > 500
+      ? agentDescription.substring(0, 500) + '...'
+      : agentDescription;
     return `You are evaluating whether a bot should proactively respond to a group chat message.
 
 Bot name: ${agentName}
-Bot role: ${agentDescription}
+Bot personality: ${personality}
 
 Group message: "${messageText}"
 

@@ -26,26 +26,56 @@ const PHASE_MOOD_HINTS: Partial<Record<ActivityPhase, string>> = {
 
 /** Random scenarios for idle mutters */
 const MUTTER_SCENARIOS = [
+  // 身體感受
   '你剛滑了一下手機',
   '你盯著螢幕發呆了一會兒',
-  '你突然想到一件事',
-  '你聽到隔壁傳來奇怪的聲音',
   '你在想等等要吃什麼',
-  '你回想起今天發生的事',
-  '你望向窗外',
-  '你伸了個懶腰',
   '你覺得椅子坐得屁股痛',
-  '你想起一首歌但想不起歌名',
-  '你偷看了一眼旁邊的同事',
-  '你在想老闆是不是忘了你的存在',
   '你的肚子叫了一聲',
   '你突然覺得有點冷',
-  '你在想人生的意義',
   '你剛打了一個哈欠',
-  '你想到一個笑話但沒人可以講',
-  '你在數天花板的格子',
+  '你眼睛有點乾',
+  '你的肩膀超緊',
+  '你覺得有點渴但懶得起來倒水',
+  // 環境觀察
+  '你聽到隔壁傳來奇怪的聲音',
+  '你望向窗外',
+  '你偷看了一眼旁邊的同事',
   '你覺得今天特別安靜',
   '你看到螢幕上自己的倒影',
+  '你注意到桌上的灰塵',
+  '你聞到不知道哪裡傳來的咖啡香',
+  '你發現隔壁的燈一直在閃',
+  // 思緒漫遊
+  '你突然想到一件事',
+  '你回想起今天發生的事',
+  '你想起一首歌但想不起歌名',
+  '你在想人生的意義',
+  '你想到一個笑話但沒人可以講',
+  '你在數天花板的格子',
+  '你在想老闆是不是忘了你的存在',
+  '你腦中突然閃過一個奇怪的畫面',
+  '你想起小時候的一件蠢事',
+  '你在想如果現在中樂透要幹嘛',
+  '你突然好奇現在外面幾度',
+  '你在想昨天夢到了什麼',
+  // 動作/小事
+  '你伸了個懶腰',
+  '你轉了一下筆',
+  '你把桌上的東西排整齊又弄亂',
+  '你嘗試用嘴把筆蓋彈起來',
+  '你在撕便利貼玩',
+  '你把椅子往後靠差點翻過去',
+  // 情緒波動
+  '你突然覺得有點無聊',
+  '你莫名其妙想笑',
+  '你忽然有點感慨',
+  '你覺得今天過得好慢',
+  '你對剛才的事情有點後悔',
+  '你突然很想吃甜的',
+  '你覺得自己好像忘了什麼事',
+  '你在猶豫要不要站起來走一走',
+  '你突然想傳訊息給某個人但又算了',
 ];
 
 export interface ReactionGeneratorOptions {
@@ -101,7 +131,7 @@ export class ReactionGenerator {
     const moodHint = PHASE_MOOD_HINTS[phase] ?? '';
 
     const recentLine = recentMessages.length > 0
-      ? `\n你最近的內心獨白（不要重複類似的）：\n${recentMessages.map(m => `- ${m}`).join('\n')}`
+      ? `\n你最近的內心獨白（絕對禁止重複類似的句型、開頭、主題）：\n${recentMessages.map(m => `- "${m}"`).join('\n')}`
       : '';
 
     const prompt = `你是 ${agentName}，一個虛擬辦公室裡的員工。${personality ? `你的個性：\n${personality.substring(0, 500)}` : ''}
@@ -114,6 +144,7 @@ export class ReactionGenerator {
 - 15 字以內
 - 不要對外回應、不要摘要任務內容
 - 要有情緒，像「又來了...」「搞定，爽！」「這什麼鬼」
+- 每次用不同的開頭方式，禁止總是用「靠」或髒話開頭
 ${moodHint}
 回覆 JSON：{"message": "你的內心獨白", "mood": "neutral|excited|annoyed|tired|focused|bored"}
 只回覆 JSON，不要其他內容。`;
@@ -139,14 +170,21 @@ ${moodHint}
     const scenario = MUTTER_SCENARIOS[Math.floor(Math.random() * MUTTER_SCENARIOS.length)];
 
     const recentLine = recentMessages.length > 0
-      ? `\n你最近說過的碎念（不要重複類似的）：\n${recentMessages.map(m => `- ${m}`).join('\n')}`
+      ? `\n你最近說過的（絕對禁止重複類似的句型、開頭、主題）：\n${recentMessages.map(m => `- "${m}"`).join('\n')}`
       : '';
 
     const prompt = `你是 ${agentName}。${personality ? `你的個性：\n${personality.substring(0, 500)}` : ''}
 
 現在是${timeContext}，${scenario}。${recentLine}
 用你的個性說一句內心碎念（口語化、15 字以內）。
-不要提到時間，不要說「等著」，要有趣、有個性、像真人自言自語。
+
+嚴格要求：
+- 每次用不同的開頭方式（反問、感嘆、自嘲、碎念、疑問句…隨機選一種）
+- 禁止每句都用「靠」或髒話開頭——偶爾可以，但不能是預設模式
+- 不要提到時間
+- 不要說「等著」
+- 要有趣、有個性、像真人自言自語
+- 回應要跟情境（${scenario}）有直接關聯
 
 回覆 JSON：{"message": "你的碎念", "mood": "neutral|excited|annoyed|tired|focused|bored"}
 只回覆 JSON，不要其他內容。`;

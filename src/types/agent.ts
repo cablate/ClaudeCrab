@@ -75,7 +75,7 @@ export const AgentSettingsSchema = z.object({
   initiative: InitiativeSettingsSchema.optional(),
   /** Social mode settings */
   social: SocialSettingsSchema.optional(),
-});;
+});
 
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
 

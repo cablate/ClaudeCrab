@@ -6,9 +6,23 @@
       "Grep",
       "Bash",
       "Edit",
-      "Write"
+      "Write",
+      "mcp__serena__*"
     ],
     "deny": []
   },
-  "model": "sonnet"
+  "model": "sonnet",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash|Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx ../_shared/hooks/path-validator.ts"
+          }
+        ]
+      }
+    ]
+  }
 }

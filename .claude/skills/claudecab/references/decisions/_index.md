@@ -38,6 +38,7 @@
 | [ADR-028](adr/adr-028-schedule-trigger-types.md) | 排程 Trigger 類型支援策略 | ✅ implemented | 2026-02-06 |
 | [ADR-029](adr/adr-029-agent-structure-sync.md) | Agent 架構同步機制 | 📋 proposed | 2026-02-06 |
 | [ADR-030](adr/adr-030-agent-team-mode.md) | Agent Team Mode — 多 Agent 並行協作 | ✅ implemented (Tier 1 + 1.1~1.3) | 2026-02-06 |
+| [ADR-031](adr-031-hook-decoupling.md) | Hook 系統解耦 — 引擎硬編轉原生 Claude Code Hooks | 📋 proposed | 2026-02-11 |
 
 ---
 

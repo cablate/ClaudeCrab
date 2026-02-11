@@ -10,12 +10,28 @@
       "WebFetch",
       "WebSearch",
       "Bash",
-      "Skill"
+      "Skill",
+      "mcp__serena__*"
     ],
-    "deny": []
+    "deny": [
+      "mcp__twse__*"
+    ]
   },
   "model": "sonnet",
   "enabledPlugins": {
     "superpowers@superpowers-marketplace": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash|Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx ../_shared/hooks/path-validator.ts"
+          }
+        ]
+      }
+    ]
   }
 }

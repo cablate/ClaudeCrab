@@ -120,6 +120,88 @@ SDK 整合層只接收 `systemPrompt` + `cwd`，不注入任何業務邏輯。�
 - [ ] 前端展示層（Web UI 渲染 agent 即時狀態與活動）
 - [ ] Idle 生命感（閒置時三不五時冒出碎碎念）
 
+### Phase 3.5：虛擬辦公室（概念確認）
+- [ ] Isometric 像素風辦公室背景（AI 生圖）
+- [ ] Agent 小人 sprite（每個 agent 2-3 姿勢：idle/working/talking）
+- [ ] 座位定位系統（背景圖上 absolute positioning）
+- [ ] 即時狀態 overlay（狀態燈、氣泡、當前動作）
+- [ ] 點擊小人 → 展開完整立繪面板（大圖 + 名字 + 人格描述 + 最近活動）
+- [ ] Agent 立繪（每個 agent 一張，AI 生圖）
+
+設計概念：兩層結構
+- **全景層**：像素小人在辦公室座位上，一眼看全局狀態
+- **個體層**：點擊角色彈出立繪面板，深入看個體資訊
+
+美術資源：全部 AI 生圖（Banana Pro），風格已錨定
+程式基礎：現有 WebUI live page + SSE + activity data 已可支撐
+
+#### 美術風格規範
+
+**整體風格**：日常系動漫風——圓潤線條、柔和粉彩色調、親和力優先
+
+**立繪 style 錨定 prompt（共用前綴）**：
+```
+anime illustration, slice-of-life anime style,
+soft rounded lineart, warm pastel color palette,
+gentle soft lighting, slight blush on cheeks,
+friendly approachable expression,
+studio Cloverworks / A-1 Pictures aesthetic,
+clean cel-shaded coloring with minimal shading layers,
+pure solid white background, sharp clean character outline,
+no glow no blur on edges, high contrast with background,
+upper body portrait
+```
+
+**辦公室背景 prompt**：
+```
+Isometric pixel art office space, top-down 45-degree view,
+spacious modern startup office with distinct zones:
+- open workspace area with 6-8 desk stations with monitors and ergonomic chairs,
+- cozy lounge corner with sofa and bean bags,
+- meeting room with glass walls and round table,
+- kitchen area with coffee machine, snack bar, mini fridge,
+- whiteboard wall covered in sticky notes and diagrams,
+- bookshelf filled with books and figurines,
+- server rack corner with blinking LEDs,
+- entrance area with shoe rack and coat hooks,
+scattered details: potted plants, desk toys, mugs, headphones on desks,
+cat sleeping on sofa, pizza box on meeting table,
+warm ambient lighting with desk lamps,
+16-bit retro pixel art aesthetic, soft pastel colors,
+no characters, all seats empty,
+game asset style, high detail environment
+```
+
+**小人 sprite prompt 模板**：
+```
+Single pixel art character sprite, isometric view,
+[POSE: sitting at desk typing / sitting leaning back relaxed / standing gesturing],
+[CHARACTER DESC],
+chibi proportions, 32x32 or 64x64 pixel style,
+clean edges, solid color background (#00FF00),
+consistent art style, game asset
+```
+
+**去背要點**：純白背景 + 銳利輪廓 + cel-shaded 平塗 → remove.bg 一鍵去背
+
+**角色生成流程**（每個 agent 依序執行）：
+1. 生立繪 → 調整到滿意為止（錨定角色設計、配色、氣質）
+2. 用立繪做 image reference → 生小人 idle 姿勢（錨定像素風比例和配色）
+3. 用小人 idle 做 reference → 生其他姿勢變體（working / talking）
+
+原則：風格一致性由上往下鎖定，每步都用前一步的成品做 reference
+
+**角色表情包生成**：
+用立繪做 reference，生成每個 agent 專屬的表情圖集——取代通用 emoji。
+類似 Discord 自訂表情 / LINE 貼圖概念，每個 reaction 都是角色自己的臉。
+
+生成流程：立繪（錨定角色）→ 用立繪 reference + emoji 描述 → 生成對應表情小圖
+
+常用表情清單（依實際 reaction 使用頻率決定優先級）：
+😀😂🤔😤👍❤️😱🫠💤🔥 等
+
+效果：activity feed 的 reaction 從通用 emoji 變成角色專屬表情，生動感大幅提升
+
 ### Phase 4：生態整合
 - [ ] 更多通訊平台支援
 - [ ] MCP Server 市集整合

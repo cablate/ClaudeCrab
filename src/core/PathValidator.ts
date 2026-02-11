@@ -169,7 +169,7 @@ export class PathValidator {
       return { allowed: true };
     }
 
-    // 3. Other agent workspaces - DENIED
+    // 3. Other agent workspaces
     if (normalizedPath.startsWith(this.agentsRoot)) {
       return {
         allowed: false,

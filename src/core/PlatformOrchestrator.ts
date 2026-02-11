@@ -28,6 +28,8 @@ import { LLMInitiativeEvaluator } from './InitiativeEvaluator.js';
 import { LLMSocialEvaluator } from './SocialEvaluator.js';
 import { SessionManager } from './SessionManager.js';
 import { MessageProcessor } from './MessageProcessor.js';
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -72,6 +74,8 @@ export interface PlatformOrchestratorOptions {
 export class PlatformOrchestrator {
   private readonly registry: AdapterRegistry = new AdapterRegistry();
   private readonly agentLoader: AgentLoader;
+  /** Cache soul.md content per agent to avoid repeated file reads */
+  private readonly personalityCache = new Map<string, string | undefined>();
   private readonly sessionManager: SessionManager;
   private readonly messageProcessor: MessageProcessor;
   private readonly securityConfig: AdapterSecurityConfig | undefined;
@@ -122,9 +126,22 @@ export class PlatformOrchestrator {
       getAgentDescription: (agentId: string) => {
         const agent = this.agentLoader.get(agentId);
         if (!agent) return undefined;
+        // Read personality from soul.md (persona skill), fall back to agent.json description
+        let personality: string | undefined;
+        if (this.personalityCache.has(agentId)) {
+          personality = this.personalityCache.get(agentId);
+        } else {
+          const soulPath = path.join(agent.path, '.claude', 'skills', 'persona', 'references', 'soul.md');
+          try {
+            personality = readFileSync(soulPath, 'utf-8');
+          } catch {
+            personality = agent.config.description;
+          }
+          this.personalityCache.set(agentId, personality);
+        }
         return {
           name: agent.config.name,
-          ...(agent.config.description !== undefined ? { description: agent.config.description } : {}),
+          ...(personality !== undefined ? { description: personality } : {}),
         };
       },
       initiativeEvaluator: new LLMInitiativeEvaluator(),

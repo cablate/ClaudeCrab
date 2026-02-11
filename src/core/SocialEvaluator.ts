@@ -117,7 +117,12 @@ export class LLMSocialEvaluator implements SocialEvaluator {
     agentDescription: string,
     agentName: string,
   ): string {
-    return `You are ${agentName}, a bot in a friend group chat. Your role: ${agentDescription}
+    // Trim personality to avoid excessive token usage (soul.md can be long)
+    const personality = agentDescription.length > 500
+      ? agentDescription.substring(0, 500) + '...'
+      : agentDescription;
+    return `You are ${agentName}, a bot in a friend group chat. Your personality:
+${personality}
 
 Someone just said: "${messageText}"
 

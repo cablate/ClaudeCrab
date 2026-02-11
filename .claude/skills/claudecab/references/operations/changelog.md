@@ -6,7 +6,33 @@
 
 ## 版本歷史
 
-### v1.29.2 - Agent 記憶搜尋指引（當前版本）
+### v1.30 - PathValidator 外部化 + Admin Agent + Serena 標配（當前版本）
+
+**發布日期**：2026-02-12
+
+**PathValidator Hook 外部化（ADR-031）**：
+- 新增 `agents/_shared/hooks/path-validator.ts` 外部驗證腳本
+- PathValidator 從引擎硬編移至各 agent 的 `settings.local.json` hooks 配置
+- 引擎 `MessageProcessor.ts` / `ScheduleExecutor.ts` 不再包含 PathValidator hook
+- 移除 `allowAllAgents` flag（agent.ts、PathValidator.ts、admin agent.json）
+
+**Admin Agent（總管）**：
+- 新增 `agents/admin/` — Agent 管理員，可跨目錄管理所有 agent
+- 不配置 path-validator hook = 天然無限制
+- 含 agent-management skill（操作指南 + 建立新 agent 指南）
+
+**Serena MCP 標配化**：
+- 所有 agent 新增 `.mcp.json`（Serena server 配置）
+- 所有 agent 的 `settings.local.json` 新增 `mcp__serena__*` 權限
+- 所有 agent 的 `CLAUDE.md` 新增 Serena 操作規則
+
+**前次 session 變更（一併收錄）**：
+- 人格來源修正：SocialEvaluator / InitiativeEvaluator 改讀 soul.md 而非 agent.json description
+- ReactionGenerator：擴充 mutter 場景 + 反重複 prompt 約束
+
+---
+
+### v1.29.2 - Agent 記憶搜尋指引
 
 **發布日期**：2026-02-11
 

@@ -16,7 +16,6 @@ import type { SDKQueryManager, QueryResult } from '../core/SDKQueryManager.js';
 import { buildPromptContext } from '../core/constants.js';
 import { retryAsync, shouldRetryError } from '../utils/retry.js';
 import type { RetryOptions } from '../utils/retry.js';
-import { PathValidator } from '../core/PathValidator.js';
 import { logger } from '../utils/logger.js';
 
 /** Schedule-specific retry options: more conservative than chat */
@@ -104,48 +103,6 @@ export class ScheduleExecutor {
                               ),
                             },
                           }),
-                        ],
-                      },
-                    ],
-                    PreToolUse: [
-                      {
-                        hooks: [
-                          async (input) => {
-                            const pathValidator = new PathValidator({
-                              agentId,
-                              workspacePath: agent.path,
-                              sharedPath: path.resolve(agent.path, '../_shared'),
-                            });
-
-                            const toolInput =
-                              (input as { tool_input?: Record<string, unknown> })
-                                .tool_input ?? {};
-                            const toolName =
-                              (input as { tool_name?: string }).tool_name ?? '';
-
-                            const validationResult = pathValidator.validate(toolName, toolInput);
-
-                            if (!validationResult.allowed) {
-                              const reason = validationResult.reason ?? 'Path access denied';
-                              logger.warn(
-                                { agentId, toolName, reason, scheduleId: spec.id },
-                                '[ScheduleExecutor] Path access denied by PathValidator'
-                              );
-                              return {
-                                hookSpecificOutput: {
-                                  hookEventName: 'PreToolUse' as const,
-                                  permissionDecision: 'deny' as const,
-                                  permissionDecisionReason: reason,
-                                },
-                              };
-                            }
-
-                            return {
-                              hookSpecificOutput: {
-                                hookEventName: 'PreToolUse' as const,
-                              },
-                            };
-                          },
                         ],
                       },
                     ],

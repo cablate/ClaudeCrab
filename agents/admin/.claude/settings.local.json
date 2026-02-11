@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Bash",
+      "mcp__serena__*"
+    ],
+    "deny": [
+      "mcp__twse__*"
+    ]
+  },
+  "model": "sonnet"
+}
