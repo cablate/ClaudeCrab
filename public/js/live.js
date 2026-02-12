@@ -8,6 +8,25 @@ const activityFeed = [];
 const MAX_FEED_ITEMS = 50;
 let activeFilter = 'all'; // 'all' | 'workflow' | 'personality' | 'agent:{id}'
 
+// --- Seat positions (% of scene width/height) ---
+// Mapped to the isometric office background desk/chair positions
+const SEAT_POSITIONS = {
+  general:   { left: '56%', top: '61%' },
+  leader:    { left: '26%', top: '35%' },
+  admin:     { left: '77%', top: '42%' },  // cozy
+  coder:     { left: '45%', top: '52%', flip: true },  // 左右鏡像
+  nitterbot: { left: '65%', top: '33%' },  // analyst
+};
+
+// --- Agent → asset mapping (test images, will be driven by agent config later) ---
+const AGENT_ASSETS = {
+    'general':   { sprite: '/static/images/generated/test-silver-sprite-nobg.png',   portrait: '/static/images/generated/test-general-portrait-v3-nobg.png', emoji: '/static/images/generated/test-emoji-laugh.png' },
+  'leader':    { sprite: '/static/images/generated/test-leader-sprite-nobg.png',   portrait: '/static/images/generated/test-leader-portrait-v2-nobg.png' },
+  'nitterbot': { sprite: '/static/images/generated/test-analyst-sprite-nobg.png',  portrait: '/static/images/generated/test-analyst-portrait-v2-nobg.png' },
+  'coder':     { sprite: '/static/images/generated/test-coder-f-sprite-v2-nobg.png', portrait: '/static/images/generated/test-coder-f-portrait-nobg.png' },
+  'admin':     { sprite: '/static/images/generated/test-cozy-sprite-nobg.png',     portrait: '/static/images/generated/test-cozy-portrait-nobg.png' },
+};
+
 // Mood emoji mapping
 const MOOD_EMOJI = {
   neutral: '😐',
@@ -51,6 +70,28 @@ const WORKFLOW_LABELS = {
 async function init() {
   await loadAgentStates();
   await loadRecentFeed();
+  populateInitialBubbles();
+
+// --- Fill initial bubbles from loaded feed data ---
+function populateInitialBubbles() {
+  // Find latest personality/mutter event per agent
+  const latestByAgent = {};
+  for (const event of activityFeed) {
+    if ((event.type === 'personality' || event.type === 'mutter') && event.agentId && event.message) {
+      if (!latestByAgent[event.agentId]) {
+        latestByAgent[event.agentId] = event.message;
+      }
+    }
+  }
+
+  // Apply to sprites
+  const sprites = document.querySelectorAll('.agent-sprite');
+  for (const sprite of sprites) {
+    const agentId = sprite.id.replace('sprite-', '');
+    const text = latestByAgent[agentId] || defaultBubble();
+    showSpriteBubble(sprite, text);
+  }
+}
   connectSSE();
   startRelativeTimeUpdater();
   startIdleBadgeUpdater();
@@ -69,13 +110,25 @@ async function loadAgentStates() {
     const container = document.getElementById('agent-cards');
     container.innerHTML = '';
     if (agents.length === 0) {
-      container.innerHTML = '<div class="empty-state"><div class="icon">🏢</div><p>尚未有員工進駐</p></div>';
+      // Show empty state in office scene
+      const scene = document.getElementById('office-scene');
+      if (scene) {
+        const empty = document.createElement('div');
+        empty.className = 'scene-empty-state';
+        empty.innerHTML = '<div class="icon">🏢</div><p>尚未有員工進駐</p>';
+        scene.appendChild(empty);
+      }
       return;
     }
-    for (const agent of agents) {
+    for (let i = 0; i < agents.length; i++) {
+      const agent = agents[i];
       const card = createAgentCard(agent);
       container.appendChild(card);
       agentCards[agent.id] = agent;
+      // Create sprite in office scene (use agent ID as seat key)
+      if (SEAT_POSITIONS[agent.id]) {
+        createAgentSprite(agent, agent.id);
+      }
     }
   } catch (err) {
     console.error('Failed to load agent states:', err);
@@ -127,6 +180,7 @@ function connectSSE() {
 // --- Handle incoming activity event ---
 function handleActivityEvent(event) {
   updateAgentCard(event);
+  updateSpriteStatus(event);
 
   if (event.type !== 'status_change') {
     addToFeed(event, true);
@@ -542,6 +596,142 @@ function applyFilter() {
     item.style.display = matchesFilter(item) ? '' : 'none';
   }
 }
+
+// ============================================
+// OFFICE SCENE — Sprites + Portrait Modal
+// ============================================
+
+// --- Create sprite in office scene ---
+function createAgentSprite(agent, seatKey) {
+  const scene = document.getElementById('office-scene');
+  if (!scene) return;
+
+  const pos = SEAT_POSITIONS[seatKey];
+  if (!pos) return;
+
+  const sprite = document.createElement('div');
+  sprite.className = 'agent-sprite breathing';
+  sprite.id = `sprite-${agent.id}`;
+  sprite.style.left = pos.left;
+  sprite.style.top = pos.top;
+  if (pos.flip) {
+    sprite.dataset.flip = 'true';
+  }
+
+  const assets = AGENT_ASSETS[agent.id] || {};
+  const spriteSrc = assets.sprite || '';
+  const mood = agent.mood || 'neutral';
+  const moodEmoji = MOOD_EMOJI[mood] || '😐';
+  const lastMsg = agent.lastEvent?.message || '';
+
+  sprite.innerHTML = `
+    <img src="${spriteSrc}" alt="${agent.name}" onerror="this.style.display='none'" class="${pos.flip ? 'flipped' : ''}">
+    <span class="sprite-label">${agent.name}</span>
+    <span class="sprite-mood">${moodEmoji}</span>
+    <div class="sprite-bubble ${lastMsg ? 'visible' : ''}">${lastMsg.length > 40 ? lastMsg.substring(0, 40) + '...' : lastMsg}</div>
+  `;
+
+  sprite.addEventListener('click', () => openPortrait(agent));
+  scene.appendChild(sprite);
+}
+
+// --- Update sprite status from event ---
+function updateSpriteStatus(event) {
+  const sprite = document.getElementById(`sprite-${event.agentId}`);
+  if (!sprite) return;
+
+  const phase = event.phase || 'idle';
+
+  // Breathing vs working pulse animation
+  if (phase === 'idle' || phase === 'completed') {
+    sprite.classList.add('breathing');
+    sprite.classList.remove('working-pulse');
+  } else {
+    sprite.classList.remove('breathing');
+    if (phase !== 'error') {
+      sprite.classList.add('working-pulse');
+    } else {
+      sprite.classList.remove('working-pulse');
+    }
+  }
+
+  // Update mood emoji
+  if (event.mood) {
+    const moodEl = sprite.querySelector('.sprite-mood');
+    if (moodEl) {
+      moodEl.textContent = MOOD_EMOJI[event.mood] || '😐';
+    }
+  }
+
+  // Update bubble — personality/mutter events persist
+  if (event.type === 'personality' || event.type === 'mutter') {
+    if (event.message) showSpriteBubble(sprite, event.message);
+  }
+}
+
+// --- Show persistent bubble above sprite ---
+function showSpriteBubble(sprite, text) {
+  const bubble = sprite.querySelector('.sprite-bubble');
+  if (!bubble) return;
+  bubble.textContent = text.length > 25 ? text.substring(0, 25) + '...' : text;
+  bubble.classList.add('visible');
+}
+
+// --- Open portrait modal ---
+function openPortrait(agent) {
+  const overlay = document.getElementById('dialogue-overlay');
+  if (!overlay) return;
+
+  const assets = AGENT_ASSETS[agent.id] || {};
+  const currentAgent = agentCards[agent.id] || agent;
+
+  // Portrait image
+  document.getElementById('dialogue-portrait-img').src = assets.portrait || '';
+
+  // Name plate
+  document.getElementById('dialogue-name').textContent = currentAgent.name || agent.name;
+  const phase = currentAgent.phase || 'idle';
+  const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
+  document.getElementById('dialogue-status').textContent = statusInfo.label;
+
+  // Latest monologue (main dialogue text)
+  const agentEvents = activityFeed.filter(e => e.agentId === agent.id && e.message);
+  const latestMsg = agentEvents.length > 0 ? agentEvents[0].message : defaultBubble();
+  document.getElementById('dialogue-text').textContent = latestMsg;
+
+  // Character emoji
+  const emojiEl = document.getElementById('dialogue-emoji');
+  const emojiSrc = assets.emoji;
+  if (emojiSrc) {
+    const emojis = Array.isArray(emojiSrc) ? emojiSrc : [emojiSrc];
+    emojiEl.innerHTML = emojis.map(src => `<img src="${src}" alt="emoji">`).join('');
+  } else {
+    // Fallback: show mood emoji as text
+    const mood = currentAgent.mood || 'neutral';
+    const moodEmoji = MOOD_EMOJI[mood] || '😐';
+    emojiEl.innerHTML = `<span style="font-size:4rem">${moodEmoji}</span>`;
+  }
+
+  // Recent thoughts history
+  const historyEl = document.getElementById('dialogue-history');
+  const olderEvents = agentEvents.slice(1, 8);
+  if (olderEvents.length > 0) {
+    historyEl.innerHTML = olderEvents.map(e =>
+      `<div class="dialogue-history-item">${escapeHtml(e.message)}<span class="history-time">${relativeTime(e.timestamp)}</span></div>`
+    ).join('');
+  } else {
+    historyEl.innerHTML = '';
+  }
+
+  overlay.style.display = 'flex';
+}
+
+// Close dialogue overlay
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('dialogue-backdrop') || e.target.classList.contains('dialogue-close')) {
+    document.getElementById('dialogue-overlay').style.display = 'none';
+  }
+});
 
 // --- Start ---
 document.addEventListener('DOMContentLoaded', init);

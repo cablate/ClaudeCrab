@@ -30,12 +30,36 @@
   <main class="office-layout">
     <!-- Left: Employee Cards (hero area) -->
     <section class="office-main">
-      <div class="agent-cards" id="agent-cards">
-        <div class="empty-state">
-          <div class="icon">🏢</div>
-          <p>辦公室準備中...</p>
+      <!-- Isometric Office Scene -->
+      <div class="office-scene" id="office-scene">
+        <img class="office-bg" src="/static/images/generated/office-background.png" alt="Office">
+        <!-- Agent sprites will be positioned here by JS -->
+
+        <!-- RPG Dialogue Panel (hidden by default, inside scene) -->
+        <div class="dialogue-overlay" id="dialogue-overlay" style="display:none;">
+          <div class="dialogue-backdrop"></div>
+          <div class="dialogue-scene">
+            <button class="dialogue-close" id="dialogue-close">&times;</button>
+            <div class="dialogue-portrait">
+              <img class="dialogue-portrait-img" id="dialogue-portrait-img" src="" alt="">
+            </div>
+            <div class="dialogue-content">
+              <div class="dialogue-nameplate">
+                <span class="dialogue-name" id="dialogue-name"></span>
+                <span class="dialogue-status" id="dialogue-status"></span>
+              </div>
+              <div class="dialogue-box">
+                <div class="dialogue-text" id="dialogue-text"></div>
+                <div class="dialogue-emoji" id="dialogue-emoji"></div>
+              </div>
+              <div class="dialogue-history" id="dialogue-history"></div>
+            </div>
+          </div>
         </div>
       </div>
+
+      <!-- Agent cards data container (hidden, used for state tracking) -->
+      <div id="agent-cards" style="display:none;"></div>
     </section>
 
     <!-- Right: Activity Feed (sidebar) -->

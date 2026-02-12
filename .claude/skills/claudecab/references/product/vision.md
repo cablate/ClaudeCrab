@@ -137,21 +137,51 @@ SDK 整合層只接收 `systemPrompt` + `cwd`，不注入任何業務邏輯。�
 
 #### 美術風格規範
 
-**整體風格**：日常系動漫風——圓潤線條、柔和粉彩色調、親和力優先
+**整體風格**：精緻光影動漫風——有環境光源、空氣感、柔和光影渲染的 semi-realistic anime
+
+**風格偏好備註（2026-02-12）**：
+比較了所有立繪後，確認偏好的風格是 Coder（紫髮）和 Cozy（粉髮）那種：
+- 有明確**光源方向**（側光/頂光），而非均勻平塗
+- 髮絲有**高光層次和透光感**
+- 膚色有**暖色漸層**，不是單一色塊
+- 衣服材質有**陰影體積感**
+- 整體有「畫面在發光」的精緻氛圍感
+- 參考風格：Makoto Shinkai 電影角色質感、京アニ光影處理
+
+不喜歡的方向：純平塗 cel-shaded（如 Leader、Analyst），光影層次少，像設定集而非場景中的角色。
 
 **立繪 style 錨定 prompt（共用前綴）**：
 ```
-anime illustration, slice-of-life anime style,
-soft rounded lineart, warm pastel color palette,
-gentle soft lighting, slight blush on cheeks,
-friendly approachable expression,
-studio Cloverworks / A-1 Pictures aesthetic,
-clean cel-shaded coloring with minimal shading layers,
+anime illustration, semi-realistic anime style,
+soft detailed lineart with varying line weight,
+warm natural lighting from upper left, visible light source direction,
+soft ambient occlusion, subtle rim lighting on hair and shoulders,
+hair with translucent highlights and volumetric shading,
+skin with warm gradient tones and gentle blush,
+fabric with soft shadow folds showing volume and material texture,
+atmospheric glow, slight depth of field feel,
+studio Kyoto Animation / Makoto Shinkai aesthetic,
+rich but soft color palette with warm undertones,
 pure solid white background, sharp clean character outline,
 no glow no blur on edges, high contrast with background,
 no background elements, no objects, no monitor, no screen, no furniture,
 upper body portrait
 ```
+
+**生成品質要求**：
+- **必須使用 2K 以上解析度**（`imageSize: "2K"`），低解析度會導致光影細節丟失、退化成平塗風格
+- **角色描述要具體化光影互動**：不只寫「silver hair」，要寫「delicate silver hair catching warm light with translucent glow」
+- **衣服材質要明確**：不只寫「blue jacket」，要寫「navy blue cable-knit cardigan with visible texture weave」
+- **膚色要描述漸層**：加上「soft blush on cheeks」「warm skin tones with subtle shadow under chin」
+- 避免籠統描述（如 "friendly expression"），改用具體五官狀態（如 "bright amber eyes, slight upward curve of lips, relaxed eyebrows"）
+
+**品質檢查清單**（生成後對照）：
+- [ ] 髮絲是否有高光層次和透光感？（不是單色色塊）
+- [ ] 膚色是否有暖色漸層？（不是均勻單色）
+- [ ] 衣服是否有陰影體積感？（不是平塗填色）
+- [ ] 是否能看出光源方向？（左上方打光）
+- [ ] 整體是否有「畫面在發光」的氛圍感？
+- 未通過 → 重新生成，不要妥協
 
 **辦公室背景 prompt**：
 ```
@@ -187,7 +217,7 @@ consistent art style, game asset, 16-bit aesthetic
 注意：小人生成時用對應立繪做 inputImagePath 以鎖定角色特徵。
 最終尺寸用工具（sharp/imagemagick）統一縮放，不靠 prompt 控制比例。
 
-**去背要點**：所有素材統一純白背景 + 銳利輪廓 + cel-shaded 平塗 → remove.bg 一鍵去背。小人不帶家具，家具由背景圖提供。
+**去背要點**：所有素材統一純白背景 + 銳利輪廓 → sharp threshold 去背（RGB > 240 → 透明）或 remove.bg。立繪去背後保留原圖（*-nobg.png 命名）。小人不帶家具，家具由背景圖提供。
 
 **角色生成流程**（每個 agent 依序執行）：
 1. 生立繪 → 調整到滿意為止（錨定角色設計、配色、氣質）

@@ -120,9 +120,10 @@ body {
 .office-main {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 0.75rem;
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
 }
 
@@ -578,6 +579,318 @@ body {
 /* ============================================
    RESPONSIVE — stack on mobile
    ============================================ */
+/* ============================================
+   OFFICE SCENE — Isometric background + sprites
+   ============================================ */
+.office-scene {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.scene-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.4);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  z-index: 5;
+}
+.scene-empty-state .icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+.office-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Agent Sprites (absolute on scene) */
+.agent-sprite {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  image-rendering: pixelated;
+}
+.agent-sprite:hover {
+  transform: scale(1.3);
+  z-index: 10;
+}
+.agent-sprite img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.agent-sprite img.flipped {
+  transform: scaleX(-1);
+}
+
+/* Sprite name label */
+.sprite-label {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  white-space: nowrap;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Sprite mood emoji (persistent, replaces status dot) */
+.sprite-mood {
+  position: absolute;
+  top: -8px;
+  right: -12px;
+  font-size: 1.2rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+  z-index: 5;
+  transition: transform 0.3s;
+}
+
+.agent-sprite:hover .sprite-mood {
+  transform: scale(1.3);
+}
+
+/* Sprite speech bubble (persistent, shows latest mutter) */
+.sprite-bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.95);
+  color: #1a1a2e;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  padding: 6px 12px;
+  border-radius: 10px;
+  min-width: 120px;
+  max-width: 320px;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
+  margin-bottom: 6px;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+/* Speech bubble tail */
+.sprite-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(255,255,255,0.95);
+}
+.sprite-bubble.visible {
+  opacity: 1;
+}
+
+/* Working status pulse ring */
+.agent-sprite.working-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 2px solid #fbbf24;
+  border-radius: 50%;
+  animation: workPulse 1.5s ease-in-out infinite;
+}
+@keyframes workPulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+/* Breathing animation for idle sprites */
+.agent-sprite.breathing img {
+  animation: spriteBreathe 3s ease-in-out infinite;
+}
+.agent-sprite.breathing img.flipped {
+  animation: spriteBreatheFlipped 3s ease-in-out infinite;
+}
+@keyframes spriteBreathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+@keyframes spriteBreatheFlipped {
+  0%, 100% { transform: scaleX(-1) translateY(0); }
+  50% { transform: scaleX(-1) translateY(-2px); }
+}
+
+/* ============================================
+   PORTRAIT MODAL
+   ============================================ */
+/* ============================================
+   RPG DIALOGUE PANEL
+   ============================================ */
+.dialogue-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.dialogue-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(2px);
+}
+.dialogue-scene {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  height: 100%;
+  padding: 0 1.5rem 1rem;
+  gap: 0;
+}
+.dialogue-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.8);
+  font-size: 1.5rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  z-index: 10;
+}
+.dialogue-close:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+
+/* Character portrait - left side, large */
+.dialogue-portrait {
+  flex-shrink: 0;
+  width: 500px;
+  display: flex;
+  align-items: flex-end;
+  z-index: 2;
+  margin-right: -20px;
+  pointer-events: none;
+}
+.dialogue-portrait-img {
+  width: 100%;
+  height: auto;
+  max-height: 90%;
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(4px 4px 12px rgba(0,0,0,0.5));
+}
+
+/* Right side: dialogue content */
+.dialogue-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0;
+  min-width: 0;
+  padding-bottom: 0.5rem;
+}
+
+/* Name plate - RPG style */
+.dialogue-nameplate {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  background: linear-gradient(135deg, rgba(30,40,80,0.95), rgba(20,25,50,0.9));
+  border: 1px solid rgba(100,140,255,0.3);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  width: fit-content;
+}
+.dialogue-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e8ecf4;
+  letter-spacing: 0.05em;
+}
+.dialogue-status {
+  font-size: 0.75rem;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgba(100,140,255,0.2);
+  color: rgba(180,200,255,0.9);
+  border: 1px solid rgba(100,140,255,0.25);
+}
+
+/* Dialogue box - main monologue display */
+.dialogue-box {
+  background: linear-gradient(180deg, rgba(15,20,45,0.92), rgba(10,15,35,0.95));
+  border: 1px solid rgba(100,140,255,0.2);
+  border-radius: 0 16px 16px 16px;
+  padding: 1.5rem 1.75rem;
+  min-height: 100px;
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(100,140,255,0.1);
+}
+.dialogue-text {
+  flex: 1;
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: #d8dce8;
+  white-space: pre-wrap;
+  letter-spacing: 0.02em;
+}
+.dialogue-emoji {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.dialogue-emoji img {
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 2px solid rgba(100,140,255,0.25);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* Recent thoughts - hidden, kept for future use */
+.dialogue-history { display: none; }
+.dialogue-history-item { }
+.dialogue-history-item .history-time { }
+
+/* ============================================
+   RESPONSIVE — stack on mobile
+   ============================================ */
 @media (max-width: 768px) {
   body {
     overflow: auto;
@@ -620,5 +933,36 @@ body {
   .agent-card {
     width: 100%;
     max-width: 360px;
+  }
+
+  .office-scene {
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+  }
+
+  .agent-sprite {
+    width: 32px;
+    height: 32px;
+  }
+
+  .sprite-label {
+    font-size: 0.5rem;
+    bottom: -14px;
+  }
+
+  .dialogue-scene {
+    flex-direction: column;
+    height: 100%;
+    padding: 0.5rem;
+  .dialogue-portrait {
+    width: 200px;
+    margin-right: 0;
+    position: absolute;
+    bottom: 40%;
+    left: 1rem;
+    opacity: 0.3;
+  }
+  .dialogue-content {
+    width: 100%;
   }
 }
