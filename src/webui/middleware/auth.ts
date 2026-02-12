@@ -6,7 +6,14 @@ import type { JWTPayload } from '../types.js';
  * Get JWT secret from environment
  */
 function getJWTSecret(): string {
-  return process.env.WEBUI_JWT_SECRET ?? 'claudecab-default-secret-change-me';
+  const secret = process.env.WEBUI_JWT_SECRET;
+  if (!secret) {
+    throw new Error(
+      'WEBUI_JWT_SECRET environment variable is not set. ' +
+      'Please set it in .env to a random string (e.g. openssl rand -hex 32).'
+    );
+  }
+  return secret;
 }
 
 /**

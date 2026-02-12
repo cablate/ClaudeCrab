@@ -1,6 +1,11 @@
 {
-  "name": "{{AGENT_NAME}}",
-  "description": "{{AGENT_DESCRIPTION}}",
+  "name": "我的助手",
+  "description": "一個通用 AI 助手",
   "version": "1.0.0",
-  "model": "sonnet"
+  "model": "sonnet",
+  "telegramBotToken": "",
+  "display": {
+    "avatar": "🤖",
+    "color": "#6B7280"
+  }
 }

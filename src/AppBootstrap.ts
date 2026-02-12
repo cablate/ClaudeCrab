@@ -442,6 +442,20 @@ export class AppBootstrap {
       return;
     }
 
+    // P0 security: Validate required auth env vars before starting WebUI
+    if (!process.env.WEBUI_PASSWORD) {
+      throw new Error(
+        'WEBUI_PASSWORD environment variable is not set. ' +
+        'WebUI requires a password for authentication. Please set it in .env.'
+      );
+    }
+    if (!process.env.WEBUI_JWT_SECRET) {
+      throw new Error(
+        'WEBUI_JWT_SECRET environment variable is not set. ' +
+        'Please set it in .env to a random string (e.g. openssl rand -hex 32).'
+      );
+    }
+
     const { port } = this.config.webui;
     logger.info({ port }, 'Initializing WebUI...');
 
