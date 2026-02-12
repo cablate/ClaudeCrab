@@ -137,6 +137,24 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   /** Maximum message length for Telegram */
   static readonly MAX_MESSAGE_LENGTH = 4096;
 
+  /**
+   * Message debounce buffer (ADR: message-split mitigation).
+   * When Telegram splits a long user message into multiple chunks,
+   * each chunk triggers handleTextMessage independently. This buffer
+   * aggregates messages from the same user+chat within DEBOUNCE_MS
+   * and emits them as a single combined message.
+   */
+  private static readonly DEBOUNCE_MS = 600;
+  private readonly messageBuffer = new Map<
+    string,
+    {
+      messages: UnifiedMessage[];
+      timer: ReturnType<typeof setTimeout>;
+      /** For group chats, store the payload builder */
+      groupPayloadBuilder?: (combined: UnifiedMessage) => GroupMessagePayload;
+    }
+  >();
+
   constructor(config: TelegramAdapterConfig) {
     super(config);
     this.rateLimiter = new RateLimiter(config.rateLimit ?? DEFAULT_RATE_LIMIT);
@@ -429,6 +447,12 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
    * Dispose bot instance
    */
   protected async doDispose(): Promise<void> {
+    // Clear debounce timers
+    for (const entry of this.messageBuffer.values()) {
+      clearTimeout(entry.timer);
+    }
+    this.messageBuffer.clear();
+
     this.bot = null;
   }
 
@@ -539,19 +563,91 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         'Emitting group message event'
       );
 
-      const payload: GroupMessagePayload = {
-        message: unifiedMessage,
-        sourceAgentId: this.config.agentId,
-        mentionedBot,
-        isReplyToBot,
-      };
-
-      getEventBus().emit('group:message', payload);
+      // Debounce: buffer group message and emit combined after delay
+      this.bufferMessage(unifiedMessage, (combined) => {
+        const payload: GroupMessagePayload = {
+          message: combined,
+          sourceAgentId: this.config.agentId,
+          mentionedBot,
+          isReplyToBot,
+        };
+        getEventBus().emit('group:message', payload);
+      });
       return; // GroupBroadcaster will handle message processing
     }
 
-    // Private chat: use original emitMessage flow
-    await this.emitMessage(unifiedMessage);
+    // Private chat: debounce then emitMessage
+    this.bufferMessage(unifiedMessage, (combined) => {
+      void this.emitMessage(combined).catch((error) => {
+        this.log.error({ error }, 'Error emitting debounced message');
+      });
+    });
+  }
+
+  /**
+   * Buffer a message for debouncing. If another message from the same user+chat
+   * arrives within DEBOUNCE_MS, texts are concatenated and emitted as one.
+   * This mitigates Telegram's message splitting for long texts.
+   */
+  private bufferMessage(
+    message: UnifiedMessage,
+    onFlush: (combined: UnifiedMessage) => void
+  ): void {
+    const bufferKey = `${message.userId}:${message.chatId}`;
+    const existing = this.messageBuffer.get(bufferKey);
+
+    if (existing) {
+      // Append to existing buffer and reset timer
+      clearTimeout(existing.timer);
+      existing.messages.push(message);
+      this.log.debug(
+        { bufferKey, count: existing.messages.length },
+        'Message buffered (debounce: appending to existing)'
+      );
+    } else {
+      // Start new buffer
+      this.messageBuffer.set(bufferKey, {
+        messages: [message],
+        timer: setTimeout(() => {}, 0), // placeholder, replaced below
+      });
+      this.log.debug(
+        { bufferKey },
+        'Message buffered (debounce: new buffer)'
+      );
+    }
+
+    const entry = this.messageBuffer.get(bufferKey)!;
+    entry.timer = setTimeout(() => {
+      this.messageBuffer.delete(bufferKey);
+      const messages = entry.messages;
+
+      if (messages.length === 1) {
+        // Single message — emit as-is
+        onFlush(messages[0]!);
+        return;
+      }
+
+      // Combine multiple messages into one
+      const first = messages[0]!;
+      const combinedText = messages.map((m) => m.text).join('\n');
+      const combined: UnifiedMessage = {
+        ...first,
+        text: combinedText,
+        // Use first message's ID (for idempotency tracking)
+        id: first.id,
+      };
+
+      this.log.info(
+        {
+          bufferKey,
+          messageCount: messages.length,
+          combinedLength: combinedText.length,
+        },
+        'Debounce: emitting combined message'
+      );
+
+      onFlush(combined);
+    }, TelegramAdapter.DEBOUNCE_MS);
   }
 
   /**
