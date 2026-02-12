@@ -149,6 +149,7 @@ studio Cloverworks / A-1 Pictures aesthetic,
 clean cel-shaded coloring with minimal shading layers,
 pure solid white background, sharp clean character outline,
 no glow no blur on edges, high contrast with background,
+no background elements, no objects, no monitor, no screen, no furniture,
 upper body portrait
 ```
 
@@ -175,13 +176,16 @@ game asset style, high detail environment
 **小人 sprite prompt 模板**：
 ```
 Single pixel art character sprite, isometric view,
-[POSE: sitting pose typing gesture / sitting leaning back relaxed / standing gesturing with one hand],
-no furniture, no desk, no chair, character only, isolated sprite,
+[POSE: sitting pose with hands forward / sitting leaning back relaxed / standing gesturing with one hand],
+no furniture, no desk, no chair, no objects, character only, isolated sprite,
 [CHARACTER DESC],
-chibi proportions, 32x32 or 64x64 pixel style,
-clean edges, pure solid white background,
-consistent art style, game asset
+chibi proportions, 64x64 pixel style,
+clean edges, PURE SOLID WHITE BACKGROUND,
+no transparency, no checkered pattern, no gradient background,
+consistent art style, game asset, 16-bit aesthetic
 ```
+注意：小人生成時用對應立繪做 inputImagePath 以鎖定角色特徵。
+最終尺寸用工具（sharp/imagemagick）統一縮放，不靠 prompt 控制比例。
 
 **去背要點**：所有素材統一純白背景 + 銳利輪廓 + cel-shaded 平塗 → remove.bg 一鍵去背。小人不帶家具，家具由背景圖提供。
 
