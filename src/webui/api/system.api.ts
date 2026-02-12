@@ -107,9 +107,7 @@ export function createSystemApiRouter(): Router {
   });
 
   /**
-   * GET /api/system/audit - Get audit logs
-   * Note: For Phase 2, this returns recent events as a placeholder.
-   * Full audit logging with database persistence is planned for Phase 3.
+   * GET /api/system/audit - Get audit logs\n   * Returns recent system events from in-memory monitoring service.
    */
   router.get('/audit', (req, res) => {
     const { monitoringService } = (req as WebUIRequest).dependencies;
@@ -124,7 +122,6 @@ export function createSystemApiRouter(): Router {
       200
     );
 
-    // For now, return events as audit placeholder
     const events = monitoringService.getRecentEvents(limit);
 
     res.json({
@@ -134,7 +131,7 @@ export function createSystemApiRouter(): Router {
         details: e.summary,
         source: 'system',
       })),
-      note: 'Full audit logging planned for Phase 3',
+
     });
   });
 

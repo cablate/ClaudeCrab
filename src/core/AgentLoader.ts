@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -134,6 +135,9 @@ export class AgentLoader implements IAgentRepository {
       // Load and parse agent.json
       const config = await this.loadConfig(agentPath, agentId);
 
+      // Validate agent setup
+      this.validateAgentSetup(agentPath, agentId, config);
+
       // Sync model from settings.local.json (SDK source of truth) → config
       await this.syncModelFromSettings(agentPath, config);
 
@@ -208,6 +212,43 @@ export class AgentLoader implements IAgentRepository {
       throw new AgentLoadError(
         agentId,
         error instanceof Error ? error : new Error(String(error))
+      );
+    }
+  }
+
+  /**
+   * Validate agent setup and warn about common issues.
+   */
+  private validateAgentSetup(
+    agentPath: string,
+    agentId: string,
+    config: AgentConfig
+  ): void {
+    // Check CLAUDE.md exists (not fatal, but important for agent behavior)
+    const claudeMdPath = path.join(agentPath, 'CLAUDE.md');
+    try {
+      fsSync.accessSync(claudeMdPath);
+    } catch {
+      logger.warn(
+        { agentId },
+        'Agent has no CLAUDE.md — the agent will run without a system prompt file. ' +
+        'Create CLAUDE.md to define agent behavior.'
+      );
+    }
+
+    // Check name is meaningful (not empty or placeholder)
+    if (!config.name || config.name.trim() === '') {
+      throw new AgentConfigError(agentId, [
+        'name is empty. Please set a display name in agent.json.'
+      ]);
+    }
+
+    // Warn about missing telegram token
+    if (!config.telegramBotToken) {
+      logger.debug(
+        { agentId },
+        'No telegramBotToken configured — agent will not connect to Telegram. ' +
+        'Set telegramBotToken in agent.json to enable Telegram.'
       );
     }
   }
