@@ -10,13 +10,67 @@ let activeFilter = 'all'; // 'all' | 'workflow' | 'personality' | 'agent:{id}'
 
 // --- Seat positions (% of scene width/height) ---
 // Mapped to the isometric office background desk/chair positions
-const SEAT_POSITIONS = {
-  general:   { left: '56%', top: '61%' },
-  leader:    { left: '26%', top: '35%' },
-  admin:     { left: '77%', top: '42%' },  // cozy
-  coder:     { left: '45%', top: '52%', flip: true },  // 左右鏡像
-  nitterbot: { left: '65%', top: '33%' },  // analyst
-};
+const SEAT_POSITIONS = [
+  { left: '56%', top: '61%' },          // desk front-right
+  { left: '26%', top: '35%' },          // desk back-left
+  { left: '77%', top: '42%' },          // cozy corner
+  { left: '45%', top: '52%', flip: true }, // desk center (flipped)
+  { left: '65%', top: '33%' },          // desk back-right
+];
+
+const SEAT_STORAGE_KEY = 'claudecab-seat-assignments';
+
+/**
+ * Get or create seat assignments for agents.
+ * Persists to localStorage so agents keep their seats across reloads.
+ * @param {string[]} agentIds - Current agent IDs from API
+ * @returns {Object<string, {left:string, top:string, flip?:boolean}|null>} agentId → position (null if overflow)
+ */
+function getSeatAssignments(agentIds) {
+  // Load existing assignments
+  let saved = {};
+  try {
+    const raw = localStorage.getItem(SEAT_STORAGE_KEY);
+    if (raw) saved = JSON.parse(raw);
+  } catch { /* ignore corrupt data */ }
+
+  // Remove agents that no longer exist
+  const activeSet = new Set(agentIds);
+  for (const id of Object.keys(saved)) {
+    if (!activeSet.has(id)) delete saved[id];
+  }
+
+  // Find which seat indices are already taken
+  const usedIndices = new Set(Object.values(saved));
+  const availableIndices = [];
+  for (let i = 0; i < SEAT_POSITIONS.length; i++) {
+    if (!usedIndices.has(i)) availableIndices.push(i);
+  }
+
+  // Assign unassigned agents to available seats
+  for (const id of agentIds) {
+    if (saved[id] === undefined) {
+      if (availableIndices.length > 0) {
+        saved[id] = availableIndices.shift();
+      } else {
+        saved[id] = null; // overflow — will use fallback grid
+      }
+    }
+  }
+
+  // Persist
+  try {
+    localStorage.setItem(SEAT_STORAGE_KEY, JSON.stringify(saved));
+  } catch { /* storage full, non-critical */ }
+
+  // Map to actual positions
+  const result = {};
+  for (const id of agentIds) {
+    const idx = saved[id];
+    result[id] = idx !== null && idx < SEAT_POSITIONS.length ? SEAT_POSITIONS[idx] : null;
+  }
+  return result;
+}
 
 // Phase → mood fallback (when no mood match in emoji set, try phase's default mood)
 const PHASE_TO_MOOD = {
@@ -125,14 +179,17 @@ async function loadAgentStates() {
       }
       return;
     }
-    // Auto-assign seats for agents not in SEAT_POSITIONS
-    const defaultSeats = [
+    // Assign seats (persisted in localStorage)
+    const seatMap = getSeatAssignments(agents.map(a => a.id));
+
+    // Fallback grid for overflow agents
+    const overflowSeats = [
       { left: '20%', top: '45%' }, { left: '35%', top: '45%' },
       { left: '50%', top: '45%' }, { left: '65%', top: '45%' },
       { left: '80%', top: '45%' }, { left: '35%', top: '65%' },
       { left: '50%', top: '65%' }, { left: '65%', top: '65%' },
     ];
-    let autoSeatIdx = 0;
+    let overflowIdx = 0;
 
     for (let i = 0; i < agents.length; i++) {
       const agent = agents[i];
@@ -140,14 +197,10 @@ async function loadAgentStates() {
       container.appendChild(card);
       agentCards[agent.id] = agent;
 
-      // Create sprite: use configured seat or auto-assign
-      if (SEAT_POSITIONS[agent.id]) {
-        createAgentSprite(agent, agent.id);
-      } else if (autoSeatIdx < defaultSeats.length) {
-        // Dynamically add seat position
-        const seatKey = `_auto_${agent.id}`;
-        SEAT_POSITIONS[seatKey] = defaultSeats[autoSeatIdx++];
-        createAgentSprite(agent, seatKey);
+      // Create sprite with assigned seat or overflow fallback
+      const pos = seatMap[agent.id] || (overflowIdx < overflowSeats.length ? overflowSeats[overflowIdx++] : null);
+      if (pos) {
+        createAgentSprite(agent, pos);
       }
     }
   } catch (err) {
@@ -387,6 +440,9 @@ function updateAgentCard(event) {
   // Flash effect
   card.classList.add('flash');
   setTimeout(() => card.classList.remove('flash'), 600);
+
+  // Sync portrait overlay if open for this agent
+  updatePortraitIfOpen(event.agentId);
 }
 
 // --- Typewriter effect ---
@@ -631,12 +687,9 @@ function applyFilter() {
 // ============================================
 
 // --- Create sprite in office scene ---
-function createAgentSprite(agent, seatKey) {
+function createAgentSprite(agent, pos) {
   const scene = document.getElementById('office-scene');
-  if (!scene) return;
-
-  const pos = SEAT_POSITIONS[seatKey];
-  if (!pos) return;
+  if (!scene || !pos) return;
 
   const sprite = document.createElement('div');
   sprite.className = 'agent-sprite breathing';
@@ -710,11 +763,65 @@ function showSpriteBubble(sprite, text) {
   bubble.classList.add('visible');
 }
 
+// --- Portrait modal state ---
+let portraitOpenAgentId = null;
+
+/** Update portrait overlay in real-time if it's open for this agent */
+function updatePortraitIfOpen(agentId) {
+  if (!portraitOpenAgentId || portraitOpenAgentId !== agentId) return;
+  const overlay = document.getElementById('dialogue-overlay');
+  if (!overlay || overlay.style.display === 'none') return;
+
+  const currentAgent = agentCards[agentId];
+  if (!currentAgent) return;
+
+  const phase = currentAgent.phase || 'idle';
+  const mood = currentAgent.mood || 'neutral';
+
+  // Update status
+  const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
+  const statusEl = document.getElementById('dialogue-status');
+  if (statusEl) statusEl.textContent = statusInfo.label;
+
+  // Update emoji
+  const emojiEl = document.getElementById('dialogue-emoji');
+  const emojiSet = currentAgent.emoji;
+  if (emojiEl) {
+    if (emojiSet && typeof emojiSet === 'object') {
+      const emojiKey = pickEmojiKey(emojiSet, mood, phase);
+      if (emojiKey && emojiSet[emojiKey]) {
+        emojiEl.innerHTML = `<img src="${emojiSet[emojiKey]}" alt="emoji">`;
+      } else {
+        emojiEl.innerHTML = `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
+      }
+    } else {
+      emojiEl.innerHTML = `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
+    }
+  }
+
+  // Update dialogue text from latest feed
+  const agentEvents = activityFeed.filter(e => e.agentId === agentId && e.message);
+  if (agentEvents.length > 0) {
+    const textEl = document.getElementById('dialogue-text');
+    if (textEl) textEl.textContent = agentEvents[0].message;
+
+    // Update history
+    const historyEl = document.getElementById('dialogue-history');
+    if (historyEl) {
+      const olderEvents = agentEvents.slice(1, 8);
+      historyEl.innerHTML = olderEvents.map(e =>
+        `<div class="dialogue-history-item">${escapeHtml(e.message)}<span class="history-time">${relativeTime(e.timestamp)}</span></div>`
+      ).join('');
+    }
+  }
+}
+
 // --- Open portrait modal ---
 function openPortrait(agent) {
   const overlay = document.getElementById('dialogue-overlay');
   if (!overlay) return;
 
+  portraitOpenAgentId = agent.id;
   const currentAgent = agentCards[agent.id] || agent;
 
   // Portrait image (from API data, with fallback)
@@ -774,6 +881,7 @@ function openPortrait(agent) {
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('dialogue-backdrop') || e.target.classList.contains('dialogue-close')) {
     document.getElementById('dialogue-overlay').style.display = 'none';
+    portraitOpenAgentId = null;
   }
 });
 
