@@ -75,3 +75,18 @@ data/*.db-shm
 agents/nitterbot/
 agents/test/
 agents/leader/
+
+# Root-level test/verification screenshots
+/*.png
+/*.jpg
+/*.jpeg
+
+# Playwright MCP screenshots
+.playwright-mcp/
+
+# Agent runtime data (group conversations, knowledge cases)
+agents/*/groups/
+agents/*/knowledge/cases/
+
+# Mangled path artifacts
+_ProgramOwnProjectClaudeCab*/

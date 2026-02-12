@@ -70,9 +70,7 @@ export {
   SessionError,
   RateLimitError,
   AdapterError,
-  McpError,
   ValidationError,
   isClaudeCabError,
-  wrapError,
   type SessionErrorCode,
 } from './errors.js';

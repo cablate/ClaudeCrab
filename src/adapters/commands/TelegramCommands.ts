@@ -19,7 +19,8 @@ const COMMAND_DEDUP_TTL_MS = 5 * 60 * 1000;
 async function replyWithMarkdown(ctx: Context, text: string): Promise<void> {
   try {
     await ctx.reply(text, { parse_mode: 'Markdown' });
-  } catch {
+  } catch (error) {
+    logger.debug({ error }, 'Markdown parse failed, falling back to plain text');
     await ctx.reply(text);
   }
 }
@@ -384,7 +385,8 @@ async function getCurrentSession(
       userId: effectiveUserId,
       agentId: deps.agentId,
     });
-  } catch {
+  } catch (error) {
+    logger.debug({ error }, 'Failed to get/create session');
     return undefined;
   }
 }

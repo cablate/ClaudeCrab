@@ -9,6 +9,7 @@ import os from 'node:os';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { validateScheduleSpec } from '../../schedule/schemas.js';
 import type { ScheduleInfo, ScheduleExecution } from '../../schedule/types.js';
+import { logger } from '../../utils/logger.js';
 
 /** Maximum upload file size for agent zip imports (10 MB) */
 const UPLOAD_MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -396,7 +397,7 @@ export function createAgentsApiRouter(): Router {
             registry.unregister(adapter.platform, adapter.agentId);
           } catch (error) {
             // Log but continue with deletion
-            console.error(`Failed to stop adapter for ${id}:`, error);
+            logger.error({ error, agentId: id }, 'Failed to stop adapter during deletion');
           }
         }
       }

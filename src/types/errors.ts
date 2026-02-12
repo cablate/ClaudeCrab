@@ -152,25 +152,6 @@ export class AdapterError extends ClaudeCabError {
   }
 }
 
-/**
- * Error thrown when MCP server fails
- */
-export class McpError extends ClaudeCabError {
-  constructor(
-    public readonly serverName: string,
-    message: string,
-    cause?: Error
-  ) {
-    super(
-      `MCP server "${serverName}" error: ${message}`,
-      'MCP_ERROR',
-      true,
-      'MCP 伺服器錯誤',
-      cause
-    );
-    this.name = 'McpError';
-  }
-}
 
 /**
  * Error thrown for validation failures
@@ -221,24 +202,3 @@ export function isClaudeCabError(error: unknown): error is ClaudeCabError {
   return error instanceof ClaudeCabError;
 }
 
-/**
- * Wrap an unknown error in a ClaudeCabError
- */
-export function wrapError(error: unknown, context?: string): ClaudeCabError {
-  if (isClaudeCabError(error)) {
-    return error;
-  }
-
-  const message =
-    error instanceof Error ? error.message : String(error);
-  const cause = error instanceof Error ? error : undefined;
-  const prefix = context !== undefined && context !== '' ? `${context}: ` : '';
-
-  return new ClaudeCabError(
-    `${prefix}${message}`,
-    'UNKNOWN_ERROR',
-    false,
-    '發生未預期的錯誤',
-    cause
-  );
-}
