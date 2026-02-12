@@ -39,6 +39,11 @@ import * as path from 'node:path';
 import type { AppConfig } from './config.js';
 import type { IQueryMetricsRepository } from './persistence/types.js';
 
+/** Interval for sending typing indicators to Telegram (ms) */
+const TYPING_INDICATOR_INTERVAL_MS = 5000;
+/** Size of the in-memory activity event ring buffer */
+const ACTIVITY_BUFFER_SIZE = 200;
+
 /**
  * Manages the full lifecycle of the ClaudeCab application.
  *
@@ -310,7 +315,7 @@ export class AppBootstrap {
         this.orchestrator?.getRegistry().get(platform, agentId),
       getSystemPrompt: (agentId) => agentLoader.readSystemPrompt(agentId),
       sendTypingIndicators: true,
-      typingIndicatorIntervalMs: 5000,
+      typingIndicatorIntervalMs: TYPING_INDICATOR_INTERVAL_MS,
       ...(conversationRepository !== undefined
         ? { conversationRepository }
         : {}),
@@ -529,7 +534,7 @@ export class AppBootstrap {
       getAgentName,
       reactionGenerator,
       activityRepository,
-      bufferSize: 200,
+      bufferSize: ACTIVITY_BUFFER_SIZE,
     });
   }
 

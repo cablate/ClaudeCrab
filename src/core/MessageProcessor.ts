@@ -27,6 +27,11 @@ import type { ActivityService } from './ActivityService.js';
 import * as path from 'node:path';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
 
+/** Debounce delay for status message updates */
+const STATUS_DEBOUNCE_MS = 2000;
+/** Maximum tool events shown in status messages */
+const MAX_EVENTS_DISPLAY = 8;
+
 /**
  * Options for MessageProcessor
  */
@@ -464,8 +469,8 @@ export class MessageProcessor {
     // ADR-030: In group chats, use typing indicators only (no text status messages)
     const statusManager = isStatusCapable(adapter) && !options?.isGroupChat
       ? new StatusMessageManager(adapter, chatId, {
-          debounceMs: 2000,
-          maxEventsDisplay: 8,
+          debounceMs: STATUS_DEBOUNCE_MS,
+          maxEventsDisplay: MAX_EVENTS_DISPLAY,
         })
       : null;
 

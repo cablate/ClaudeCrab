@@ -10,10 +10,13 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { validateScheduleSpec } from '../../schedule/schemas.js';
 import type { ScheduleInfo, ScheduleExecution } from '../../schedule/types.js';
 
+/** Maximum upload file size for agent zip imports (10 MB) */
+const UPLOAD_MAX_FILE_SIZE = 10 * 1024 * 1024;
+
 // Configure multer for zip file uploads
 const upload = multer({
   dest: os.tmpdir(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  limits: { fileSize: UPLOAD_MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype === 'application/zip' || file.originalname.endsWith('.zip')) {
       cb(null, true);

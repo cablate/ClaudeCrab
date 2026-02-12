@@ -7,6 +7,11 @@ import { logger } from '../../utils/logger.js';
 import { buildGroupUserId } from '../../utils/groupSession.js';
 import { DedupTracker } from '../../utils/DedupTracker.js';
 
+/** Max entries in the group-command dedup tracker */
+const COMMAND_DEDUP_MAX_SIZE = 500;
+/** TTL for group-command dedup entries (5 minutes) */
+const COMMAND_DEDUP_TTL_MS = 5 * 60 * 1000;
+
 /**
  * Reply with Markdown parse mode, falling back to plain text if parsing fails.
  * Use for messages containing dynamic content (agent names, schedule IDs, etc.).
@@ -132,8 +137,8 @@ export function isTargetAll(ctx: Context): boolean {
 const DEDUP_GLOBAL_KEY = '__claudecab_group_cmd_dedup__';
 if ((globalThis as Record<string, unknown>)[DEDUP_GLOBAL_KEY] === undefined) {
   (globalThis as Record<string, unknown>)[DEDUP_GLOBAL_KEY] = new DedupTracker({
-    maxSize: 500,
-    ttlMs: 5 * 60 * 1000, // 5 minutes TTL
+    maxSize: COMMAND_DEDUP_MAX_SIZE,
+    ttlMs: COMMAND_DEDUP_TTL_MS,
   });
 }
 const processedGroupCommands = (globalThis as Record<string, unknown>)[

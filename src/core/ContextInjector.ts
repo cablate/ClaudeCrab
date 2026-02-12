@@ -10,6 +10,9 @@ import type {
 } from '../persistence/types.js';
 import { logger } from '../utils/logger.js';
 
+/** Default maximum number of messages to inject */
+const DEFAULT_MESSAGE_LIMIT = 50;
+
 /**
  * Result of getting injection context
  */
@@ -82,7 +85,7 @@ export class ContextInjector {
     platform: string,
     options?: InjectionOptions
   ): InjectionContext {
-    const limit = options?.limit ?? 50;
+    const limit = options?.limit ?? DEFAULT_MESSAGE_LIMIT;
 
     // ADR-020: Get member list (always include even if no new messages)
     const memberList = this.formatMemberList(agentId, chatId, platform);

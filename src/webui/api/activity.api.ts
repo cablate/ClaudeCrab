@@ -4,6 +4,11 @@ import type { SSEBroadcaster } from '../services/SSEBroadcaster.js';
 import type { ActivityService } from '../../core/ActivityService.js';
 import type { AgentLoader } from '../../core/AgentLoader.js';
 
+/** Default number of recent events to return */
+const DEFAULT_EVENTS_LIMIT = 50;
+/** Maximum number of events a client can request */
+const MAX_EVENTS_LIMIT = 200;
+
 /**
  * Create the activity API router (v2.0 Characters Come Alive).
  *
@@ -32,7 +37,7 @@ export function createActivityApiRouter(
 
   // Recent events (supports ?agentId=&type=&since=&limit= filters)
   router.get('/events', (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = Math.min(Number(req.query.limit) || DEFAULT_EVENTS_LIMIT, MAX_EVENTS_LIMIT);
     const filters: { agentId?: string; type?: string; since?: string } = {};
     if (typeof req.query.agentId === 'string') filters.agentId = req.query.agentId;
     if (typeof req.query.type === 'string') filters.type = req.query.type;

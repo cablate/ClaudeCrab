@@ -17,6 +17,13 @@ import { InitiativeHandler } from './InitiativeHandler.js';
 import { DelegationHandler } from './DelegationHandler.js';
 import { SocialHandler } from './SocialHandler.js';
 
+/** Max entries in broadcast message dedup tracker */
+const BROADCAST_DEDUP_MAX_SIZE = 1000;
+/** TTL for broadcast dedup entries (5 minutes) */
+const BROADCAST_DEDUP_TTL_MS = 5 * 60 * 1000;
+/** Delay between poll iterations when waiting for bot message_id */
+const POLL_DELAY_MS = 50;
+
 /**
  * Options for GroupBroadcaster
  */
@@ -107,7 +114,7 @@ export class GroupBroadcaster {
    * the same message can arrive multiple times.
    * Uses DedupTracker with TTL for automatic cleanup.
    */
-  private readonly processedMessages = new DedupTracker({ maxSize: 1000, ttlMs: 5 * 60 * 1000 });
+  private readonly processedMessages = new DedupTracker({ maxSize: BROADCAST_DEDUP_MAX_SIZE, ttlMs: BROADCAST_DEDUP_TTL_MS });
 
   /** ADR-030 Tier 1.2: Track chats with active delegation to suppress initiative */
   private readonly delegationActive = new Set<string>();
@@ -536,7 +543,7 @@ export class GroupBroadcaster {
         return msgId;
       }
       // Yield to allow other event handlers to run
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, POLL_DELAY_MS));
     }
     this.log.warn(
       { agentId, timeoutMs },
