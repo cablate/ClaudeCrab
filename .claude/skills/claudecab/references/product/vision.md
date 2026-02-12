@@ -175,14 +175,15 @@ game asset style, high detail environment
 **小人 sprite prompt 模板**：
 ```
 Single pixel art character sprite, isometric view,
-[POSE: sitting at desk typing / sitting leaning back relaxed / standing gesturing],
+[POSE: sitting pose typing gesture / sitting leaning back relaxed / standing gesturing with one hand],
+no furniture, no desk, no chair, character only, isolated sprite,
 [CHARACTER DESC],
 chibi proportions, 32x32 or 64x64 pixel style,
-clean edges, solid color background (#00FF00),
+clean edges, pure solid white background,
 consistent art style, game asset
 ```
 
-**去背要點**：純白背景 + 銳利輪廓 + cel-shaded 平塗 → remove.bg 一鍵去背
+**去背要點**：所有素材統一純白背景 + 銳利輪廓 + cel-shaded 平塗 → remove.bg 一鍵去背。小人不帶家具，家具由背景圖提供。
 
 **角色生成流程**（每個 agent 依序執行）：
 1. 生立繪 → 調整到滿意為止（錨定角色設計、配色、氣質）
