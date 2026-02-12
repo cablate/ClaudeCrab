@@ -202,13 +202,36 @@ no transparency, no checkered pattern, no gradient background,
 consistent art style, game asset, 16-bit aesthetic
 ```
 
-### Portrait
+### Portrait（風格錨定前綴 + 角色描述）
+
+> 設計哲學：**鎖定繪畫技法，不鎖定生理結構**。
+> 所有角色共用同一套「畫師筆觸」（眼睛質感、線條風格、光影材質），
+> 但臉型、眼型、氣質、配色由各角色描述自由定義，避免千人一面。
+
 ```
-[CHARACTER DESC], upper body portrait,
-anime illustration style, detailed face and expression,
-clean sharp edges, PURE SOLID WHITE BACKGROUND,
-no transparency, no checkered pattern, no gradient,
-high quality, professional character art
+(masterpiece, top quality, highly detailed anime illustration:1.2),
+delicate semi-realistic anime style, sense of transparency (透明感),
+studio Kyoto Animation / Makoto Shinkai aesthetic,
+
+highly detailed expressive eyes, complex iris layers with soft reflections,
+watery and jewel-like eye texture, delicate eyelashes with soft edges,
+softly defined facial features, delicate tracing lineart with varying weight,
+slightly colored soft outlines (avoid harsh black lines),
+
+soft diffused natural lighting from upper left,
+(avoid harsh shadows:1.3), (avoid hard specular highlights:1.3),
+soft ambient occlusion, subtle soft rim lighting on hair,
+hair with translucent highlights and soft volumetric shading,
+matte fabric texture with soft folds showing volume, (no shiny plastic texture:1.3),
+skin with warm gradient tones and delicate blush,
+
+atmospheric glow, rich but soft color palette with warm undertones,
+pure solid white background, sharp clean character outline,
+no glow no blur on edges, high contrast with background,
+(simple background:1.5), no background elements, no objects, no monitor,
+upper body portrait,
+
+[CHARACTER DESC]
 ```
 
 ### Emoji

@@ -133,7 +133,7 @@ const WORKFLOW_LABELS = {
 function populateInitialBubbles() {
   const latestByAgent = {};
   for (const event of activityFeed) {
-    if ((event.type === 'personality' || event.type === 'mutter') && event.agentId && event.message) {
+    if (event.type !== 'workflow' && event.agentId && event.message) {
       if (!latestByAgent[event.agentId]) {
         latestByAgent[event.agentId] = event.message;
       }
@@ -749,9 +749,9 @@ function updateSpriteStatus(event) {
     }
   }
 
-  // Update bubble — personality/mutter events persist
-  if (event.type === 'personality' || event.type === 'mutter') {
-    if (event.message) showSpriteBubble(sprite, event.message);
+  // Update bubble — any non-workflow event with a message updates the bubble
+  if (event.type !== 'workflow' && event.message) {
+    showSpriteBubble(sprite, event.message);
   }
 }
 

@@ -98,6 +98,22 @@ export class ActivityRepository {
     return rows.map(r => r.message);
   }
 
+  /** Get the latest mood for each agent (for state restoration on startup) */
+  getLatestMoodByAgent(): Array<{ agentId: string; mood: string; phase: string | null }> {
+    const rows = this.db.prepare(`
+      SELECT e.agent_id, e.mood, e.phase
+      FROM activity_events e
+      INNER JOIN (
+        SELECT agent_id, MAX(created_at) AS max_ts
+        FROM activity_events
+        WHERE mood IS NOT NULL
+        GROUP BY agent_id
+      ) latest ON e.agent_id = latest.agent_id AND e.created_at = latest.max_ts
+      WHERE e.mood IS NOT NULL
+    `).all() as Array<{ agent_id: string; mood: string; phase: string | null }>;
+    return rows.map(r => ({ agentId: r.agent_id, mood: r.mood, phase: r.phase }));
+  }
+
   /** Delete events older than given ISO date */
   deleteOlderThan(isoDate: string): number {
     const result = this.db.prepare(

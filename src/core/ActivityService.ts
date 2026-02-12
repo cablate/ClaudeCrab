@@ -70,6 +70,23 @@ export class ActivityService {
       this.flushTimer = setInterval(() => this.flushWriteQueue(), ActivityService.FLUSH_INTERVAL_MS);
       this.cleanupTimer = setInterval(() => this.cleanupOldEvents(), ActivityService.CLEANUP_INTERVAL_MS);
       this.cleanupOldEvents(); // run once at startup
+      this.restoreMoodFromDb();
+    }
+  }
+
+  /** Restore agent mood state from DB on startup */
+  private restoreMoodFromDb(): void {
+    if (!this.activityRepository) return;
+    try {
+      const rows = this.activityRepository.getLatestMoodByAgent();
+      for (const { agentId, mood } of rows) {
+        this.agentMood.set(agentId, mood as ActivityMood);
+      }
+      if (rows.length > 0) {
+        log.info({ restoredAgents: rows.length }, 'Restored agent mood from DB');
+      }
+    } catch (err) {
+      log.warn({ err }, 'Failed to restore agent mood from DB');
     }
   }
 
