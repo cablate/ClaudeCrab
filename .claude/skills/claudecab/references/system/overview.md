@@ -63,6 +63,9 @@ claudecab/
 │   │   ├── MEMORY.md      # 長期記憶
 │   │   └── memory/        # 每日日誌
 │   └── coder/             # 程式碼助手
+├── scripts/               # 工具腳本
+│   ├── setup.ts           # 互動式首次設定精靈 (npm run setup)
+│   └── validate-image-assets.cjs  # 圖片資產規格驗證
 ├── tests/                 # 386 tests, 25 files
 └── data/                  # SQLite 資料庫
 ```

@@ -31,7 +31,18 @@ cd claudecab
 npm install
 ```
 
-### 2. 環境設定
+### 2. 快速設定（推薦）
+
+```bash
+npm run setup
+```
+
+互動式精靈會引導你設定 API Key、WebUI 密碼，並建立第一個 Agent。
+
+<details>
+<summary>或者手動設定</summary>
+
+### 2a. 環境設定
 
 ```bash
 cp .env.example .env
@@ -62,6 +73,8 @@ WEBUI_JWT_SECRET=your-random-secret-string  # 必填（WebUI 啟用時）
   "telegramBotToken": "123456:ABC-your-bot-token"
 }
 ```
+
+</details>
 
 ### 4. 啟動
 
@@ -228,6 +241,7 @@ npm run cli coder        # 測試指定 agent
 ## Development
 
 ```bash
+npm run setup        # 互動式首次設定精靈
 npm run dev          # 開發模式（Hot Reload）
 npm run build        # 編譯 TypeScript
 npm run typecheck    # 類型檢查
