@@ -2,7 +2,7 @@
 
 > 2026-02-13 更新
 
-**MVP 就緒度評估：85-90%**
+**MVP 就緒度評估：95%**（僅剩 P0-1 token 外部化待公開前處理）
 
 ---
 
@@ -25,10 +25,8 @@
 
 ## 🟠 P1 — 新用戶體驗
 
-### 4. 配置複雜度高
-- **問題**：新用戶需要編輯 5+ 個檔案
-- **方案**：`npm run setup` 交互式配置精靈
-- **狀態**：📋 待做
+### 4. ~~配置複雜度高~~ ✅ 已修復
+- `npm run setup` 交互式精靈：.env 設定 + 第一個 Agent 建立
 
 ### 5. ~~README 設定說明不完整~~ ✅ 已修復
 - Quick Start Checklist、Environment Variables 表、Troubleshooting 章節
@@ -40,10 +38,8 @@
 
 ## 🟡 P2 — 代碼品質與維護性
 
-### 7. public/images/generated/ 雜亂
-- **問題**：80+ 個檔案含大量舊版本和 test-* 測試圖
-- **方案**：清理舊版本，保留需要的
-- **狀態**：📋 待做
+### 7. ~~public/images/generated/ 雜亂~~ ✅ 已修復
+- 刪除 generated/ 目錄，原圖保留在 agents/{id}/originals/，背景圖搬到 images/
 
 ### 8. ~~魔術數字分散~~ ✅ 已修復
 - 7 個檔案的 inline 數字提取為命名常數（timing、limits、buffer sizes）
@@ -69,8 +65,10 @@
 
 ### 待做
 - [ ] P0-1: Bot Token 外部化（公開前處理）
-- [ ] P1-4: 簡化配置流程（`npm run setup`）
-- [ ] P2-7: 清理 images/generated/
+
+### 新完成 ✅
+- [x] P1-4: 簡化配置流程（`npm run setup`）
+- [x] P2-7: 清理 images/generated/
 
 ---
 
