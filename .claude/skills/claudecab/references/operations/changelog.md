@@ -6,7 +6,31 @@
 
 ## 版本歷史
 
-### v1.30 - PathValidator 外部化 + Admin Agent + Serena 標配（當前版本）
+### v1.31 - Live Page Data-Driven 重構（當前版本）
+
+**發布日期**：2026-02-12
+
+**Live Page 資產配置後端驅動化（ADR-032）**：
+- 刪除前端 `AGENT_ASSETS` hardcode 常量，改從 `/api/activity/agents` API 動態載入
+- `agent.json` 新增 `display` 欄位（avatar, color, sprite, portrait, emoji）
+- `AgentConfigSchema`（Zod）新增 `DisplaySchema` 型別定義
+- `activity.api.ts` 讀取 display config 組裝完整 URL 回傳
+- emoji key 對齊 `ActivityMood` 值（neutral/excited/annoyed/tired/focused/bored）
+- `pickEmojiKey` 簡化為 mood → phase→mood fallback → neutral
+- 圖片遷移至 `public/images/agents/{agentId}/` 標準目錄結構
+- 無 display 設定的 agent 自動 fallback（avatar emoji 替代 sprite）
+
+**Bug 修復**：
+- `ActivityService.ts`：移除 lastEvent 60 秒過期限制（重新整理後保留最新狀態）
+- `ActivityService.ts`：auto-idle event message 改用 `PHASE_DESCRIPTIONS.idle`
+- `live.js`：agentCards 即時同步 phase/mood（修復 dialogue panel 狀態不更新）
+- `live.js`：過濾 workflow idle 事件不顯示在 feed
+- `live.js`：修復 `populateInitialBubbles` 被嵌套在 `init()` 內的問題
+- `live.css`：修復 media query 巢狀 `}` 缺失
+
+---
+
+### v1.30 - PathValidator 外部化 + Admin Agent + Serena 標配
 
 **發布日期**：2026-02-12
 

@@ -2,7 +2,9 @@
   "name": "人資總監",
   "display": {
     "avatar": "🏛️",
-    "color": "#6366F1"
+    "color": "#6366F1",
+    "sprite": "sprite.png",
+    "portrait": "portrait.png"
   },
   "description": "Agent 管理員，負責管理所有 agent 的設定、人格、技能",
   "version": "1.0.0",

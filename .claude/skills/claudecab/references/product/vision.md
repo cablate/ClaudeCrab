@@ -232,8 +232,15 @@ consistent art style, game asset, 16-bit aesthetic
 
 生成流程：立繪（錨定角色）→ 用立繪 reference + emoji 描述 → 生成對應表情小圖
 
+**Emoji 生成 Prompt 規範**：
+- **背景必須寫 `solid pure white #FFFFFF background`**，不要寫 `transparent background`（模型會生出灰色漸層假透明）
+- 不可出現：圓框、漸層、暈影、裝飾性背景元素
+- 正確寫法：`Head and shoulders only, solid pure white #FFFFFF background, no gradients, no circles, no vignettes, no decorative elements behind the character`
+- 生成後統一用 flood-fill 從邊緣去白背景，threshold > 180 即可乾淨去除
+- 使用 `imageSize: "2K"` + `maintainCharacterConsistency: true` + 立繪作為 `inputImagePath`
+
 常用表情清單（依實際 reaction 使用頻率決定優先級）：
-😀😂🤔😤👍❤️😱🫠💤🔥 等
+😐(neutral) 😀(happy) 😂(laugh) 🤔(thinking) 😤(frustrated) 👍(thumbsup) ❤️(love) 😱(surprised) 💤(sleepy) 🔥(fired_up) 等
 
 效果：activity feed 的 reaction 從通用 emoji 變成角色專屬表情，生動感大幅提升
 

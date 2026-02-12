@@ -2,7 +2,17 @@
   "name": "秘書",
   "display": {
     "avatar": "📝",
-    "color": "#F59E0B"
+    "color": "#F59E0B",
+    "sprite": "sprite.png",
+    "portrait": "portrait.png",
+    "emoji": {
+      "neutral": "emoji-neutral.png",
+      "excited": "emoji-excited.png",
+      "annoyed": "emoji-annoyed.png",
+      "tired": "emoji-tired.png",
+      "focused": "emoji-focused.png",
+      "task_received": "emoji-task_received.png"
+    }
   },
   "description": "A helpful general-purpose AI assistant",
   "version": "1.0.0",

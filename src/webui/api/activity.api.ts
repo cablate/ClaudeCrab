@@ -48,10 +48,17 @@ export function createActivityApiRouter(
     const states = agentIds.map(agentId => {
       const agent = agentLoader.get(agentId);
       const state = activityService.getAgentState(agentId);
-      const config = agent?.config as Record<string, unknown> | undefined;
-      const display = config?.display as
-        | { avatar?: string; color?: string }
-        | undefined;
+      const config = agent?.config;
+      const display = config?.display;
+
+      // Build asset URLs from display config (relative filenames → full paths)
+      const assetBase = `/static/images/agents/${agentId}`;
+      const sprite = display?.sprite ? `${assetBase}/${display.sprite}` : null;
+      const portrait = display?.portrait ? `${assetBase}/${display.portrait}` : null;
+      const emoji = display?.emoji
+        ? Object.fromEntries(Object.entries(display.emoji).map(([k, v]) => [k, `${assetBase}/${v}`]))
+        : null;
+
       return {
         id: agentId,
         name: (config?.name as string) ?? agentId,
@@ -59,6 +66,9 @@ export function createActivityApiRouter(
         model: (config?.model as string) ?? 'unknown',
         avatar: display?.avatar ?? '🤖',
         color: display?.color ?? '#6B7280',
+        sprite,
+        portrait,
+        emoji,
         idleDuration: activityService.getIdleDuration(agentId),
         ...state,
       };

@@ -142,7 +142,7 @@ export class ActivityService {
         // Only reset if phase hasn't been updated by a new task
         if (this.agentPhase.get(agentId) === phase) {
           this.agentPhase.set(agentId, 'idle');
-          const idleEvent = this.createEvent(agentId, 'workflow', 'idle', 'idle', undefined);
+          const idleEvent = this.createEvent(agentId, 'workflow', PHASE_DESCRIPTIONS.idle, 'idle', undefined);
           this.pushAndEmit(idleEvent);
         }
       }, 5_000);
@@ -177,15 +177,14 @@ export class ActivityService {
       this.agentPhase.set(agentId, 'idle');
     }
 
-    // Only return lastEvent if it's recent (within 60s), otherwise stale bubbles are confusing
+    // Always return the latest event — frontend decides display
     const lastEvent = events.length > 0 ? events[events.length - 1] : undefined;
-    const eventIsRecent = lastEvent && (Date.now() - new Date(lastEvent.timestamp).getTime()) < 60_000;
 
     return {
       phase,
-      mood: isStale ? 'neutral' : (this.agentMood.get(agentId) ?? 'neutral'),
+      mood: this.agentMood.get(agentId) ?? 'neutral',
       lastActivity: lastAct,
-      lastEvent: eventIsRecent ? lastEvent : undefined,
+      lastEvent,
     };
   }
 

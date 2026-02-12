@@ -48,7 +48,8 @@ claudecab/
 │   │   └── views/         # EJS 模板（元件化）
 │   ├── types/             # TypeScript 型別定義
 │   └── utils/             # logger, security, audit, retry, format
-├── public/                # 靜態資源 (JS, CSS)
+├── public/                # 靜態資源 (JS, CSS, images)
+│   └── images/agents/     # Agent 視覺資產（sprite, portrait, emoji）
 ├── agents/                # Agent 配置（每個子目錄 = 一個代理）
 │   ├── general/           # 通用助手（含記憶系統 workspace）
 │   │   ├── .claude/
@@ -318,13 +319,27 @@ keep-coding-instructions: false
   "version": "1.0.0",
   "model": "sonnet",
   "telegramBotToken": "123456:ABC-DEF...",
-  "extends": "general",
+  "display": {
+    "avatar": "📝",
+    "color": "#F59E0B",
+    "sprite": "sprite.png",
+    "portrait": "portrait.png",
+    "emoji": {
+      "neutral": "emoji-neutral.png",
+      "excited": "emoji-excited.png",
+      "annoyed": "emoji-annoyed.png",
+      "tired": "emoji-tired.png",
+      "focused": "emoji-focused.png"
+    }
+  },
   "settings": {
     "permissionMode": "default",
     "maxTurns": 20
   }
 }
 ```
+
+> **display 欄位**（v1.31）：Live page 視覺資產配置。圖片路徑相對於 `public/images/agents/{agentId}/`，API 自動組裝完整 URL。emoji key 對齊 `ActivityMood` 值。未設定的欄位前端自動 fallback（avatar emoji 替代 sprite）。
 
 ### CLAUDE.md
 
@@ -524,6 +539,13 @@ interface AgentConfig {
   allowedTools?: string[];     // SDK query 層工具白名單（Dashboard 不管理，手動編輯 agent.json）
   disallowedTools?: string[];  // SDK query 層工具黑名單（同上）
   mcpConfigFile?: string;      // MCP 伺服器設定檔路徑（相對於 agent 目錄）
+  display?: {                  // Live page 視覺資產（v1.31）
+    avatar?: string;           // 文字 emoji（如 📝），用於 feed 和 fallback
+    color?: string;            // 主題色（如 #F59E0B）
+    sprite?: string;           // 辦公室場景角色圖檔名（相對於 public/images/agents/{id}/）
+    portrait?: string;         // 對話面板半身像圖檔名
+    emoji?: Record<string, string>;  // mood → 表情圖檔名，key 對齊 ActivityMood
+  };
   settings?: {
     permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'delegate' | 'dontAsk';
     maxTurns?: number;

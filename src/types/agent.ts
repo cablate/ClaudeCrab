@@ -83,6 +83,17 @@ export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
  * agent.json Schema
  * Defines the configuration structure for an agent
  */
+/** Display configuration for live page visuals */
+const DisplaySchema = z.object({
+  avatar: z.string().optional(),
+  color: z.string().optional(),
+  sprite: z.string().optional(),
+  portrait: z.string().optional(),
+  emoji: z.record(z.string(), z.string()).optional(),
+});
+
+export type AgentDisplay = z.infer<typeof DisplaySchema>;
+
 export const AgentConfigSchema = z.object({
   // Basic information
   name: z.string().min(1),
@@ -107,6 +118,9 @@ export const AgentConfigSchema = z.object({
 
   // Platform bot tokens
   telegramBotToken: z.string().optional(),
+
+  // Display configuration (live page visuals)
+  display: DisplaySchema.optional(),
 
   // Additional settings
   settings: AgentSettingsSchema.optional(),

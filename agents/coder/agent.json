@@ -2,7 +2,16 @@
   "name": "工程師",
   "display": {
     "avatar": "💻",
-    "color": "#3B82F6"
+    "color": "#3B82F6",
+    "sprite": "sprite.png",
+    "portrait": "portrait.png",
+    "emoji": {
+      "neutral": "emoji-neutral.png",
+      "excited": "emoji-excited.png",
+      "annoyed": "emoji-annoyed.png",
+      "tired": "emoji-tired.png",
+      "focused": "emoji-focused.png"
+    }
   },
   "description": "A specialized coding assistant that helps with programming tasks",
   "version": "1.0.0",

@@ -18,14 +18,22 @@ const SEAT_POSITIONS = {
   nitterbot: { left: '65%', top: '33%' },  // analyst
 };
 
-// --- Agent → asset mapping (test images, will be driven by agent config later) ---
-const AGENT_ASSETS = {
-    'general':   { sprite: '/static/images/generated/test-silver-sprite-nobg.png',   portrait: '/static/images/generated/test-general-portrait-v3-nobg.png', emoji: '/static/images/generated/test-emoji-laugh.png' },
-  'leader':    { sprite: '/static/images/generated/test-leader-sprite-nobg.png',   portrait: '/static/images/generated/test-leader-portrait-v2-nobg.png' },
-  'nitterbot': { sprite: '/static/images/generated/test-analyst-sprite-nobg.png',  portrait: '/static/images/generated/test-analyst-portrait-v2-nobg.png' },
-  'coder':     { sprite: '/static/images/generated/test-coder-f-sprite-v2-nobg.png', portrait: '/static/images/generated/test-coder-f-portrait-nobg.png' },
-  'admin':     { sprite: '/static/images/generated/test-cozy-sprite-nobg.png',     portrait: '/static/images/generated/test-cozy-portrait-nobg.png' },
+// Phase → mood fallback (when no mood match in emoji set, try phase's default mood)
+const PHASE_TO_MOOD = {
+  idle: 'neutral', working: 'focused', tool_use: 'focused',
+  task_received: 'task_received', completed: 'excited', error: 'annoyed',
 };
+
+// Pick emoji key: mood first, then phase→mood fallback, then neutral
+function pickEmojiKey(emojiSet, mood, phase) {
+  if (!emojiSet) return null;
+  if (mood && emojiSet[mood]) return mood;
+  const fallback = PHASE_TO_MOOD[phase];
+  if (fallback && emojiSet[fallback]) return fallback;
+  if (emojiSet.neutral) return 'neutral';
+  const keys = Object.keys(emojiSet);
+  return keys.length > 0 ? keys[0] : null;
+}
 
 // Mood emoji mapping
 const MOOD_EMOJI = {
@@ -67,14 +75,8 @@ const WORKFLOW_LABELS = {
 };
 
 // --- Initialize ---
-async function init() {
-  await loadAgentStates();
-  await loadRecentFeed();
-  populateInitialBubbles();
-
 // --- Fill initial bubbles from loaded feed data ---
 function populateInitialBubbles() {
-  // Find latest personality/mutter event per agent
   const latestByAgent = {};
   for (const event of activityFeed) {
     if ((event.type === 'personality' || event.type === 'mutter') && event.agentId && event.message) {
@@ -83,8 +85,6 @@ function populateInitialBubbles() {
       }
     }
   }
-
-  // Apply to sprites
   const sprites = document.querySelectorAll('.agent-sprite');
   for (const sprite of sprites) {
     const agentId = sprite.id.replace('sprite-', '');
@@ -92,6 +92,11 @@ function populateInitialBubbles() {
     showSpriteBubble(sprite, text);
   }
 }
+
+async function init() {
+  await loadAgentStates();
+  await loadRecentFeed();
+  populateInitialBubbles();
   connectSSE();
   startRelativeTimeUpdater();
   startIdleBadgeUpdater();
@@ -120,14 +125,29 @@ async function loadAgentStates() {
       }
       return;
     }
+    // Auto-assign seats for agents not in SEAT_POSITIONS
+    const defaultSeats = [
+      { left: '20%', top: '45%' }, { left: '35%', top: '45%' },
+      { left: '50%', top: '45%' }, { left: '65%', top: '45%' },
+      { left: '80%', top: '45%' }, { left: '35%', top: '65%' },
+      { left: '50%', top: '65%' }, { left: '65%', top: '65%' },
+    ];
+    let autoSeatIdx = 0;
+
     for (let i = 0; i < agents.length; i++) {
       const agent = agents[i];
       const card = createAgentCard(agent);
       container.appendChild(card);
       agentCards[agent.id] = agent;
-      // Create sprite in office scene (use agent ID as seat key)
+
+      // Create sprite: use configured seat or auto-assign
       if (SEAT_POSITIONS[agent.id]) {
         createAgentSprite(agent, agent.id);
+      } else if (autoSeatIdx < defaultSeats.length) {
+        // Dynamically add seat position
+        const seatKey = `_auto_${agent.id}`;
+        SEAT_POSITIONS[seatKey] = defaultSeats[autoSeatIdx++];
+        createAgentSprite(agent, seatKey);
       }
     }
   } catch (err) {
@@ -182,7 +202,9 @@ function handleActivityEvent(event) {
   updateAgentCard(event);
   updateSpriteStatus(event);
 
-  if (event.type !== 'status_change') {
+  // Skip status_change and auto-idle workflow events from feed
+  const isAutoIdle = event.type === 'workflow' && event.phase === 'idle';
+  if (event.type !== 'status_change' && !isAutoIdle) {
     addToFeed(event, true);
   }
 
@@ -214,7 +236,8 @@ async function loadRecentFeed() {
     }
     // Events come newest-first, render in order (newest on top)
     for (const event of events) {
-      if (event.type !== 'status_change') {
+      const isAutoIdle = event.type === 'workflow' && event.phase === 'idle';
+      if (event.type !== 'status_change' && !isAutoIdle) {
         addToFeed(event, false);
       }
     }
@@ -300,6 +323,12 @@ function updateAgentCard(event) {
   const phase = event.phase || 'idle';
   const mood = event.mood || 'neutral';
   const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
+
+  // Sync in-memory state for portrait modal
+  if (agentCards[event.agentId]) {
+    agentCards[event.agentId].phase = phase;
+    if (event.mood) agentCards[event.agentId].mood = mood;
+  }
 
   // Update status
   const statusEl = card.querySelector('.agent-status');
@@ -618,14 +647,18 @@ function createAgentSprite(agent, seatKey) {
     sprite.dataset.flip = 'true';
   }
 
-  const assets = AGENT_ASSETS[agent.id] || {};
-  const spriteSrc = assets.sprite || '';
+  const spriteSrc = agent.sprite || '';
   const mood = agent.mood || 'neutral';
   const moodEmoji = MOOD_EMOJI[mood] || '😐';
   const lastMsg = agent.lastEvent?.message || '';
 
+  // Sprite: use image if available, otherwise show avatar emoji as fallback
+  const spriteContent = spriteSrc
+    ? `<img src="${spriteSrc}" alt="${agent.name}" onerror="this.parentElement.querySelector('.sprite-fallback').style.display='flex';this.style.display='none'" class="${pos.flip ? 'flipped' : ''}"><span class="sprite-fallback" style="display:none;font-size:2.5rem;width:100%;height:100%;align-items:center;justify-content:center">${agent.avatar || '🤖'}</span>`
+    : `<span class="sprite-fallback" style="font-size:2.5rem;width:100%;height:100%;display:flex;align-items:center;justify-content:center">${agent.avatar || '🤖'}</span>`;
+
   sprite.innerHTML = `
-    <img src="${spriteSrc}" alt="${agent.name}" onerror="this.style.display='none'" class="${pos.flip ? 'flipped' : ''}">
+    ${spriteContent}
     <span class="sprite-label">${agent.name}</span>
     <span class="sprite-mood">${moodEmoji}</span>
     <div class="sprite-bubble ${lastMsg ? 'visible' : ''}">${lastMsg.length > 40 ? lastMsg.substring(0, 40) + '...' : lastMsg}</div>
@@ -682,11 +715,16 @@ function openPortrait(agent) {
   const overlay = document.getElementById('dialogue-overlay');
   if (!overlay) return;
 
-  const assets = AGENT_ASSETS[agent.id] || {};
   const currentAgent = agentCards[agent.id] || agent;
 
-  // Portrait image
-  document.getElementById('dialogue-portrait-img').src = assets.portrait || '';
+  // Portrait image (from API data, with fallback)
+  const portraitImg = document.getElementById('dialogue-portrait-img');
+  if (currentAgent.portrait) {
+    portraitImg.src = currentAgent.portrait;
+    portraitImg.style.display = '';
+  } else {
+    portraitImg.style.display = 'none';
+  }
 
   // Name plate
   document.getElementById('dialogue-name').textContent = currentAgent.name || agent.name;
@@ -699,12 +737,18 @@ function openPortrait(agent) {
   const latestMsg = agentEvents.length > 0 ? agentEvents[0].message : defaultBubble();
   document.getElementById('dialogue-text').textContent = latestMsg;
 
-  // Character emoji
+  // Character emoji — pick from emoji set based on mood/phase
   const emojiEl = document.getElementById('dialogue-emoji');
-  const emojiSrc = assets.emoji;
-  if (emojiSrc) {
-    const emojis = Array.isArray(emojiSrc) ? emojiSrc : [emojiSrc];
-    emojiEl.innerHTML = emojis.map(src => `<img src="${src}" alt="emoji">`).join('');
+  const emojiSet = currentAgent.emoji;
+  if (emojiSet && typeof emojiSet === 'object') {
+    const mood = currentAgent.mood || 'neutral';
+    const emojiKey = pickEmojiKey(emojiSet, mood, phase);
+    if (emojiKey && emojiSet[emojiKey]) {
+      emojiEl.innerHTML = `<img src="${emojiSet[emojiKey]}" alt="emoji">`;
+    } else {
+      const moodEmoji = MOOD_EMOJI[mood] || '😐';
+      emojiEl.innerHTML = `<span style="font-size:4rem">${moodEmoji}</span>`;
+    }
   } else {
     // Fallback: show mood emoji as text
     const mood = currentAgent.mood || 'neutral';
