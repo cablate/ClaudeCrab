@@ -11,9 +11,11 @@
 | 文件 | 用途 |
 |------|------|
 | [vision.md](product/vision.md) | 產品定位、核心概念、路線圖 |
+| [mvp-gap-analysis.md](product/mvp-gap-analysis.md) | **MVP 就緒度落差分析**：P0~P2 優先級問題清單、修復順序、配置複雜性評估 |
 | [principle.md](product/principle.md) | 功能開發原則、設計原則 |
 | [strategy-analysis.md](product/strategy-analysis.md) | **產品策略分析報告**：市場定位、OpenClaw 競品對比、差異化策略、行動建議 |
 | [mmorpg-skill-system.md](product/mmorpg-skill-system.md) | **MMORPG 化 Skill 管理設計**：遊戲化 bot 管理概念、裝備系統、熟練度、角色面板 |
+| [image-asset-spec.md](product/image-asset-spec.md) | **圖片資產規格標準**：各類型尺寸/格式/背景規範、假透明防範、生成 prompt template、驗證標準 |
 
 ---
 
@@ -46,6 +48,7 @@
 | [migration-guide-skill-system.md](operations/migration-guide-skill-system.md) | **Skill System 遷移指南**：Phase 1~5 step-by-step 操作與驗證清單 |
 | [troubleshooting.md](operations/troubleshooting.md) | 常見問題與解法 |
 | [changelog.md](operations/changelog.md) | 版本歷史 (v0.1.0 ~ v1.11.0) |
+| [image-toolchain.md](operations/image-toolchain.md) | **內部圖片生成工具鏈**：mcp-image 參數對應、sharp 後處理指令、完整流程範例 |
 
 ---
 
