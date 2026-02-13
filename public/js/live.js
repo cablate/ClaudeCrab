@@ -301,8 +301,10 @@ async function loadRecentFeed() {
       showFeedEmpty();
       return;
     }
-    // Events come newest-first — addToFeed handles store + DOM filtering
-    for (const event of events) {
+    // Events come newest-first from API; reverse so oldest is processed first.
+    // storeEvent uses unshift, so last-processed (newest) ends up at [0].
+    const ordered = [...events].reverse();
+    for (const event of ordered) {
       addToFeed(event, false);
     }
   } catch (err) {
