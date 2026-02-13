@@ -33,7 +33,7 @@ const SPEC = {
     filename: 'portrait.png',
     width: { min: 1000, max: 3000 },
     height: { min: 500, max: 2000 },
-    ratioTarget: 16 / 9,
+    ratioTarget: 4 / 3,
     ratioTolerance: 0.3, // 允許較寬範圍（各 agent 風格不同）
     maxBytes: 2 * 1024 * 1024, // 2MB（寬鬆，建議 500KB）
     recommendedMaxBytes: 500 * 1024,

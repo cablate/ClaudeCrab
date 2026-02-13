@@ -28,12 +28,18 @@
 }
 ```
 
-### Portrait（橫向半身像）
+### Portrait（半身像）
+
+> **構圖規範**：所有角色 portrait 必須遵守以下構圖約束，確保裁切成大頭貼時一致：
+> - **取景**：頭頂到胸口中段（bust shot），不露手
+> - **居中**：角色水平置中，臉部在畫布中心線上
+> - **留白**：頭頂上方留小段空間，不裁切頭髮；左右負空間對稱
+> - **比例**：4:3（比 16:9 更緊湊，減少水平偏移）
 
 ```json
 {
-  "prompt": "(masterpiece, top quality, highly detailed anime illustration:1.2), delicate semi-realistic anime style, sense of transparency (透明感), studio Kyoto Animation / Makoto Shinkai aesthetic, highly detailed expressive eyes, complex iris layers with soft reflections, watery and jewel-like eye texture, delicate eyelashes with soft edges, softly defined facial features, delicate tracing lineart with varying weight, slightly colored soft outlines (avoid harsh black lines), soft diffused natural lighting from upper left, (avoid harsh shadows:1.3), (avoid hard specular highlights:1.3), soft ambient occlusion, subtle soft rim lighting on hair, hair with translucent highlights and soft volumetric shading, matte fabric texture with soft folds showing volume, (no shiny plastic texture:1.3), skin with warm gradient tones and delicate blush, atmospheric glow, rich but soft color palette with warm undertones, pure solid white background, sharp clean character outline, no glow no blur on edges, high contrast with background, (simple background:1.5), no background elements, no objects, no monitor, upper body portrait, [角色描述]",
-  "aspectRatio": "16:9",
+  "prompt": "(masterpiece, top quality, highly detailed anime illustration:1.2), delicate semi-realistic anime style, sense of transparency (透明感), studio Kyoto Animation / Makoto Shinkai aesthetic, highly detailed expressive eyes, complex iris layers with soft reflections, watery and jewel-like eye texture, delicate eyelashes with soft edges, softly defined facial features, delicate tracing lineart with varying weight, slightly colored soft outlines (avoid harsh black lines), soft diffused natural lighting from upper left, (avoid harsh shadows:1.3), (avoid hard specular highlights:1.3), soft ambient occlusion, subtle soft rim lighting on hair, hair with translucent highlights and soft volumetric shading, matte fabric texture with soft folds showing volume, (no shiny plastic texture:1.3), skin with warm gradient tones and delicate blush, atmospheric glow, rich but soft color palette with warm undertones, pure solid white background, sharp clean character outline, no glow no blur on edges, high contrast with background, (simple background:1.5), no background elements, no objects, no monitor, bust shot from head to mid-chest, no hands visible, character centered in frame, face on horizontal midpoint, small margin above head, no cropped hair, symmetrical empty space on both sides, [角色描述]",
+  "aspectRatio": "4:3",
   "inputImagePath": "[前一版立繪或 sprite 的絕對路徑，首次可省略]",
   "maintainCharacterConsistency": true
 }
@@ -93,8 +99,8 @@ node -e "require('sharp')(process.argv[1]).resize(512,512,{fit:'cover'}).png().t
 # Sprite → 120x160
 node -e "require('sharp')(process.argv[1]).resize(120,160,{fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toFile(process.argv[2]).then(()=>console.log('Done'))" input.png output.png
 
-# Portrait → 1408x768
-node -e "require('sharp')(process.argv[1]).resize(1408,768,{fit:'cover'}).png().toFile(process.argv[2]).then(()=>console.log('Done'))" input.png output.png
+# Portrait → 1024x768 (4:3)
+node -e "require('sharp')(process.argv[1]).resize(1024,768,{fit:'cover'}).png().toFile(process.argv[2]).then(()=>console.log('Done'))" input.png output.png
 ```
 
 ### 壓縮（減少檔案大小）
