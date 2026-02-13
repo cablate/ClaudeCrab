@@ -14,7 +14,7 @@ const SEAT_POSITIONS = [
   { left: '56%', top: '61%' },          // desk front-right
   { left: '26%', top: '35%' },          // desk back-left
   { left: '77%', top: '42%' },          // cozy corner
-  { left: '45%', top: '52%', flip: true }, // desk center (flipped)
+  { left: '45%', top: '52%' },             // desk center
   { left: '65%', top: '33%' },          // desk back-right
 ];
 
@@ -24,7 +24,7 @@ const SEAT_STORAGE_KEY = 'claudecab-seat-assignments';
  * Get or create seat assignments for agents.
  * Persists to localStorage so agents keep their seats across reloads.
  * @param {string[]} agentIds - Current agent IDs from API
- * @returns {Object<string, {left:string, top:string, flip?:boolean}|null>} agentId → position (null if overflow)
+ * @returns {Object<string, {left:string, top:string}|null>} agentId → position (null if overflow)
  */
 function getSeatAssignments(agentIds) {
   // Load existing assignments
@@ -696,9 +696,7 @@ function createAgentSprite(agent, pos) {
   sprite.id = `sprite-${agent.id}`;
   sprite.style.left = pos.left;
   sprite.style.top = pos.top;
-  if (pos.flip) {
-    sprite.dataset.flip = 'true';
-  }
+
 
   const spriteSrc = agent.sprite || '';
   const mood = agent.mood || 'neutral';
@@ -707,7 +705,7 @@ function createAgentSprite(agent, pos) {
 
   // Sprite: use image if available, otherwise show avatar emoji as fallback
   const spriteContent = spriteSrc
-    ? `<img src="${spriteSrc}" alt="${agent.name}" onerror="this.parentElement.querySelector('.sprite-fallback').style.display='flex';this.style.display='none'" class="${pos.flip ? 'flipped' : ''}"><span class="sprite-fallback" style="display:none;font-size:2.5rem;width:100%;height:100%;align-items:center;justify-content:center">${agent.avatar || '🤖'}</span>`
+    ? `<img src="${spriteSrc}" alt="${agent.name}" onerror="this.parentElement.querySelector('.sprite-fallback').style.display='flex';this.style.display='none'"><span class="sprite-fallback" style="display:none;font-size:2.5rem;width:100%;height:100%;align-items:center;justify-content:center">${agent.avatar || '🤖'}</span>`
     : `<span class="sprite-fallback" style="font-size:2.5rem;width:100%;height:100%;display:flex;align-items:center;justify-content:center">${agent.avatar || '🤖'}</span>`;
 
   sprite.innerHTML = `

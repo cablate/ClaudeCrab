@@ -633,10 +633,6 @@ body {
   height: 100%;
   object-fit: contain;
 }
-.agent-sprite img.flipped {
-  transform: scaleX(-1);
-}
-
 /* Sprite name label */
 .sprite-label {
   position: absolute;
@@ -725,16 +721,9 @@ body {
 .agent-sprite.breathing img {
   animation: spriteBreathe 3s ease-in-out infinite;
 }
-.agent-sprite.breathing img.flipped {
-  animation: spriteBreatheFlipped 3s ease-in-out infinite;
-}
 @keyframes spriteBreathe {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-2px); }
-}
-@keyframes spriteBreatheFlipped {
-  0%, 100% { transform: scaleX(-1) translateY(0); }
-  50% { transform: scaleX(-1) translateY(-2px); }
 }
 
 /* ============================================
