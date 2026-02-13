@@ -492,6 +492,19 @@ body {
   white-space: normal;
 }
 
+/* Mutter items — softer, thought-like appearance */
+.feed-mutter {
+  background: rgba(100, 100, 150, 0.03);
+  opacity: 0.7;
+}
+.feed-mutter:hover {
+  opacity: 1;
+  background: rgba(100, 100, 150, 0.08);
+}
+.feed-mutter .feed-message {
+  color: rgba(200, 200, 220, 0.7);
+}
+
 .feed-type-icon {
   font-size: 0.85rem;
   flex-shrink: 0;
@@ -628,6 +641,15 @@ body {
   transform: scale(1.3);
   z-index: 10;
 }
+.agent-sprite:active {
+  animation: spriteBounce 0.3s ease-out;
+}
+@keyframes spriteBounce {
+  0% { transform: scale(1.3); }
+  40% { transform: scale(1.3) translateY(-8px); }
+  70% { transform: scale(1.3) translateY(2px); }
+  100% { transform: scale(1.3) translateY(0); }
+}
 .agent-sprite img {
   width: 100%;
   height: 100%;
@@ -702,6 +724,16 @@ body {
 .sprite-bubble.visible {
   opacity: 1;
 }
+/* Mutter bubble — thought bubble style */
+.sprite-bubble.mutter {
+  background: rgba(255,255,255,0.75);
+  border: 1.5px dashed rgba(100,100,150,0.4);
+  font-style: italic;
+  color: #444;
+}
+.sprite-bubble.mutter::after {
+  border-top-color: rgba(255,255,255,0.75);
+}
 
 /* Working status pulse ring */
 .agent-sprite.working-pulse::after {
@@ -749,6 +781,13 @@ body {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+.dialogue-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
 }
 .dialogue-backdrop {
   position: absolute;
@@ -806,6 +845,13 @@ body {
   object-fit: contain;
   object-position: bottom;
   filter: drop-shadow(4px 4px 12px rgba(0,0,0,0.5));
+  transform: translateX(-30px);
+  opacity: 0;
+  transition: transform 0.4s ease-out 0.1s, opacity 0.4s ease-out 0.1s;
+}
+.dialogue-overlay.active .dialogue-portrait-img {
+  transform: translateX(0);
+  opacity: 1;
 }
 
 /* Right side: dialogue content */
@@ -817,6 +863,13 @@ body {
   gap: 0;
   min-width: 0;
   padding-bottom: 0.5rem;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: transform 0.4s ease-out 0.15s, opacity 0.4s ease-out 0.15s;
+}
+.dialogue-overlay.active .dialogue-content {
+  transform: translateY(0);
+  opacity: 1;
 }
 
 /* Name plate - RPG style */

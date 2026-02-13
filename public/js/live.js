@@ -475,7 +475,8 @@ function addToFeed(event, animate) {
 
   const item = document.createElement('div');
   const isWorkflow = event.type === 'workflow';
-  item.className = `feed-item ${isWorkflow ? 'feed-workflow' : 'feed-personality'} ${animate ? 'feed-enter' : ''}`;
+  const isMutter = event.type === 'mutter';
+  item.className = `feed-item ${isWorkflow ? 'feed-workflow' : 'feed-personality'}${isMutter ? ' feed-mutter' : ''} ${animate ? 'feed-enter' : ''}`;
   item.dataset.timestamp = event.timestamp;
   item.dataset.eventType = isWorkflow ? 'workflow' : 'personality';
   item.dataset.agentId = event.agentId || '';
@@ -748,16 +749,17 @@ function updateSpriteStatus(event) {
 
   // Update bubble — any non-workflow event with a message updates the bubble
   if (event.type !== 'workflow' && event.message) {
-    showSpriteBubble(sprite, event.message);
+    showSpriteBubble(sprite, event.message, event.type === 'mutter');
   }
 }
 
 // --- Show persistent bubble above sprite ---
-function showSpriteBubble(sprite, text) {
+function showSpriteBubble(sprite, text, isMutter = false) {
   const bubble = sprite.querySelector('.sprite-bubble');
   if (!bubble) return;
   const truncated = text.length > 25 ? text.substring(0, 25) + '...' : text;
-  typewriterEffect(bubble, truncated, 40);
+  bubble.classList.toggle('mutter', isMutter);
+  typewriterEffect(bubble, truncated, isMutter ? 50 : 40);
   bubble.classList.add('visible');
 }
 
@@ -768,7 +770,7 @@ let portraitOpenAgentId = null;
 function updatePortraitIfOpen(agentId) {
   if (!portraitOpenAgentId || portraitOpenAgentId !== agentId) return;
   const overlay = document.getElementById('dialogue-overlay');
-  if (!overlay || overlay.style.display === 'none') return;
+  if (!overlay || !overlay.classList.contains('active')) return;
 
   const currentAgent = agentCards[agentId];
   if (!currentAgent) return;
@@ -876,14 +878,22 @@ function openPortrait(agent) {
     historyEl.innerHTML = '';
   }
 
-  overlay.style.display = 'flex';
+  overlay.classList.add('active');
 }
 
 // Close dialogue overlay
+function closePortrait() {
+  document.getElementById('dialogue-overlay').classList.remove('active');
+  portraitOpenAgentId = null;
+}
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('dialogue-backdrop') || e.target.classList.contains('dialogue-close')) {
-    document.getElementById('dialogue-overlay').style.display = 'none';
-    portraitOpenAgentId = null;
+    closePortrait();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && portraitOpenAgentId) {
+    closePortrait();
   }
 });
 
