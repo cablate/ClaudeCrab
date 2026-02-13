@@ -24,15 +24,9 @@ export function createActivityApiRouter(
 ): Router {
   const router = Router();
 
-  // SSE stream
+  // SSE stream — real-time events only; history is loaded via REST /events
   router.get('/stream', (req, res) => {
     sseBroadcaster.addClient(res);
-
-    // Send recent events as initial batch
-    const recent = activityService.getRecent(30);
-    for (const event of recent) {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    }
   });
 
   // Recent events (supports ?agentId=&type=&since=&limit= filters)

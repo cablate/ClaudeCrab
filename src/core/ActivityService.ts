@@ -166,6 +166,17 @@ export class ActivityService {
     }
   }
 
+  /**
+   * Emit a reply event (agent's response to user message).
+   * Stored truncated for Live backlog display.
+   */
+  emitReply(agentId: string, message: string, metadata?: Record<string, unknown>): void {
+    this.trackActivity(agentId);
+    const truncated = message.length > 200 ? message.substring(0, 200) + '...' : message;
+    const event = this.createEvent(agentId, 'reply', truncated, undefined, undefined, metadata);
+    this.pushAndEmit(event);
+  }
+
   /** Get recent events (for initial SSE load) */
   getRecent(limit = 50, filters?: { agentId?: string; type?: string; since?: string }): ActivityEvent[] {
     // Use repository if available (supports filters + persisted history across restarts)
@@ -226,7 +237,7 @@ export class ActivityService {
 
   private createEvent(
     agentId: string,
-    type: 'reaction' | 'mutter' | 'status_change' | 'workflow',
+    type: 'reaction' | 'mutter' | 'status_change' | 'workflow' | 'reply',
     message: string,
     phase?: ActivityPhase,
     mood?: ActivityMood,

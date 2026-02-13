@@ -147,7 +147,7 @@ function showSpriteBubble(sprite, text, isMutter = false) {
 function populateInitialBubbles() {
   const latestByAgent = {};
   for (const event of activityFeed) {
-    if (event.type !== 'workflow' && event.agentId && event.message) {
+    if (event.agentId && event.message && (event.type === 'mutter' || event.type === 'reaction' || event.type === 'reply')) {
       if (!latestByAgent[event.agentId]) {
         // Phase-aware: idle/completed agents skip stale reactions
         const agentState = agentCards[event.agentId];
@@ -235,17 +235,10 @@ const SSE_MAX_RETRY_DELAY = 30000;
 
 function connectSSE() {
   const source = new EventSource('/api/activity/stream');
-  let isInitialBatch = true;
-
-  setTimeout(() => { isInitialBatch = false; }, 2000);
 
   source.onmessage = (e) => {
     try {
       const event = JSON.parse(e.data);
-      if (isInitialBatch) {
-        // Skip — loadRecentFeed() already loaded history from DB
-        return;
-      }
       handleActivityEvent(event);
     } catch (err) {
       console.error('Failed to parse SSE event:', err);
@@ -276,11 +269,8 @@ function handleActivityEvent(event) {
   syncAgentState(event);
   updateSpriteStatus(event);
 
-  // Skip status_change and auto-idle workflow events from feed
-  const isAutoIdle = event.type === 'workflow' && event.phase === 'idle';
-  if (event.type !== 'status_change' && !isAutoIdle) {
-    addToFeed(event, true);
-  }
+  // addToFeed stores all events + renders visible ones to sidebar
+  addToFeed(event, true);
 
   // Portrait update AFTER feed so activityFeed has the latest event
   updatePortraitIfOpen(event.agentId);
@@ -304,19 +294,16 @@ function defaultBubble() {
 // --- Load recent feed history from DB ---
 async function loadRecentFeed() {
   try {
-    const res = await fetch('/api/activity/events?limit=20');
+    const res = await fetch('/api/activity/events?limit=50');
     const { events } = await res.json();
     const feed = document.getElementById('activity-feed');
     if (!feed || !events || events.length === 0) {
       showFeedEmpty();
       return;
     }
-    // Events come newest-first, render in order (newest on top)
+    // Events come newest-first — addToFeed handles store + DOM filtering
     for (const event of events) {
-      const isAutoIdle = event.type === 'workflow' && event.phase === 'idle';
-      if (event.type !== 'status_change' && !isAutoIdle) {
-        addToFeed(event, false);
-      }
+      addToFeed(event, false);
     }
   } catch (err) {
     console.error('Failed to load recent feed:', err);
@@ -399,15 +386,37 @@ function typewriterEffect(el, text, speed = 30) {
 }
 
 // --- Add event to activity feed (v3.0 — enhanced) ---
+// Store event in memory (data layer, no DOM)
+function storeEvent(event) {
+  activityFeed.unshift(event);
+  if (activityFeed.length > MAX_FEED_ITEMS * 2) {
+    activityFeed.pop();
+  }
+}
+
+// Should this event appear in the sidebar feed DOM?
+function isFeedVisible(event) {
+  if (event.type === 'status_change') return false;
+  if (event.type === 'workflow' && event.phase === 'idle') return false;
+  return true;
+}
+
 function addToFeed(event, animate) {
+  // Always store for backlog
+  storeEvent(event);
+
+  // Skip DOM for non-visible events
+  if (!isFeedVisible(event)) return;
+
   const feed = document.getElementById('activity-feed');
   if (!feed) return;
   clearFeedEmpty();
 
   const item = document.createElement('div');
   const isWorkflow = event.type === 'workflow';
+  const isReply = event.type === 'reply';
   const isThought = isInnerThought(event.type);
-  item.className = `feed-item ${isWorkflow ? 'feed-workflow' : 'feed-personality'}${isThought ? ' feed-mutter' : ''} ${animate ? 'feed-enter' : ''}`;
+  item.className = `feed-item ${isWorkflow ? 'feed-workflow' : 'feed-personality'}${isThought ? ' feed-mutter' : ''}${isReply ? ' feed-reply' : ''} ${animate ? 'feed-enter' : ''}`;
   item.dataset.timestamp = event.timestamp;
   item.dataset.eventType = isWorkflow ? 'workflow' : 'personality';
   item.dataset.agentId = event.agentId || '';
@@ -427,7 +436,6 @@ function addToFeed(event, animate) {
     const toolBadge = event.metadata?.toolName
       ? `<span class="tool-badge">${escapeHtml(String(event.metadata.toolName))}</span>`
       : '';
-    // For task_received, show truncated task content
     let detail = '';
     if (event.phase === 'task_received' && event.metadata?.taskContent) {
       const content = String(event.metadata.taskContent);
@@ -441,9 +449,17 @@ function addToFeed(event, animate) {
       <span class="feed-workflow-message">${label}${detail ? ' ' + detail : ''}</span>
       <span class="feed-time">${relativeTime(event.timestamp)}</span>
     `;
+  } else if (isReply) {
+    const replyText = event.message.length > 60 ? event.message.substring(0, 60) + '...' : event.message;
+    item.innerHTML = `
+      <span class="feed-type-icon">💬</span>
+      <span class="feed-avatar" style="color: ${color}">${avatar}</span>
+      <span class="feed-name" style="color: ${color}">${name}</span>
+      <span class="feed-message feed-reply-msg">${escapeHtml(replyText)}</span>
+      <span class="feed-time">${relativeTime(event.timestamp)}</span>
+    `;
   } else {
     const moodEmoji = MOOD_EMOJI[event.mood] || '';
-    // Reaction with task context
     let taskContext = '';
     if (event.type === 'reaction' && event.metadata?.taskContent) {
       const content = String(event.metadata.taskContent);
@@ -465,11 +481,6 @@ function addToFeed(event, animate) {
 
   while (feed.children.length > MAX_FEED_ITEMS) {
     feed.removeChild(feed.lastChild);
-  }
-
-  activityFeed.unshift(event);
-  if (activityFeed.length > MAX_FEED_ITEMS) {
-    activityFeed.pop();
   }
 }
 
@@ -716,8 +727,8 @@ function updateSpriteStatus(event) {
     }
   }
 
-  // Update bubble — any non-workflow event with a message updates the bubble
-  if (event.type !== 'workflow' && event.message) {
+  // Update bubble — only personality events (mutter/reaction/reply), skip workflow/status_change
+  if (event.message && (event.type === 'mutter' || event.type === 'reaction' || event.type === 'reply')) {
     const isThought = isInnerThought(event.type);
     const bubbleMsg = isThought ? `（${event.message}）` : event.message;
     showSpriteBubble(sprite, bubbleMsg, isThought);
@@ -760,8 +771,11 @@ function updatePortraitContent(agentId) {
     }
   }
 
-  // Dialogue text — show latest event of ANY type
-  const agentEvents = activityFeed.filter(e => e.agentId === agentId && e.message);
+  // Dialogue text — show latest personality event (skip workflow/status_change noise)
+  const agentEvents = activityFeed.filter(e =>
+    e.agentId === agentId && e.message &&
+    (e.type === 'mutter' || e.type === 'reaction' || e.type === 'reply')
+  );
   const latestEvent = agentEvents.length > 0 ? agentEvents[0] : null;
   const textEl = document.getElementById('dialogue-text');
   const ctxEl = document.getElementById('dialogue-task-context');
@@ -877,11 +891,21 @@ function openBacklog() {
   const scroll = document.getElementById('backlog-scroll');
   if (!scroll) return;
 
-  const agentEvents = activityFeed.filter(e => e.agentId === portraitOpenAgentId && e.message);
+  // Filter meaningful dialogue events: user messages, thoughts, replies
+  const agentEvents = activityFeed.filter(e => {
+    if (e.agentId !== portraitOpenAgentId || !e.message) return false;
+    if (e.type === 'reaction' || e.type === 'mutter' || e.type === 'reply') return true;
+    if (e.type === 'workflow' && e.phase === 'task_received' && e.metadata?.taskContent) return true;
+    return false;
+  });
+  // Sort oldest-first (dialogue chronological order)
+  agentEvents.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   if (agentEvents.length === 0) {
     scroll.innerHTML = '<div class="backlog-empty">尚無歷史紀錄</div>';
   } else {
     scroll.innerHTML = buildBacklogHTML(agentEvents);
+    // Auto-scroll to bottom (newest)
+    scroll.scrollTop = scroll.scrollHeight;
   }
 
   overlay.classList.add('active');

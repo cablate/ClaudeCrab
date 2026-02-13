@@ -30,7 +30,7 @@ export interface ActivityEvent {
   /** Agent display name */
   agentName: string;
   /** Event type */
-  type: 'reaction' | 'mutter' | 'status_change' | 'workflow';
+  type: 'reaction' | 'mutter' | 'status_change' | 'workflow' | 'reply';
   /** Lifecycle phase */
   phase?: ActivityPhase;
   /** Personality-driven message (the "voice" of the agent) */

@@ -779,9 +779,9 @@ body {
    BACKLOG MODAL — Star Rail style
    ============================================ */
 .backlog-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: 100;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -901,20 +901,20 @@ body {
 }
 .backlog-type.type-mutter,
 .backlog-type.type-reaction {
-  color: rgba(180,160,255,0.8);
-  background: rgba(140,120,255,0.1);
+  color: rgba(195,180,255,0.9);
+  background: rgba(140,120,255,0.15);
 }
 .backlog-type.type-workflow {
-  color: rgba(140,180,220,0.6);
-  background: rgba(100,160,220,0.08);
+  color: rgba(160,195,235,0.75);
+  background: rgba(100,160,220,0.1);
 }
 .backlog-type.type-reply {
-  color: rgba(140,200,255,0.85);
-  background: rgba(100,170,255,0.1);
+  color: rgba(160,215,255,0.95);
+  background: rgba(100,170,255,0.15);
 }
 .backlog-time {
   font-size: 0.7rem;
-  color: rgba(150,160,190,0.4);
+  color: rgba(160,170,200,0.55);
   margin-left: auto;
 }
 
@@ -922,31 +922,41 @@ body {
 .backlog-msg {
   font-size: 1rem;
   line-height: 1.8;
-  color: rgba(215,220,235,0.88);
+  color: rgba(230,235,250,0.95);
   white-space: pre-wrap;
   word-break: break-word;
   padding-left: 0.25rem;
 }
 .backlog-msg.thought {
   font-style: italic;
-  color: rgba(190,180,235,0.6);
+  color: rgba(200,190,255,0.78);
 }
 .backlog-msg.user-msg {
-  color: rgba(140,200,255,0.85);
-  border-left: 2px solid rgba(100,170,255,0.3);
+  color: rgba(160,215,255,0.95);
+  border-left: 2px solid rgba(100,170,255,0.45);
   padding-left: 0.75rem;
 }
 .backlog-msg.workflow-msg {
   font-size: 0.88rem;
-  color: rgba(160,170,200,0.45);
+  color: rgba(175,185,215,0.6);
 }
 .backlog-msg.reply-msg {
-  color: rgba(220,225,240,0.82);
+  color: rgba(235,240,255,0.92);
 }
 
 /* Workflow entries dimmer */
 .backlog-entry.entry-workflow {
   opacity: 0.55;
+}
+/* Reply entries — accent bar */
+.backlog-entry.entry-reply {
+  border-left: 2px solid rgba(100,170,255,0.35);
+  padding-left: 0.75rem;
+}
+/* Reply in sidebar feed */
+.feed-reply-msg {
+  color: rgba(160,200,255,0.85);
+  font-size: 0.82rem;
 }
 
 /* Empty state */
