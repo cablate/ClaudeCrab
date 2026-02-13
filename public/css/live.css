@@ -384,6 +384,11 @@ body {
   font-style: italic;
 }
 
+.bubble-mutter {
+  opacity: 0.7;
+  border-style: dashed;
+}
+
 /* --- Agent Task --- */
 .agent-task {
   font-size: 0.7rem;
@@ -509,6 +514,10 @@ body {
   font-size: 0.85rem;
   flex-shrink: 0;
   opacity: 0.7;
+}
+.feed-mood {
+  font-size: 0.75rem;
+  flex-shrink: 0;
 }
 
 .tool-badge {
@@ -919,6 +928,10 @@ body {
   white-space: pre-wrap;
   letter-spacing: 0.02em;
 }
+.dialogue-text-mutter {
+  font-style: italic;
+  color: rgba(200,210,230,0.7);
+}
 .dialogue-emoji {
   flex-shrink: 0;
   display: flex;
@@ -944,10 +957,97 @@ body {
   100% { opacity: 1; transform: scale(1); }
 }
 
-/* Recent thoughts - hidden, kept for future use */
-.dialogue-history { display: none; }
-.dialogue-history-item { }
-.dialogue-history-item .history-time { }
+/* History toggle button */
+.dialogue-history-toggle {
+  background: rgba(100,140,255,0.1);
+  border: 1px solid rgba(100,140,255,0.15);
+  color: rgba(180,200,255,0.7);
+  font-size: 0.75rem;
+  padding: 3px 14px;
+  border-radius: 0 0 8px 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: flex-start;
+  margin-top: -1px;
+}
+.dialogue-history-toggle:hover {
+  background: rgba(100,140,255,0.2);
+  color: rgba(200,220,255,0.9);
+}
+
+/* Dialogue history (Backlog) */
+.dialogue-history {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.35s ease, opacity 0.3s ease, margin 0.3s ease;
+  background: linear-gradient(180deg, rgba(12,16,38,0.88), rgba(8,12,30,0.92));
+  border: 1px solid rgba(100,140,255,0.12);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  margin-top: 0;
+}
+.dialogue-history.expanded {
+  max-height: 220px;
+  overflow-y: auto;
+  opacity: 1;
+  margin-top: 2px;
+  padding: 8px 0;
+}
+.dialogue-history-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 16px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: rgba(200,210,230,0.8);
+  transition: background 0.15s;
+}
+.dialogue-history-item:hover {
+  background: rgba(100,140,255,0.06);
+}
+.dialogue-history-item .history-icon {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+.dialogue-history-item .history-mood {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+.dialogue-history-item .history-msg {
+  flex: 1;
+  white-space: normal;
+  word-break: break-word;
+}
+.dialogue-history-item .history-time {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  color: rgba(150,160,190,0.5);
+  margin-left: auto;
+}
+
+/* Mutter items — inner monologue style */
+.history-item-mutter {
+  opacity: 0.65;
+}
+.history-mutter {
+  font-style: italic;
+  color: rgba(180,190,220,0.7);
+}
+
+/* Custom scrollbar for history */
+.dialogue-history::-webkit-scrollbar {
+  width: 4px;
+}
+.dialogue-history::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dialogue-history::-webkit-scrollbar-thumb {
+  background: rgba(100,140,255,0.2);
+  border-radius: 2px;
+}
 
 /* ============================================
    RESPONSIVE — stack on mobile

@@ -135,15 +135,20 @@ function populateInitialBubbles() {
   for (const event of activityFeed) {
     if (event.type !== 'workflow' && event.agentId && event.message) {
       if (!latestByAgent[event.agentId]) {
-        latestByAgent[event.agentId] = event.message;
+        latestByAgent[event.agentId] = event;
       }
     }
   }
   const sprites = document.querySelectorAll('.agent-sprite');
   for (const sprite of sprites) {
     const agentId = sprite.id.replace('sprite-', '');
-    const text = latestByAgent[agentId] || defaultBubble();
-    showSpriteBubble(sprite, text);
+    const event = latestByAgent[agentId];
+    if (event) {
+      const msg = event.type === 'mutter' ? `（${event.message}）` : event.message;
+      showSpriteBubble(sprite, msg, event.type === 'mutter');
+    } else {
+      showSpriteBubble(sprite, defaultBubble());
+    }
   }
 }
 
@@ -356,8 +361,8 @@ function createAgentCard(agent) {
       <div class="agent-status ${statusInfo.class}">${statusInfo.label}</div>
     </div>
     <div class="agent-task" style="display: none;"></div>
-    <div class="agent-bubble">
-      <span class="bubble-text">${agent.lastEvent?.message || defaultBubble()}</span>
+    <div class="agent-bubble${agent.lastEvent?.type === 'mutter' ? ' bubble-mutter' : ''}">
+      <span class="bubble-text">${agent.lastEvent ? (agent.lastEvent.type === 'mutter' ? `（${agent.lastEvent.message}）` : agent.lastEvent.message) : defaultBubble()}</span>
     </div>
   `;
 
@@ -424,9 +429,12 @@ function updateAgentCard(event) {
 
   // Update bubble: personality events use typewriter, workflow events skip bubble
   if (event.type !== 'workflow') {
+    const bubbleEl = card.querySelector('.agent-bubble');
     const bubbleText = card.querySelector('.bubble-text');
+    if (bubbleEl) bubbleEl.classList.toggle('bubble-mutter', event.type === 'mutter');
     if (bubbleText && event.message) {
-      typewriterEffect(bubbleText, event.message);
+      const cardMsg = event.type === 'mutter' ? `（${event.message}）` : event.message;
+      typewriterEffect(bubbleText, cardMsg);
     }
   }
 
@@ -512,11 +520,13 @@ function addToFeed(event, animate) {
     `;
   } else {
     const typeIcon = event.type === 'mutter' ? '💭' : '💬';
+    const moodEmoji = MOOD_EMOJI[event.mood] || '';
     item.innerHTML = `
       <span class="feed-type-icon">${typeIcon}</span>
+      <span class="feed-mood">${moodEmoji}</span>
       <span class="feed-avatar" style="color: ${color}">${avatar}</span>
       <span class="feed-name" style="color: ${color}">${name}</span>
-      <span class="feed-message">${escapeHtml(event.message)}</span>
+      <span class="feed-message">${event.type === 'mutter' ? `（${escapeHtml(event.message)}）` : escapeHtml(event.message)}</span>
       <span class="feed-time">${relativeTime(event.timestamp)}</span>
     `;
   }
@@ -701,7 +711,9 @@ function createAgentSprite(agent, pos) {
   const spriteSrc = agent.sprite || '';
   const mood = agent.mood || 'neutral';
   const moodEmoji = MOOD_EMOJI[mood] || '😐';
-  const lastMsg = agent.lastEvent?.message || '';
+  const lastEvent = agent.lastEvent;
+  const lastMsg = lastEvent ? (lastEvent.type === 'mutter' ? `（${lastEvent.message}）` : lastEvent.message) : '';
+  const lastIsMutter = lastEvent?.type === 'mutter';
 
   // Sprite: use image if available, otherwise show avatar emoji as fallback
   const spriteContent = spriteSrc
@@ -712,7 +724,7 @@ function createAgentSprite(agent, pos) {
     ${spriteContent}
     <span class="sprite-label">${agent.name}</span>
     <span class="sprite-mood">${moodEmoji}</span>
-    <div class="sprite-bubble ${lastMsg ? 'visible' : ''}">${lastMsg.length > 40 ? lastMsg.substring(0, 40) + '...' : lastMsg}</div>
+    <div class="sprite-bubble ${lastMsg ? 'visible' : ''}${lastIsMutter ? ' mutter' : ''}">${lastMsg.length > 40 ? lastMsg.substring(0, 40) + '...' : lastMsg}</div>
   `;
 
   sprite.addEventListener('click', () => openPortrait(agent));
@@ -749,7 +761,8 @@ function updateSpriteStatus(event) {
 
   // Update bubble — any non-workflow event with a message updates the bubble
   if (event.type !== 'workflow' && event.message) {
-    showSpriteBubble(sprite, event.message, event.type === 'mutter');
+    const bubbleMsg = event.type === 'mutter' ? `（${event.message}）` : event.message;
+    showSpriteBubble(sprite, bubbleMsg, event.type === 'mutter');
   }
 }
 
@@ -807,15 +820,18 @@ function updatePortraitIfOpen(agentId) {
   const agentEvents = activityFeed.filter(e => e.agentId === agentId && e.message);
   if (agentEvents.length > 0) {
     const textEl = document.getElementById('dialogue-text');
-    if (textEl) typewriterEffect(textEl, agentEvents[0].message, 25);
+    if (textEl) {
+      const latest = agentEvents[0];
+      const msg = latest.type === 'mutter' ? `（${latest.message}）` : latest.message;
+      textEl.classList.toggle('dialogue-text-mutter', latest.type === 'mutter');
+      typewriterEffect(textEl, msg, latest.type === 'mutter' ? 35 : 25);
+    }
 
     // Update history
     const historyEl = document.getElementById('dialogue-history');
     if (historyEl) {
       const olderEvents = agentEvents.slice(1, 8);
-      historyEl.innerHTML = olderEvents.map(e =>
-        `<div class="dialogue-history-item">${escapeHtml(e.message)}<span class="history-time">${relativeTime(e.timestamp)}</span></div>`
-      ).join('');
+      historyEl.innerHTML = buildHistoryHTML(olderEvents);
     }
   }
 }
@@ -845,8 +861,11 @@ function openPortrait(agent) {
 
   // Latest monologue (main dialogue text)
   const agentEvents = activityFeed.filter(e => e.agentId === agent.id && e.message);
-  const latestMsg = agentEvents.length > 0 ? agentEvents[0].message : defaultBubble();
-  typewriterEffect(document.getElementById('dialogue-text'), latestMsg, 25);
+  const latestEvent = agentEvents.length > 0 ? agentEvents[0] : null;
+  const latestMsg = latestEvent ? (latestEvent.type === 'mutter' ? `（${latestEvent.message}）` : latestEvent.message) : defaultBubble();
+  const dialogueTextEl = document.getElementById('dialogue-text');
+  dialogueTextEl.classList.toggle('dialogue-text-mutter', latestEvent?.type === 'mutter');
+  typewriterEffect(dialogueTextEl, latestMsg, latestEvent?.type === 'mutter' ? 35 : 25);
 
   // Character emoji — pick from emoji set based on mood/phase
   const emojiEl = document.getElementById('dialogue-emoji');
@@ -871,9 +890,7 @@ function openPortrait(agent) {
   const historyEl = document.getElementById('dialogue-history');
   const olderEvents = agentEvents.slice(1, 8);
   if (olderEvents.length > 0) {
-    historyEl.innerHTML = olderEvents.map(e =>
-      `<div class="dialogue-history-item">${escapeHtml(e.message)}<span class="history-time">${relativeTime(e.timestamp)}</span></div>`
-    ).join('');
+    historyEl.innerHTML = buildHistoryHTML(olderEvents);
   } else {
     historyEl.innerHTML = '';
   }
@@ -881,9 +898,26 @@ function openPortrait(agent) {
   overlay.classList.add('active');
 }
 
+// Build history items HTML (Galgame backlog style)
+function buildHistoryHTML(events) {
+  return events.map(e => {
+    const isMutter = e.type === 'mutter';
+    const icon = isMutter ? '💭' : '💬';
+    const moodEmoji = MOOD_EMOJI[e.mood] || '';
+    const msgClass = isMutter ? 'history-msg history-mutter' : 'history-msg';
+    const text = isMutter ? `（${escapeHtml(e.message)}）` : escapeHtml(e.message);
+    return `<div class="dialogue-history-item${isMutter ? ' history-item-mutter' : ''}"><span class="history-icon">${icon}</span><span class="history-mood">${moodEmoji}</span><span class="${msgClass}">${text}</span><span class="history-time">${relativeTime(e.timestamp)}</span></div>`;
+  }).join('');
+}
+
 // Close dialogue overlay
 function closePortrait() {
   document.getElementById('dialogue-overlay').classList.remove('active');
+  // Collapse history on close
+  const history = document.getElementById('dialogue-history');
+  const toggle = document.getElementById('dialogue-history-toggle');
+  if (history) history.classList.remove('expanded');
+  if (toggle) toggle.textContent = '▼ 歷史紀錄';
   portraitOpenAgentId = null;
 }
 document.addEventListener('click', (e) => {
@@ -894,6 +928,16 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && portraitOpenAgentId) {
     closePortrait();
+  }
+});
+
+// History toggle
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'dialogue-history-toggle') {
+    const history = document.getElementById('dialogue-history');
+    if (!history) return;
+    const expanded = history.classList.toggle('expanded');
+    e.target.textContent = expanded ? '▲ 收合' : '▼ 歷史紀錄';
   }
 });
 
