@@ -130,6 +130,20 @@ const WORKFLOW_LABELS = {
 
 // --- Initialize ---
 // --- Fill initial bubbles from loaded feed data ---
+// --- Show/update sprite bubble ---
+function showSpriteBubble(sprite, text, isMutter = false) {
+  const bubble = sprite.querySelector('.sprite-bubble');
+  if (!bubble) return;
+  const truncated = text && text.length > 40 ? text.substring(0, 40) + '...' : (text || '');
+  bubble.textContent = truncated;
+  bubble.classList.toggle('mutter', !!isMutter);
+  if (truncated) {
+    bubble.classList.add('visible');
+  } else {
+    bubble.classList.remove('visible');
+  }
+}
+
 function populateInitialBubbles() {
   const latestByAgent = {};
   for (const event of activityFeed) {
@@ -484,6 +498,26 @@ async function fetchStats() {
   }
 }
 
+// Format a single event for dialogue display (portrait main text or history item)
+function formatDialogueEvent(e) {
+  const type = e.type;
+  if (type === 'workflow') {
+    if (e.phase === 'task_received' && e.metadata?.taskContent) {
+      const content = String(e.metadata.taskContent);
+      const truncated = content.length > 60 ? content.substring(0, 60) + '...' : content;
+      return { icon: '📩', text: truncated, cssClass: 'dialogue-user-msg', speed: 20 };
+    }
+    const label = WORKFLOW_LABELS[e.phase] || e.message;
+    const phaseIcon = WORKFLOW_ICONS[e.phase] || '⚙️';
+    return { icon: phaseIcon, text: label, cssClass: 'dialogue-workflow', speed: 15 };
+  }
+  if (type === 'reply') {
+    return { icon: '💬', text: e.message, cssClass: 'dialogue-reply', speed: 20 };
+  }
+  // mutter / reaction = inner thought
+  return { icon: '💭', text: `（${e.message}）`, cssClass: 'dialogue-thought', speed: 35 };
+}
+
 // --- Utility functions ---
 function isInnerThought(type) {
   return type === 'mutter' || type === 'reaction';
@@ -690,21 +724,7 @@ function updateSpriteStatus(event) {
   }
 }
 
-// --- Show persistent bubble above sprite ---
-function showSpriteBubble(sprite, text, isMutter = false) {
-  const bubble = sprite.querySelector('.sprite-bubble');
-  if (!bubble) return;
-  const truncated = text.length > 25 ? text.substring(0, 25) + '...' : text;
-  bubble.classList.toggle('mutter', isMutter);
-  typewriterEffect(bubble, truncated, isMutter ? 50 : 40);
-  bubble.classList.add('visible');
-}
-
-// --- Portrait modal state ---
-let portraitOpenAgentId = null;
-let portraitLastEventId = null;
-
-/** Update portrait overlay in real-time if it's open for this agent */
+// --- Portrait emoji rendering ---
 function renderPortraitEmoji(emojiSet, mood, phase) {
   if (emojiSet && typeof emojiSet === 'object') {
     const emojiKey = pickEmojiKey(emojiSet, mood, phase);
@@ -714,6 +734,11 @@ function renderPortraitEmoji(emojiSet, mood, phase) {
   }
   return `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
 }
+
+// --- Portrait content ---
+let portraitOpenAgentId = null;
+let portraitLastEventId = null;
+
 function updatePortraitContent(agentId) {
   const currentAgent = agentCards[agentId];
   if (!currentAgent) return;
@@ -735,53 +760,51 @@ function updatePortraitContent(agentId) {
     }
   }
 
-  // Dialogue text — phase-driven: idle/completed only shows mutters, working phases also show reactions
-  const isWorking = phase !== 'idle' && phase !== 'completed';
-  const personalityEvents = activityFeed.filter(e =>
-    e.agentId === agentId && e.message && e.type !== 'workflow' &&
-    (isWorking || e.type !== 'reaction')
-  );
-  const latestEvent = personalityEvents.length > 0 ? personalityEvents[0] : null;
+  // Dialogue text — show latest event of ANY type
+  const agentEvents = activityFeed.filter(e => e.agentId === agentId && e.message);
+  const latestEvent = agentEvents.length > 0 ? agentEvents[0] : null;
   const textEl = document.getElementById('dialogue-text');
   const ctxEl = document.getElementById('dialogue-task-context');
 
   if (textEl) {
-    // Only update text if we have a NEW event (avoid re-triggering typewriter)
     const eventId = latestEvent?.id || null;
     if (eventId !== portraitLastEventId) {
       portraitLastEventId = eventId;
 
-      // Task context for reactions
-      if (ctxEl) {
-        if (latestEvent?.type === 'reaction' && latestEvent.metadata?.taskContent) {
-          const content = String(latestEvent.metadata.taskContent);
-          const truncated = content.length > 40 ? content.substring(0, 40) + '...' : content;
-          ctxEl.textContent = `📋 ${truncated}`;
-          ctxEl.style.display = '';
-        } else {
-          ctxEl.style.display = 'none';
-        }
-      }
+      // Hide task context (now handled inline by formatDialogueEvent)
+      if (ctxEl) ctxEl.style.display = 'none';
 
       if (latestEvent) {
-        const isThought = isInnerThought(latestEvent.type);
-        const msg = isThought ? `（${latestEvent.message}）` : latestEvent.message;
-        textEl.classList.toggle('dialogue-text-mutter', isThought);
-        typewriterEffect(textEl, msg, isThought ? 35 : 25);
+        const fmt = formatDialogueEvent(latestEvent);
+        textEl.className = `dialogue-text ${fmt.cssClass}`;
+        typewriterEffect(textEl, fmt.text, fmt.speed);
       } else {
-        textEl.classList.remove('dialogue-text-mutter');
+        textEl.className = 'dialogue-text';
         textEl.textContent = defaultBubble();
-        if (ctxEl) ctxEl.style.display = 'none';
       }
     }
   }
+}
 
-  // History
-  const historyEl = document.getElementById('dialogue-history');
-  if (historyEl) {
-    const olderEvents = personalityEvents.slice(1, 8);
-    historyEl.innerHTML = olderEvents.length > 0 ? buildHistoryHTML(olderEvents) : '';
-  }
+function buildBacklogHTML(events) {
+  const TYPE_LABELS = { mutter: '獨白', reaction: '心聲', workflow: '系統', reply: '回覆' };
+  const MSG_CLASS = { mutter: 'thought', reaction: 'thought', workflow: 'workflow-msg', reply: 'reply-msg' };
+  return events.map(e => {
+    const fmt = formatDialogueEvent(e);
+    const moodEmoji = MOOD_EMOJI[e.mood] || '';
+    const typeLabel = TYPE_LABELS[e.type] || e.type;
+    const msgClass = MSG_CLASS[e.type] || '';
+    const isUserMsg = e.type === 'workflow' && e.phase === 'task_received' && e.metadata?.taskContent;
+    return `<div class="backlog-entry entry-${e.type}">
+      <div class="backlog-entry-header">
+        <span class="backlog-icon">${fmt.icon}</span>
+        ${moodEmoji ? `<span class="backlog-mood">${moodEmoji}</span>` : ''}
+        <span class="backlog-type type-${e.type}">${typeLabel}</span>
+        <span class="backlog-time">${relativeTime(e.timestamp)}</span>
+      </div>
+      <div class="backlog-msg ${isUserMsg ? 'user-msg' : msgClass}">${escapeHtml(fmt.text)}</div>
+    </div>`;
+  }).join('');
 }
 
 function updatePortraitIfOpen(agentId) {
@@ -818,32 +841,10 @@ function openPortrait(agent) {
   overlay.classList.add('active');
 }
 
-// Build history items HTML (Galgame backlog style)
-function buildHistoryHTML(events) {
-  return events.map(e => {
-    const isThought = isInnerThought(e.type);
-    const moodEmoji = MOOD_EMOJI[e.mood] || '';
-    const msgClass = isThought ? 'history-msg history-mutter' : 'history-msg';
-    const text = isThought ? `（${escapeHtml(e.message)}）` : escapeHtml(e.message);
-    // Reaction with task context
-    let taskCtx = '';
-    if (e.type === 'reaction' && e.metadata?.taskContent) {
-      const content = String(e.metadata.taskContent);
-      const truncated = content.length > 20 ? content.substring(0, 20) + '...' : content;
-      taskCtx = `<span class="history-task-ctx">📋 ${escapeHtml(truncated)}</span>`;
-    }
-    return `<div class="dialogue-history-item${isThought ? ' history-item-mutter' : ''}"><span class="history-icon">💭</span><span class="history-mood">${moodEmoji}</span>${taskCtx}<span class="${msgClass}">${text}</span><span class="history-time">${relativeTime(e.timestamp)}</span></div>`;
-  }).join('');
-}
-
 // Close dialogue overlay
 function closePortrait() {
   document.getElementById('dialogue-overlay').classList.remove('active');
-  // Collapse history on close
-  const history = document.getElementById('dialogue-history');
-  const toggle = document.getElementById('dialogue-history-toggle');
-  if (history) history.classList.remove('expanded');
-  if (toggle) toggle.textContent = '▼ 歷史紀錄';
+  closeBacklog();
   portraitOpenAgentId = null;
 }
 document.addEventListener('click', (e) => {
@@ -857,13 +858,53 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// History toggle
+// Backlog modal — open
 document.addEventListener('click', (e) => {
   if (e.target.id === 'dialogue-history-toggle') {
-    const history = document.getElementById('dialogue-history');
-    if (!history) return;
-    const expanded = history.classList.toggle('expanded');
-    e.target.textContent = expanded ? '▲ 收合' : '▼ 歷史紀錄';
+    openBacklog();
+  }
+});
+
+function openBacklog() {
+  if (!portraitOpenAgentId) return;
+  const overlay = document.getElementById('backlog-overlay');
+  if (!overlay) return;
+
+  const agent = agentCards[portraitOpenAgentId];
+  const nameEl = document.getElementById('backlog-agent-name');
+  if (nameEl) nameEl.textContent = agent?.name || portraitOpenAgentId;
+
+  const scroll = document.getElementById('backlog-scroll');
+  if (!scroll) return;
+
+  const agentEvents = activityFeed.filter(e => e.agentId === portraitOpenAgentId && e.message);
+  if (agentEvents.length === 0) {
+    scroll.innerHTML = '<div class="backlog-empty">尚無歷史紀錄</div>';
+  } else {
+    scroll.innerHTML = buildBacklogHTML(agentEvents);
+  }
+
+  overlay.classList.add('active');
+}
+
+function closeBacklog() {
+  const overlay = document.getElementById('backlog-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+// Backlog modal — close
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('backlog-backdrop') || e.target.id === 'backlog-close') {
+    closeBacklog();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('backlog-overlay');
+    if (overlay && overlay.classList.contains('active')) {
+      closeBacklog();
+      e.stopPropagation();
+    }
   }
 });
 

@@ -51,9 +51,8 @@ export class WebUIServer {
 
     this.app = express();
     this.setupMiddleware();
-    this.setupRoutes();
-    // Note: Error handling (404 + global) is registered in start() to allow
-    // external route registration (e.g. activity API) between constructor and start().
+    // Note: Routes and error handling are registered in start() to allow
+    // external route registration (e.g. activity API) before auth middleware.
   }
 
   /**
@@ -164,7 +163,8 @@ export class WebUIServer {
    * Start the WebUI server
    */
   async start(): Promise<void> {
-    // Register error handling last, after any external routes have been added
+    // Register routes + error handling last, after any external routes have been added
+    this.setupRoutes();
     this.setupErrorHandling();
 
     return new Promise((resolve, reject) => {
