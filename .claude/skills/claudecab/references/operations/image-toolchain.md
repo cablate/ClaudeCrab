@@ -38,9 +38,9 @@
 
 ```json
 {
-  "prompt": "(masterpiece, top quality, highly detailed anime illustration:1.2), delicate semi-realistic anime style, sense of transparency (透明感), studio Kyoto Animation / Makoto Shinkai aesthetic, highly detailed expressive eyes, complex iris layers with soft reflections, watery and jewel-like eye texture, delicate eyelashes with soft edges, softly defined facial features, delicate tracing lineart with varying weight, slightly colored soft outlines (avoid harsh black lines), soft diffused natural lighting from upper left, (avoid harsh shadows:1.3), (avoid hard specular highlights:1.3), soft ambient occlusion, subtle soft rim lighting on hair, hair with translucent highlights and soft volumetric shading, matte fabric texture with soft folds showing volume, (no shiny plastic texture:1.3), skin with warm gradient tones and delicate blush, atmospheric glow, rich but soft color palette with warm undertones, pure solid white background, sharp clean character outline, no glow no blur on edges, high contrast with background, (simple background:1.5), no background elements, no objects, no monitor, bust shot from head to mid-chest, no hands visible, character centered in frame, face on horizontal midpoint, small margin above head, no cropped hair, symmetrical empty space on both sides, [角色描述]",
+  "prompt": "(masterpiece, top quality, highly detailed anime illustration:1.2), delicate semi-realistic anime style, sense of transparency (透明感), studio Kyoto Animation / Makoto Shinkai aesthetic, highly detailed expressive eyes, complex iris layers with soft reflections, watery and jewel-like eye texture, delicate eyelashes with soft edges, softly defined facial features, delicate tracing lineart with varying weight, slightly colored soft outlines (avoid harsh black lines), soft diffused natural lighting from upper left, (avoid harsh shadows:1.3), (avoid hard specular highlights:1.3), soft ambient occlusion, subtle soft rim lighting on hair, hair with translucent highlights and soft volumetric shading, matte fabric texture with soft folds showing volume, (no shiny plastic texture:1.3), skin with warm gradient tones and delicate blush, atmospheric glow, rich but soft color palette with warm undertones, pure solid white background, sharp clean character outline, no glow no blur on edges, high contrast with background, (simple background:1.5), no background elements, no objects, no monitor, bust shot from head to mid-chest, no hands visible, face near horizontal center of the canvas, slight head tilt and gaze direction allowed for dynamic expression, roughly balanced negative space on both sides, small margin above head, no cropped hair, [角色描述]",
   "aspectRatio": "4:3",
-  "inputImagePath": "[前一版立繪或 sprite 的絕對路徑，首次可省略]",
+  "inputImagePath": "[可選：前一版立繪做 reference。注意：參考圖會影響構圖位置，若構圖偏移嚴重建議不帶此參數重新生成]",
   "maintainCharacterConsistency": true
 }
 ```
@@ -70,6 +70,9 @@
 ## sharp 後處理指令
 
 ### 去背（白底 → 透明）
+
+> **限制**：sharp threshold 去背只能處理主體外圍的大面積白底。髮絲間隙、半透明邊緣、淺色配件旁的白色會被誤判。最佳品質仍需手動編輯。
+> 未來可考慮 `@imgly/background-removal-node`（本地 ONNX 模型，免費）替代 threshold 方式。
 
 ```bash
 # threshold 去背：白色區域（RGB > 240）→ 透明

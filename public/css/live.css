@@ -619,26 +619,23 @@ body {
 /* Character portrait - left side, large */
 .dialogue-portrait {
   flex-shrink: 0;
-  width: 500px;
+  width: 280px;
   display: flex;
   align-items: flex-end;
   z-index: 2;
-  margin-right: -20px;
   pointer-events: none;
+  overflow: hidden;
 }
 .dialogue-portrait-img {
   width: 100%;
   height: auto;
-  max-height: 90%;
   object-fit: contain;
   object-position: bottom;
   filter: drop-shadow(4px 4px 12px rgba(0,0,0,0.5));
-  transform: translateX(-30px);
   opacity: 0;
-  transition: transform 0.4s ease-out 0.1s, opacity 0.4s ease-out 0.1s;
+  transition: opacity 0.4s ease-out 0.1s;
 }
 .dialogue-overlay.active .dialogue-portrait-img {
-  transform: translateX(0);
   opacity: 1;
 }
 
@@ -1007,18 +1004,18 @@ body {
   align-items: center;
   padding: 0.3rem 0.3rem 0.4rem;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--agent-color, #6B7280) 10%, transparent) 0%,
-                            rgba(10,10,25,0.6) 50%,
-                            color-mix(in srgb, var(--agent-color, #6B7280) 6%, transparent) 100%);
-  border: 1px solid color-mix(in srgb, var(--agent-color, #6B7280) 25%, transparent);
+    linear-gradient(180deg, color-mix(in srgb, var(--agent-color, #6B7280) 18%, transparent) 0%,
+                            rgba(10,10,25,0.7) 50%,
+                            color-mix(in srgb, var(--agent-color, #6B7280) 12%, transparent) 100%);
+  border: 2px solid color-mix(in srgb, var(--agent-color, #6B7280) 45%, transparent);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   width: 80px;
   flex-shrink: 0;
   position: relative;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--agent-color, #6B7280) 10%, transparent),
-              inset 0 1px 0 color-mix(in srgb, var(--agent-color, #6B7280) 12%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--agent-color, #6B7280) 20%, transparent),
+              inset 0 1px 0 color-mix(in srgb, var(--agent-color, #6B7280) 18%, transparent);
 }
 
 /* Decorative top accent line */
@@ -1030,7 +1027,7 @@ body {
   right: 15%;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--agent-color, #6B7280), transparent);
-  opacity: 0.5;
+  opacity: 0.8;
 }
 
 /* Outer glow layer */
@@ -1040,7 +1037,7 @@ body {
   inset: -1px;
   border-radius: 7px;
   background: linear-gradient(180deg, var(--agent-color, #6B7280), transparent 60%);
-  opacity: 0;
+  opacity: 0.15;
   z-index: -1;
   transition: opacity 0.3s;
 }
@@ -1089,18 +1086,19 @@ body {
 /* --- Diamond Portrait Frame --- */
 .roster-frame {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 66px;
+  height: 66px;
   margin-bottom: 0.15rem;
 }
 
 .roster-diamond {
-  width: 50px;
-  height: 50px;
+  width: 62px;
+  height: 62px;
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) rotate(45deg);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
   overflow: hidden;
   border: 2px solid color-mix(in srgb, var(--agent-color, #6B7280) 35%, rgba(255,255,255,0.1));
   background: rgba(0,0,0,0.4);
@@ -1119,15 +1117,17 @@ body {
 }
 
 .roster-diamond img {
-  width: 140%;
-  height: 140%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  transform: rotate(-45deg) translate(-10%, -10%);
+  transform: translate(-50%, -50%);
 }
 
 .roster-diamond-emoji {
   font-size: 1.5rem;
-  transform: rotate(-45deg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1171,8 +1171,8 @@ body {
 }
 
 .roster-name {
-  font-size: 0.68rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 700;
   color: rgba(230,235,250,0.95);
   white-space: nowrap;
   overflow: hidden;
