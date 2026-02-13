@@ -21,7 +21,7 @@
 
 ```json
 {
-  "prompt": "[角色描述] face closeup, [表情], Head and shoulders only, square format, 1:1 aspect ratio, expressive emotion, Discord custom emoji style, solid pure white #FFFFFF background, no gradients, no circles, no vignettes, no decorative elements behind the character, clean sharp edges, simple composition, character face only",
+  "prompt": "[角色描述] face closeup, [表情], slightly deformed chibi-like proportions with larger head, big detailed expressive anime eyes with reflections, soft colored outlines not harsh black lines, hair with translucent highlights and volumetric shading, skin with warm gradient tones, delicate semi-realistic anime style, Head and shoulders only, square format, 1:1 aspect ratio, solid pure white #FFFFFF background, no gradients, no circles, no vignettes, no decorative elements behind the character, clean sharp edges, simple composition",
   "aspectRatio": "1:1",
   "inputImagePath": "[角色立繪的絕對路徑]",
   "maintainCharacterConsistency": true

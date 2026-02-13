@@ -448,13 +448,12 @@ function updateAgentCard(event) {
 // --- Typewriter effect ---
 const activeTypewriters = new WeakMap();
 
-function typewriterEffect(el, text) {
+function typewriterEffect(el, text, speed = 30) {
   const prev = activeTypewriters.get(el);
   if (prev) clearTimeout(prev);
 
   el.textContent = '';
   let i = 0;
-  const speed = 30;
   function type() {
     if (i < text.length) {
       el.textContent += text.charAt(i);
@@ -757,7 +756,8 @@ function updateSpriteStatus(event) {
 function showSpriteBubble(sprite, text) {
   const bubble = sprite.querySelector('.sprite-bubble');
   if (!bubble) return;
-  bubble.textContent = text.length > 25 ? text.substring(0, 25) + '...' : text;
+  const truncated = text.length > 25 ? text.substring(0, 25) + '...' : text;
+  typewriterEffect(bubble, truncated, 40);
   bubble.classList.add('visible');
 }
 
@@ -781,19 +781,23 @@ function updatePortraitIfOpen(agentId) {
   const statusEl = document.getElementById('dialogue-status');
   if (statusEl) statusEl.textContent = statusInfo.label;
 
-  // Update emoji
+  // Update emoji with pop animation
   const emojiEl = document.getElementById('dialogue-emoji');
   const emojiSet = currentAgent.emoji;
   if (emojiEl) {
+    let newHtml;
     if (emojiSet && typeof emojiSet === 'object') {
       const emojiKey = pickEmojiKey(emojiSet, mood, phase);
       if (emojiKey && emojiSet[emojiKey]) {
-        emojiEl.innerHTML = `<img src="${emojiSet[emojiKey]}" alt="emoji">`;
+        newHtml = `<img src="${emojiSet[emojiKey]}" alt="emoji" class="emoji-entering">`;
       } else {
-        emojiEl.innerHTML = `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
+        newHtml = `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
       }
     } else {
-      emojiEl.innerHTML = `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
+      newHtml = `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
+    }
+    if (emojiEl.innerHTML !== newHtml) {
+      emojiEl.innerHTML = newHtml;
     }
   }
 
@@ -801,7 +805,7 @@ function updatePortraitIfOpen(agentId) {
   const agentEvents = activityFeed.filter(e => e.agentId === agentId && e.message);
   if (agentEvents.length > 0) {
     const textEl = document.getElementById('dialogue-text');
-    if (textEl) textEl.textContent = agentEvents[0].message;
+    if (textEl) typewriterEffect(textEl, agentEvents[0].message, 25);
 
     // Update history
     const historyEl = document.getElementById('dialogue-history');
@@ -840,7 +844,7 @@ function openPortrait(agent) {
   // Latest monologue (main dialogue text)
   const agentEvents = activityFeed.filter(e => e.agentId === agent.id && e.message);
   const latestMsg = agentEvents.length > 0 ? agentEvents[0].message : defaultBubble();
-  document.getElementById('dialogue-text').textContent = latestMsg;
+  typewriterEffect(document.getElementById('dialogue-text'), latestMsg, 25);
 
   // Character emoji — pick from emoji set based on mood/phase
   const emojiEl = document.getElementById('dialogue-emoji');
@@ -849,7 +853,7 @@ function openPortrait(agent) {
     const mood = currentAgent.mood || 'neutral';
     const emojiKey = pickEmojiKey(emojiSet, mood, phase);
     if (emojiKey && emojiSet[emojiKey]) {
-      emojiEl.innerHTML = `<img src="${emojiSet[emojiKey]}" alt="emoji">`;
+      emojiEl.innerHTML = `<img src="${emojiSet[emojiKey]}" alt="emoji" class="emoji-entering">`;
     } else {
       const moodEmoji = MOOD_EMOJI[mood] || '😐';
       emojiEl.innerHTML = `<span style="font-size:4rem">${moodEmoji}</span>`;

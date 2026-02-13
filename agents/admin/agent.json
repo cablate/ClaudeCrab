@@ -4,7 +4,14 @@
     "avatar": "🏛️",
     "color": "#6366F1",
     "sprite": "sprite.png",
-    "portrait": "portrait.png"
+    "portrait": "portrait.png",
+    "emoji": {
+      "neutral": "emoji-neutral.png",
+      "excited": "emoji-excited.png",
+      "annoyed": "emoji-annoyed.png",
+      "tired": "emoji-tired.png",
+      "focused": "emoji-focused.png"
+    }
   },
   "description": "Agent 管理員，負責管理所有 agent 的設定、人格、技能",
   "version": "1.0.0",

@@ -726,6 +726,16 @@ body {
   50% { transform: translateY(-2px); }
 }
 
+/* Working animation — slight rapid bobbing */
+.agent-sprite.working-pulse img {
+  animation: spriteWorking 0.8s ease-in-out infinite;
+}
+@keyframes spriteWorking {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1.5px) rotate(-1deg); }
+  75% { transform: translateY(-1.5px) rotate(1deg); }
+}
+
 /* ============================================
    PORTRAIT MODAL
    ============================================ */
@@ -870,6 +880,15 @@ body {
   border-radius: 10px;
   border: 2px solid rgba(100,140,255,0.25);
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.dialogue-emoji img.emoji-entering {
+  animation: emojiPop 0.35s ease-out;
+}
+@keyframes emojiPop {
+  0% { opacity: 0; transform: scale(0.7); }
+  60% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 /* Recent thoughts - hidden, kept for future use */

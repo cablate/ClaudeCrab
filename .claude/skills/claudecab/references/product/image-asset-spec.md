@@ -250,14 +250,23 @@ upper body portrait,
 [CHARACTER DESC]
 ```
 
-### Emoji
+### Emoji（Q 版精緻風）
+
+> 設計哲學：**chibi 頭身比 + 精緻光影上色**。
+> 不是純平塗 LINE 貼圖，也不是寫實立繪裁切。
+> 參考現有 coder/general emoji 的風格：大頭大眼但有漸層光影和髮絲高光。
+
 ```
 [CHARACTER DESC] face closeup, [EXPRESSION],
+slightly deformed chibi-like proportions with larger head,
+big detailed expressive anime eyes with reflections,
+soft colored outlines not harsh black lines,
+hair with translucent highlights and volumetric shading,
+skin with warm gradient tones, delicate semi-realistic anime style,
 Head and shoulders only, square format, 1:1 aspect ratio,
-expressive emotion, Discord custom emoji style,
 solid pure white #FFFFFF background,
 no gradients, no circles, no vignettes, no decorative elements behind the character,
-clean sharp edges, simple composition, character face only
+clean sharp edges, simple composition
 ```
 
 ---
