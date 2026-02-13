@@ -986,13 +986,15 @@ body {
    PARTY ROSTER
    ============================================ */
 .party-roster {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  right: 0.5rem;
   display: flex;
   gap: 0.5rem;
   padding: 0.75rem;
-  margin-top: 0.5rem;
-  width: 100%;
-  max-width: 100%;
   overflow-x: auto;
+  z-index: 5;
 }
 
 .roster-card {
