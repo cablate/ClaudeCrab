@@ -171,8 +171,6 @@ async function loadAgentStates() {
   try {
     const res = await fetch('/api/activity/agents');
     const { agents } = await res.json();
-    const container = document.getElementById('agent-cards');
-    container.innerHTML = '';
     if (agents.length === 0) {
       // Show empty state in office scene
       const scene = document.getElementById('office-scene');
@@ -198,8 +196,6 @@ async function loadAgentStates() {
 
     for (let i = 0; i < agents.length; i++) {
       const agent = agents[i];
-      const card = createAgentCard(agent);
-      container.appendChild(card);
       agentCards[agent.id] = agent;
 
       // Create sprite with assigned seat or overflow fallback
@@ -257,7 +253,7 @@ function connectSSE() {
 
 // --- Handle incoming activity event ---
 function handleActivityEvent(event) {
-  updateAgentCard(event);
+  syncAgentState(event);
   updateSpriteStatus(event);
 
   // Skip status_change and auto-idle workflow events from feed
@@ -332,124 +328,31 @@ function truncateDescription(text, maxLen) {
 }
 
 // --- Create agent card (v3.0 — employee profile style) ---
-function createAgentCard(agent) {
-  const card = document.createElement('div');
-  card.className = 'agent-card';
-  card.id = `agent-${agent.id}`;
-  card.style.setProperty('--agent-color', agent.color || '#6B7280');
-
-  const phase = agent.phase || 'idle';
-  const mood = agent.mood || 'neutral';
-  const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
-  const modelLabel = (agent.model || 'unknown').toUpperCase();
-  const roleDesc = truncateDescription(agent.description, 60);
-
-  card.innerHTML = `
-    <div class="agent-header">
-      <div class="agent-avatar-large">${agent.avatar || '🤖'}</div>
-      <div class="agent-info">
-        <div class="agent-name">${agent.name}</div>
-        <div class="agent-role">${escapeHtml(roleDesc) || 'AI Assistant'}</div>
-      </div>
-    </div>
-    <div class="agent-meta">
-      <span class="meta-badge meta-model">${modelLabel}</span>
-      <span class="meta-badge meta-idle">${formatIdleDuration(agent.idleDuration)}</span>
-    </div>
-    <div class="agent-status-row">
-      <span class="agent-mood-large">${MOOD_EMOJI[mood] || ''}</span>
-      <div class="agent-status ${statusInfo.class}">${statusInfo.label}</div>
-    </div>
-    <div class="agent-task" style="display: none;"></div>
-    <div class="agent-bubble${agent.lastEvent?.type === 'mutter' ? ' bubble-mutter' : ''}">
-      <span class="bubble-text">${agent.lastEvent ? (agent.lastEvent.type === 'mutter' ? `（${agent.lastEvent.message}）` : agent.lastEvent.message) : defaultBubble()}</span>
-    </div>
-  `;
-
-  if (phase === 'idle') {
-    card.classList.add('breathing');
-  }
-
-  return card;
-}
 
 // --- Update agent card with new event ---
-function updateAgentCard(event) {
-  const card = document.getElementById(`agent-${event.agentId}`);
-  if (!card) return;
+function syncAgentState(event) {
+  const agentState = agentCards[event.agentId];
+  if (!agentState) return;
 
   const phase = event.phase || 'idle';
   const mood = event.mood || 'neutral';
-  const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
 
-  // Sync in-memory state for portrait modal
-  if (agentCards[event.agentId]) {
-    agentCards[event.agentId].phase = phase;
-    if (event.mood) agentCards[event.agentId].mood = mood;
+  // Sync phase & mood
+  agentState.phase = phase;
+  if (event.mood) agentState.mood = mood;
+
+  // Reset idle duration on any event
+  agentState.idleDuration = 0;
+
+  // Track current task
+  if (event.type === 'workflow' && event.phase === 'task_received' && event.metadata?.taskContent) {
+    const preview = String(event.metadata.taskContent);
+    agentState.currentTask = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
+  } else if (event.phase === 'completed' || event.phase === 'idle') {
+    agentState.currentTask = null;
   }
 
-  // Update status
-  const statusEl = card.querySelector('.agent-status');
-  if (statusEl) {
-    statusEl.textContent = statusInfo.label;
-    statusEl.className = `agent-status ${statusInfo.class}`;
-  }
-
-  // Update mood (large)
-  const moodEl = card.querySelector('.agent-mood-large');
-  if (moodEl) {
-    moodEl.textContent = MOOD_EMOJI[mood] || '';
-  }
-
-  // Update idle badge — reset to "active now" on any event
-  const idleEl = card.querySelector('.meta-idle');
-  if (idleEl) {
-    idleEl.textContent = '剛剛活躍';
-  }
-
-  // Update current task display — persist during working phases
-  const taskEl = card.querySelector('.agent-task');
-  if (taskEl) {
-    if (event.type === 'workflow' && event.phase === 'task_received' && event.metadata?.taskContent) {
-      const preview = String(event.metadata.taskContent);
-      const truncated = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
-      taskEl.textContent = truncated;
-      taskEl.style.display = 'block';
-      // Remember current task
-      if (agentCards[event.agentId]) agentCards[event.agentId].currentTask = truncated;
-    } else if (event.phase === 'completed' || event.phase === 'idle') {
-      taskEl.style.display = 'none';
-      if (agentCards[event.agentId]) agentCards[event.agentId].currentTask = null;
-    } else if (agentCards[event.agentId]?.currentTask) {
-      // working / tool_use — keep showing the task
-      taskEl.textContent = agentCards[event.agentId].currentTask;
-      taskEl.style.display = 'block';
-    }
-  }
-
-  // Update bubble: personality events use typewriter, workflow events skip bubble
-  if (event.type !== 'workflow') {
-    const bubbleEl = card.querySelector('.agent-bubble');
-    const bubbleText = card.querySelector('.bubble-text');
-    if (bubbleEl) bubbleEl.classList.toggle('bubble-mutter', event.type === 'mutter');
-    if (bubbleText && event.message) {
-      const cardMsg = event.type === 'mutter' ? `（${event.message}）` : event.message;
-      typewriterEffect(bubbleText, cardMsg);
-    }
-  }
-
-  // Breathing animation
-  if (phase === 'idle') {
-    card.classList.add('breathing');
-  } else {
-    card.classList.remove('breathing');
-  }
-
-  // Flash effect
-  card.classList.add('flash');
-  setTimeout(() => card.classList.remove('flash'), 600);
-
-  // Sync portrait overlay if open for this agent
+  // Sync portrait if open
   updatePortraitIfOpen(event.agentId);
 }
 
@@ -780,60 +683,62 @@ function showSpriteBubble(sprite, text, isMutter = false) {
 let portraitOpenAgentId = null;
 
 /** Update portrait overlay in real-time if it's open for this agent */
-function updatePortraitIfOpen(agentId) {
-  if (!portraitOpenAgentId || portraitOpenAgentId !== agentId) return;
-  const overlay = document.getElementById('dialogue-overlay');
-  if (!overlay || !overlay.classList.contains('active')) return;
+function renderPortraitEmoji(emojiSet, mood, phase) {
+  if (emojiSet && typeof emojiSet === 'object') {
+    const emojiKey = pickEmojiKey(emojiSet, mood, phase);
+    if (emojiKey && emojiSet[emojiKey]) {
+      return `<img src="${emojiSet[emojiKey]}" alt="emoji" class="emoji-entering">`;
+    }
+  }
+  return `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
+}
 
+function updatePortraitContent(agentId) {
   const currentAgent = agentCards[agentId];
   if (!currentAgent) return;
 
   const phase = currentAgent.phase || 'idle';
   const mood = currentAgent.mood || 'neutral';
 
-  // Update status
+  // Status
   const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
   const statusEl = document.getElementById('dialogue-status');
   if (statusEl) statusEl.textContent = statusInfo.label;
 
-  // Update emoji with pop animation
+  // Emoji
   const emojiEl = document.getElementById('dialogue-emoji');
-  const emojiSet = currentAgent.emoji;
   if (emojiEl) {
-    let newHtml;
-    if (emojiSet && typeof emojiSet === 'object') {
-      const emojiKey = pickEmojiKey(emojiSet, mood, phase);
-      if (emojiKey && emojiSet[emojiKey]) {
-        newHtml = `<img src="${emojiSet[emojiKey]}" alt="emoji" class="emoji-entering">`;
-      } else {
-        newHtml = `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
-      }
-    } else {
-      newHtml = `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
-    }
+    const newHtml = renderPortraitEmoji(currentAgent.emoji, mood, phase);
     if (emojiEl.innerHTML !== newHtml) {
       emojiEl.innerHTML = newHtml;
     }
   }
 
-  // Update dialogue text from latest feed
+  // Dialogue text
   const agentEvents = activityFeed.filter(e => e.agentId === agentId && e.message);
-  if (agentEvents.length > 0) {
-    const textEl = document.getElementById('dialogue-text');
-    if (textEl) {
-      const latest = agentEvents[0];
-      const msg = latest.type === 'mutter' ? `（${latest.message}）` : latest.message;
-      textEl.classList.toggle('dialogue-text-mutter', latest.type === 'mutter');
-      typewriterEffect(textEl, msg, latest.type === 'mutter' ? 35 : 25);
-    }
-
-    // Update history
-    const historyEl = document.getElementById('dialogue-history');
-    if (historyEl) {
-      const olderEvents = agentEvents.slice(1, 8);
-      historyEl.innerHTML = buildHistoryHTML(olderEvents);
-    }
+  const latestEvent = agentEvents.length > 0 ? agentEvents[0] : null;
+  const textEl = document.getElementById('dialogue-text');
+  if (textEl) {
+    const msg = latestEvent
+      ? (latestEvent.type === 'mutter' ? `（${latestEvent.message}）` : latestEvent.message)
+      : defaultBubble();
+    textEl.classList.toggle('dialogue-text-mutter', latestEvent?.type === 'mutter');
+    typewriterEffect(textEl, msg, latestEvent?.type === 'mutter' ? 35 : 25);
   }
+
+  // History
+  const historyEl = document.getElementById('dialogue-history');
+  if (historyEl) {
+    const olderEvents = agentEvents.slice(1, 8);
+    historyEl.innerHTML = olderEvents.length > 0 ? buildHistoryHTML(olderEvents) : '';
+  }
+}
+
+function updatePortraitIfOpen(agentId) {
+  if (!portraitOpenAgentId || portraitOpenAgentId !== agentId) return;
+  const overlay = document.getElementById('dialogue-overlay');
+  if (!overlay || !overlay.classList.contains('active')) return;
+  updatePortraitContent(agentId);
 }
 
 // --- Open portrait modal ---
@@ -844,7 +749,7 @@ function openPortrait(agent) {
   portraitOpenAgentId = agent.id;
   const currentAgent = agentCards[agent.id] || agent;
 
-  // Portrait image (from API data, with fallback)
+  // Portrait image
   const portraitImg = document.getElementById('dialogue-portrait-img');
   if (currentAgent.portrait) {
     portraitImg.src = currentAgent.portrait;
@@ -855,45 +760,9 @@ function openPortrait(agent) {
 
   // Name plate
   document.getElementById('dialogue-name').textContent = currentAgent.name || agent.name;
-  const phase = currentAgent.phase || 'idle';
-  const statusInfo = PHASE_STATUS[phase] || PHASE_STATUS.idle;
-  document.getElementById('dialogue-status').textContent = statusInfo.label;
 
-  // Latest monologue (main dialogue text)
-  const agentEvents = activityFeed.filter(e => e.agentId === agent.id && e.message);
-  const latestEvent = agentEvents.length > 0 ? agentEvents[0] : null;
-  const latestMsg = latestEvent ? (latestEvent.type === 'mutter' ? `（${latestEvent.message}）` : latestEvent.message) : defaultBubble();
-  const dialogueTextEl = document.getElementById('dialogue-text');
-  dialogueTextEl.classList.toggle('dialogue-text-mutter', latestEvent?.type === 'mutter');
-  typewriterEffect(dialogueTextEl, latestMsg, latestEvent?.type === 'mutter' ? 35 : 25);
-
-  // Character emoji — pick from emoji set based on mood/phase
-  const emojiEl = document.getElementById('dialogue-emoji');
-  const emojiSet = currentAgent.emoji;
-  if (emojiSet && typeof emojiSet === 'object') {
-    const mood = currentAgent.mood || 'neutral';
-    const emojiKey = pickEmojiKey(emojiSet, mood, phase);
-    if (emojiKey && emojiSet[emojiKey]) {
-      emojiEl.innerHTML = `<img src="${emojiSet[emojiKey]}" alt="emoji" class="emoji-entering">`;
-    } else {
-      const moodEmoji = MOOD_EMOJI[mood] || '😐';
-      emojiEl.innerHTML = `<span style="font-size:4rem">${moodEmoji}</span>`;
-    }
-  } else {
-    // Fallback: show mood emoji as text
-    const mood = currentAgent.mood || 'neutral';
-    const moodEmoji = MOOD_EMOJI[mood] || '😐';
-    emojiEl.innerHTML = `<span style="font-size:4rem">${moodEmoji}</span>`;
-  }
-
-  // Recent thoughts history
-  const historyEl = document.getElementById('dialogue-history');
-  const olderEvents = agentEvents.slice(1, 8);
-  if (olderEvents.length > 0) {
-    historyEl.innerHTML = buildHistoryHTML(olderEvents);
-  } else {
-    historyEl.innerHTML = '';
-  }
+  // Shared content: status, emoji, text, history
+  updatePortraitContent(agent.id);
 
   overlay.classList.add('active');
 }
