@@ -6,7 +6,31 @@
 
 ## 版本歷史
 
-### v1.31 - Live Page Data-Driven 重構（當前版本）
+### v1.32 - Live Page Event 重構 + Reply Event（當前版本）
+
+**發布日期**：2026-02-13
+
+**Activity Event 系統重構**：
+- 新增 `reply` event type — agent 回覆訊息現在進入 activity system（截斷 200 字）
+- `ActivityService.emitReply()` 新方法，`MessageProcessor` 在 `emitWorkflow('completed')` 後自動 emit
+- SSE `/stream` 移除初始批次推送（原先推 30 筆全被前端 2s hack 丟棄）
+- 前端資料/DOM 分離：`storeEvent()`（記憶層）+ `isFeedVisible()`（顯示層）
+- `activityFeed[]` 現在存所有事件，sidebar feed DOM 層 filter 掉 status_change/auto-idle
+- `loadRecentFeed` limit 20→50，reverse API 結果確保 `[0]` 是最新事件
+
+**Live Page Backlog 劇情回顧**：
+- Backlog modal 按 timestamp 排序（oldest-first），自動 scrollToBottom
+- 顯示完整對話脈絡：使用者訊息（📩）→ agent 心聲（💭）→ agent 回覆（💬）
+- Backlog overlay 限制在 office-scene 區域（`position: absolute`）
+- 文字對比度提升（全部 backlog 文字 opacity 調高）
+
+**Bug 修復**：
+- Portrait/sprite bubble filter 統一為 mutter/reaction/reply（修復顯示 stale workflow 資料）
+- `loadRecentFeed` 事件順序修正（reverse 後 unshift，確保最新在 `[0]`）
+
+---
+
+### v1.31 - Live Page Data-Driven 重構
 
 **發布日期**：2026-02-12
 
