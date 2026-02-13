@@ -135,6 +135,11 @@ function populateInitialBubbles() {
   for (const event of activityFeed) {
     if (event.type !== 'workflow' && event.agentId && event.message) {
       if (!latestByAgent[event.agentId]) {
+        // Phase-aware: idle/completed agents skip stale reactions
+        const agentState = agentCards[event.agentId];
+        const phase = agentState?.phase || 'idle';
+        const isWorking = phase !== 'idle' && phase !== 'completed';
+        if (!isWorking && event.type === 'reaction') continue;
         latestByAgent[event.agentId] = event;
       }
     }
@@ -144,8 +149,9 @@ function populateInitialBubbles() {
     const agentId = sprite.id.replace('sprite-', '');
     const event = latestByAgent[agentId];
     if (event) {
-      const msg = event.type === 'mutter' ? `（${event.message}）` : event.message;
-      showSpriteBubble(sprite, msg, event.type === 'mutter');
+      const isThought = isInnerThought(event.type);
+      const msg = isThought ? `（${event.message}）` : event.message;
+      showSpriteBubble(sprite, msg, isThought);
     } else {
       showSpriteBubble(sprite, defaultBubble());
     }
@@ -262,6 +268,9 @@ function handleActivityEvent(event) {
     addToFeed(event, true);
   }
 
+  // Portrait update AFTER feed so activityFeed has the latest event
+  updatePortraitIfOpen(event.agentId);
+
   updateStats();
   updatePageTitle();
 }
@@ -351,9 +360,6 @@ function syncAgentState(event) {
   } else if (event.phase === 'completed' || event.phase === 'idle') {
     agentState.currentTask = null;
   }
-
-  // Sync portrait if open
-  updatePortraitIfOpen(event.agentId);
 }
 
 // --- Typewriter effect ---
@@ -386,8 +392,8 @@ function addToFeed(event, animate) {
 
   const item = document.createElement('div');
   const isWorkflow = event.type === 'workflow';
-  const isMutter = event.type === 'mutter';
-  item.className = `feed-item ${isWorkflow ? 'feed-workflow' : 'feed-personality'}${isMutter ? ' feed-mutter' : ''} ${animate ? 'feed-enter' : ''}`;
+  const isThought = isInnerThought(event.type);
+  item.className = `feed-item ${isWorkflow ? 'feed-workflow' : 'feed-personality'}${isThought ? ' feed-mutter' : ''} ${animate ? 'feed-enter' : ''}`;
   item.dataset.timestamp = event.timestamp;
   item.dataset.eventType = isWorkflow ? 'workflow' : 'personality';
   item.dataset.agentId = event.agentId || '';
@@ -422,14 +428,21 @@ function addToFeed(event, animate) {
       <span class="feed-time">${relativeTime(event.timestamp)}</span>
     `;
   } else {
-    const typeIcon = event.type === 'mutter' ? '💭' : '💬';
     const moodEmoji = MOOD_EMOJI[event.mood] || '';
+    // Reaction with task context
+    let taskContext = '';
+    if (event.type === 'reaction' && event.metadata?.taskContent) {
+      const content = String(event.metadata.taskContent);
+      const truncated = content.length > 25 ? content.substring(0, 25) + '...' : content;
+      taskContext = `<span class="feed-task-context">📋 ${escapeHtml(truncated)}</span>`;
+    }
     item.innerHTML = `
-      <span class="feed-type-icon">${typeIcon}</span>
+      <span class="feed-type-icon">💭</span>
       <span class="feed-mood">${moodEmoji}</span>
       <span class="feed-avatar" style="color: ${color}">${avatar}</span>
       <span class="feed-name" style="color: ${color}">${name}</span>
-      <span class="feed-message">${event.type === 'mutter' ? `（${escapeHtml(event.message)}）` : escapeHtml(event.message)}</span>
+      ${taskContext}
+      <span class="feed-message">（${escapeHtml(event.message)}）</span>
       <span class="feed-time">${relativeTime(event.timestamp)}</span>
     `;
   }
@@ -472,6 +485,10 @@ async function fetchStats() {
 }
 
 // --- Utility functions ---
+function isInnerThought(type) {
+  return type === 'mutter' || type === 'reaction';
+}
+
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
@@ -614,9 +631,12 @@ function createAgentSprite(agent, pos) {
   const spriteSrc = agent.sprite || '';
   const mood = agent.mood || 'neutral';
   const moodEmoji = MOOD_EMOJI[mood] || '😐';
-  const lastEvent = agent.lastEvent;
-  const lastMsg = lastEvent ? (lastEvent.type === 'mutter' ? `（${lastEvent.message}）` : lastEvent.message) : '';
-  const lastIsMutter = lastEvent?.type === 'mutter';
+  const agentPhase = agent.phase || 'idle';
+  const agentIsWorking = agentPhase !== 'idle' && agentPhase !== 'completed';
+  // Skip stale reactions for idle/completed agents
+  const lastEvent = (agent.lastEvent && !(agent.lastEvent.type === 'reaction' && !agentIsWorking)) ? agent.lastEvent : null;
+  const lastIsThought = lastEvent ? isInnerThought(lastEvent.type) : false;
+  const lastMsg = lastEvent ? (lastIsThought ? `（${lastEvent.message}）` : lastEvent.message) : '';
 
   // Sprite: use image if available, otherwise show avatar emoji as fallback
   const spriteContent = spriteSrc
@@ -627,7 +647,7 @@ function createAgentSprite(agent, pos) {
     ${spriteContent}
     <span class="sprite-label">${agent.name}</span>
     <span class="sprite-mood">${moodEmoji}</span>
-    <div class="sprite-bubble ${lastMsg ? 'visible' : ''}${lastIsMutter ? ' mutter' : ''}">${lastMsg.length > 40 ? lastMsg.substring(0, 40) + '...' : lastMsg}</div>
+    <div class="sprite-bubble ${lastMsg ? 'visible' : ''}${lastIsThought ? ' mutter' : ''}">${lastMsg.length > 40 ? lastMsg.substring(0, 40) + '...' : lastMsg}</div>
   `;
 
   sprite.addEventListener('click', () => openPortrait(agent));
@@ -664,8 +684,9 @@ function updateSpriteStatus(event) {
 
   // Update bubble — any non-workflow event with a message updates the bubble
   if (event.type !== 'workflow' && event.message) {
-    const bubbleMsg = event.type === 'mutter' ? `（${event.message}）` : event.message;
-    showSpriteBubble(sprite, bubbleMsg, event.type === 'mutter');
+    const isThought = isInnerThought(event.type);
+    const bubbleMsg = isThought ? `（${event.message}）` : event.message;
+    showSpriteBubble(sprite, bubbleMsg, isThought);
   }
 }
 
@@ -681,6 +702,7 @@ function showSpriteBubble(sprite, text, isMutter = false) {
 
 // --- Portrait modal state ---
 let portraitOpenAgentId = null;
+let portraitLastEventId = null;
 
 /** Update portrait overlay in real-time if it's open for this agent */
 function renderPortraitEmoji(emojiSet, mood, phase) {
@@ -692,7 +714,6 @@ function renderPortraitEmoji(emojiSet, mood, phase) {
   }
   return `<span style="font-size:4rem">${MOOD_EMOJI[mood] || '😐'}</span>`;
 }
-
 function updatePortraitContent(agentId) {
   const currentAgent = agentCards[agentId];
   if (!currentAgent) return;
@@ -714,22 +735,51 @@ function updatePortraitContent(agentId) {
     }
   }
 
-  // Dialogue text
-  const agentEvents = activityFeed.filter(e => e.agentId === agentId && e.message);
-  const latestEvent = agentEvents.length > 0 ? agentEvents[0] : null;
+  // Dialogue text — phase-driven: idle/completed only shows mutters, working phases also show reactions
+  const isWorking = phase !== 'idle' && phase !== 'completed';
+  const personalityEvents = activityFeed.filter(e =>
+    e.agentId === agentId && e.message && e.type !== 'workflow' &&
+    (isWorking || e.type !== 'reaction')
+  );
+  const latestEvent = personalityEvents.length > 0 ? personalityEvents[0] : null;
   const textEl = document.getElementById('dialogue-text');
+  const ctxEl = document.getElementById('dialogue-task-context');
+
   if (textEl) {
-    const msg = latestEvent
-      ? (latestEvent.type === 'mutter' ? `（${latestEvent.message}）` : latestEvent.message)
-      : defaultBubble();
-    textEl.classList.toggle('dialogue-text-mutter', latestEvent?.type === 'mutter');
-    typewriterEffect(textEl, msg, latestEvent?.type === 'mutter' ? 35 : 25);
+    // Only update text if we have a NEW event (avoid re-triggering typewriter)
+    const eventId = latestEvent?.id || null;
+    if (eventId !== portraitLastEventId) {
+      portraitLastEventId = eventId;
+
+      // Task context for reactions
+      if (ctxEl) {
+        if (latestEvent?.type === 'reaction' && latestEvent.metadata?.taskContent) {
+          const content = String(latestEvent.metadata.taskContent);
+          const truncated = content.length > 40 ? content.substring(0, 40) + '...' : content;
+          ctxEl.textContent = `📋 ${truncated}`;
+          ctxEl.style.display = '';
+        } else {
+          ctxEl.style.display = 'none';
+        }
+      }
+
+      if (latestEvent) {
+        const isThought = isInnerThought(latestEvent.type);
+        const msg = isThought ? `（${latestEvent.message}）` : latestEvent.message;
+        textEl.classList.toggle('dialogue-text-mutter', isThought);
+        typewriterEffect(textEl, msg, isThought ? 35 : 25);
+      } else {
+        textEl.classList.remove('dialogue-text-mutter');
+        textEl.textContent = defaultBubble();
+        if (ctxEl) ctxEl.style.display = 'none';
+      }
+    }
   }
 
   // History
   const historyEl = document.getElementById('dialogue-history');
   if (historyEl) {
-    const olderEvents = agentEvents.slice(1, 8);
+    const olderEvents = personalityEvents.slice(1, 8);
     historyEl.innerHTML = olderEvents.length > 0 ? buildHistoryHTML(olderEvents) : '';
   }
 }
@@ -747,6 +797,7 @@ function openPortrait(agent) {
   if (!overlay) return;
 
   portraitOpenAgentId = agent.id;
+  portraitLastEventId = null;  // Force fresh render
   const currentAgent = agentCards[agent.id] || agent;
 
   // Portrait image
@@ -770,12 +821,18 @@ function openPortrait(agent) {
 // Build history items HTML (Galgame backlog style)
 function buildHistoryHTML(events) {
   return events.map(e => {
-    const isMutter = e.type === 'mutter';
-    const icon = isMutter ? '💭' : '💬';
+    const isThought = isInnerThought(e.type);
     const moodEmoji = MOOD_EMOJI[e.mood] || '';
-    const msgClass = isMutter ? 'history-msg history-mutter' : 'history-msg';
-    const text = isMutter ? `（${escapeHtml(e.message)}）` : escapeHtml(e.message);
-    return `<div class="dialogue-history-item${isMutter ? ' history-item-mutter' : ''}"><span class="history-icon">${icon}</span><span class="history-mood">${moodEmoji}</span><span class="${msgClass}">${text}</span><span class="history-time">${relativeTime(e.timestamp)}</span></div>`;
+    const msgClass = isThought ? 'history-msg history-mutter' : 'history-msg';
+    const text = isThought ? `（${escapeHtml(e.message)}）` : escapeHtml(e.message);
+    // Reaction with task context
+    let taskCtx = '';
+    if (e.type === 'reaction' && e.metadata?.taskContent) {
+      const content = String(e.metadata.taskContent);
+      const truncated = content.length > 20 ? content.substring(0, 20) + '...' : content;
+      taskCtx = `<span class="history-task-ctx">📋 ${escapeHtml(truncated)}</span>`;
+    }
+    return `<div class="dialogue-history-item${isThought ? ' history-item-mutter' : ''}"><span class="history-icon">💭</span><span class="history-mood">${moodEmoji}</span>${taskCtx}<span class="${msgClass}">${text}</span><span class="history-time">${relativeTime(e.timestamp)}</span></div>`;
   }).join('');
 }
 
