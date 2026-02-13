@@ -48,9 +48,22 @@
 | **風格** | 半身像，anime/illustration 風格，與 sprite 角色設計一致 |
 
 **生成注意事項**：
-- prompt 指定 `solid white background, clean edges, no gradient`
+- 使用 Prompt Template 區段的「風格錨定前綴」（技法鎖定策略）
+- 必須使用 2K 以上解析度（`imageSize: "2K"`），低解析度會退化成平塗風格
+- 角色描述要具體化光影互動：不只 "silver hair"，要寫 "delicate silver hair catching warm light with translucent glow"
+- 衣服材質要明確：不只 "blue jacket"，要寫 "navy blue cable-knit cardigan with visible texture weave"
+- 膚色要描述漸層："soft blush on cheeks", "warm skin tones with subtle shadow under chin"
+- 避免籠統描述（"friendly expression"），改用具體五官狀態（"bright amber eyes, slight upward curve of lips, relaxed eyebrows"）
 - 用角色 sprite 或前一版立繪做 inputImagePath 鎖定角色特徵
 - 去背後保留原圖備份（`portrait-original.png`）
+
+**品質檢查清單**（生成後對照）：
+- [ ] 髮絲是否有高光層次和透光感？（不是單色色塊）
+- [ ] 膚色是否有暖色漸層？（不是均勻單色）
+- [ ] 衣服是否有陰影體積感？（不是平塗填色）
+- [ ] 是否能看出光源方向？（左上方打光）
+- [ ] 整體是否有「畫面在發光」的氛圍感？
+- 未通過 → 重新生成，不要妥協
 
 ### Emoji（表情反應圖）
 
@@ -77,9 +90,12 @@
 
 **生成注意事項**：
 - prompt 必須指定 `1:1 aspect ratio, square format`
-- prompt 指定 `solid white background`
+- 背景必須寫 `solid pure white #FFFFFF background`（不要寫 `transparent background`）
+- 不可出現：圓框、漸層、暈影、裝飾性背景元素
+- 正確寫法：`Head and shoulders only, solid pure white #FFFFFF background, no gradients, no circles, no vignettes, no decorative elements behind the character`
+- 使用 `imageSize: "2K"` + `maintainCharacterConsistency: true` + 立繪作為 `inputImagePath`
 - 一次生成一組（6 個必要 + 1 可選），用同一個角色立繪做 reference
-- 去背後統一縮放至 512×512
+- 去背後統一縮放至 512×512（flood-fill 從邊緣去白背景，threshold > 180）
 
 ### Background（辦公室背景）
 
@@ -237,11 +253,11 @@ upper body portrait,
 ### Emoji
 ```
 [CHARACTER DESC] face closeup, [EXPRESSION],
-square format, 1:1 aspect ratio,
+Head and shoulders only, square format, 1:1 aspect ratio,
 expressive emotion, Discord custom emoji style,
-clean sharp edges, PURE SOLID WHITE BACKGROUND,
-no transparency, no checkered pattern, no gradient,
-simple composition, character face only
+solid pure white #FFFFFF background,
+no gradients, no circles, no vignettes, no decorative elements behind the character,
+clean sharp edges, simple composition, character face only
 ```
 
 ---

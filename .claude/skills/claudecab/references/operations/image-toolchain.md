@@ -21,7 +21,7 @@
 
 ```json
 {
-  "prompt": "[角色描述] face closeup, [表情], square format, 1:1 aspect ratio, expressive emotion, Discord custom emoji style, clean sharp edges, PURE SOLID WHITE BACKGROUND, no transparency, no checkered pattern, no gradient, simple composition, character face only",
+  "prompt": "[角色描述] face closeup, [表情], Head and shoulders only, square format, 1:1 aspect ratio, expressive emotion, Discord custom emoji style, solid pure white #FFFFFF background, no gradients, no circles, no vignettes, no decorative elements behind the character, clean sharp edges, simple composition, character face only",
   "aspectRatio": "1:1",
   "inputImagePath": "[角色立繪的絕對路徑]",
   "maintainCharacterConsistency": true
