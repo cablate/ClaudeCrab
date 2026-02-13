@@ -145,6 +145,17 @@ function showSpriteBubble(sprite, text, isMutter = false) {
 }
 
 // --- Party Roster ---
+
+// Mood → bar color & width (0-100%)
+const MOOD_BAR = {
+  excited: { color: '#4ade80', width: 100 },
+  focused: { color: '#60a5fa', width: 85 },
+  neutral: { color: '#a78bfa', width: 60 },
+  bored:   { color: '#fbbf24', width: 40 },
+  annoyed: { color: '#f97316', width: 25 },
+  tired:   { color: '#ef4444', width: 15 },
+};
+
 function createRoster() {
   const container = document.getElementById('party-roster');
   if (!container) return;
@@ -163,21 +174,29 @@ function createRoster() {
     const avatarSrc = agent.portrait || null;
     const avatarFallback = agent.avatar || '🤖';
     const moodEmoji = MOOD_EMOJI[agent.mood] || MOOD_EMOJI.neutral;
+    const moodBar = MOOD_BAR[agent.mood] || MOOD_BAR.neutral;
     const statusInfo = PHASE_STATUS[agent.phase] || PHASE_STATUS.idle;
-    const idleText = isWorking ? statusInfo.label : formatIdleDuration(agent.idleDuration);
+    const statusText = isWorking ? statusInfo.label : formatIdleDuration(agent.idleDuration);
+    const statusClass = isWorking ? 'is-working' : (agent.phase === 'error' ? 'is-error' : '');
+    const roleEmoji = agent.avatar || '🤖';
 
     card.innerHTML = `
-      <div class="roster-avatar">
-        ${avatarSrc
-          ? `<img src="${avatarSrc}" alt="${agent.name}">`
-          : `<span class="roster-avatar-emoji">${avatarFallback}</span>`}
+      <div class="roster-frame">
+        <div class="roster-diamond">
+          ${avatarSrc
+            ? `<img src="${avatarSrc}" alt="${agent.name}">`
+            : `<span class="roster-diamond-emoji">${avatarFallback}</span>`}
+        </div>
+        <span class="roster-role">${roleEmoji}</span>
+        <span class="roster-mood">${moodEmoji}</span>
       </div>
       <div class="roster-info">
         <div class="roster-name">${agent.name}</div>
-        <div class="roster-status ${statusInfo.class}">${statusInfo.label}</div>
       </div>
-      <div class="roster-mood">${moodEmoji}</div>
-      <div class="roster-idle">${idleText}</div>
+      <div class="roster-mood-bar">
+        <div class="roster-mood-bar-fill" style="width:${moodBar.width}%;background:${moodBar.color}"></div>
+      </div>
+      <div class="roster-status-text ${statusClass}">${statusText}</div>
     `;
     container.appendChild(card);
   }
@@ -194,16 +213,18 @@ function updateRosterCard(agentId) {
   const moodEl = card.querySelector('.roster-mood');
   if (moodEl) moodEl.textContent = MOOD_EMOJI[agent.mood] || MOOD_EMOJI.neutral;
 
-  const statusEl = card.querySelector('.roster-status');
-  const statusInfo = PHASE_STATUS[agent.phase] || PHASE_STATUS.idle;
-  if (statusEl) {
-    statusEl.textContent = statusInfo.label;
-    statusEl.className = `roster-status ${statusInfo.class}`;
+  const barFill = card.querySelector('.roster-mood-bar-fill');
+  const moodBar = MOOD_BAR[agent.mood] || MOOD_BAR.neutral;
+  if (barFill) {
+    barFill.style.width = moodBar.width + '%';
+    barFill.style.background = moodBar.color;
   }
 
-  const idleEl = card.querySelector('.roster-idle');
-  if (idleEl) {
-    idleEl.textContent = isWorking ? statusInfo.label : formatIdleDuration(agent.idleDuration);
+  const statusEl = card.querySelector('.roster-status-text');
+  const statusInfo = PHASE_STATUS[agent.phase] || PHASE_STATUS.idle;
+  if (statusEl) {
+    statusEl.textContent = isWorking ? statusInfo.label : formatIdleDuration(agent.idleDuration);
+    statusEl.className = `roster-status-text ${isWorking ? 'is-working' : (agent.phase === 'error' ? 'is-error' : '')}`;
   }
 }
 
