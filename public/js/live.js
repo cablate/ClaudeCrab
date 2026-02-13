@@ -144,6 +144,69 @@ function showSpriteBubble(sprite, text, isMutter = false) {
   }
 }
 
+// --- Party Roster ---
+function createRoster() {
+  const container = document.getElementById('party-roster');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (const agent of Object.values(agentCards)) {
+    const card = document.createElement('div');
+    card.className = 'roster-card';
+    card.id = `roster-${agent.id}`;
+    card.style.setProperty('--agent-color', agent.color || '#6B7280');
+    card.addEventListener('click', () => openPortrait(agent));
+
+    const isWorking = agent.phase && agent.phase !== 'idle' && agent.phase !== 'completed';
+    if (isWorking) card.classList.add('working');
+
+    const avatarSrc = agent.portrait || null;
+    const avatarFallback = agent.avatar || '🤖';
+    const moodEmoji = MOOD_EMOJI[agent.mood] || MOOD_EMOJI.neutral;
+    const statusInfo = PHASE_STATUS[agent.phase] || PHASE_STATUS.idle;
+    const idleText = isWorking ? statusInfo.label : formatIdleDuration(agent.idleDuration);
+
+    card.innerHTML = `
+      <div class="roster-avatar">
+        ${avatarSrc
+          ? `<img src="${avatarSrc}" alt="${agent.name}">`
+          : `<span class="roster-avatar-emoji">${avatarFallback}</span>`}
+      </div>
+      <div class="roster-info">
+        <div class="roster-name">${agent.name}</div>
+        <div class="roster-status ${statusInfo.class}">${statusInfo.label}</div>
+      </div>
+      <div class="roster-mood">${moodEmoji}</div>
+      <div class="roster-idle">${idleText}</div>
+    `;
+    container.appendChild(card);
+  }
+}
+
+function updateRosterCard(agentId) {
+  const card = document.getElementById(`roster-${agentId}`);
+  const agent = agentCards[agentId];
+  if (!card || !agent) return;
+
+  const isWorking = agent.phase && agent.phase !== 'idle' && agent.phase !== 'completed';
+  card.classList.toggle('working', isWorking);
+
+  const moodEl = card.querySelector('.roster-mood');
+  if (moodEl) moodEl.textContent = MOOD_EMOJI[agent.mood] || MOOD_EMOJI.neutral;
+
+  const statusEl = card.querySelector('.roster-status');
+  const statusInfo = PHASE_STATUS[agent.phase] || PHASE_STATUS.idle;
+  if (statusEl) {
+    statusEl.textContent = statusInfo.label;
+    statusEl.className = `roster-status ${statusInfo.class}`;
+  }
+
+  const idleEl = card.querySelector('.roster-idle');
+  if (idleEl) {
+    idleEl.textContent = isWorking ? statusInfo.label : formatIdleDuration(agent.idleDuration);
+  }
+}
+
 function populateInitialBubbles() {
   const latestByAgent = {};
   for (const event of activityFeed) {
@@ -174,6 +237,7 @@ function populateInitialBubbles() {
 
 async function init() {
   await loadAgentStates();
+  createRoster();
   await loadRecentFeed();
   populateInitialBubbles();
   connectSSE();
@@ -363,6 +427,8 @@ function syncAgentState(event) {
   } else if (event.phase === 'completed' || event.phase === 'idle') {
     agentState.currentTask = null;
   }
+
+  updateRosterCard(event.agentId);
 }
 
 // --- Typewriter effect ---
