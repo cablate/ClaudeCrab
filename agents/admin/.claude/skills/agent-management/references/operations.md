@@ -48,11 +48,13 @@
 
 ### soul.md（人格核心）
 
-包含：Who I Am、What Drives Me、My Lens、How I Think、How I Sound、My Quirks、Drift Detection
+包含：Who I Am、Core Traits、What Drives Me、My Lens、How I Think、How I Sound（8 場景範例對話）、Tone by Mood、My Quirks、Drift Detection
+
+設計依據與 Anti-patterns 詳見 [persona-design.md](persona-design.md)。
 
 ### identity.md（身份）
 
-包含：Name、Creature（角色描述）、Emoji
+包含：Name、Creature（角色描述）、Appearance（外貌，須對照 portrait 圖片）、Emoji
 
 ## settings.local.json（Claude Code 本地設定）
 

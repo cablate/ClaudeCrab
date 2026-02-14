@@ -60,4 +60,4 @@
 | [agent-skill/guide.md](research/agent-skill/guide.md) | Agent Skill 實踐指南 |
 | [moltbot-gap.md](research/moltbot-gap.md) | Moltbot 記憶系統差距分析 |
 | [emergent-cooperation.md](research/emergent-cooperation.md) | 湧現式協作行為觀察（最小提示 → 自發協作推理） |
-| [persona-design.md](research/persona-design.md) | **Agent Persona 設計指南**：soul.md / identity.md 欄位設計依據、SillyTavern 競品對照、新建 Agent Checklist | 湧現式協作行為觀察（最小提示 → 自發協作推理） |
+

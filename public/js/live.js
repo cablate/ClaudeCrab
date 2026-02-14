@@ -347,6 +347,7 @@ function connectSSE() {
   source.addEventListener('open', () => {
     if (dot) dot.classList.add('connected');
     sseRetryDelay = 1000;
+    showLiveToast('已連線', 'success');
   });
 }
 
@@ -1027,10 +1028,20 @@ document.addEventListener('keydown', (e) => {
 async function sendMessageToAgent(agentId, text) {
   const sendBtn = document.getElementById('dialogue-send-btn');
   const input = document.getElementById('dialogue-input');
+  const textEl = document.getElementById('dialogue-text');
 
   if (sendBtn) {
     sendBtn.disabled = true;
     sendBtn.querySelector('.send-text').textContent = '傳送中...';
+  }
+
+  // Clear input immediately
+  if (input) input.value = '';
+
+  // Show user message in dialogue box right away
+  if (textEl) {
+    textEl.className = 'dialogue-text dialogue-user-msg';
+    textEl.textContent = text;
   }
 
   try {
@@ -1045,17 +1056,44 @@ async function sendMessageToAgent(agentId, text) {
       throw new Error(data.error || 'Failed to send message');
     }
 
-    if (input) input.value = '';
+    // Show thinking indicator — will be replaced when SSE reply arrives
+    if (textEl) {
+      textEl.className = 'dialogue-text dialogue-thinking';
+      textEl.innerHTML = '思考中<span class="thinking-dot">.</span><span class="thinking-dot">.</span><span class="thinking-dot">.</span>';
+    }
 
   } catch (error) {
     console.error('Send message error:', error);
-    alert('傳送失敗：' + error.message);
+    showLiveToast('傳送失敗：' + error.message, 'error');
+    // Restore previous dialogue content
+    if (portraitOpenAgentId) {
+      portraitLastEventId = null;
+      updatePortraitContent(portraitOpenAgentId);
+    }
   } finally {
     if (sendBtn) {
       sendBtn.disabled = false;
       sendBtn.querySelector('.send-text').textContent = '送出';
     }
   }
+}
+
+// Toast notification for Live page
+function showLiveToast(message, type = 'info') {
+  const existing = document.querySelector('.live-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = `live-toast live-toast-${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add('show'));
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
 }
 
 function initDialogueInput() {
@@ -1091,6 +1129,106 @@ function initDialogueInput() {
     });
   }
 }
+
+// --- Context Menu ---
+
+let contextMenuEl = null;
+
+function createContextMenu() {
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  menu.id = 'ctx-menu';
+  menu.innerHTML = `
+    <button class="ctx-item" data-action="chat">💬 對話</button>
+    <button class="ctx-item" data-action="send">✉️ 傳送訊息</button>
+    <button class="ctx-item" data-action="history">📜 歷史紀錄</button>
+    <div class="ctx-divider"></div>
+    <button class="ctx-item" data-action="filter">🔍 篩選動態</button>
+  `;
+  document.body.appendChild(menu);
+  contextMenuEl = menu;
+
+  // Handle menu item clicks
+  menu.addEventListener('click', (e) => {
+    const item = e.target.closest('.ctx-item');
+    if (!item) return;
+
+    const action = item.dataset.action;
+    const agentId = menu.dataset.agentId;
+    const agent = agentCards[agentId];
+    if (!agent) { hideContextMenu(); return; }
+
+    switch (action) {
+      case 'chat':
+        openPortrait(agent);
+        break;
+      case 'send':
+        openPortrait(agent);
+        // Focus input after portrait opens
+        setTimeout(() => {
+          const input = document.getElementById('dialogue-input');
+          if (input) input.focus();
+        }, 100);
+        break;
+      case 'history':
+        openPortrait(agent);
+        setTimeout(() => openBacklog(), 100);
+        break;
+      case 'filter':
+        // Click the agent filter button in activity feed
+        const filterBtn = document.querySelector(`.filter-btn[data-filter="agent:${agentId}"]`);
+        if (filterBtn) filterBtn.click();
+        break;
+    }
+    hideContextMenu();
+  });
+}
+
+function showContextMenu(e, agentId) {
+  e.preventDefault();
+  if (!contextMenuEl) createContextMenu();
+
+  contextMenuEl.dataset.agentId = agentId;
+
+  // Position at cursor, keep within viewport
+  const x = Math.min(e.clientX, window.innerWidth - 180);
+  const y = Math.min(e.clientY, window.innerHeight - 200);
+  contextMenuEl.style.left = x + 'px';
+  contextMenuEl.style.top = y + 'px';
+  contextMenuEl.classList.add('visible');
+}
+
+function hideContextMenu() {
+  if (contextMenuEl) contextMenuEl.classList.remove('visible');
+}
+
+// Close on click outside or Escape
+document.addEventListener('click', (e) => {
+  if (contextMenuEl && !contextMenuEl.contains(e.target)) {
+    hideContextMenu();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideContextMenu();
+});
+
+// Attach context menu to sprites (delegated on office-scene)
+document.addEventListener('contextmenu', (e) => {
+  // Sprite right-click
+  const sprite = e.target.closest('.agent-sprite');
+  if (sprite) {
+    const agentId = sprite.id.replace('sprite-', '');
+    showContextMenu(e, agentId);
+    return;
+  }
+  // Roster card right-click
+  const card = e.target.closest('.roster-card');
+  if (card) {
+    const agentId = card.id.replace('roster-', '');
+    showContextMenu(e, agentId);
+    return;
+  }
+});
 
 // --- Start ---
 document.addEventListener('DOMContentLoaded', init);
