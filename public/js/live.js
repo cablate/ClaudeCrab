@@ -1250,5 +1250,70 @@ function initDialogueInput() {
   }
 }
 
+// --- Context Menu ---
+let contextMenuEl = null;
+
+function createContextMenu() {
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  menu.id = 'ctx-menu';
+  menu.innerHTML = `
+    <button class="ctx-item" data-action="chat">💬 對話</button>
+    <button class="ctx-item" data-action="send">✉️ 傳送訊息</button>
+    <button class="ctx-item" data-action="history">📜 歷史紀錄</button>
+    <div class="ctx-divider"></div>
+    <button class="ctx-item" data-action="filter">🔍 篩選動態</button>
+  `;
+  document.body.appendChild(menu);
+  contextMenuEl = menu;
+  menu.addEventListener('click', (e) => {
+    const item = e.target.closest('.ctx-item');
+    if (!item) return;
+    const action = item.dataset.action;
+    const agentId = menu.dataset.agentId;
+    const agent = agentCards[agentId];
+    if (!agent) { hideContextMenu(); return; }
+    switch (action) {
+      case 'chat': openPortrait(agent); break;
+      case 'send':
+        openPortrait(agent);
+        setTimeout(() => { const input = document.getElementById('dialogue-input'); if (input) input.focus(); }, 100);
+        break;
+      case 'history': openPortrait(agent); setTimeout(() => openBacklog(), 100); break;
+      case 'filter':
+        const filterBtn = document.querySelector(`.filter-btn[data-filter="agent:${agentId}"]`);
+        if (filterBtn) filterBtn.click();
+        break;
+    }
+    hideContextMenu();
+  });
+}
+
+function showContextMenu(e, agentId) {
+  e.preventDefault();
+  if (!contextMenuEl) createContextMenu();
+  contextMenuEl.dataset.agentId = agentId;
+  const x = Math.min(e.clientX, window.innerWidth - 180);
+  const y = Math.min(e.clientY, window.innerHeight - 200);
+  contextMenuEl.style.left = x + 'px';
+  contextMenuEl.style.top = y + 'px';
+  contextMenuEl.classList.add('visible');
+}
+
+function hideContextMenu() {
+  if (contextMenuEl) contextMenuEl.classList.remove('visible');
+}
+
+document.addEventListener('click', (e) => {
+  if (contextMenuEl && !contextMenuEl.contains(e.target)) hideContextMenu();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideContextMenu(); });
+document.addEventListener('contextmenu', (e) => {
+  const sprite = e.target.closest('.agent-sprite');
+  if (sprite) { showContextMenu(e, sprite.id.replace('sprite-', '')); return; }
+  const card = e.target.closest('.roster-card');
+  if (card) { showContextMenu(e, card.id.replace('roster-', '')); return; }
+});
+
 // --- Start ---
 document.addEventListener('DOMContentLoaded', init);
