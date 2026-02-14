@@ -238,6 +238,11 @@ v3+：持續迭代
 
 設計新 Skill 或調整現有 Skill 時，用這份清單驗證：
 
+### Frontmatter（必備）
+- [ ] SKILL.md 開頭有 YAML frontmatter（`---` 包圍）
+- [ ] 包含 `name` 欄位（skill 的識別名稱）
+- [ ] 包含 `description` 欄位（Progressive Disclosure Level 1）
+
 ### Description 品質
 - [ ] 描述的是「使用情境」而非「功能分類」
 - [ ] AI 讀完 description 能判斷「什麼時候該載入」

@@ -136,8 +136,8 @@ SDK 整合層只接收 `systemPrompt` + `cwd`，不注入任何業務邏輯。�
 以 Galgame/Visual Novel 互動模式為方向，逐步深化 Live 頁面體驗。
 
 #### 高優先
-- [ ] **互動選項（選択肢）** — 點擊角色後可直接從 Live 頁面發送訊息；預設快速選項（「辛苦了」「現在在做什麼？」「幫我做個任務」）；角色即時回應形成對話循環。把 Live 從「看」變成「玩」。
-- [ ] **對話紀錄（Backlog）** — 開啟 portrait 後可回看歷史對話（dialogue-history 區塊已存在但 hidden）；每則標記角色名、時間、mood 表情。
+- [x] **互動選項（選択肢）** — ✅ v1.33 完成。Quick Reply + 自由輸入框，Web/Telegram 共享 session，即時 SSE 回應。
+- [x] **對話紀錄（Backlog）** — ✅ v1.32 完成。Backlog modal，標記類型/時間/mood，oldest-first 排序。
 
 #### 中優先
 - [ ] **日夜場景氛圍** — 根據實際時間改變 office 背景色調（晨光/日間/黃昏/夜晚 CSS filter overlay）；低成本高氛圍感。

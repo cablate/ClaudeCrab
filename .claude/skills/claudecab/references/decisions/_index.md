@@ -40,6 +40,7 @@
 | [ADR-030](adr/adr-030-agent-team-mode.md) | Agent Team Mode — 多 Agent 並行協作 | ✅ implemented (Tier 1 + 1.1~1.3) | 2026-02-06 |
 | [ADR-031](adr-031-hook-decoupling.md) | Hook 系統解耦 — 引擎硬編轉原生 Claude Code Hooks | 📋 proposed | 2026-02-11 |
 | ADR-032 | Live Page Data-Driven — 消除前端 hardcode，後端驅動渲染 | ✅ implemented | 2026-02-12 |
+| [ADR-033](adr/adr-033-webui-interactive-hooks.md) | Web UI Interactive Hooks — Galgame 選択肢互動 | 📋 proposed | 2026-02-13 |
 
 ---
 

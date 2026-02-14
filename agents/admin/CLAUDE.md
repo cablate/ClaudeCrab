@@ -88,3 +88,28 @@ groups/     — 群組討論
 - 視覺元素會影響評分（特別是權威背書、附加價值）
 - 有視覺內容時，建議應包含「文字如何引導讀者看圖」
 
+### 2026-02-13: AgentSkill Frontmatter 是必備要素
+
+- **發現**：lecture-digest-generator skill 初次審查得 11/12 分，唯一缺陷是「沒有 frontmatter」
+- **Frontmatter 格式**：SKILL.md 開頭的 YAML 區塊（`---` 包圍），必須包含 `name` 和 `description`
+- **為什麼重要**：
+  - Description 是 Progressive Disclosure 的 Level 1
+  - AI 判斷是否載入 Skill 的**唯一依據**
+  - 沒有 frontmatter = AI 無法發現這個 Skill
+- **檢查項**：建立任何 AgentSkill 時，第一步確認 frontmatter 已寫好（name + description）且 description 符合情境導向原則
+- **教訓**：agentskill-expertise 的 Review 清單原本沒有「Frontmatter 檢查」，導致審查時遺漏，已補上
+
+### 2026-02-13: Skill 經驗複用加速開發
+
+- **發現**：social-post-optimizer 花 4 小時達 v2.0，lecture-digest-generator 一次設計就達 v2.0
+- **原因**：六維度評分框架、原則導向設計模式、references 三層結構可跨 skill 複用
+- **方法**：新 skill 可直接參考成熟 skill 的設計模式（framework + standards + examples 結構）
+- **效果**：開發速度 4 小時 → 1 小時（75% 時間節省）
+
+### 2026-02-13: Social-Post-Optimizer 診斷前必須確認目標
+
+- **情境**：優化社群貼文時，誤判為「技術推廣文」（導流/導購），實際是「人設建立文」（展示個人特質）
+- **問題**：相同內容、目標不同 → 優化方向完全不同
+- **教訓**：必須先問清楚「這篇貼文想達成什麼」再評估，不能憑內容自行判斷目標
+- **對應 Skill 原則**：social-post-optimizer 步驟 1「理解脈絡」包含「這篇貼文的目標是什麼？」— 這一步必須做對
+
