@@ -475,7 +475,7 @@ export class MessageProcessor {
       : null;
 
     // Set up interaction handler for permission prompts and question prompts
-    const interactionHandler = new InteractionHandler(adapter, chatId);
+    const interactionHandler = new InteractionHandler(adapter, chatId, 120_000, agentId);
     const canUseTool = interactionHandler.buildCanUseTool();
 
     try {

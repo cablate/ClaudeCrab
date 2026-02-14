@@ -9,6 +9,7 @@
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import { PermissionBridge } from './PermissionBridge.js';
 import { QuestionBridge } from './QuestionBridge.js';
+import { getEventBus } from './EventBus.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -51,14 +52,20 @@ export interface CanUseToolOptions {
  * 3. Call `dispose()` in the finally block to clean up pending requests
  */
 export class InteractionHandler {
+  // Static registries — allow Web UI API to resolve bridges by requestId
+  static readonly permissionRegistry = new Map<string, PermissionBridge>();
+  static readonly questionRegistry = new Map<string, QuestionBridge>();
+
   private readonly adapter: BaseAdapter;
   private readonly chatId: string;
+  private readonly agentId: string;
   private readonly permissionBridge: PermissionBridge;
   private readonly questionBridge: QuestionBridge;
 
-  constructor(adapter: BaseAdapter, chatId: string, timeoutMs = 120_000) {
+  constructor(adapter: BaseAdapter, chatId: string, timeoutMs = 120_000, agentId = '') {
     this.adapter = adapter;
     this.chatId = chatId;
+    this.agentId = agentId;
     this.permissionBridge = new PermissionBridge(timeoutMs);
     this.questionBridge = new QuestionBridge(timeoutMs);
 
@@ -168,6 +175,20 @@ export class InteractionHandler {
       { signal: options.signal }
     );
 
+    // Register bridge for Web UI resolution + broadcast via SSE
+    InteractionHandler.questionRegistry.set(requestId, this.questionBridge);
+    void promise.finally(() => InteractionHandler.questionRegistry.delete(requestId));
+
+    getEventBus().emitSync('interaction', {
+      type: 'question_request',
+      requestId,
+      agentId: this.agentId,
+      question: firstQuestion.question,
+      header: firstQuestion.header,
+      options: firstQuestion.options,
+      multiSelect: firstQuestion.multiSelect,
+    });
+
     const promptResult = await this.adapter.sendQuestionPrompt(this.chatId, {
       requestId,
       question: firstQuestion.question,
@@ -237,6 +258,18 @@ export class InteractionHandler {
       toolInput,
       bridgeOptions
     );
+
+    // Register bridge for Web UI resolution + broadcast via SSE
+    InteractionHandler.permissionRegistry.set(requestId, this.permissionBridge);
+    void promise.finally(() => InteractionHandler.permissionRegistry.delete(requestId));
+
+    getEventBus().emitSync('interaction', {
+      type: 'permission_request' as const,
+      requestId,
+      agentId: this.agentId,
+      toolName,
+      ...(options.decisionReason !== undefined ? { decisionReason: options.decisionReason } : {}),
+    });
 
     const promptOptions: {
       requestId: string;

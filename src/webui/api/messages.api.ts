@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import type { MessageProcessor } from '../../core/MessageProcessor.js';
 import type { AgentLoader } from '../../core/AgentLoader.js';
 import type { UnifiedMessage } from '../../adapters/types.js';
+import { InteractionHandler } from '../../core/InteractionHandler.js';
 import { loadSecurityConfig } from '../../utils/security.js';
 import { logger } from '../../utils/logger.js';
 
@@ -54,13 +55,61 @@ export function createMessagesApiRouter(
       timestamp: new Date(),
     };
 
-    try {
-      await messageProcessor.processMessage(message, agentId);
-      res.json({ success: true });
-    } catch (error) {
-      logger.error({ error, agentId }, 'Failed to send message from web');
-      res.status(500).json({ error: 'Failed to process message' });
+    // Fire-and-forget: respond immediately, let SSE push results
+    messageProcessor.processMessage(message, agentId).catch((error) => {
+      logger.error({ error, agentId }, 'Failed to process message from web');
+    });
+    res.json({ success: true });
+  });
+
+  // --- Resolve interactive hooks from Web UI ---
+
+  router.post('/resolve-permission', (req: Request, res: Response) => {
+    const { requestId, decision } = req.body as { requestId?: string; decision?: string };
+
+    if (!requestId || !decision) {
+      res.status(400).json({ error: 'Missing requestId or decision' });
+      return;
     }
+
+    const bridge = InteractionHandler.permissionRegistry.get(requestId);
+    if (!bridge) {
+      res.status(404).json({ error: 'Permission request not found or already resolved' });
+      return;
+    }
+
+    if (decision === 'always') {
+      bridge.resolvePermission(requestId, { behavior: 'allow', alwaysAllow: true });
+    } else if (decision === 'allow') {
+      bridge.resolvePermission(requestId, { behavior: 'allow' });
+    } else {
+      bridge.resolvePermission(requestId, { behavior: 'deny', message: 'Denied from Web UI' });
+    }
+
+    res.json({ success: true });
+  });
+
+  router.post('/resolve-question', (req: Request, res: Response) => {
+    const { requestId, answer } = req.body as { requestId?: string; answer?: string | null };
+
+    if (!requestId) {
+      res.status(400).json({ error: 'Missing requestId' });
+      return;
+    }
+
+    const bridge = InteractionHandler.questionRegistry.get(requestId);
+    if (!bridge) {
+      res.status(404).json({ error: 'Question request not found or already resolved' });
+      return;
+    }
+
+    if (answer === null || answer === undefined) {
+      bridge.resolveQuestion(requestId, { answer: null });
+    } else {
+      bridge.resolveQuestion(requestId, { answer });
+    }
+
+    res.json({ success: true });
   });
 
   return router;

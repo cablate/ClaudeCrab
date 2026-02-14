@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import type { ActivityEvent } from '../../types/activity.js';
+import type { InteractionEvent } from '../../types/events.js';
 import { getEventBus } from '../../core/EventBus.js';
 import { logger } from '../../utils/logger.js';
 
@@ -18,6 +19,7 @@ export class SSEBroadcaster {
   constructor() {
     const eventBus = getEventBus();
     eventBus.on('activity', (event: ActivityEvent) => this.broadcast(event));
+    eventBus.on('interaction', (event: InteractionEvent) => this.broadcastRaw(event as unknown as Record<string, unknown>));
 
     // Send periodic heartbeat to keep connections alive through proxies
     this.heartbeatTimer = setInterval(() => {
@@ -62,6 +64,19 @@ export class SSEBroadcaster {
    * Broadcast an activity event to all connected SSE clients.
    */
   private broadcast(event: ActivityEvent): void {
+    if (this.clients.size === 0) return;
+
+    const data = `data: ${JSON.stringify(event)}\n\n`;
+    for (const client of this.clients) {
+      try {
+        client.write(data);
+      } catch {
+        this.clients.delete(client);
+      }
+    }
+  }
+
+  private broadcastRaw(event: Record<string, unknown>): void {
     if (this.clients.size === 0) return;
 
     const data = `data: ${JSON.stringify(event)}\n\n`;

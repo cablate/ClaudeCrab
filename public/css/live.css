@@ -962,6 +962,108 @@ body {
 }
 
 /* ============================================
+   INTERACTION PROMPTS — Galgame 選択肢 Style
+   ============================================ */
+.interaction-prompt {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(40, 35, 60, 0.6);
+  border: 1px solid rgba(180, 160, 220, 0.25);
+  border-radius: 12px;
+  animation: promptFadeIn 0.3s ease;
+}
+
+@keyframes promptFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.prompt-label {
+  font-size: 0.75rem;
+  color: rgba(200, 180, 240, 0.8);
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+  letter-spacing: 0.03em;
+}
+
+.prompt-detail {
+  font-size: 0.8rem;
+  color: rgba(220, 225, 245, 0.85);
+  margin-bottom: 0.6rem;
+  line-height: 1.4;
+}
+
+.prompt-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.choice-btn {
+  padding: 0.5rem 0.8rem;
+  background: rgba(60, 55, 90, 0.5);
+  border: 1px solid rgba(150, 140, 200, 0.25);
+  border-radius: 8px;
+  color: rgba(230, 225, 250, 0.9);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.choice-btn:hover {
+  background: rgba(80, 75, 120, 0.6);
+  border-color: rgba(170, 160, 230, 0.4);
+  transform: translateX(4px);
+}
+
+.choice-btn:active {
+  transform: translateX(2px) scale(0.98);
+}
+
+/* Permission-specific button colors */
+.choice-allow {
+  border-color: rgba(100, 200, 150, 0.3);
+}
+.choice-allow:hover {
+  background: rgba(60, 120, 90, 0.4);
+  border-color: rgba(100, 200, 150, 0.5);
+}
+
+.choice-always {
+  border-color: rgba(100, 160, 220, 0.3);
+}
+.choice-always:hover {
+  background: rgba(50, 90, 140, 0.4);
+  border-color: rgba(100, 160, 220, 0.5);
+}
+
+.choice-deny {
+  border-color: rgba(220, 120, 120, 0.3);
+}
+.choice-deny:hover {
+  background: rgba(140, 60, 60, 0.4);
+  border-color: rgba(220, 120, 120, 0.5);
+}
+
+/* Question option buttons */
+.choice-option {
+  border-color: rgba(160, 140, 220, 0.3);
+}
+.choice-option:hover {
+  background: rgba(80, 65, 130, 0.5);
+  border-color: rgba(180, 160, 240, 0.5);
+}
+
+/* Resolved state */
+.prompt-resolved {
+  font-size: 0.8rem;
+  color: rgba(160, 200, 170, 0.9);
+  padding: 0.4rem 0;
+  font-weight: 500;
+}
+
+/* ============================================
    BACKLOG MODAL — Star Rail style
    ============================================ */
 .backlog-overlay {

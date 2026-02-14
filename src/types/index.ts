@@ -59,6 +59,7 @@ export {
   type SessionStateChangedPayload,
   type GroupMessagePayload,
   type BotRepliedPayload,
+  type InteractionEvent,
 } from './events.js';
 
 // Error types

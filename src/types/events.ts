@@ -44,6 +44,9 @@ export interface EventMap {
 
   /** Fired when an agent activity occurs (v2.0 Characters Come Alive) */
   'activity': import('./activity.js').ActivityEvent;
+
+  /** Fired when an interactive prompt needs user response (ADR-033) */
+  'interaction': InteractionEvent;
 }
 
 /**
@@ -140,6 +143,23 @@ export interface SessionStateChangedPayload {
 }
 
 /**
+ * Interactive prompt event (ADR-033: Web UI galgame-style choices)
+ */
+export interface InteractionEvent {
+  type: 'permission_request' | 'question_request';
+  requestId: string;
+  agentId: string;
+  // Permission fields
+  toolName?: string;
+  decisionReason?: string;
+  // Question fields
+  question?: string;
+  header?: string;
+  options?: Array<{ label: string; description: string }>;
+  multiSelect?: boolean;
+}
+
+/**
  * Event handler type
  */
 export type EventHandler<K extends keyof EventMap> = (
@@ -166,4 +186,5 @@ export const EVENT_NAMES: EventName[] = [
   'error',
   'group:message',
   'bot:replied',
+  'interaction',
 ];

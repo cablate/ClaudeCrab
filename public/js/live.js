@@ -347,12 +347,21 @@ function connectSSE() {
   source.addEventListener('open', () => {
     if (dot) dot.classList.add('connected');
     sseRetryDelay = 1000;
-    showLiveToast('已連線', 'success');
   });
 }
 
 // --- Handle incoming activity event ---
 function handleActivityEvent(event) {
+  // ADR-033: Interactive hooks (permission/question prompts)
+  if (event.type === 'permission_request') {
+    showPermissionPrompt(event);
+    return;
+  }
+  if (event.type === 'question_request') {
+    showQuestionPrompt(event);
+    return;
+  }
+
   syncAgentState(event);
   updateSpriteStatus(event);
 
@@ -457,13 +466,7 @@ function syncAgentState(event) {
 // --- Typewriter effect ---
 const activeTypewriters = new WeakMap();
 
-function renderMarkdown(text) {
-  if (typeof marked === 'undefined') return escapeHtml(text);
-  marked.setOptions({ breaks: true, gfm: true });
-  return marked.parse(text);
-}
-
-function typewriterEffect(el, text, speed = 30, useMarkdown = false) {
+function typewriterEffect(el, text, speed = 30) {
   const prev = activeTypewriters.get(el);
   if (prev) clearTimeout(prev);
 
@@ -477,7 +480,6 @@ function typewriterEffect(el, text, speed = 30, useMarkdown = false) {
       activeTypewriters.set(el, timer);
     } else {
       activeTypewriters.delete(el);
-      if (useMarkdown) el.innerHTML = renderMarkdown(text);
     }
   }
   type();
@@ -608,13 +610,13 @@ async function fetchStats() {
 }
 
 // Format a single event for dialogue display (portrait main text or history item)
-function formatDialogueEvent(e) {
+function formatDialogueEvent(e, { truncate = true } = {}) {
   const type = e.type;
   if (type === 'workflow') {
     if (e.phase === 'task_received' && e.metadata?.taskContent) {
       const content = String(e.metadata.taskContent);
-      const truncated = content.length > 60 ? content.substring(0, 60) + '...' : content;
-      return { icon: '📩', text: truncated, cssClass: 'dialogue-user-msg', speed: 20 };
+      const text = truncate && content.length > 60 ? content.substring(0, 60) + '...' : content;
+      return { icon: '📩', text, cssClass: 'dialogue-user-msg', speed: 20 };
     }
     const label = WORKFLOW_LABELS[e.phase] || e.message;
     const phaseIcon = WORKFLOW_ICONS[e.phase] || '⚙️';
@@ -889,7 +891,7 @@ function updatePortraitContent(agentId) {
       if (latestEvent) {
         const fmt = formatDialogueEvent(latestEvent);
         textEl.className = `dialogue-text ${fmt.cssClass}`;
-        typewriterEffect(textEl, fmt.text, fmt.speed, latestEvent.type === 'reply');
+        typewriterEffect(textEl, fmt.text, fmt.speed);
       } else {
         textEl.className = 'dialogue-text';
         textEl.textContent = defaultBubble();
@@ -902,7 +904,7 @@ function buildBacklogHTML(events) {
   const TYPE_LABELS = { mutter: '獨白', reaction: '心聲', workflow: '系統', reply: '回覆' };
   const MSG_CLASS = { mutter: 'thought', reaction: 'thought', workflow: 'workflow-msg', reply: 'reply-msg' };
   return events.map(e => {
-    const fmt = formatDialogueEvent(e);
+    const fmt = formatDialogueEvent(e, { truncate: false });
     const moodEmoji = MOOD_EMOJI[e.mood] || '';
     const typeLabel = TYPE_LABELS[e.type] || e.type;
     const msgClass = MSG_CLASS[e.type] || '';
@@ -914,7 +916,7 @@ function buildBacklogHTML(events) {
         <span class="backlog-type type-${e.type}">${typeLabel}</span>
         <span class="backlog-time">${relativeTime(e.timestamp)}</span>
       </div>
-      <div class="backlog-msg ${isUserMsg ? 'user-msg' : msgClass}">${e.type === 'reply' ? renderMarkdown(fmt.text) : escapeHtml(fmt.text)}</div>
+      <div class="backlog-msg ${isUserMsg ? 'user-msg' : msgClass}">${escapeHtml(fmt.text)}</div>
     </div>`;
   }).join('');
 }
@@ -1042,6 +1044,9 @@ async function sendMessageToAgent(agentId, text) {
     sendBtn.querySelector('.send-text').textContent = '傳送中...';
   }
 
+  // Disable quick-reply buttons during send
+  document.querySelectorAll('.quick-reply-btn').forEach(btn => btn.disabled = true);
+
   // Clear input immediately
   if (input) input.value = '';
 
@@ -1082,7 +1087,115 @@ async function sendMessageToAgent(agentId, text) {
       sendBtn.disabled = false;
       sendBtn.querySelector('.send-text').textContent = '送出';
     }
+    document.querySelectorAll('.quick-reply-btn').forEach(btn => btn.disabled = false);
   }
+}
+
+// --- ADR-033: Interactive Prompts (Galgame Choices) ---
+
+function showPermissionPrompt(event) {
+  if (portraitOpenAgentId !== event.agentId) return;
+
+  const container = document.querySelector('.dialogue-quick-replies');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="interaction-prompt">
+      <div class="prompt-label">🔐 工具授權請求</div>
+      <div class="prompt-detail">${escapeHtml(event.toolName || '')}${event.decisionReason ? ' — ' + escapeHtml(event.decisionReason) : ''}</div>
+      <div class="prompt-choices">
+        <button class="choice-btn choice-allow" onclick="resolvePermission('${event.requestId}', 'allow')">允許</button>
+        <button class="choice-btn choice-always" onclick="resolvePermission('${event.requestId}', 'always')">永遠允許</button>
+        <button class="choice-btn choice-deny" onclick="resolvePermission('${event.requestId}', 'deny')">拒絕</button>
+      </div>
+    </div>
+  `;
+}
+
+function showQuestionPrompt(event) {
+  if (portraitOpenAgentId !== event.agentId) return;
+
+  const container = document.querySelector('.dialogue-quick-replies');
+  if (!container) return;
+
+  const optionButtons = (event.options || []).map((opt, i) =>
+    `<button class="choice-btn choice-option" onclick="resolveQuestion('${event.requestId}', '${escapeHtml(opt.label)}')" title="${escapeHtml(opt.description)}">${escapeHtml(opt.label)}</button>`
+  ).join('');
+
+  container.innerHTML = `
+    <div class="interaction-prompt">
+      <div class="prompt-label">❓ ${escapeHtml(event.header || '選擇')}</div>
+      <div class="prompt-detail">${escapeHtml(event.question || '')}</div>
+      <div class="prompt-choices">
+        ${optionButtons}
+        <button class="choice-btn choice-deny" onclick="resolveQuestion('${event.requestId}', null)">取消</button>
+      </div>
+    </div>
+  `;
+}
+
+async function resolvePermission(requestId, decision) {
+  const container = document.querySelector('.interaction-prompt');
+  if (container) {
+    container.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = true);
+  }
+
+  try {
+    const res = await fetch('/api/messages/resolve-permission', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId, decision })
+    });
+    if (!res.ok) throw new Error('Failed');
+
+    const label = decision === 'allow' ? '✅ 已允許' : decision === 'always' ? '✅ 永遠允許' : '❌ 已拒絕';
+    if (container) container.innerHTML = `<div class="prompt-resolved">${label}</div>`;
+    setTimeout(restoreQuickReplies, 2000);
+  } catch (err) {
+    console.error('resolvePermission error:', err);
+    showLiveToast('操作失敗', 'error');
+    if (container) container.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = false);
+  }
+}
+
+async function resolveQuestion(requestId, answer) {
+  const container = document.querySelector('.interaction-prompt');
+  if (container) {
+    container.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = true);
+  }
+
+  try {
+    const res = await fetch('/api/messages/resolve-question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId, answer })
+    });
+    if (!res.ok) throw new Error('Failed');
+
+    const label = answer ? `✅ ${escapeHtml(answer)}` : '❌ 已取消';
+    if (container) container.innerHTML = `<div class="prompt-resolved">${label}</div>`;
+    setTimeout(restoreQuickReplies, 2000);
+  } catch (err) {
+    console.error('resolveQuestion error:', err);
+    showLiveToast('操作失敗', 'error');
+    if (container) container.querySelectorAll('.choice-btn').forEach(btn => btn.disabled = false);
+  }
+}
+
+function restoreQuickReplies() {
+  const container = document.querySelector('.dialogue-quick-replies');
+  if (!container) return;
+  container.innerHTML = `
+    <button class="quick-reply-btn" data-text="最近怎麼樣？">最近怎麼樣？</button>
+    <button class="quick-reply-btn" data-text="有什麼需要幫忙的嗎？">有什麼需要幫忙的嗎？</button>
+    <button class="quick-reply-btn" data-text="聊聊天吧">聊聊天吧</button>
+  `;
+  // Re-attach handlers
+  container.querySelectorAll('.quick-reply-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (portraitOpenAgentId) sendMessageToAgent(portraitOpenAgentId, btn.dataset.text);
+    });
+  });
 }
 
 // Toast notification for Live page
@@ -1136,106 +1249,6 @@ function initDialogueInput() {
     });
   }
 }
-
-// --- Context Menu ---
-
-let contextMenuEl = null;
-
-function createContextMenu() {
-  const menu = document.createElement('div');
-  menu.className = 'ctx-menu';
-  menu.id = 'ctx-menu';
-  menu.innerHTML = `
-    <button class="ctx-item" data-action="chat">💬 對話</button>
-    <button class="ctx-item" data-action="send">✉️ 傳送訊息</button>
-    <button class="ctx-item" data-action="history">📜 歷史紀錄</button>
-    <div class="ctx-divider"></div>
-    <button class="ctx-item" data-action="filter">🔍 篩選動態</button>
-  `;
-  document.body.appendChild(menu);
-  contextMenuEl = menu;
-
-  // Handle menu item clicks
-  menu.addEventListener('click', (e) => {
-    const item = e.target.closest('.ctx-item');
-    if (!item) return;
-
-    const action = item.dataset.action;
-    const agentId = menu.dataset.agentId;
-    const agent = agentCards[agentId];
-    if (!agent) { hideContextMenu(); return; }
-
-    switch (action) {
-      case 'chat':
-        openPortrait(agent);
-        break;
-      case 'send':
-        openPortrait(agent);
-        // Focus input after portrait opens
-        setTimeout(() => {
-          const input = document.getElementById('dialogue-input');
-          if (input) input.focus();
-        }, 100);
-        break;
-      case 'history':
-        openPortrait(agent);
-        setTimeout(() => openBacklog(), 100);
-        break;
-      case 'filter':
-        // Click the agent filter button in activity feed
-        const filterBtn = document.querySelector(`.filter-btn[data-filter="agent:${agentId}"]`);
-        if (filterBtn) filterBtn.click();
-        break;
-    }
-    hideContextMenu();
-  });
-}
-
-function showContextMenu(e, agentId) {
-  e.preventDefault();
-  if (!contextMenuEl) createContextMenu();
-
-  contextMenuEl.dataset.agentId = agentId;
-
-  // Position at cursor, keep within viewport
-  const x = Math.min(e.clientX, window.innerWidth - 180);
-  const y = Math.min(e.clientY, window.innerHeight - 200);
-  contextMenuEl.style.left = x + 'px';
-  contextMenuEl.style.top = y + 'px';
-  contextMenuEl.classList.add('visible');
-}
-
-function hideContextMenu() {
-  if (contextMenuEl) contextMenuEl.classList.remove('visible');
-}
-
-// Close on click outside or Escape
-document.addEventListener('click', (e) => {
-  if (contextMenuEl && !contextMenuEl.contains(e.target)) {
-    hideContextMenu();
-  }
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') hideContextMenu();
-});
-
-// Attach context menu to sprites (delegated on office-scene)
-document.addEventListener('contextmenu', (e) => {
-  // Sprite right-click
-  const sprite = e.target.closest('.agent-sprite');
-  if (sprite) {
-    const agentId = sprite.id.replace('sprite-', '');
-    showContextMenu(e, agentId);
-    return;
-  }
-  // Roster card right-click
-  const card = e.target.closest('.roster-card');
-  if (card) {
-    const agentId = card.id.replace('roster-', '');
-    showContextMenu(e, agentId);
-    return;
-  }
-});
 
 // --- Start ---
 document.addEventListener('DOMContentLoaded', init);
