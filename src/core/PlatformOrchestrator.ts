@@ -131,12 +131,17 @@ export class PlatformOrchestrator {
         if (this.personalityCache.has(agentId)) {
           personality = this.personalityCache.get(agentId);
         } else {
-          const soulPath = path.join(agent.path, '.claude', 'skills', 'persona', 'references', 'soul.md');
+          const personaDir = path.join(agent.path, '.claude', 'skills', 'persona', 'references');
+          const soulPath = path.join(personaDir, 'soul.md');
+          const identityPath = path.join(personaDir, 'identity.md');
+          let combined = '';
+          try { combined += readFileSync(identityPath, 'utf-8').trim() + '\n\n'; } catch { /* optional */ }
           try {
-            personality = readFileSync(soulPath, 'utf-8');
+            combined += readFileSync(soulPath, 'utf-8').trim();
           } catch {
-            personality = agent.config.description;
+            if (!combined) { personality = agent.config.description; }
           }
+          if (!personality) { personality = combined.trim() || agent.config.description; }
           this.personalityCache.set(agentId, personality);
         }
         return {

@@ -159,7 +159,7 @@ export class ReactionGenerator {
       ? `\n你最近的內心獨白（絕對禁止重複類似的句型、開頭、主題）：\n${recentMessages.map(m => `- "${m}"`).join('\n')}`
       : '';
 
-    const prompt = `你是 ${agentName}，一個虛擬辦公室裡的員工。${personality ? `你的個性：\n${personality.substring(0, 500)}` : ''}
+    const prompt = `你是 ${agentName}，一個虛擬辦公室裡的員工。${personality ? `你的個性：\n${personality}` : ''}
 
 現在的狀況：${phaseDesc}${contextHint}${recentLine}
 
@@ -198,7 +198,7 @@ ${moodHint}
       ? `\n你最近說過的（絕對禁止重複類似的句型、開頭、主題）：\n${recentMessages.map(m => `- "${m}"`).join('\n')}`
       : '';
 
-    const prompt = `你是 ${agentName}。${personality ? `你的個性：\n${personality.substring(0, 500)}` : ''}
+    const prompt = `你是 ${agentName}。${personality ? `你的個性：\n${personality}` : ''}
 
 現在是${timeContext}，${scenario}。${recentLine}
 用你的個性說一句內心碎念（口語化、15 字以內）。

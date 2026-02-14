@@ -560,16 +560,34 @@ export class AppBootstrap {
       const agent = agentLoader.get(agentId);
       if (!agent) return undefined;
 
-      const soulPath = path.join(agent.path, '.claude', 'skills', 'persona', 'references', 'soul.md');
+      const personaDir = path.join(agent.path, '.claude', 'skills', 'persona', 'references');
+      const soulPath = path.join(personaDir, 'soul.md');
+      const identityPath = path.join(personaDir, 'identity.md');
+
+      let combined = '';
+
+      // Read identity.md first (name, role, appearance — brief context)
       try {
-        const content = readFileSync(soulPath, 'utf-8');
-        personalityCache.set(agentId, content);
-        return content;
+        combined += readFileSync(identityPath, 'utf-8').trim() + '\n\n';
       } catch {
-        const desc = agent.config.description;
-        personalityCache.set(agentId, desc);
-        return desc;
+        // identity.md is optional
       }
+
+      // Read soul.md (personality, tone, quirks — core content)
+      try {
+        combined += readFileSync(soulPath, 'utf-8').trim();
+      } catch {
+        // Fall back to agent.json description if no soul.md
+        if (!combined) {
+          const desc = agent.config.description;
+          personalityCache.set(agentId, desc);
+          return desc;
+        }
+      }
+
+      const result = combined.trim() || undefined;
+      personalityCache.set(agentId, result);
+      return result;
     };
   }
 
