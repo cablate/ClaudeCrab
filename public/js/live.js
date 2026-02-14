@@ -457,7 +457,13 @@ function syncAgentState(event) {
 // --- Typewriter effect ---
 const activeTypewriters = new WeakMap();
 
-function typewriterEffect(el, text, speed = 30) {
+function renderMarkdown(text) {
+  if (typeof marked === 'undefined') return escapeHtml(text);
+  marked.setOptions({ breaks: true, gfm: true });
+  return marked.parse(text);
+}
+
+function typewriterEffect(el, text, speed = 30, useMarkdown = false) {
   const prev = activeTypewriters.get(el);
   if (prev) clearTimeout(prev);
 
@@ -471,6 +477,7 @@ function typewriterEffect(el, text, speed = 30) {
       activeTypewriters.set(el, timer);
     } else {
       activeTypewriters.delete(el);
+      if (useMarkdown) el.innerHTML = renderMarkdown(text);
     }
   }
   type();
@@ -882,7 +889,7 @@ function updatePortraitContent(agentId) {
       if (latestEvent) {
         const fmt = formatDialogueEvent(latestEvent);
         textEl.className = `dialogue-text ${fmt.cssClass}`;
-        typewriterEffect(textEl, fmt.text, fmt.speed);
+        typewriterEffect(textEl, fmt.text, fmt.speed, latestEvent.type === 'reply');
       } else {
         textEl.className = 'dialogue-text';
         textEl.textContent = defaultBubble();
@@ -907,7 +914,7 @@ function buildBacklogHTML(events) {
         <span class="backlog-type type-${e.type}">${typeLabel}</span>
         <span class="backlog-time">${relativeTime(e.timestamp)}</span>
       </div>
-      <div class="backlog-msg ${isUserMsg ? 'user-msg' : msgClass}">${escapeHtml(fmt.text)}</div>
+      <div class="backlog-msg ${isUserMsg ? 'user-msg' : msgClass}">${e.type === 'reply' ? renderMarkdown(fmt.text) : escapeHtml(fmt.text)}</div>
     </div>`;
   }).join('');
 }
