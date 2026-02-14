@@ -269,6 +269,7 @@ async function init() {
   initFilters();
   updateStats();
   updatePageTitle();
+  initDialogueInput();
 }
 
 // --- Load initial agent states ---
@@ -1020,6 +1021,76 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// --- Dialogue Input: Send messages to agents from Web UI ---
+
+async function sendMessageToAgent(agentId, text) {
+  const sendBtn = document.getElementById('dialogue-send-btn');
+  const input = document.getElementById('dialogue-input');
+
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.querySelector('.send-text').textContent = '傳送中...';
+  }
+
+  try {
+    const response = await fetch('/api/messages/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId, text })
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to send message');
+    }
+
+    if (input) input.value = '';
+
+  } catch (error) {
+    console.error('Send message error:', error);
+    alert('傳送失敗：' + error.message);
+  } finally {
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.querySelector('.send-text').textContent = '送出';
+    }
+  }
+}
+
+function initDialogueInput() {
+  // Quick reply buttons
+  document.querySelectorAll('.quick-reply-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!portraitOpenAgentId) return;
+      sendMessageToAgent(portraitOpenAgentId, btn.dataset.text);
+    });
+  });
+
+  // Send button
+  const sendBtn = document.getElementById('dialogue-send-btn');
+  const input = document.getElementById('dialogue-input');
+
+  if (sendBtn && input) {
+    sendBtn.addEventListener('click', () => {
+      const text = input.value.trim();
+      if (text && portraitOpenAgentId) {
+        sendMessageToAgent(portraitOpenAgentId, text);
+      }
+    });
+
+    // Enter to send, Shift+Enter for newline
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const text = input.value.trim();
+        if (text && portraitOpenAgentId) {
+          sendMessageToAgent(portraitOpenAgentId, text);
+        }
+      }
+    });
+  }
+}
 
 // --- Start ---
 document.addEventListener('DOMContentLoaded', init);

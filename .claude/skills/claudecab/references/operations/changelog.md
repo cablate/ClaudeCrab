@@ -6,7 +6,29 @@
 
 ## 版本歷史
 
-### v1.32 - Live Page Event 重構 + Reply Event（當前版本）
+### v1.33 - Live Page 互動輸入功能（當前版本）
+
+**發布日期**：2026-02-14
+
+**Web UI → Agent 訊息傳送**：
+- 新增 `POST /api/messages/send` endpoint（`src/webui/api/messages.api.ts`）
+- Web UI 與 Telegram 完全共享 session（同一個 session key：`telegram::agentId::userId`）
+- 使用 `ALLOWED_USERS[0]` 作為 owner userId，零新增環境變數
+- 走完全相同的 `processMessage()` 流程，回應同時出現在 Web 和 Telegram
+
+**Portrait 面板互動 UI**：
+- Quick Reply 按鈕（3 個預設選項）+ 自由輸入 textarea
+- Enter 送出 / Shift+Enter 換行 / Loading state
+- 樣式融入 Galgame 美學（漸層按鈕、半透明輸入框）
+
+**對話內容改善**：
+- `emitReply()` 移除 200 字元截斷，全文傳送
+- `MessageProcessor` 移除 reply preview 截斷
+- `.dialogue-box` 加入 `max-height: 40vh` + `overflow-y: auto` 支援長文滾動
+
+---
+
+### v1.32 - Live Page Event 重構 + Reply Event
 
 **發布日期**：2026-02-13
 

@@ -746,8 +746,7 @@ export class MessageProcessor {
 
       // v2.0: Emit reply event for Live backlog
       if (fullResponse.length > 0) {
-        const replyPreview = fullResponse.length > 200 ? fullResponse.substring(0, 200) + '...' : fullResponse;
-        this.activityService?.emitReply(agentId, replyPreview);
+        this.activityService?.emitReply(agentId, fullResponse);
       }
 
       // v2.0: Status change only for completed (no Haiku)

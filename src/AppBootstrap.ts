@@ -125,7 +125,8 @@ export class AppBootstrap {
       agentLoader,
       sessionManager,
       persistence,
-      activityService
+      activityService,
+      messageProcessor
     );
 
     // v2.0: Start idle mutter scheduler (cost-optimized: 5min interval, 30% chance, 3/hr cap, viewers-only)
@@ -442,6 +443,7 @@ export class AppBootstrap {
     sessionManager: SessionManager,
     persistence: PersistenceLayer | null,
     activityService?: ActivityService,
+    messageProcessor?: MessageProcessor,
   ): Promise<void> {
     if (!this.config.webui.enabled) {
       return;
@@ -484,6 +486,14 @@ export class AppBootstrap {
       const activityRouter = createActivityApiRouter(this.sseBroadcaster, activityService, agentLoader);
       this.webUIServer.getApp().use('/api/activity', activityRouter);
       logger.info('Activity API + SSE broadcaster registered');
+    }
+
+    // v3.0: Register messages API for Web UI → Agent communication (shares Telegram session)
+    if (messageProcessor) {
+      const { createMessagesApiRouter } = await import('./webui/api/messages.api.js');
+      const messagesRouter = createMessagesApiRouter(messageProcessor, agentLoader);
+      this.webUIServer!.getApp().use('/api/messages', messagesRouter);
+      logger.info('Messages API registered (Web UI → Agent)');
     }
 
     await this.webUIServer.start();

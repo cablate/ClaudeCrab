@@ -172,8 +172,7 @@ export class ActivityService {
    */
   emitReply(agentId: string, message: string, metadata?: Record<string, unknown>): void {
     this.trackActivity(agentId);
-    const truncated = message.length > 200 ? message.substring(0, 200) + '...' : message;
-    const event = this.createEvent(agentId, 'reply', truncated, undefined, undefined, metadata);
+    const event = this.createEvent(agentId, 'reply', message, undefined, undefined, metadata);
     this.pushAndEmit(event);
   }
 
