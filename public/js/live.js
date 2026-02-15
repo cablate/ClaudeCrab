@@ -270,6 +270,10 @@ async function init() {
   updateStats();
   updatePageTitle();
   initDialogueInput();
+
+  // Day/night sky background
+  updateSkyBackground();
+  setInterval(updateSkyBackground, 60_000);
 }
 
 // --- Load initial agent states ---
@@ -1314,6 +1318,36 @@ document.addEventListener('contextmenu', (e) => {
   const card = e.target.closest('.roster-card');
   if (card) { showContextMenu(e, card.id.replace('roster-', '')); return; }
 });
+
+// --- Day/Night Sky Background ---
+const SKY_BACKGROUNDS = {
+  dawn:  '/static/images/bg-dawn.png',
+  day:   '/static/images/bg-day.png',
+  dusk:  '/static/images/bg-dusk.png',
+  night: '/static/images/bg-night.png',
+};
+
+let currentTimePeriod = null;
+
+function getTimePeriod() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 8) return 'dawn';
+  if (hour >= 8 && hour < 17) return 'day';
+  if (hour >= 17 && hour < 19) return 'dusk';
+  return 'night';
+}
+
+function updateSkyBackground() {
+  const period = getTimePeriod();
+  if (period === currentTimePeriod) return;
+  currentTimePeriod = period;
+
+  const skyLayer = document.getElementById('sky-layer');
+  if (!skyLayer) return;
+
+  skyLayer.style.backgroundImage = `url('${SKY_BACKGROUNDS[period]}')`;
+  console.log(`[Sky] switched to ${period}`);
+}
 
 // --- Start ---
 document.addEventListener('DOMContentLoaded', init);
