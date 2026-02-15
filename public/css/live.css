@@ -761,20 +761,19 @@ body {
   background: linear-gradient(135deg, rgba(220,180,200,0.92), rgba(200,160,185,0.9));
   border: 1px solid rgba(180,130,160,0.4);\n  border-bottom: none;
   border-radius: 12px 12px 0 0;
-  width: fit-content;
 }
 .dialogue-name {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #3a2535;\n  letter-spacing: 0.05em;
+  color: #2a1020;\n  letter-spacing: 0.05em;
 }
 .dialogue-status {
   font-size: 0.75rem;
   padding: 2px 10px;
   border-radius: 10px;
   background: rgba(160,100,140,0.15);
-  color: rgba(90,50,75,0.8);
-  border: 1px solid rgba(160,100,140,0.25);
+  color: rgba(60,25,45,0.85);
+  border: 1px solid rgba(160,100,140,0.3);
 }
 
 /* Dialogue box - main monologue display */
@@ -807,14 +806,14 @@ body {
 .dialogue-text {
   font-size: 1.05rem;
   line-height: 1.8;
-  color: #3a2535;
+  color: #2a1020;
   white-space: pre-wrap;
   letter-spacing: 0.02em;
 }
 /* Dialogue type styles — portrait main text */
 .dialogue-thought {
   font-style: italic;
-  color: rgba(80,50,70,0.6);
+  color: rgba(50,20,40,0.65);
 }
 .dialogue-user-msg {
   color: rgba(60,90,140,0.9);
@@ -826,7 +825,7 @@ body {
   color: rgba(80,60,75,0.5);
 }
 .dialogue-reply {
-  color: #3a2535;
+  color: #2a1020;
   white-space: normal;
 }
 /* Markdown inside dialogue */
@@ -837,8 +836,8 @@ body {
 .dialogue-text code { background: rgba(120,80,110,0.12); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.92em; }
 .dialogue-text pre { background: rgba(60,40,55,0.08); border: 1px solid rgba(120,80,110,0.15); border-radius: 8px; padding: 0.75em 1em; overflow-x: auto; margin: 0.5em 0; }
 .dialogue-text pre code { background: none; padding: 0; }
-.dialogue-text strong { color: #2a1525; }
-.dialogue-text em { color: rgba(80,45,70,0.8); }
+.dialogue-text strong { color: #1a0515; }
+.dialogue-text em { color: rgba(50,20,40,0.85); }
 .dialogue-text blockquote { border-left: 2px solid rgba(100,140,255,0.3); padding-left: 0.75em; color: rgba(180,190,220,0.7); margin: 0.4em 0; }
 /* Markdown in backlog */
 .backlog-msg p { margin: 0 0 0.4em; }
@@ -956,20 +955,19 @@ body {
 
 /* History toggle — opens backlog modal */
 .dialogue-history-toggle {
-  background: rgba(100,140,255,0.1);
-  border: 1px solid rgba(100,140,255,0.15);
-  color: rgba(180,200,255,0.7);
-  font-size: 0.78rem;
-  padding: 4px 16px;
-  border-radius: 0 0 8px 8px;
+  margin-left: auto;
+  background: rgba(160,100,140,0.15);
+  border: 1px solid rgba(160,110,140,0.3);
+  color: rgba(60,25,45,0.7);
+  font-size: 0.72rem;
+  padding: 2px 10px;
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
-  align-self: flex-start;
-  margin-top: -1px;
 }
 .dialogue-history-toggle:hover {
-  background: rgba(100,140,255,0.25);
-  color: rgba(220,230,255,0.95);
+  background: rgba(160,100,140,0.25);
+  color: rgba(40,15,30,0.9);
 }
 
 /* ============================================
@@ -990,12 +988,10 @@ body {
   display: block;
   width: 100%;
   padding: 0.6rem 1.2rem;
-  background: rgba(20, 18, 40, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(160, 150, 220, 0.2);
+  background: rgba(235, 210, 225, 0.9);
+  border: 1px solid rgba(170, 120, 150, 0.5);
   border-radius: 6px;
-  color: rgba(230, 230, 250, 0.9);
+  color: rgba(45, 15, 35, 0.95);
   font-size: 0.82rem;
   text-align: center;
   cursor: pointer;
@@ -1025,16 +1021,16 @@ body {
 
 .quick-reply-btn:hover,
 .choice-btn:hover {
-  background: rgba(45, 40, 80, 0.7);
-  border-color: rgba(180, 170, 240, 0.45);
-  box-shadow: 0 0 12px rgba(150, 140, 220, 0.15);
+  background: rgba(225, 195, 212, 0.95);
+  border-color: rgba(160, 100, 140, 0.6);
+  box-shadow: 0 0 12px rgba(200, 150, 180, 0.2);
   transform: translateY(-1px);
 }
 
 .quick-reply-btn:active,
 .choice-btn:active {
   transform: scale(0.98);
-  background: rgba(60, 55, 100, 0.7);
+  background: rgba(215, 185, 200, 0.85);
 }
 
 .quick-reply-btn:disabled,
@@ -1125,12 +1121,10 @@ body {
 .dialogue-input {
   flex: 1;
   padding: 0.5rem 0.7rem;
-  background: rgba(20, 18, 40, 0.45);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(150, 140, 200, 0.2);
+  background: rgba(248, 235, 242, 0.92);
+  border: 1px solid rgba(170, 120, 150, 0.45);
   border-radius: 6px;
-  color: rgba(230, 230, 250, 0.95);
+  color: rgba(60, 30, 50, 0.95);
   font-size: 0.82rem;
   font-family: inherit;
   resize: none;
@@ -1140,20 +1134,18 @@ body {
 }
 .dialogue-input:focus {
   outline: none;
-  border-color: rgba(160, 150, 220, 0.5);
-  background: rgba(30, 28, 55, 0.55);
+  border-color: rgba(180, 120, 155, 0.5);
+  background: rgba(255, 245, 250, 0.85);
 }
 .dialogue-input::placeholder {
-  color: rgba(160, 150, 200, 0.35);
+  color: rgba(120, 80, 105, 0.5);
 }
 .dialogue-send-btn {
   padding: 0.5rem 0.9rem;
-  background: rgba(20, 18, 40, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(160, 150, 220, 0.25);
+  background: rgba(200, 150, 175, 0.7);
+  border: 1px solid rgba(180, 120, 155, 0.4);
   border-radius: 6px;
-  color: rgba(230, 230, 250, 0.9);
+  color: rgba(255, 250, 252, 0.95);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -1161,9 +1153,9 @@ body {
   white-space: nowrap;
 }
 .dialogue-send-btn:hover {
-  background: rgba(45, 40, 80, 0.7);
-  border-color: rgba(180, 170, 240, 0.45);
-  box-shadow: 0 0 12px rgba(150, 140, 220, 0.15);
+  background: rgba(190, 130, 160, 0.85);
+  border-color: rgba(170, 110, 145, 0.5);
+  box-shadow: 0 0 12px rgba(200, 150, 180, 0.25);
   transform: translateY(-1px);
 }
 .dialogue-send-btn:active {
@@ -1394,7 +1386,7 @@ body {
   gap: 0.4rem;
   overflow-x: auto;
   z-index: 5;
-  background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.5) 20%, rgba(5,5,15,0.93) 100%);
+  background: linear-gradient(180deg, transparent 0%, rgba(80,45,65,0.4) 20%, rgba(45,25,40,0.75) 100%);
   padding: 1.5rem 1rem 0.5rem;
   justify-content: center;
   align-items: flex-end;
@@ -1408,7 +1400,7 @@ body {
   padding: 0.3rem 0.3rem 0.4rem;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--agent-color, #6B7280) 18%, transparent) 0%,
-                            rgba(10,10,25,0.7) 50%,
+                            rgba(60,35,50,0.6) 50%,
                             color-mix(in srgb, var(--agent-color, #6B7280) 12%, transparent) 100%);
   border: 2px solid color-mix(in srgb, var(--agent-color, #6B7280) 45%, transparent);
   border-radius: 6px;
@@ -1603,7 +1595,7 @@ body {
 /* --- Status Text --- */
 .roster-status-text {
   font-size: 0.55rem;
-  color: rgba(160,170,200,0.5);
+  color: rgba(220,210,230,0.85);
   margin-top: 0.1rem;
   white-space: nowrap;
   letter-spacing: 0.02em;
