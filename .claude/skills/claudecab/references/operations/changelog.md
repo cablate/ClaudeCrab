@@ -6,7 +6,44 @@
 
 ## 版本歷史
 
-### v1.33 - Live Page 互動輸入功能（當前版本）
+### v1.34 - Galgame 美學統一 + 即時串流回覆（當前版本）
+
+**發布日期**：2026-02-16
+
+**即時串流回覆**：
+- `onIntermediateMessage` 回調中新增 `emitReply()` — 每段中間回覆即時推送到 Web UI
+- 結尾 `emitReply()` 改為只送 `result.response`（最後一段），避免重複
+- 原先行為：SDK 全部跑完後才一次送 `fullResponse`；現在：每個 assistant turn 即時串流
+
+**對話框淺粉重設計**：
+- 對話框背景從深藍黑改為淺粉漸層（rgba 235,200,215）
+- 所有文字從白底改為深梅色（#2a1020）提升對比度
+- Quick reply 按鈕、輸入框、送出按鈕、nameplate 全部適配粉色調
+- 歷史紀錄按鈕從對話框下方移到 nameplate 右側（pill 樣式）
+
+**Roster 區粉調統一**：
+- `.party-roster` 漸層從純黑改為暗紫粉（rgba 80,45,65 → rgba 45,25,40）
+- `.roster-card` 底色從深黑改為暗紫粉（rgba 60,35,50）
+- 狀態文字對比度從 0.5 提升至 0.85
+
+**立繪微演出（CSS）**：
+- `task_received` → sprite-jump（跳起）
+- `completed` → sprite-celebrate（閃光粒子）
+- `error` → sprite-error（震動+紅閃）
+- `triggerPhaseAnimation()` 觸發，`animationend` 自動清除
+
+**Markdown 渲染修復**：
+- Portrait 回覆改用 `renderSimpleMarkdown()` 渲染（支援 bold/italic/code/list/heading）
+- typewriterEffect 新增 `markdown` 選項，動畫結束後切換為 HTML
+- 補上遺漏的 italic（`*text*`）支援
+
+**Agent 靜默模式修復**：
+- `MEMORY_STOP_CHECKPOINT` 和 `MEMORY_CHECKPOINT_CONTEXT` 加入靜默模式指令
+- 修復私聊中記憶檢查結果被輸出為可見文字的問題
+
+---
+
+### v1.33 - Live Page 互動輸入功能
 
 **發布日期**：2026-02-14
 

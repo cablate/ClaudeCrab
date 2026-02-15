@@ -570,6 +570,9 @@ export class MessageProcessor {
                   }
                   intermediateMessages.push(text);
 
+                  // Stream reply to Web UI in real-time (not just at the end)
+                  this.activityService?.emitReply(agentId, text);
+
                   // Mark that next tool event should create new status message
                   statusManager?.markNeedNewMessage();
                 },
@@ -745,8 +748,9 @@ export class MessageProcessor {
       this.activityService?.emitWorkflow(agentId, 'completed', '回覆完成');
 
       // v2.0: Emit reply event for Live backlog
-      if (fullResponse.length > 0) {
-        this.activityService?.emitReply(agentId, fullResponse);
+      // Only emit final part here — intermediates were already streamed in real-time
+      if (result.response.length > 0) {
+        this.activityService?.emitReply(agentId, result.response);
       }
 
       // v2.0: Status change only for completed (no Haiku)
