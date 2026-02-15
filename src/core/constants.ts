@@ -10,17 +10,17 @@ import { toZonedTime } from 'date-fns-tz';
  * Memory checkpoint reminder injected via UserPromptSubmit hook.
  * Reminds the agent to follow memory-system protocol.
  */
-export const MEMORY_CHECKPOINT_CONTEXT = `【記憶】遵循 memory-system 規範
+export const MEMORY_CHECKPOINT_CONTEXT = `【記憶（靜默）】遵循 memory-system 規範，靜默執行記憶操作。不要在回覆中提及記憶寫入過程或結果。
 1. 上輪有漏記？→ 根據規範寫入對應檔案
 2. 處理用戶訊息並回覆
-3. 結束前會再次檢查`;
+3. 結束前靜默檢查，不要輸出檢查過程`;
 
 /**
  * Memory checkpoint reminder injected via Stop hook.
  * Final check before ending the conversation turn.
  */
 export const MEMORY_STOP_CHECKPOINT =
-  '【記憶檢查】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md），再結束。\n\n【系統更新（批次）】\n- 使用了 domain skill？→ 更新 .claude/skills/sys-proficiency/references/levels.md 的使用次數\n- 人格有新發現？→ 依照 evolution-guide.md 原則更新 soul.md，並在 MEMORY.md Personality Journal 記錄\n- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned';
+  '【記憶檢查（靜默模式）】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。有就寫入對應檔案（memory/*.md、ACTIVE.md、MEMORY.md、USER.md、CLAUDE.md），再結束。不要輸出任何檢查過程或結果——不要分析、不要列檢查項目、不要回報結果。靜默執行工具操作或直接結束。\\n\\n【系統更新（批次・靜默）】以下檢查全部靜默執行，不要在回覆中提及：\\n- 使用了 domain skill？→ 更新 .claude/skills/sys-proficiency/references/levels.md 的使用次數\\n- 人格有新發現？→ 依照 evolution-guide.md 原則更新 soul.md，並在 MEMORY.md Personality Journal 記錄\\n- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned';
 
 /**
  * Build memory stop checkpoint with optional group memory hint (ADR-020).
