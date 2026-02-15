@@ -660,8 +660,9 @@ function renderSimpleMarkdown(text) {
   html = html.replace(/^###\s+(.+)$/gm, '<strong>$1</strong>');
   html = html.replace(/^##\s+(.+)$/gm, '<strong>$1</strong>');
   html = html.replace(/^#\s+(.+)$/gm, '<strong style="font-size:1.05em">$1</strong>');
-  // Bold **text**
+  // Bold **text** then italic *text*
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   // Inline code `code`
   html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08);padding:0.1em 0.3em;border-radius:3px;font-size:0.9em">$1</code>');
   // Bullet lists (- item or * item)
