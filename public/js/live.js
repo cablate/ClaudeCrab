@@ -470,7 +470,7 @@ function syncAgentState(event) {
 // --- Typewriter effect ---
 const activeTypewriters = new WeakMap();
 
-function typewriterEffect(el, text, speed = 30) {
+function typewriterEffect(el, text, speed = 30, { markdown = false } = {}) {
   const prev = activeTypewriters.get(el);
   if (prev) clearTimeout(prev);
 
@@ -484,6 +484,10 @@ function typewriterEffect(el, text, speed = 30) {
       activeTypewriters.set(el, timer);
     } else {
       activeTypewriters.delete(el);
+      // After typewriter completes, render markdown if requested
+      if (markdown) {
+        el.innerHTML = renderSimpleMarkdown(text);
+      }
     }
   }
   type();
@@ -627,7 +631,7 @@ function formatDialogueEvent(e, { truncate = true } = {}) {
     return { icon: phaseIcon, text: label, cssClass: 'dialogue-workflow', speed: 15 };
   }
   if (type === 'reply') {
-    return { icon: '💬', text: e.message, cssClass: 'dialogue-reply', speed: 20 };
+    return { icon: '💬', text: e.message, cssClass: 'dialogue-reply', speed: 20, markdown: true };
   }
   // mutter / reaction = inner thought
   return { icon: '💭', text: `（${e.message}）`, cssClass: 'dialogue-thought', speed: 35 };
@@ -642,6 +646,31 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+/**
+ * Lightweight markdown renderer for dialogue text.
+ * Supports: line breaks, **bold**, bullet lists (- / *), numbered lists, headings (#),
+ * checkboxes (✅/❌), inline code (`code`).
+ */
+function renderSimpleMarkdown(text) {
+  if (!text) return '';
+  let html = escapeHtml(text);
+  // Headings (### / ## / #)
+  html = html.replace(/^###\s+(.+)$/gm, '<strong>$1</strong>');
+  html = html.replace(/^##\s+(.+)$/gm, '<strong>$1</strong>');
+  html = html.replace(/^#\s+(.+)$/gm, '<strong style="font-size:1.05em">$1</strong>');
+  // Bold **text**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Inline code `code`
+  html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08);padding:0.1em 0.3em;border-radius:3px;font-size:0.9em">$1</code>');
+  // Bullet lists (- item or * item)
+  html = html.replace(/^[\-\*]\s+(.+)$/gm, '&nbsp;&nbsp;• $1');
+  // Numbered lists (1. item)
+  html = html.replace(/^\d+\.\s+(.+)$/gm, (_, content) => '&nbsp;&nbsp;' + content);
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+  return html;
 }
 
 function relativeTime(timestamp) {
@@ -895,7 +924,7 @@ function updatePortraitContent(agentId) {
       if (latestEvent) {
         const fmt = formatDialogueEvent(latestEvent);
         textEl.className = `dialogue-text ${fmt.cssClass}`;
-        typewriterEffect(textEl, fmt.text, fmt.speed);
+        typewriterEffect(textEl, fmt.text, fmt.speed, { markdown: !!fmt.markdown });
       } else {
         textEl.className = 'dialogue-text';
         textEl.textContent = defaultBubble();
@@ -920,7 +949,7 @@ function buildBacklogHTML(events) {
         <span class="backlog-type type-${e.type}">${typeLabel}</span>
         <span class="backlog-time">${relativeTime(e.timestamp)}</span>
       </div>
-      <div class="backlog-msg ${isUserMsg ? 'user-msg' : msgClass}">${escapeHtml(fmt.text)}</div>
+      <div class="backlog-msg ${isUserMsg ? 'user-msg' : msgClass}">${fmt.markdown ? renderSimpleMarkdown(fmt.text) : escapeHtml(fmt.text)}</div>
     </div>`;
   }).join('');
 }
