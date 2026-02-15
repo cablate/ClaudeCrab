@@ -833,12 +833,45 @@ function createAgentSprite(agent, pos) {
   scene.appendChild(sprite);
 }
 
+// --- One-shot sprite micro-animations ---
+const PHASE_ANIMATION_CLASS = {
+  task_received: 'sprite-jump',
+  completed: 'sprite-celebrate',
+  error: 'sprite-error',
+};
+
+function triggerPhaseAnimation(sprite, phase) {
+  const animClass = PHASE_ANIMATION_CLASS[phase];
+  if (!animClass) return;
+
+  // Remove any existing one-shot animation classes
+  sprite.classList.remove('sprite-jump', 'sprite-celebrate', 'sprite-error');
+
+  // Force reflow so re-adding the same class restarts the animation
+  void sprite.offsetWidth;
+
+  sprite.classList.add(animClass);
+
+  // Remove after animation completes
+  const cleanup = () => {
+    sprite.classList.remove(animClass);
+    sprite.removeEventListener('animationend', cleanup);
+  };
+  sprite.addEventListener('animationend', cleanup);
+
+  // Fallback removal in case animationend doesn't fire
+  setTimeout(() => sprite.classList.remove(animClass), 1200);
+}
+
 // --- Update sprite status from event ---
 function updateSpriteStatus(event) {
   const sprite = document.getElementById(`sprite-${event.agentId}`);
   if (!sprite) return;
 
   const phase = event.phase || 'idle';
+
+  // One-shot micro-animations for phase transitions
+  triggerPhaseAnimation(sprite, phase);
 
   // Breathing vs working pulse animation
   if (phase === 'idle' || phase === 'completed') {
