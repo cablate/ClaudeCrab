@@ -8,6 +8,49 @@
 
 ## 版本歷史
 
+### v1.36 - Live 遊戲化後台整合 + UI 重設計
+
+**發布日期**：2026-02-16
+
+**Game Menu（全新）**：
+- 全螢幕 overlay（☰ 按鈕觸發），四個頁籤：用量 / 任務 / 系統 / 成員
+- 用量頁：今日花費、查詢數、IN/OUT tokens、7 天柱狀圖、per-agent 表格
+- 任務頁：進行中 session 列表、關閉/清理操作
+- 系統頁：uptime、memory HP bar、bot 啟停
+- 成員頁：agent 列表、model badge、reload 操作
+- 新增 API：`GET /api/usage/agents?days=N`（per-agent 聚合用量）
+- 未登入時顯示登入提示（檢查 `/api/system/health` 401）
+
+**HUD 資源列擴充**：
+- Header 新增 💰花費 / ⚡查詢 / ⏱uptime（每 60s polling）
+- 點擊 stat → 打開 Game Menu 對應頁籤
+
+**角色屬性面板**：
+- 對話框 nameplate 新增 📊 屬性 toggle
+- 切換時 overlay 在對話文字上方（position absolute 在 dialogue-box 內）
+- 顯示 24h 花費、查詢數、IN/OUT tokens、model、bot 狀態
+
+**Roster 通知徽章**：
+- 有新 personality event 時 roster 卡片顯示紅點脈衝動畫
+- 點進 portrait 後紅點消失
+
+**色系統一（玫瑰/梅色系）**：
+- Game Menu：深藍 `rgba(12,16,40)` → 深梅 `rgba(35,20,32)`，accent 藍 `#60a5fa` → 玫瑰 `#c88caa`
+- Backlog 紀錄面板：全面從藍色改為玫瑰/梅色調
+- 對話框 stats panel / toggle：粉色調統一
+- Canvas 柱狀圖漸層：藍 → 玫瑰
+
+**Activity Feed 側欄改為 overlay**：
+- 從 flex 佈局改為 `position: fixed` 覆蓋模式
+- 預設收起，右側邊緣 toggle 按鈕 ◀/▶ 控制
+- 開關不影響主畫面尺寸
+
+**改動檔案**：
+- `src/webui/api/usage.api.ts` — 新增 `/agents` endpoint
+- `src/webui/views/live/index.ejs` — menu overlay + HUD + stats panel + sidebar toggle
+- `public/css/live.css` — 全部新增 UI 樣式 + 色系重寫
+- `public/js/live.js` — menu / HUD / stats / roster / sidebar 邏輯
+
 ### v1.35 - ADR-031 Phase 2: Stop Hook 外部化
 
 **發布日期**：2026-02-16

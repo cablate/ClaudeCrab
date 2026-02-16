@@ -19,10 +19,14 @@
         <span class="header-clock" id="header-clock"></span>
       </div>
     </div>
+    <button class="header-menu-btn" id="header-menu-btn" title="主選單">☰</button>
     <div class="header-stats">
+      <div class="mini-stat clickable" data-menu-tab="usage"><span class="mini-stat-icon">💰</span><span class="mini-stat-value" id="stat-cost">--</span><span class="mini-stat-label">花費</span></div>
+      <div class="mini-stat clickable" data-menu-tab="usage"><span class="mini-stat-icon">⚡</span><span class="mini-stat-value" id="stat-queries">--</span><span class="mini-stat-label">查詢</span></div>
       <div class="mini-stat"><span class="mini-stat-icon">💬</span><span class="mini-stat-value" id="stat-messages">0</span><span class="mini-stat-label">訊息</span></div>
       <div class="mini-stat"><span class="mini-stat-icon">✅</span><span class="mini-stat-value" id="stat-completed">0</span><span class="mini-stat-label">完成</span></div>
       <div class="mini-stat"><span class="mini-stat-icon">🧠</span><span class="mini-stat-value" id="stat-personality">0</span><span class="mini-stat-label">獨白</span></div>
+      <div class="mini-stat clickable" data-menu-tab="system"><span class="mini-stat-icon">⏱</span><span class="mini-stat-value" id="stat-uptime">--</span><span class="mini-stat-label">uptime</span></div>
     </div>
   </header>
 
@@ -49,16 +53,29 @@
               <div class="dialogue-nameplate">
                 <span class="dialogue-name" id="dialogue-name"></span>
                 <span class="dialogue-status" id="dialogue-status"></span>
-                <button class="dialogue-history-toggle" id="dialogue-history-toggle">📜 紀錄</button>
+                <div class="dialogue-nameplate-actions">
+                  <button class="dialogue-stats-toggle" id="dialogue-stats-toggle">📊 屬性</button>
+                  <button class="dialogue-history-toggle" id="dialogue-history-toggle">📜 紀錄</button>
+                </div>
               </div>
               <div class="dialogue-box">
-                <div class="dialogue-box-inner">
+                <div class="dialogue-box-inner" id="dialogue-box-inner">
                   <div class="dialogue-task-context" id="dialogue-task-context" style="display:none;"></div>
                   <div class="dialogue-text" id="dialogue-text"></div>
                 </div>
                 <div class="dialogue-emoji" id="dialogue-emoji"></div>
+                <!-- Agent Stats Panel — overlays dialogue text when active -->
+                <div class="dialogue-stats-panel" id="dialogue-stats-panel" style="display:none;">
+                  <div class="stats-panel-grid">
+                    <div class="stats-panel-item"><span class="stats-panel-label">24h 花費</span><span class="stats-panel-value" id="stats-cost">--</span></div>
+                    <div class="stats-panel-item"><span class="stats-panel-label">查詢數</span><span class="stats-panel-value" id="stats-queries">--</span></div>
+                    <div class="stats-panel-item"><span class="stats-panel-label">IN tokens</span><span class="stats-panel-value" id="stats-in">--</span></div>
+                    <div class="stats-panel-item"><span class="stats-panel-label">OUT tokens</span><span class="stats-panel-value" id="stats-out">--</span></div>
+                    <div class="stats-panel-item"><span class="stats-panel-label">Model</span><span class="stats-panel-value" id="stats-model">--</span></div>
+                    <div class="stats-panel-item"><span class="stats-panel-label">Bot</span><span class="stats-panel-value" id="stats-bot-status">--</span></div>
+                  </div>
+                </div>
               </div>
-
 
               <!-- Quick Reply Buttons -->
               <div class="dialogue-quick-replies">
@@ -92,6 +109,114 @@
             </div>
           </div>
         </div>
+        <!-- Game Menu Overlay -->
+        <div class="game-menu-overlay" id="game-menu-overlay">
+          <div class="game-menu-backdrop"></div>
+          <div class="game-menu-panel">
+            <button class="game-menu-close" id="game-menu-close">&times;</button>
+            <nav class="game-menu-nav">
+              <button class="game-menu-tab active" data-tab="usage">📊 用量</button>
+              <button class="game-menu-tab" data-tab="sessions">💬 任務</button>
+              <button class="game-menu-tab" data-tab="system">🖥 系統</button>
+              <button class="game-menu-tab" data-tab="agents">👥 成員</button>
+            </nav>
+            <div class="game-menu-content">
+              <!-- Auth gate -->
+              <div class="game-menu-auth-gate" id="game-menu-auth-gate" style="display:none;">
+                <div class="auth-gate-msg">🔒 需要登入才能查看</div>
+                <a href="/login" class="auth-gate-link">前往登入</a>
+              </div>
+              <!-- Usage tab -->
+              <div class="game-menu-page active" id="menu-page-usage">
+                <div class="menu-usage-header">
+                  <div class="menu-usage-cards">
+                    <div class="usage-card">
+                      <span class="usage-card-icon">💰</span>
+                      <span class="usage-card-value" id="menu-cost">--</span>
+                      <span class="usage-card-label">花費</span>
+                    </div>
+                    <div class="usage-card">
+                      <span class="usage-card-icon">⚡</span>
+                      <span class="usage-card-value" id="menu-queries">--</span>
+                      <span class="usage-card-label">查詢</span>
+                    </div>
+                    <div class="usage-card">
+                      <span class="usage-card-icon">📥</span>
+                      <span class="usage-card-value" id="menu-input-tokens">--</span>
+                      <span class="usage-card-label">IN tokens</span>
+                    </div>
+                    <div class="usage-card">
+                      <span class="usage-card-icon">📤</span>
+                      <span class="usage-card-value" id="menu-output-tokens">--</span>
+                      <span class="usage-card-label">OUT tokens</span>
+                    </div>
+                  </div>
+                  <div class="menu-usage-period">
+                    <button class="period-btn active" data-days="1">24h</button>
+                    <button class="period-btn" data-days="7">7d</button>
+                    <button class="period-btn" data-days="30">30d</button>
+                  </div>
+                </div>
+                <div class="menu-usage-chart">
+                  <canvas id="menu-usage-canvas"></canvas>
+                </div>
+                <div class="menu-usage-agents" id="menu-usage-agents">
+                  <div class="menu-loading">載入中...</div>
+                </div>
+              </div>
+              <!-- Sessions tab -->
+              <div class="game-menu-page" id="menu-page-sessions">
+                <div class="menu-section-header">
+                  <h3>進行中的任務</h3>
+                  <button class="menu-action-btn" id="menu-sessions-cleanup">🧹 清理過期</button>
+                </div>
+                <div id="menu-sessions-list" class="menu-sessions-list">
+                  <div class="menu-loading">載入中...</div>
+                </div>
+              </div>
+              <!-- System tab -->
+              <div class="game-menu-page" id="menu-page-system">
+                <div class="system-stats-grid">
+                  <div class="system-stat-card">
+                    <span class="system-stat-icon">⏱</span>
+                    <span class="system-stat-value" id="menu-sys-uptime">--</span>
+                    <span class="system-stat-label">Uptime</span>
+                  </div>
+                  <div class="system-stat-card">
+                    <span class="system-stat-icon">🧠</span>
+                    <span class="system-stat-value" id="menu-sys-memory">--</span>
+                    <span class="system-stat-label">Memory</span>
+                  </div>
+                  <div class="system-stat-card">
+                    <span class="system-stat-icon">💬</span>
+                    <span class="system-stat-value" id="menu-sys-sessions">--</span>
+                    <span class="system-stat-label">活躍 Sessions</span>
+                  </div>
+                </div>
+                <div class="system-memory-bar">
+                  <div class="system-memory-label">
+                    <span>Heap</span>
+                    <span id="menu-sys-heap-text">-- / --</span>
+                  </div>
+                  <div class="system-bar-track">
+                    <div class="system-bar-fill" id="menu-sys-heap-bar" style="width:0%"></div>
+                  </div>
+                </div>
+                <h3 class="menu-sub-heading">Bot 狀態</h3>
+                <div id="menu-sys-bots" class="menu-bots-list">
+                  <div class="menu-loading">載入中...</div>
+                </div>
+              </div>
+              <!-- Agents tab -->
+              <div class="game-menu-page" id="menu-page-agents">
+                <div id="menu-agents-list" class="menu-agents-list">
+                  <div class="menu-loading">載入中...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       <div class="party-roster" id="party-roster">
         <!-- JS 動態渲染 -->
       </div>
@@ -100,7 +225,8 @@
     </section>
 
     <!-- Right: Activity Feed (sidebar) -->
-    <aside class="office-sidebar">
+    <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="展開側欄">◀</button>
+    <aside class="office-sidebar collapsed" id="office-sidebar">
       <div class="sidebar-header">
         <h2 class="sidebar-title">📋 辦公室動態</h2>
         <div class="feed-filters" id="feed-filters">

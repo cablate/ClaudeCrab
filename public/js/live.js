@@ -369,6 +369,11 @@ function handleActivityEvent(event) {
   syncAgentState(event);
   updateSpriteStatus(event);
 
+  // Roster notification for personality events
+  if (event.agentId && (event.type === 'mutter' || event.type === 'reaction' || event.type === 'reply')) {
+    addRosterNotification(event.agentId);
+  }
+
   // addToFeed stores all events + renders visible ones to sidebar
   addToFeed(event, true);
 
@@ -735,6 +740,32 @@ function startIdleBadgeUpdater() {
 // --- Stats periodic poll (every 30s) ---
 function startStatsPoller() {
   setInterval(fetchStats, 30000);
+  // Also poll HUD cost/queries/uptime
+  fetchHudStats();
+  setInterval(fetchHudStats, 60000);
+}
+
+async function fetchHudStats() {
+  try {
+    const [usageRes, sysRes] = await Promise.all([
+      fetch('/api/usage/daily?days=1').catch(() => null),
+      fetch('/api/system/metrics').catch(() => null),
+    ]);
+    if (usageRes && usageRes.ok) {
+      const { daily } = await usageRes.json();
+      let cost = 0, queries = 0;
+      for (const d of daily) { cost += d.costUsd; queries += d.queries; }
+      const costEl = document.getElementById('stat-cost');
+      const queriesEl = document.getElementById('stat-queries');
+      if (costEl) costEl.textContent = `$${cost.toFixed(2)}`;
+      if (queriesEl) queriesEl.textContent = String(queries);
+    }
+    if (sysRes && sysRes.ok) {
+      const metrics = await sysRes.json();
+      const uptimeEl = document.getElementById('stat-uptime');
+      if (uptimeEl) uptimeEl.textContent = metrics.uptimeFormatted || '--';
+    }
+  } catch { /* HUD stats are non-critical */ }
 }
 
 // --- Dynamic page title ---
@@ -1002,6 +1033,7 @@ function openPortrait(agent) {
 
   portraitOpenAgentId = agent.id;
   portraitLastEventId = null;  // Force fresh render
+  clearRosterNotification(agent.id);
   const currentAgent = agentCards[agent.id] || agent;
 
   // Portrait image
@@ -1027,6 +1059,16 @@ function closePortrait() {
   document.getElementById('dialogue-overlay').classList.remove('active');
   closeBacklog();
   portraitOpenAgentId = null;
+  // Reset stats panel
+  statsPanelOpen = false;
+  const statsPanel = document.getElementById('dialogue-stats-panel');
+  const statsBtn = document.getElementById('dialogue-stats-toggle');
+  const boxInner = document.getElementById('dialogue-box-inner');
+  const emoji = document.getElementById('dialogue-emoji');
+  if (statsPanel) statsPanel.style.display = 'none';
+  if (statsBtn) statsBtn.classList.remove('active');
+  if (boxInner) boxInner.style.visibility = '';
+  if (emoji) emoji.style.visibility = '';
 }
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('dialogue-backdrop') || e.target.classList.contains('dialogue-close')) {
@@ -1412,5 +1454,519 @@ function updateSkyBackground() {
   console.log(`[Sky] switched to ${period}`);
 }
 
+// ============================================
+// GAME MENU
+// ============================================
+
+let gameMenuOpen = false;
+let gameMenuAuthed = null; // null = unchecked, true/false
+let gameMenuActiveDays = 1;
+
+function openGameMenu() {
+  const overlay = document.getElementById('game-menu-overlay');
+  if (!overlay) return;
+  overlay.classList.add('active');
+  gameMenuOpen = true;
+
+  if (gameMenuAuthed === null) {
+    checkGameMenuAuth();
+  } else if (gameMenuAuthed) {
+    loadMenuUsageData(gameMenuActiveDays);
+  }
+}
+
+function closeGameMenu() {
+  const overlay = document.getElementById('game-menu-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  gameMenuOpen = false;
+}
+
+async function checkGameMenuAuth() {
+  try {
+    const res = await fetch('/api/system/health');
+    if (res.status === 401) {
+      gameMenuAuthed = false;
+      document.getElementById('game-menu-auth-gate').style.display = '';
+      document.querySelectorAll('.game-menu-page').forEach(p => p.classList.remove('active'));
+    } else {
+      gameMenuAuthed = true;
+      document.getElementById('game-menu-auth-gate').style.display = 'none';
+      document.querySelector('.game-menu-page')?.classList.add('active');
+      loadMenuUsageData(gameMenuActiveDays);
+    }
+  } catch {
+    gameMenuAuthed = false;
+    document.getElementById('game-menu-auth-gate').style.display = '';
+    document.querySelectorAll('.game-menu-page').forEach(p => p.classList.remove('active'));
+  }
+}
+
+function switchMenuTab(tab) {
+  document.querySelectorAll('.game-menu-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.tab === tab)
+  );
+  document.querySelectorAll('.game-menu-page').forEach(p =>
+    p.classList.toggle('active', p.id === `menu-page-${tab}`)
+  );
+  // Load data for the active tab
+  if (gameMenuAuthed) {
+    if (tab === 'usage') loadMenuUsageData(gameMenuActiveDays);
+    else if (tab === 'sessions') loadMenuSessions();
+    else if (tab === 'system') loadMenuSystem();
+    else if (tab === 'agents') loadMenuAgents();
+  }
+}
+
+// --- Usage tab ---
+
+function formatTokenCount(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  return String(n);
+}
+
+async function loadMenuUsageData(days) {
+  gameMenuActiveDays = days;
+  try {
+    const [dailyRes, agentsRes] = await Promise.all([
+      fetch(`/api/usage/daily?days=${days}`),
+      fetch(`/api/usage/agents?days=${days}`),
+    ]);
+    const { daily } = await dailyRes.json();
+    const { agents: agentStats } = await agentsRes.json();
+
+    // Summary cards from daily totals
+    let totalCost = 0, totalQueries = 0, totalIn = 0, totalOut = 0;
+    for (const d of daily) {
+      totalCost += d.costUsd;
+      totalQueries += d.queries;
+      totalIn += d.inputTokens;
+      totalOut += d.outputTokens;
+    }
+
+    document.getElementById('menu-cost').textContent = `$${totalCost.toFixed(2)}`;
+    document.getElementById('menu-queries').textContent = totalQueries.toLocaleString();
+    document.getElementById('menu-input-tokens').textContent = formatTokenCount(totalIn);
+    document.getElementById('menu-output-tokens').textContent = formatTokenCount(totalOut);
+
+    drawMenuUsageChart(daily);
+    renderMenuAgentTable(agentStats);
+  } catch (err) {
+    console.error('[GameMenu] Failed to load usage data:', err);
+  }
+}
+
+function drawMenuUsageChart(daily) {
+  const canvas = document.getElementById('menu-usage-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.scale(dpr, dpr);
+
+  const w = rect.width;
+  const h = rect.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (daily.length === 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('暫無數據', w / 2, h / 2);
+    return;
+  }
+
+  const pad = { top: 20, right: 15, bottom: 28, left: 45 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+  const maxCost = Math.max(...daily.map(d => d.costUsd), 0.01);
+  const barGap = 4;
+  const barW = Math.max((cw / daily.length) - barGap, 6);
+
+  daily.forEach((d, i) => {
+    const barH = (d.costUsd / maxCost) * ch;
+    const x = pad.left + i * (cw / daily.length) + barGap / 2;
+    const y = pad.top + ch - barH;
+
+    const grad = ctx.createLinearGradient(x, y + barH, x, y);
+    grad.addColorStop(0, 'rgba(200,140,170,0.5)');
+    grad.addColorStop(1, 'rgba(220,170,195,0.9)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, barW, barH);
+
+    // Date label
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(d.date.substring(5), x + barW / 2, pad.top + ch + 15);
+  });
+
+  // Y-axis
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('$' + maxCost.toFixed(2), pad.left - 5, pad.top + 10);
+  ctx.fillText('$0', pad.left - 5, pad.top + ch + 4);
+
+  // Grid line
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.beginPath();
+  ctx.moveTo(pad.left, pad.top + ch);
+  ctx.lineTo(pad.left + cw, pad.top + ch);
+  ctx.stroke();
+}
+
+function renderMenuAgentTable(agentStats) {
+  const container = document.getElementById('menu-usage-agents');
+  if (!container) return;
+
+  if (!agentStats || agentStats.length === 0) {
+    container.innerHTML = '<div class="menu-loading">暫無數據</div>';
+    return;
+  }
+
+  // Sort by cost descending
+  const sorted = [...agentStats].sort((a, b) => b.totalCostUsd - a.totalCostUsd);
+
+  container.innerHTML = `
+    <table class="agent-usage-table">
+      <thead><tr>
+        <th>Agent</th><th>花費</th><th>查詢</th><th>IN</th><th>OUT</th>
+      </tr></thead>
+      <tbody>${sorted.map(a => {
+        const color = agentCards[a.agentId]?.color || '#6B7280';
+        return `<tr>
+          <td><span class="agent-usage-dot" style="background:${color}"></span>${escapeHtml(a.agentName)}</td>
+          <td>$${a.totalCostUsd.toFixed(3)}</td>
+          <td>${a.totalQueries}</td>
+          <td>${formatTokenCount(a.totalInputTokens)}</td>
+          <td>${formatTokenCount(a.totalOutputTokens)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+// --- Sessions tab ---
+
+async function loadMenuSessions() {
+  const container = document.getElementById('menu-sessions-list');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/sessions');
+    const { sessions } = await res.json();
+    if (!sessions || sessions.length === 0) {
+      container.innerHTML = '<div class="menu-loading">目前沒有任何 session</div>';
+      return;
+    }
+    container.innerHTML = sessions.map(s => {
+      const color = agentCards[s.agentId]?.color || '#6B7280';
+      const dotClass = s.state === 'processing' ? 'processing' : 'idle';
+      const ago = relativeTime(s.lastActiveAt);
+      return `<div class="session-item" data-sid="${s.sessionId}">
+        <div class="session-info">
+          <span class="session-dot ${dotClass}"></span>
+          <span class="session-agent" style="color:${color}">${escapeHtml(s.agentName)}</span>
+          <span class="session-user">${escapeHtml(s.userId?.substring(0, 12) || '--')}</span>
+        </div>
+        <div class="session-meta">
+          <span>${s.messageCount} 訊息</span>
+          <span>${ago}</span>
+          ${!s.isExpired ? `<button class="session-close-btn" onclick="closeMenuSession('${s.sessionId}')">✕</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    console.error('[GameMenu] Failed to load sessions:', err);
+    container.innerHTML = '<div class="menu-loading">載入失敗</div>';
+  }
+}
+
+async function closeMenuSession(sessionId) {
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+    if (res.ok) loadMenuSessions();
+  } catch (err) {
+    console.error('[GameMenu] Failed to close session:', err);
+  }
+}
+
+async function cleanupMenuSessions() {
+  const btn = document.getElementById('menu-sessions-cleanup');
+  if (btn) { btn.disabled = true; btn.textContent = '清理中...'; }
+  try {
+    await fetch('/api/sessions/cleanup', { method: 'POST' });
+    await loadMenuSessions();
+  } catch (err) {
+    console.error('[GameMenu] Cleanup failed:', err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🧹 清理過期'; }
+  }
+}
+
+// --- System tab ---
+
+async function loadMenuSystem() {
+  try {
+    const [metricsRes, botsRes] = await Promise.all([
+      fetch('/api/system/metrics'),
+      fetch('/api/system/bots'),
+    ]);
+    const metrics = await metricsRes.json();
+    const { bots } = await botsRes.json();
+
+    // Uptime
+    const uptimeEl = document.getElementById('menu-sys-uptime');
+    if (uptimeEl) uptimeEl.textContent = metrics.uptimeFormatted || '--';
+
+    // Memory
+    const memEl = document.getElementById('menu-sys-memory');
+    if (memEl) memEl.textContent = metrics.memory?.heapUsedFormatted || '--';
+
+    // Sessions
+    const sessEl = document.getElementById('menu-sys-sessions');
+    if (sessEl) sessEl.textContent = String(metrics.sessions?.active ?? 0);
+
+    // Heap bar
+    const heapText = document.getElementById('menu-sys-heap-text');
+    const heapBar = document.getElementById('menu-sys-heap-bar');
+    if (heapText && metrics.memory) {
+      heapText.textContent = `${metrics.memory.heapUsedFormatted} / ${metrics.memory.heapTotalFormatted}`;
+    }
+    if (heapBar && metrics.memory) {
+      const pct = Math.min((metrics.memory.heapUsed / metrics.memory.heapTotal) * 100, 100);
+      heapBar.style.width = pct + '%';
+    }
+
+    // Bots list
+    const botsContainer = document.getElementById('menu-sys-bots');
+    if (botsContainer && bots) {
+      if (bots.length === 0) {
+        botsContainer.innerHTML = '<div class="menu-loading">沒有 bot</div>';
+      } else {
+        botsContainer.innerHTML = bots.map(b => {
+          const statusClass = b.status === 'running' ? 'running' : (b.status === 'error' ? 'error' : 'stopped');
+          const action = b.status === 'running' ? 'stop' : 'start';
+          const actionLabel = b.status === 'running' ? '停止' : '啟動';
+          const color = agentCards[b.agentId]?.color || '#6B7280';
+          return `<div class="bot-item">
+            <div class="bot-info">
+              <span class="bot-status-dot ${statusClass}"></span>
+              <span class="bot-name" style="color:${color}">${escapeHtml(b.agentName || b.agentId)}</span>
+            </div>
+            <button class="bot-toggle-btn" onclick="toggleBot('${b.agentId}', '${action}')">${actionLabel}</button>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch (err) {
+    console.error('[GameMenu] Failed to load system:', err);
+  }
+}
+
+async function toggleBot(agentId, action) {
+  try {
+    await fetch(`/api/agents/${agentId}/bot/${action}`, { method: 'POST' });
+    await loadMenuSystem();
+  } catch (err) {
+    console.error(`[GameMenu] Failed to ${action} bot:`, err);
+  }
+}
+
+// --- Agents tab ---
+
+async function loadMenuAgents() {
+  const container = document.getElementById('menu-agents-list');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/agents');
+    const { agents } = await res.json();
+    if (!agents || agents.length === 0) {
+      container.innerHTML = '<div class="menu-loading">沒有 agent</div>';
+      return;
+    }
+    container.innerHTML = agents.map(a => {
+      const card = agentCards[a.id] || {};
+      const avatar = card.avatar || '🤖';
+      const color = card.color || '#6B7280';
+      const botBadges = (a.botStatus || []).map(b =>
+        `<span class="bot-status-dot ${b.status}" style="margin-left:0.3rem" title="${b.platform}: ${b.status}"></span>`
+      ).join('');
+      return `<div class="agent-item" onclick="openPortrait(agentCards['${a.id}'] || {id:'${a.id}',name:'${escapeHtml(a.name)}'})">
+        <div class="agent-item-info">
+          <span class="agent-item-avatar">${avatar}</span>
+          <div>
+            <div class="agent-item-name" style="color:${color}">${escapeHtml(a.name)}${botBadges}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted)">${escapeHtml(a.description?.substring(0, 60) || '')}</div>
+          </div>
+        </div>
+        <div class="agent-item-actions">
+          <span class="agent-item-model">${a.model || '--'}</span>
+          <button class="menu-action-btn" onclick="event.stopPropagation(); reloadAgent('${a.id}')">🔄</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    console.error('[GameMenu] Failed to load agents:', err);
+    container.innerHTML = '<div class="menu-loading">載入失敗</div>';
+  }
+}
+
+async function reloadAgent(agentId) {
+  try {
+    await fetch(`/api/agents/${agentId}/reload`, { method: 'POST' });
+    showLiveToast(`${agentId} 重載成功`);
+    await loadMenuAgents();
+  } catch (err) {
+    showLiveToast('重載失敗', 'error');
+  }
+}
+
+// --- Roster Notification Badges ---
+
+const rosterNotifications = new Set(); // agentIds with unread personality events
+
+function addRosterNotification(agentId) {
+  // Don't notify if portrait is already open for this agent
+  if (portraitOpenAgentId === agentId) return;
+  if (rosterNotifications.has(agentId)) return;
+  rosterNotifications.add(agentId);
+
+  const card = document.getElementById(`roster-${agentId}`);
+  if (card && !card.querySelector('.roster-notify-dot')) {
+    const dot = document.createElement('span');
+    dot.className = 'roster-notify-dot';
+    card.appendChild(dot);
+  }
+}
+
+function clearRosterNotification(agentId) {
+  rosterNotifications.delete(agentId);
+  const card = document.getElementById(`roster-${agentId}`);
+  const dot = card?.querySelector('.roster-notify-dot');
+  if (dot) dot.remove();
+}
+
+// --- Agent Stats Panel in Portrait ---
+
+let statsPanelOpen = false;
+
+function toggleStatsPanel() {
+  const panel = document.getElementById('dialogue-stats-panel');
+  const btn = document.getElementById('dialogue-stats-toggle');
+  const boxInner = document.getElementById('dialogue-box-inner');
+  const emoji = document.getElementById('dialogue-emoji');
+  if (!panel || !btn) return;
+
+  statsPanelOpen = !statsPanelOpen;
+  panel.style.display = statsPanelOpen ? '' : 'none';
+  if (boxInner) boxInner.style.visibility = statsPanelOpen ? 'hidden' : '';
+  if (emoji) emoji.style.visibility = statsPanelOpen ? 'hidden' : '';
+  btn.classList.toggle('active', statsPanelOpen);
+
+  if (statsPanelOpen && portraitOpenAgentId) {
+    loadAgentStatsPanel(portraitOpenAgentId);
+  }
+}
+
+async function loadAgentStatsPanel(agentId) {
+  try {
+    const [usageRes, agentRes] = await Promise.all([
+      fetch(`/api/usage/daily?days=1&agent=${agentId}`).catch(() => null),
+      fetch(`/api/agents/${agentId}`).catch(() => null),
+    ]);
+
+    if (usageRes && usageRes.ok) {
+      const { daily } = await usageRes.json();
+      let cost = 0, queries = 0, inT = 0, outT = 0;
+      for (const d of daily) { cost += d.costUsd; queries += d.queries; inT += d.inputTokens; outT += d.outputTokens; }
+      document.getElementById('stats-cost').textContent = `$${cost.toFixed(3)}`;
+      document.getElementById('stats-queries').textContent = String(queries);
+      document.getElementById('stats-in').textContent = formatTokenCount(inT);
+      document.getElementById('stats-out').textContent = formatTokenCount(outT);
+    }
+
+    if (agentRes && agentRes.ok) {
+      const data = await agentRes.json();
+      document.getElementById('stats-model').textContent = data.model || '--';
+    }
+
+    // Bot status
+    const botRes = await fetch(`/api/agents/${agentId}/bot/status`).catch(() => null);
+    if (botRes && botRes.ok) {
+      const { status } = await botRes.json();
+      const label = status?.[0]?.status || 'no bot';
+      document.getElementById('stats-bot-status').textContent = label;
+    }
+  } catch { /* non-critical */ }
+}
+
+// --- Game Menu Event Listeners ---
+
+function initGameMenu() {
+  document.getElementById('header-menu-btn')?.addEventListener('click', openGameMenu);
+  document.getElementById('game-menu-close')?.addEventListener('click', closeGameMenu);
+  document.querySelector('.game-menu-backdrop')?.addEventListener('click', closeGameMenu);
+
+  // Tab switching
+  document.querySelectorAll('.game-menu-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchMenuTab(tab.dataset.tab));
+  });
+
+  // Period buttons
+  document.querySelectorAll('.period-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadMenuUsageData(parseInt(btn.dataset.days));
+    });
+  });
+
+  // Stats panel toggle in portrait
+  document.getElementById('dialogue-stats-toggle')?.addEventListener('click', toggleStatsPanel);
+
+  // Clickable HUD stats → open menu tab
+  document.querySelectorAll('.mini-stat.clickable').forEach(stat => {
+    stat.addEventListener('click', () => {
+      const tab = stat.dataset.menuTab;
+      if (tab) {
+        openGameMenu();
+        switchMenuTab(tab);
+      }
+    });
+  });
+
+  // Sessions cleanup button
+  document.getElementById('menu-sessions-cleanup')?.addEventListener('click', cleanupMenuSessions);
+
+  // Sidebar toggle
+  document.getElementById('sidebar-toggle-btn')?.addEventListener('click', () => {
+    const sidebar = document.getElementById('office-sidebar');
+    const btn = document.getElementById('sidebar-toggle-btn');
+    if (!sidebar || !btn) return;
+    const isCollapsed = !sidebar.classList.contains('collapsed');
+    sidebar.classList.toggle('collapsed', isCollapsed);
+    btn.classList.toggle('sidebar-open', !isCollapsed);
+    btn.textContent = isCollapsed ? '◀' : '▶';
+  });
+
+  // ESC key — capture phase so game menu takes priority over other overlays
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && gameMenuOpen) {
+      closeGameMenu();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+}
+
+
 // --- Start ---
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+  initGameMenu();
+});

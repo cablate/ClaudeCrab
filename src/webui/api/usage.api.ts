@@ -70,5 +70,36 @@ export function createUsageApiRouter(): Router {
     res.json({ queries, hasMore });
   });
 
+  /**
+   * GET /api/usage/agents?days=N
+   * Returns per-agent aggregated stats for the given period
+   */
+  router.get('/agents', (req, res) => {
+    const { queryMetricsRepository, agentLoader } =
+      (req as WebUIRequest).dependencies;
+
+    if (queryMetricsRepository === undefined) {
+      res.json({ agents: [] });
+      return;
+    }
+
+    const days = Math.min(
+      Math.max(parseInt(req.query.days as string, 10) || 7, 1),
+      365
+    );
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const stats = queryMetricsRepository.getAllAgentStatsSince(since);
+
+    const agents = stats.map((s) => {
+      const agent = agentLoader.get(s.agentId);
+      return {
+        ...s,
+        agentName: agent?.config.name ?? s.agentId,
+      };
+    });
+
+    res.json({ agents });
+  });
+
   return router;
 }
