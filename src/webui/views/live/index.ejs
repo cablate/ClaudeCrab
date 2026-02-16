@@ -3,16 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ClaudeCab Live</title>
+  <title>ClaudeCrab 🦀</title>
   <link rel="stylesheet" href="/static/css/live.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+  <!-- Title Screen (Galgame style) -->
+  <div class="title-screen" id="title-screen">
+    <div class="title-bg">
+      <img class="title-bg-img" src="/static/images/office-background-cny.png" alt="">
+      <div class="title-bg-overlay"></div>
+    </div>
+    <div class="title-characters">
+      <img class="title-char-img" src="/static/images/title-cny.png" alt="">
+    </div>
+    <div class="title-logo-area">
+      <h1 class="title-logo">Claude<span class="logo-crab">Crab</span><span class="logo-crab-emoji">🦀</span></h1>
+      <p class="title-subtitle">新年快樂 — Happy Lunar New Year 2026</p>
+    </div>
+    <nav class="title-menu">
+      <button class="title-menu-item" id="title-start"><span class="title-menu-label">はじめる</span><span class="title-menu-en">START</span></button>
+    </nav>
+    <div class="title-particles" id="title-particles"></div>
+    <div class="title-lanterns">
+      <span class="lantern l1">🏮</span>
+      <span class="lantern l2">🏮</span>
+      <span class="lantern l3">🏮</span>
+      <span class="lantern l4">🏮</span>
+      <span class="lantern l5">🏮</span>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="live-header">
     <div class="header-left">
-      <h1>ClaudeCab <span class="header-accent">Live</span></h1>
+      <h1>Claude<span class="header-accent">Crab</span> 🦀</h1>
       <div class="subtitle">
         <span id="connection-dot" class="connection-dot"></span>
         <span>虛擬辦公室</span>
@@ -40,7 +66,27 @@
         <div class="sky-layer" id="sky-layer"></div>
         <img class="office-bg" src="/static/images/office-background.png" alt="Office">
         <!-- Agent sprites will be positioned here by JS -->
-        <button class="scene-edit-btn" id="scene-edit-btn" title="編輯小人位置">🔧</button>
+        <button class="scene-edit-btn" id="scene-edit-btn" title="編輯模式">🔧 編輯</button>
+        <!-- Edit mode toolbar (hidden by default) -->
+        <div class="edit-toolbar hidden" id="edit-toolbar">
+          <div class="edit-toolbar-left">
+            <button class="edit-toolbar-bg" id="edit-bg-btn" title="切換背景">🖼️ 背景</button>
+            <div class="edit-bg-picker hidden" id="edit-bg-picker">
+              <button class="bg-picker-item" data-bg="default">
+                <img src="/static/images/office-background.png" alt="Default">
+                <span>預設</span>
+              </button>
+              <button class="bg-picker-item" data-bg="cny">
+                <img src="/static/images/office-background-cny.png" alt="CNY">
+                <span>新年</span>
+              </button>
+            </div>
+          </div>
+          <div class="edit-toolbar-right">
+            <button class="edit-toolbar-cancel" id="edit-cancel" title="取消">✕</button>
+            <button class="edit-toolbar-save" id="edit-save" title="儲存">✓</button>
+          </div>
+        </div>
 
         <!-- RPG Dialogue Panel (hidden by default, inside scene) -->
         <div class="dialogue-overlay" id="dialogue-overlay">

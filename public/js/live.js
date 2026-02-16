@@ -750,7 +750,7 @@ function startStatsPoller() {
 async function fetchHudStats() {
   try {
     const [usageRes, sysRes] = await Promise.all([
-      fetch('/api/usage/daily?days=1').catch(() => null),
+      fetch('/api/usage/daily?days=9999').catch(() => null),
       fetch('/api/system/metrics').catch(() => null),
     ]);
     if (usageRes && usageRes.ok) {
@@ -1989,22 +1989,111 @@ function saveCustomPosition(agentId, leftPct, topPct) {
   try { localStorage.setItem(CUSTOM_POS_KEY, JSON.stringify(all)); } catch {}
 }
 
-function toggleSpriteEditMode() {
+// Snapshot of positions/bg before editing, for cancel/revert
+let editSnapshot = null;
+
+function enterEditMode() {
   const scene = document.getElementById('office-scene');
   const btn = document.getElementById('scene-edit-btn');
-  if (!scene || !btn) return;
+  const toolbar = document.getElementById('edit-toolbar');
+  if (!scene || spriteEditMode) return;
 
-  spriteEditMode = !spriteEditMode;
-  scene.classList.toggle('edit-mode', spriteEditMode);
-  btn.classList.toggle('active', spriteEditMode);
+  // Snapshot current state for cancel
+  editSnapshot = {
+    positions: JSON.parse(JSON.stringify(getCustomPositions())),
+    bg: getOfficeBg()
+  };
+
+  spriteEditMode = true;
+  scene.classList.add('edit-mode');
+  if (btn) btn.classList.add('active');
+  if (toolbar) toolbar.classList.remove('hidden');
+}
+
+function exitEditMode(save) {
+  const scene = document.getElementById('office-scene');
+  const btn = document.getElementById('scene-edit-btn');
+  const toolbar = document.getElementById('edit-toolbar');
+  const picker = document.getElementById('edit-bg-picker');
+
+  if (save) {
+    // Write all pending positions to localStorage
+    const sprites = document.querySelectorAll('.agent-sprite');
+    const sceneRect = scene.getBoundingClientRect();
+    sprites.forEach(sprite => {
+      const agentId = sprite.id.replace('sprite-', '');
+      const leftPct = ((sprite.offsetLeft / sceneRect.width) * 100).toFixed(1) + '%';
+      const topPct = ((sprite.offsetTop / sceneRect.height) * 100).toFixed(1) + '%';
+      saveCustomPosition(agentId, leftPct, topPct);
+    });
+    // bg is already saved by setOfficeBg
+  } else {
+    // Cancel — revert positions and bg
+    if (editSnapshot) {
+      localStorage.setItem(CUSTOM_POS_KEY, JSON.stringify(editSnapshot.positions));
+      setOfficeBg(editSnapshot.bg);
+      // Restore sprite positions from snapshot
+      const sprites = document.querySelectorAll('.agent-sprite');
+      sprites.forEach(sprite => {
+        const agentId = sprite.id.replace('sprite-', '');
+        const pos = editSnapshot.positions[agentId];
+        if (pos) {
+          sprite.style.left = pos.left;
+          sprite.style.top = pos.top;
+        }
+      });
+    }
+  }
+
+  spriteEditMode = false;
+  editSnapshot = null;
+  scene.classList.remove('edit-mode');
+  if (btn) btn.classList.remove('active');
+  if (toolbar) toolbar.classList.add('hidden');
+  if (picker) picker.classList.add('hidden');
 }
 
 function initSpriteEditMode() {
   const scene = document.getElementById('office-scene');
   const btn = document.getElementById('scene-edit-btn');
+  const saveBtn = document.getElementById('edit-save');
+  const cancelBtn = document.getElementById('edit-cancel');
+  const bgBtn = document.getElementById('edit-bg-btn');
+  const bgPicker = document.getElementById('edit-bg-picker');
   if (!scene || !btn) return;
 
-  btn.addEventListener('click', toggleSpriteEditMode);
+  btn.addEventListener('click', () => {
+    if (spriteEditMode) {
+      exitEditMode(true); // clicking 🔧 again = save
+    } else {
+      enterEditMode();
+    }
+  });
+
+  if (saveBtn) saveBtn.addEventListener('click', () => exitEditMode(true));
+  if (cancelBtn) cancelBtn.addEventListener('click', () => exitEditMode(false));
+
+  // BG picker toggle
+  if (bgBtn && bgPicker) {
+    bgBtn.addEventListener('click', () => bgPicker.classList.toggle('hidden'));
+    // Close picker on outside click
+    document.addEventListener('click', (e) => {
+      if (!bgPicker.contains(e.target) && e.target !== bgBtn) {
+        bgPicker.classList.add('hidden');
+      }
+    });
+  }
+
+  // BG picker items
+  const bgItems = document.querySelectorAll('#edit-bg-picker .bg-picker-item');
+  bgItems.forEach(item => {
+    if (item.dataset.bg === getOfficeBg()) item.classList.add('active');
+    item.addEventListener('click', () => {
+      setOfficeBg(item.dataset.bg);
+      bgItems.forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+    });
+  });
 
   // --- Drag handlers (pointer events for mouse + touch) ---
   scene.addEventListener('pointerdown', (e) => {
@@ -2034,7 +2123,6 @@ function initSpriteEditMode() {
     const x = e.clientX - sceneRect.left - offsetX;
     const y = e.clientY - sceneRect.top - offsetY;
 
-    // Clamp within scene bounds
     const maxX = sceneRect.width - sprite.offsetWidth;
     const maxY = sceneRect.height - sprite.offsetHeight;
     const clampedX = Math.max(0, Math.min(x, maxX));
@@ -2046,21 +2134,12 @@ function initSpriteEditMode() {
 
   scene.addEventListener('pointerup', (e) => {
     if (!dragState || e.pointerId !== dragState.pointerId) return;
-
-    const { sprite, sceneRect } = dragState;
-    sprite.classList.remove('dragging');
-    sprite.releasePointerCapture(e.pointerId);
-
-    // Save position
-    const agentId = sprite.id.replace('sprite-', '');
-    const leftPct = ((sprite.offsetLeft / sceneRect.width) * 100).toFixed(1) + '%';
-    const topPct = ((sprite.offsetTop / sceneRect.height) * 100).toFixed(1) + '%';
-    saveCustomPosition(agentId, leftPct, topPct);
-
+    dragState.sprite.classList.remove('dragging');
+    dragState.sprite.releasePointerCapture(e.pointerId);
     dragState = null;
+    // Don't save to localStorage here — wait for save button
   });
 
-  // Cancel drag on pointer leave
   scene.addEventListener('pointercancel', () => {
     if (dragState) {
       dragState.sprite.classList.remove('dragging');
@@ -2069,9 +2148,65 @@ function initSpriteEditMode() {
   });
 }
 
+// --- Title Screen ---
+function spawnParticles() {
+  const container = document.getElementById('title-particles');
+  if (!container) return;
+  for (let i = 0; i < 25; i++) {
+    const p = document.createElement('div');
+    p.className = 'title-particle';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.animationDuration = (4 + Math.random() * 6) + 's';
+    p.style.animationDelay = Math.random() * 5 + 's';
+    p.style.width = p.style.height = (2 + Math.random() * 4) + 'px';
+    container.appendChild(p);
+  }
+}
+
+function initTitleScreen() {
+  const screen = document.getElementById('title-screen');
+  const startBtn = document.getElementById('title-start');
+  if (!screen) return;
+
+  spawnParticles();
+
+  const dismiss = () => {
+    screen.classList.add('hidden');
+    document.removeEventListener('keydown', dismissKey);
+    setTimeout(() => screen.remove(), 1100);
+  };
+  const dismissKey = (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') dismiss();
+  };
+
+  if (startBtn) startBtn.addEventListener('click', dismiss);
+  document.addEventListener('keydown', dismissKey);
+}
+
+// --- Office Background Switcher ---
+const BG_KEY = 'claudecab-office-bg';
+const OFFICE_BACKGROUNDS = {
+  default: '/static/images/office-background.png',
+  cny: '/static/images/office-background-cny.png'
+};
+
+function getOfficeBg() {
+  return localStorage.getItem(BG_KEY) || 'default';
+}
+
+function setOfficeBg(key) {
+  localStorage.setItem(BG_KEY, key);
+  const bgImg = document.querySelector('.office-bg');
+  if (bgImg && OFFICE_BACKGROUNDS[key]) {
+    bgImg.src = OFFICE_BACKGROUNDS[key];
+  }
+}
+
 // --- Start ---
 document.addEventListener('DOMContentLoaded', () => {
+  initTitleScreen();
   init();
   initGameMenu();
   initSpriteEditMode();
+  setOfficeBg(getOfficeBg()); // apply saved bg on load
 });

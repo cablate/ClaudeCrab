@@ -8,6 +8,38 @@
 
 ## 版本歷史
 
+### v1.38 - 新年主題 Title Screen + 編輯模式升級
+
+**發布日期**：2026-02-16
+
+**Galgame 風格 Title Screen**：
+- 全屏開場畫面：新年辦公室背景 + 三人合照立繪 + 浮動光粒子 + 🏮搖擺動畫
+- 標題「ClaudeCrab 🦀」漸層 shimmer + 多層 text-shadow 確保可讀性
+- 右下 Galgame 選單「はじめる / START」，Enter/Space/ESC 可進入
+- 進入後淡出並移除 DOM
+
+**編輯模式升級**：
+- 🔧 按鈕加文字標籤「🔧 編輯」，hover/active 狀態更明顯
+- 進入編輯模式顯示中上方工具列：🖼️ 背景切換 + ✓ 儲存 / ✕ 取消
+- 背景切換：預設 / 新年兩套辦公室，選擇存 localStorage
+- 儲存/取消機制：拖曳不即時寫入，✓ 才存，✕ 還原所有變更
+- Sprite 虛線框加粗 + 呼吸脈衝動畫，拖曳中綠色實線 + 光暈
+- 場景邊框高亮，提示文字移至底部膠囊標籤
+
+**其他**：
+- Header 標題改為 ClaudeCrab 🦀
+- HUD 花費改為歷史總累計
+- 全域防誤選反白（圖片、sprite、按鈕等，對話框除外）
+
+**新增圖片**：
+- `public/images/office-background-cny.png` — 新年辦公室背景
+- `public/images/title-cny.png` — 三人新年合照
+
+**改動檔案**：
+- `src/webui/views/live/index.ejs` — Title Screen HTML + 編輯工具列
+- `public/css/live.css` — Title Screen 樣式 + 編輯模式重設計 + 防選取
+- `public/js/live.js` — Title Screen 邏輯 + 編輯模式 save/cancel + bg switcher
+
 ### v1.37 - Sprite 編輯模式
 
 **發布日期**：2026-02-16
