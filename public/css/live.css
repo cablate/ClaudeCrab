@@ -2459,6 +2459,18 @@ body {
     0 2px 40px rgba(0,0,0,0.8),
     0 0 60px rgba(255,120,80,0.3);
 }
+
+.logo-cab {
+  color: #ff8a65;
+  text-shadow:
+    0 0 8px rgba(0,0,0,0.9),
+    0 0 20px rgba(0,0,0,0.7),
+    0 2px 40px rgba(0,0,0,0.8),
+    0 0 60px rgba(255,120,80,0.3);
+}
+.logo-r {
+  color: #fff;
+}
 .logo-crab-emoji {
   font-size: 0.7em;
   display: inline-block;
