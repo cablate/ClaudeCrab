@@ -8,6 +8,22 @@
 
 ## 版本歷史
 
+### v1.37 - Sprite 編輯模式
+
+**發布日期**：2026-02-16
+
+**Sprite 自由擺放**：
+- 場景右下角 🔧 toggle 進入編輯模式
+- Pointer Events 拖曳（滑鼠 + 觸控）、場景邊界限制
+- 自訂位置存 `localStorage['claudecab-sprite-custom-positions']`
+- 載入優先級：自訂位置 > seat assignment > overflow grid
+- 編輯模式下 sprite 顯示虛線框，click 不觸發 portrait
+
+**改動檔案**：
+- `src/webui/views/live/index.ejs` — 🔧 按鈕
+- `public/css/live.css` — 編輯模式視覺（虛線框、提示文字、拖曳狀態）
+- `public/js/live.js` — 拖曳系統、localStorage 讀寫、edit mode toggle
+
 ### v1.36 - Live 遊戲化後台整合 + UI 重設計
 
 **發布日期**：2026-02-16

@@ -19,6 +19,7 @@ const SEAT_POSITIONS = [
 ];
 
 const SEAT_STORAGE_KEY = 'claudecab-seat-assignments';
+const CUSTOM_POS_KEY = 'claudecab-sprite-custom-positions';
 
 /**
  * Get or create seat assignments for agents.
@@ -292,8 +293,9 @@ async function loadAgentStates() {
       }
       return;
     }
-    // Assign seats (persisted in localStorage)
+    // Assign seats (persisted in localStorage), with custom position override
     const seatMap = getSeatAssignments(agents.map(a => a.id));
+    const customPositions = getCustomPositions();
 
     // Fallback grid for overflow agents
     const overflowSeats = [
@@ -308,8 +310,8 @@ async function loadAgentStates() {
       const agent = agents[i];
       agentCards[agent.id] = agent;
 
-      // Create sprite with assigned seat or overflow fallback
-      const pos = seatMap[agent.id] || (overflowIdx < overflowSeats.length ? overflowSeats[overflowIdx++] : null);
+      // Create sprite: custom position > seat assignment > overflow fallback
+      const pos = customPositions[agent.id] || seatMap[agent.id] || (overflowIdx < overflowSeats.length ? overflowSeats[overflowIdx++] : null);
       if (pos) {
         createAgentSprite(agent, pos);
       }
@@ -860,7 +862,10 @@ function createAgentSprite(agent, pos) {
     <div class="sprite-bubble ${lastMsg ? 'visible' : ''}${lastIsThought ? ' mutter' : ''}">${lastMsg.length > 40 ? lastMsg.substring(0, 40) + '...' : lastMsg}</div>
   `;
 
-  sprite.addEventListener('click', () => openPortrait(agent));
+  sprite.addEventListener('click', (e) => {
+    if (spriteEditMode) { e.stopPropagation(); return; }
+    openPortrait(agent);
+  });
   scene.appendChild(sprite);
 }
 
@@ -1965,8 +1970,108 @@ function initGameMenu() {
 }
 
 
+// ============================
+// SPRITE EDIT MODE — Drag to reposition
+// ============================
+let spriteEditMode = false;
+let dragState = null; // { sprite, startX, startY, origLeft, origTop }
+
+function getCustomPositions() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_POS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveCustomPosition(agentId, leftPct, topPct) {
+  const all = getCustomPositions();
+  all[agentId] = { left: leftPct, top: topPct };
+  try { localStorage.setItem(CUSTOM_POS_KEY, JSON.stringify(all)); } catch {}
+}
+
+function toggleSpriteEditMode() {
+  const scene = document.getElementById('office-scene');
+  const btn = document.getElementById('scene-edit-btn');
+  if (!scene || !btn) return;
+
+  spriteEditMode = !spriteEditMode;
+  scene.classList.toggle('edit-mode', spriteEditMode);
+  btn.classList.toggle('active', spriteEditMode);
+}
+
+function initSpriteEditMode() {
+  const scene = document.getElementById('office-scene');
+  const btn = document.getElementById('scene-edit-btn');
+  if (!scene || !btn) return;
+
+  btn.addEventListener('click', toggleSpriteEditMode);
+
+  // --- Drag handlers (pointer events for mouse + touch) ---
+  scene.addEventListener('pointerdown', (e) => {
+    if (!spriteEditMode) return;
+    const sprite = e.target.closest('.agent-sprite');
+    if (!sprite) return;
+
+    e.preventDefault();
+    sprite.setPointerCapture(e.pointerId);
+    sprite.classList.add('dragging');
+
+    const rect = scene.getBoundingClientRect();
+    dragState = {
+      sprite,
+      pointerId: e.pointerId,
+      offsetX: e.clientX - sprite.getBoundingClientRect().left,
+      offsetY: e.clientY - sprite.getBoundingClientRect().top,
+      sceneRect: rect,
+    };
+  });
+
+  scene.addEventListener('pointermove', (e) => {
+    if (!dragState || e.pointerId !== dragState.pointerId) return;
+    e.preventDefault();
+
+    const { sprite, offsetX, offsetY, sceneRect } = dragState;
+    const x = e.clientX - sceneRect.left - offsetX;
+    const y = e.clientY - sceneRect.top - offsetY;
+
+    // Clamp within scene bounds
+    const maxX = sceneRect.width - sprite.offsetWidth;
+    const maxY = sceneRect.height - sprite.offsetHeight;
+    const clampedX = Math.max(0, Math.min(x, maxX));
+    const clampedY = Math.max(0, Math.min(y, maxY));
+
+    sprite.style.left = ((clampedX / sceneRect.width) * 100).toFixed(1) + '%';
+    sprite.style.top = ((clampedY / sceneRect.height) * 100).toFixed(1) + '%';
+  });
+
+  scene.addEventListener('pointerup', (e) => {
+    if (!dragState || e.pointerId !== dragState.pointerId) return;
+
+    const { sprite, sceneRect } = dragState;
+    sprite.classList.remove('dragging');
+    sprite.releasePointerCapture(e.pointerId);
+
+    // Save position
+    const agentId = sprite.id.replace('sprite-', '');
+    const leftPct = ((sprite.offsetLeft / sceneRect.width) * 100).toFixed(1) + '%';
+    const topPct = ((sprite.offsetTop / sceneRect.height) * 100).toFixed(1) + '%';
+    saveCustomPosition(agentId, leftPct, topPct);
+
+    dragState = null;
+  });
+
+  // Cancel drag on pointer leave
+  scene.addEventListener('pointercancel', () => {
+    if (dragState) {
+      dragState.sprite.classList.remove('dragging');
+      dragState = null;
+    }
+  });
+}
+
 // --- Start ---
 document.addEventListener('DOMContentLoaded', () => {
   init();
   initGameMenu();
+  initSpriteEditMode();
 });
