@@ -1,3 +1,6 @@
+> **⚠️ 歷史文件 — 已策展歸檔**：策展版本請見 [`_archive/operations/migration-guide-skill-system.md`](../_archive/operations/migration-guide-skill-system.md)
+> 本檔案為原始開發紀錄，保留供完整追溯。
+
 # Skill-Based Character System 遷移指南
 
 > 如何將現有 agent（如 general）遷移到新的 Skill-Based Character System

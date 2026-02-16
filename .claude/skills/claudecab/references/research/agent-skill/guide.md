@@ -135,7 +135,7 @@ persona/
 
 1. 檢查 description 是否包含相關關鍵詞
 2. 確認 `settings.local.json` 的 `allow` 包含 `"Skill"`
-3. 確認使用 `settingSources: ['project']`（v1.11.0+）
+3. 確認使用 `settingSources: ['project', 'local']`（v1.11.0+）
 
 ### Skill 內容未載入
 

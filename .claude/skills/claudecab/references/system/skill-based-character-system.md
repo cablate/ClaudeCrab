@@ -116,12 +116,12 @@ agents/{agentId}/.claude/skills/
 - SKILL.md 是 schema，references/ 是動態 data
 - 可以整包複製到新 bot
 
-**獨立 Skills（5 個）**：
-1. `agent-protocols` — 統一啟動流程（祖母 skill，管理子系統）
-2. `proficiency` — 熟練度追蹤
-3. `achievements` — 成就系統
-4. `character-sheet` — 屬性面板
-5. `equipment` — 裝備管理
+**獨立 Skills（已實作 3 個，規劃 5 個）**：
+1. `agent-protocols` — 統一啟動流程（祖母 skill，管理子系統）✅
+2. `proficiency` — 熟練度追蹤 ✅
+3. `equipment` — 裝備管理 ✅
+4. `achievements` — 成就系統（設計完成，尚未部署到任何 agent）
+5. `character-sheet` — 屬性面板（設計完成，尚未部署到任何 agent）
 
 **內嵌協議（在 agent-protocols 內部）**：
 - `memory-system` — 記憶寫入規則（跨界協議：規則在 skill 裡，寫入目標在根目錄）
@@ -754,7 +754,14 @@ description: >
 
 **驗證**：新 bot 可以直接複製所有 `sys-*` 目錄到 `.claude/skills/`，啟動即可用。
 
-**已完成**：✅ general agent 已遷移（2026-02-08）。
+**注意**：`agents/_shared/system-template/` 尚未建立。
+
+**遷移現況**（2026-02-16 審計）：
+- ✅ `general`：已遷移至 `sys-*` 命名（sys-agent-protocols、sys-proficiency、sys-equipment）
+- 🔶 `admin`：僅有 sys-agent-protocols，缺 sys-proficiency、sys-equipment
+- ❌ `leader`：使用舊命名（agent-protocols、equip），未遷移至 `sys-*` 前綴
+- ❌ `nitterbot`：使用舊命名（agent-protocols、equip），未遷移至 `sys-*` 前綴
+- ❌ `coder`：完全無 `.claude/skills/` 目錄
 
 ### Phase 2：Agent-Protocols 啟動流程整合
 

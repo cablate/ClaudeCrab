@@ -37,9 +37,10 @@ claudecab/
 │   ├── index.ts           # 精簡入口（~20 行，委派給 AppBootstrap）
 │   ├── config.ts           # 集中化環境變數解析（AppConfig）
 │   ├── AppBootstrap.ts     # 應用生命週期管理（初始化 + 關機序列）
-│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus, PlatformOrchestrator, StatusMessageManager, InteractionHandler
+│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus, PlatformOrchestrator, StatusMessageManager, InteractionHandler, ActivityService, GroupBroadcaster, DelegationHandler, etc.
 │   ├── persistence/       # SQLite 持久化層
-│   ├── adapters/          # TelegramAdapter, BaseAdapter
+│   ├── schedule/          # 排程系統（CronScheduler, ScheduleManager, ScheduleExecutor, etc.）
+│   ├── adapters/          # TelegramAdapter, BaseAdapter, commands/TelegramCommands
 │   ├── webui/             # Express + EJS 管理介面
 │   │   ├── WebUIServer.ts
 │   │   ├── routes/        # 頁面路由
@@ -47,7 +48,7 @@ claudecab/
 │   │   ├── services/      # 業務邏輯
 │   │   └── views/         # EJS 模板（元件化）
 │   ├── types/             # TypeScript 型別定義
-│   └── utils/             # logger, security, audit, retry, format
+│   └── utils/             # logger, security, audit, retry, format, DedupTracker, groupSession, telegramMarkdown
 ├── public/                # 靜態資源 (JS, CSS, images)
 │   └── images/agents/     # Agent 視覺資產（sprite, portrait, emoji）
 ├── agents/                # Agent 配置（每個子目錄 = 一個代理）
@@ -120,10 +121,10 @@ interface IAgentRepository {
 封裝 Claude Agent SDK `query()` 函數：
 
 **關鍵設計（Agent Isolation + Skills）**：
-- `settingSources: ['project']` - 載入 agent 的設定檔（`.claude/settings.local.json`）**和 skills**（`.claude/skills/`）
+- `settingSources: ['project', 'local']` - 載入 agent 的設定檔（`.claude/settings.local.json`）**和 skills**（`.claude/skills/`）
 - `systemPrompt` 參數 - 使用 SDK preset append 模式（`{ type: 'preset', preset: 'claude_code', append: agentSystemPrompt }`），保留 Claude Code 內建 prompt 並附加 agent 的 CLAUDE.md 內容
 - **原因**：`'local'` 無法載入 skills；改用 `'project'` 後，仍透過明確傳遞 `systemPrompt` 確保 agent isolation。v1.28 從字串覆蓋改為 preset append，避免丟失 Claude Code 的工具規範與安全規則
-- **變更歷史**：v1.11.0 從 `['local']` 改為 `['project']`
+- **變更歷史**：v1.11.0 從 `['local']` → `['project']` → `['project', 'local']`
 
 **功能**：
 - 管理 Query 生命週期
@@ -218,6 +219,114 @@ v1.17.0 從 MessageProcessor 抽出，封裝即時狀態訊息管理：
 - Key 為 `platform::agentId` 複合鍵
 - 支援按平台+Agent 查詢 Adapter
 
+### ConfigTransformer (`src/core/ConfigTransformer.ts`)
+
+AgentConfig → SDK Options 轉換器：
+- `toSDKOptions()` 將 agent.json 配置轉換為 SDK `query()` 可用的 options
+- `getSDKModel()` 映射 model 名稱（sonnet/opus/haiku → SDK model ID）
+- `validateSDKOptions()` 驗證轉換後的 options
+- 內含 `PERMISSION_MODE_MAP` 映射表（default/acceptEdits/bypassPermissions/plan/delegate/dontAsk）
+
+### QuestionBridge (`src/core/QuestionBridge.ts`)
+
+Promise-based 非同步問答橋接（與 PermissionBridge 平行的設計）：
+- 處理 SDK `AskUserQuestion` 工具的回應流程
+- 管理 `requestId → deferred Promise` 映射
+- 提取問題選項標籤供 Telegram InlineKeyboard 顯示
+- 由 InteractionHandler 整合調用
+
+### ContextInjector (`src/core/ContextInjector.ts`)
+
+群組對話歷史注入（v1.18.0+）：
+- `getInjectionContext()` 取得群組訊息歷史，格式化為 agent 可理解的上下文
+- `formatHistory()` 將群組訊息轉為結構化文字
+- `formatMemberList()` 格式化群組成員資訊
+- `updateCursor()` 更新注入游標，避免重複注入
+- 依賴 GroupMessageRepository + InjectionStateRepository
+
+### DelegationHandler (`src/core/DelegationHandler.ts`)
+
+Agent 對 Agent 委派機制（ADR-022）：
+- `processDelegation()` 處理委派請求
+- `detectDelegationTargets()` 識別委派目標 agent
+- `executeDelegation()` / `executeParallelDelegation()` 執行單一/並行委派
+- `buildSynthesisPrompt()` 建構委派結果綜合提示
+- 內含 `MAX_DELEGATION_DEPTH` 防止無限遞迴
+
+### GroupBroadcaster (`src/core/GroupBroadcaster.ts`)
+
+多 Agent 群組對話協調器（v1.18.0+）：
+- `handleGroupMessage()` 處理群組訊息路由
+- `getRespondingBot()` 決定由哪個 bot 回應
+- `registerBotInGroup()` / `restoreMemberships()` 群組成員管理
+- `handleBotReplied()` / `recordBotReplyToGroupMessages()` 回應追蹤
+- 整合 DelegationHandler、InitiativeHandler、SocialHandler
+- 管理 per-bot 訊息去重（DedupTracker）
+
+### InitiativeEvaluator (`src/core/InitiativeEvaluator.ts`)
+
+Agent 主動互動評估器（ADR-023）：
+- 評估 agent 是否應主動發起對話
+- 基於 agent.json `settings.initiative` 配置
+
+### InitiativeHandler (`src/core/InitiativeHandler.ts`)
+
+Agent 主動互動執行器（ADR-023）：
+- `evaluateInitiatives()` 評估所有 agent 的主動行為時機
+- `executeInitiative()` 執行主動訊息發送
+- 冷卻時間管理（cooldowns）+ 每小時計數器（hourlyCounters）
+
+### SocialEvaluator (`src/core/SocialEvaluator.ts`)
+
+社交行為評估器：
+- 評估群組中 agent 是否應進行社交互動
+
+### SocialHandler (`src/core/SocialHandler.ts`)
+
+社交互動執行器：
+- `evaluateSocial()` 評估社交互動時機
+- `executeSocial()` 執行社交訊息
+- 群組能量（energy）機制：每次互動消耗能量，自然衰減，防止 bot 過度活躍
+- `DEFAULTS` 配置：cooldown、energyThreshold、maxConsecutiveBotTurns、maxPerHour
+
+### ActivityService (`src/core/ActivityService.ts`)
+
+Live page 活動追蹤服務（v1.27.0+）：
+- 緩衝式事件收集（`FLUSH_THRESHOLD` / `FLUSH_INTERVAL_MS`）+ 寫入佇列
+- `emitReaction()` / `emitMutter()` / `emitReply()` / `emitStatusChange()` / `emitWorkflow()` 發送不同類型事件
+- `trackActivity()` 追蹤 agent 活動狀態（phase + mood）
+- `getAgentState()` / `getIdleDuration()` / `getStats()` 狀態查詢
+- `restoreMoodFromDb()` 重啟後恢復 mood
+- 依賴 ActivityRepository + ReactionGenerator + EventBus
+- `PHASE_DESCRIPTIONS` 映射：idle/task_received/working/tool_use/completed/error
+
+### ReactionGenerator (`src/core/ReactionGenerator.ts`)
+
+AI 驅動的反應/心情生成器（Live page 用）：
+- `generateReaction()` 根據事件生成 agent 反應（emoji + 短文字）
+- `generateMutter()` 生成 idle 時的自言自語
+- `inferMood()` 從事件推斷 agent 心情（ActivityMood）
+- 使用 Haiku 模型（低成本即時生成）
+- `MUTTER_SCENARIOS` 預定義自言自語場景
+
+### IdleMutterScheduler (`src/core/IdleMutterScheduler.ts`)
+
+Idle 自言自語排程器（Live page 用）：
+- 定期檢查 agent 閒置時間（`checkIntervalMs`）
+- 閒置超過閾值（`idleThresholdMs`）時有機率（`mutterChance`）觸發自言自語
+- 每 agent 每小時上限（`maxPerAgentPerHour`）
+- `hasActiveViewers()` 回調：僅在有人觀看 Live page 時觸發
+
+### Schedule 模組 (`src/schedule/`)
+
+排程系統（agent 可建立定時任務）：
+- `ScheduleManager.ts` — 排程 CRUD + 生命週期管理（create/pause/resume/delete/runNow）
+- `ScheduleLoader.ts` — 從 agent 目錄載入排程定義
+- `CronScheduler.ts` — Cron 表達式排程引擎
+- `ScheduleExecutor.ts` — 排程任務執行器
+- `ScheduleNotifier.ts` — 排程事件通知
+- `schemas.ts` / `types.ts` — Zod schema 與型別定義
+
 ### BaseAdapter (`src/adapters/BaseAdapter.ts`)
 
 所有平台 Adapter 的抽象基底類別：
@@ -232,7 +341,7 @@ Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 - 訊息分割（超過 4096 字元）
 - 打字指示器
 - 速率限制（35ms 最小間隔）
-- 指令處理：`/start`, `/help`, `/reset`
+- 指令處理（`commands/TelegramCommands.ts`）：`/start`, `/help`, `/reset` 等
 - **權限審批 UI**（v1.7.0）：Override `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` 三個方法；發送 InlineKeyboard（Allow / Deny 按鈕）；註冊 `callback_query` handler 處理使用者按鈕回應
 - **Fire-and-forget message handler**（v1.7.0）：message handler 不 await processMessage，避免阻塞 grammy polling loop 造成 callback_query 死鎖
 - **allowed_updates**（v1.7.0）：`doStart` 明確指定 `allowed_updates: ['message', 'callback_query']` 確保接收按鈕回調事件
@@ -246,6 +355,9 @@ SQLite 持久化：
 - `GroupMemberRepository.ts`（v1.18.0）- 群組成員持久化（platform + chat_id + agent_id），供重啟後還原成員關係
 - `QueryMetricsRepository.ts`（v1.19.0）- 每次 SDK query 的 token 用量、成本、回應時間追蹤；提供 per-agent 聚合統計和每日統計
 - `ActivityRepository.ts`（v1.27.0）- Activity events 持久化（重啟後 Live page 歷史可見）；支援 agentId/type/since 篩選查詢
+- `GroupMessageRepository.ts`（v1.18.0+）- 群組訊息持久化，供 ContextInjector 注入歷史上下文
+- `InjectionStateRepository.ts`（v1.18.0+）- 群組訊息注入游標狀態，追蹤每個 agent 已注入到哪條訊息
+- `ScheduleRepository.ts` - 排程定義與執行歷史持久化
 
 ---
 
@@ -273,7 +385,7 @@ agents/general/
 }
 ```
 
-> **重要**：使用 `settings.local.json` 而非 `settings.json`，搭配 `settingSources: ['local']` 避免 SDK 搜尋父目錄。
+> **重要**：使用 `settings.local.json` 而非 `settings.json`，搭配 `settingSources: ['project', 'local']` 載入 agent 設定檔和 skills。
 >
 > **所有權**：此檔案由 SDK 管理。SDK 在 runtime 會動態寫入 `permissions.allow`（使用者核准工具時）。
 > Dashboard Edit 頁面可讀寫此檔案的 `permissions` 和 `model`（merge 式更新，不覆蓋其他欄位）。
@@ -499,7 +611,7 @@ Agent 用 Read/Write 工具自行讀寫 workspace 檔案
 ┌─────────────────────────────────────────────┐
 │  3. SDKQueryManager 執行查詢                  │
 │     - cwd = agent 目錄                        │
-│     - settingSources: ['local']              │
+│     - settingSources: ['project', 'local']              │
 │     - systemPrompt = 從磁碟重新讀取的 CLAUDE.md│
 │     - resume = sdkSessionId（如有）           │
 └───────────────────┬─────────────────────────┘

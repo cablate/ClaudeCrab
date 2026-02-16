@@ -1,4 +1,6 @@
-# ADR-031: Skill-Based Character System 資料配置策略
+# ADR-034: Skill-Based Character System 資料配置策略
+
+> 原編號 ADR-031，因與 ADR-031 Hook 系統解耦衝突，重新編號為 ADR-034。
 
 **狀態**：✅ Accepted & Implemented (general agent)
 **日期**：2026-02-08

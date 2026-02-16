@@ -105,10 +105,11 @@ I1 + I2 + I3 → N1
 
 | Batch | 狀態 | 完成項 |
 |-------|------|--------|
-| Batch 1 Track A | ⬜ 待開始 | |
-| Batch 1 Track B | ⬜ 待開始 | |
-| Batch 1 Track C | ⬜ 待開始 | |
-| Batch 2 Group 1 | ⬜ 待開始 | |
-| Batch 2 Group 2 | ⬜ 待開始 | |
-| Batch 2 Group 3 | ⬜ 待開始 | |
-| Batch 3 | ⬜ 待開始 | |
+| Batch 1 Track A | ✅ 完成 | H1~H7 全部策展歸檔，原始文件已加 deprecation notice |
+| Batch 1 Track B | ✅ 完成 | ADR 審計完成：ADR-019/022 status→implemented，ADR-031 搬到 adr/，ADR-034 重新編號，ADR-032 補建 .md |
+| Batch 1 Track C | ✅ 完成 | Changelog 分割：v0.1~v1.24→archive，v1.25+ 留原位 |
+| Batch 2 Group 1 | ✅ 完成 | L1 overview.md（settingSources×3 + 12 模組 + schedule + 3 repos），L2 trigger-map（Social 預設值 + 3 EventBus 事件） |
+| Batch 2 Group 2 | ✅ 完成 | L3 shared-knowledge（目錄更新），L4 skill-system（遷移現況×5 agents），L5 vision（Phase 2 🔶），L7 mmorpg（拆分已完成/待部署），L8 image-asset-spec（日夜系統 + emoji 修正） |
+| Batch 2 Group 3 | ✅ 完成 | L9 quick-nav（396 tests + JWT + isSocial + 測試清單），L10 troubleshooting（settingSources + InteractionHandler + AppBootstrap + DedupTracker），L13 guide（settingSources）。L6/L11/L12/L14 驗證通過無需修改 |
+| Batch 3 Indexes | ✅ 完成 | I1 _index.md（重構含 _archive 區塊），I2 decisions/_index.md（ADR-032 連結 + ADR-034），I3 SKILL.md（更新導航） |
+| Batch 3 Narrative | ✅ 完成 | N1 project-journey.md — 21 天演化敘事，6 章節 + 架構總覽 + 數字里程碑 |

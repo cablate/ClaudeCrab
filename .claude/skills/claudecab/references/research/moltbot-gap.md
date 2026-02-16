@@ -1,3 +1,6 @@
+> **⚠️ 歷史文件 — 已策展歸檔**：策展版本請見 [`_archive/research/moltbot-gap.md`](../_archive/research/moltbot-gap.md)
+> 本檔案為原始開發紀錄，保留供完整追溯。
+
 # Moltbot 機制差距分析
 
 > 基於 Moltbot 官方文件（docs.molt.bot）與目前 agents/general/ 實作的逐項對照。

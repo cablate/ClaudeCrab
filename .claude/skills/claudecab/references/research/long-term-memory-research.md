@@ -1,3 +1,6 @@
+> **⚠️ 歷史文件 — 已策展歸檔**：策展版本請見 [`_archive/research/long-term-memory-research.md`](../_archive/research/long-term-memory-research.md)
+> 本檔案為原始開發紀錄，保留供完整追溯。
+
 # AI Agent 長期記憶與知識庫工具研究報告
 
 **日期**：2026-02-09

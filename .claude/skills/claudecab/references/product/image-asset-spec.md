@@ -13,6 +13,7 @@
 | **Portrait** | 對話面板的角色立繪 | `public/images/agents/{id}/portrait.png` | 選填（fallback: 大號 avatar emoji） |
 | **Emoji** | 對話面板的表情反應圖 | `public/images/agents/{id}/emoji-{key}.png` | 選填（fallback: text emoji） |
 | **Background** | 辦公室場景背景 | `public/images/office-background.png` | 選填（fallback: CSS 漸層背景） |
+| **Day/Night BG** | 日夜場景氛圍背景 | `public/images/bg-{dawn,day,dusk,night}.png` | 選填（已實作日夜切換） |
 
 ---
 
@@ -109,6 +110,17 @@
 | **最大檔案大小** | 1 MB |
 | **風格** | Isometric pixel art, 45-degree top-down view |
 
+**日夜場景變體**（已實作）：
+
+| 檔案 | 時段 | 觸發條件 |
+|------|------|----------|
+| `bg-dawn.png` | 晨光（05:00-07:59） | `getTimePeriod()` in `live.js` |
+| `bg-day.png` | 日間（08:00-16:59） | 同上 |
+| `bg-dusk.png` | 黃昏（17:00-18:59） | 同上 |
+| `bg-night.png` | 夜晚（19:00-04:59） | 同上 |
+
+`office-background.png` 為預設/備用背景。日夜切換由 `updateSkyBackground()` 每分鐘檢查。
+
 ---
 
 ## 假透明 (Fake Transparency) 防範
@@ -160,11 +172,13 @@ AI 圖片生成器（特別是 Gemini）在被要求生成「透明背景」時�
       "annoyed": "emoji-annoyed.png",
       "tired": "emoji-tired.png",
       "focused": "emoji-focused.png",
-      "bored": "emoji-bored.png"
+      "task_received": "emoji-task_received.png"
     }
   }
 }
 ```
+
+> **注意**：上方範例取自 general 的實際 agent.json。`bored` 為標準 key 但目前無 agent 已生成對應圖片。
 
 路徑相對於 `public/images/agents/{agentId}/`，API 自動組裝完整 URL。
 
@@ -178,11 +192,11 @@ AI 圖片生成器（特別是 Gemini）在被要求生成「透明背景」時�
 | Sprite 圖片載入失敗 | onerror → 切換為 avatar emoji | `live.js: createAgentSprite` |
 | Portrait 圖片 | `display: none`（隱藏圖片區域） | `live.js: openPortrait` |
 | Emoji 圖片 | 顯示 MOOD_EMOJI text emoji（4rem） | `live.js: openPortrait` |
-| Background 圖片 | CSS 漸層背景（需實作） | `live.css` |
+| Background 圖片 | 日夜場景背景自動切換（bg-dawn/day/dusk/night.png） | `live.js: updateSkyBackground` |
 
 ### 待改善
 - Portrait fallback 應該改為顯示大號 avatar emoji 而非完全隱藏
-- Background 應有 CSS fallback 漸層色
+- `emoji-bored.png` 列為標準 key 但目前無任何 agent 已生成此表情
 
 ---
 

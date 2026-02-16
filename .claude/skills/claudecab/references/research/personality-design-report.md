@@ -1,3 +1,6 @@
+> **⚠️ 歷史文件 — 已策展歸檔**：策展版本請見 [`_archive/research/personality-design-report.md`](../_archive/research/personality-design-report.md)
+> 本檔案為原始開發紀錄，保留供完整追溯。
+
 # AI Bot 人格設計深度研究報告
 
 **目標**：從「遵循規則的助手」進化到「有辨識度的人」

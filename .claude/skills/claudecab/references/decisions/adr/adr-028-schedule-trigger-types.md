@@ -1,7 +1,7 @@
 # ADR-028: 排程 Trigger 類型支援策略
 
 **日期**：2026-02-06
-**狀態**：已接受
+**狀態**：✅ implemented
 **關聯**：Schedule 系統、CronScheduler、TelegramCommands
 
 ## 背景

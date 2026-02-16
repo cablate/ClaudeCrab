@@ -410,12 +410,15 @@ bot 產出：
 
 ### ✅ 已完成
 
-1. **Skill-Based Character System 架構**：三層分類（system/persona/domain）、5 個 system skills、general agent 遷移完成
-2. **裝備欄**：equipment skill + loadout.md
-3. **熟練度追蹤架構**：proficiency skill（等級定義、Stop Hook 驅動）
-4. **成就系統架構**：achievements skill（定義、unlocked、progress）
-5. **角色面板架構**：character-sheet skill（聚合數據）
-6. **Stop Hook 整合**：對話結束時批次提醒更新 proficiency/achievements
+1. **Skill-Based Character System 架構**：三層分類（system/persona/domain）、general agent 遷移完成（sys-agent-protocols、sys-proficiency、sys-equipment）
+2. **裝備欄**：equipment skill + loadout.md（僅 general 已部署）
+3. **熟練度追蹤架構**：proficiency skill + levels.md（僅 general 已部署）
+4. **Stop Hook 整合**：buildMemoryStopCheckpoint 已在 MessageProcessor 中實作
+
+### 🔶 設計完成但尚未部署
+
+5. **成就系統架構**：achievements skill SKILL.md 設計完成，但 sys-achievements 目錄未建立在任何 agent
+6. **角色面板架構**：character-sheet skill SKILL.md 設計完成，但 sys-character-sheet 目錄未建立在任何 agent
 
 ### 短期可做（2-6 週）
 

@@ -107,7 +107,7 @@ SDK 整合層只接收 `systemPrompt` + `cwd`，不注入任何業務邏輯。�
 - [x] Memory System
 - [x] WebUI 管理介面
 
-### Phase 2：智慧任務 ✅
+### Phase 2：智慧任務 🔶
 - [x] Cron 排程系統（v1.10）
 - [x] 主動通知（Agent → User）（v1.10）
 - [x] Agent Skill 系統（v1.11）

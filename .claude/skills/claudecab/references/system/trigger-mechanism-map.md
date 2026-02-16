@@ -50,6 +50,9 @@
 | **`session:created`** | SessionManager | WebUIServer（監控） | dashboard 更新 |
 | **`session:closed`** | SessionManager | WebUIServer（監控） | dashboard 更新 |
 | **`session:stateChanged`** | SessionManager | WebUIServer（監控） | dashboard 更新 |
+| **`session:switched`** | SessionManager | WebUIServer（監控） | Agent 切換通知 |
+| **`activity`** | ActivityService | SSEBroadcaster（Live page 即時更新） | Live page activity event 推送 |
+| **`interaction`** | InteractionHandler | WebUIServer（ADR-033 互動 UI） | 權限請求/問答事件推送到 Web UI |
 | **`error`** | 各處 | WebUIServer（監控） | 錯誤記錄 |
 
 ---
@@ -259,9 +262,9 @@ bot:replied 事件
   "settings": {
     "social": {
       "enabled": true,
-      "energyThreshold": 2,    // 1-5，LLM 回傳的 energy 需 >= 此值
-      "cooldown": 120,          // 秒，每個 bot 在每個群組的冷卻時間
-      "maxPerHour": 30,         // 每小時上限
+      "energyThreshold": 3,    // 1-5，LLM 回傳的 energy 需 >= 此值
+      "cooldown": 600,          // 秒，每個 bot 在每個群組的冷卻時間
+      "maxPerHour": 10,         // 每小時上限         // 每小時上限
       "maxConsecutiveBotTurns": 3  // 連續 bot 回覆上限
     }
   }

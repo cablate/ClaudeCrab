@@ -26,10 +26,10 @@
 | [ADR-016](adr/adr-016-path-validator.md) | PathValidator 路徑權限強制執行 | ✅ accepted | 2026-02-02 |
 | [ADR-017](adr/adr-017-group-chat.md) | Telegram 群組對話支援設計 | ✅ accepted | 2026-02-02 |
 | [ADR-018](adr/adr-018-multi-bot-group.md) | 多 Bot 群組協作設計 | ✅ accepted | 2026-02-02 |
-| [ADR-019](adr/adr-019-multi-agent-group.md) | 群組對話架構重設計 - Multi-Agent 協作生態系統 | ✅ accepted | 2026-02-03 |
+| [ADR-019](adr/adr-019-multi-agent-group.md) | 群組對話架構重設計 - Multi-Agent 協作生態系統 | ✅ implemented | 2026-02-03 |
 | [ADR-020](adr/adr-020-virtual-office.md) | 虛擬辦公室模式可行性評估與改進路線圖 | ✅ accepted (Phase 1+2) | 2026-02-04 |
 | [ADR-021](adr/adr-021-auto-delegation.md) | 群組自動委派（Auto-Delegation） | ✅ accepted | 2026-02-04 |
-| [ADR-022](adr/adr-022-delegation-enhancement.md) | 委派機制增強（多重委派 + 可配置） | ✅ accepted | 2026-02-04 |
+| [ADR-022](adr/adr-022-delegation-enhancement.md) | 委派機制增強（多重委派 + 可配置） | ✅ implemented | 2026-02-04 |
 | [ADR-023](adr/adr-023-bot-initiative.md) | Bot 主動互動模式 | ✅ implemented (v1 work) | 2026-02-05 |
 | [ADR-024](adr/adr-024-group-commands.md) | 群組命令支援 | ✅ accepted | 2026-02-04 |
 | [ADR-025](adr/adr-025-dashboard-group-analytics.md) | Dashboard 群組分析與委派統計 | 📋 proposed | 2026-02-04 |
@@ -38,9 +38,10 @@
 | [ADR-028](adr/adr-028-schedule-trigger-types.md) | 排程 Trigger 類型支援策略 | ✅ implemented | 2026-02-06 |
 | [ADR-029](adr/adr-029-agent-structure-sync.md) | Agent 架構同步機制 | 📋 proposed | 2026-02-06 |
 | [ADR-030](adr/adr-030-agent-team-mode.md) | Agent Team Mode — 多 Agent 並行協作 | ✅ implemented (Tier 1 + 1.1~1.3) | 2026-02-06 |
-| [ADR-031](adr-031-hook-decoupling.md) | Hook 系統解耦 — 引擎硬編轉原生 Claude Code Hooks | 📋 proposed | 2026-02-11 |
-| ADR-032 | Live Page Data-Driven — 消除前端 hardcode，後端驅動渲染 | ✅ implemented | 2026-02-12 |
+| [ADR-031](adr/adr-031-hook-decoupling.md) | Hook 系統解耦 — 引擎硬編轉原生 Claude Code Hooks | 📋 proposed | 2026-02-11 |
+| [ADR-032](adr/adr-032-live-page-data-driven.md) | Live Page Data-Driven — 消除前端 hardcode，後端驅動渲染 | ✅ implemented | 2026-02-12 |
 | [ADR-033](adr/adr-033-webui-interactive-hooks.md) | Web UI Interactive Hooks — Galgame 選択肢互動 | 📋 proposed | 2026-02-13 |
+| [ADR-034](adr/adr-034-data-placement-strategy.md) | Skill-Based Character System 資料配置策略 | ✅ implemented | 2026-02-08 |
 
 ---
 

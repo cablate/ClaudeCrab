@@ -44,16 +44,18 @@ ClaudeCab 是**輕量級多代理框架**，讓 Claude Code 成為可被遠端�
 | 詳細架構設計、模組說明、資料流 | [system/overview.md](references/system/overview.md) |
 | 共享知識區架構（跨 bot 知識共享） | [system/shared-knowledge.md](references/system/shared-knowledge.md) |
 | 觸發機制全覽（事件流、cascade 分析） | [system/trigger-mechanism-map.md](references/system/trigger-mechanism-map.md) |
+| Skill-Based Character System 設計 | [system/skill-based-character-system.md](references/system/skill-based-character-system.md) |
 | **決策** | |
-| 決策追蹤（ADR + 功能故事） | [decisions/_index.md](references/decisions/_index.md) |
+| 決策追蹤（ADR-001 ~ ADR-034 + 功能故事） | [decisions/_index.md](references/decisions/_index.md) |
 | **操作** | |
 | 「做 X 功能看哪些檔案」對照表 | [operations/quick-nav.md](references/operations/quick-nav.md) |
 | 已知問題、踩過的坑、解決方案 | [operations/troubleshooting.md](references/operations/troubleshooting.md) |
-| 版本歷史、重大變更 | [operations/changelog.md](references/operations/changelog.md) |
+| 版本歷史（v1.25+） | [operations/changelog.md](references/operations/changelog.md) |
 | **研究** | |
 | Agent Skill 設計原則、核心洞察 | [research/agent-skill/design.md](references/research/agent-skill/design.md) |
 | Agent Skill 實踐指南 | [research/agent-skill/guide.md](references/research/agent-skill/guide.md) |
-| Moltbot 記憶系統差距分析 | [research/moltbot-gap.md](references/research/moltbot-gap.md) |
+| **歸檔** | |
+| 歷史文件策展歸檔（portfolio 材料） | [_archive/_index.md](references/_archive/_index.md) |
 
 > **開發新功能前，請先閱讀 [product/vision.md](references/product/vision.md) 確認符合產品定位。**
 

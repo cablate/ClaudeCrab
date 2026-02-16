@@ -1,3 +1,6 @@
+> **⚠️ 歷史文件 — 已策展歸檔**：策展版本請見 [`_archive/planning/mvp-gap-analysis.md`](../_archive/planning/mvp-gap-analysis.md)
+> 本檔案為原始開發紀錄，保留供完整追溯。
+
 # MVP 就緒度落差分析
 
 > 2026-02-13 更新

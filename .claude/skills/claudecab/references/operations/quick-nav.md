@@ -8,7 +8,7 @@
 
 ```bash
 npm run dev          # 啟動開發伺服器
-npm test             # 執行測試 (284 tests)
+npm test             # 執行測試 (396 tests)
 npm run typecheck    # TypeScript 型別檢查
 ```
 
@@ -24,6 +24,7 @@ npm run typecheck    # TypeScript 型別檢查
 | `WEBUI_ENABLED` | 啟用 WebUI 管理介面，預設 false |
 | `WEBUI_PORT` | WebUI 埠號，預設 3001 |
 | `WEBUI_PASSWORD` | WebUI 登入密碼（必填，若啟用 WebUI）|
+| `WEBUI_JWT_SECRET` | WebUI JWT 簽名密鑰（必填，若啟用 WebUI）|
 | `DB_RETENTION_MS` | DB session 保留時間（毫秒），預設 30 天（2592000000）|
 
 ---
@@ -72,7 +73,7 @@ npm run typecheck    # TypeScript 型別檢查
 **群組委派與並行協作（ADR-021/022/030）**：
 - 委派核心：`src/core/DelegationHandler.ts`（`processDelegation`、`executeDelegation`、`executeParallelDelegation`、`buildSynthesisPrompt`）
 - 廣播入口：`src/core/GroupBroadcaster.ts`（`handleBotReplied` → `processDelegation`）
-- 事件型別：`src/types/events.ts`（`BotRepliedPayload`：`isSynthesis`、`isInitiative`）
+- 事件型別：`src/types/events.ts`（`BotRepliedPayload`：`isSynthesis`、`isInitiative`、`isSocial`）
 - 測試：`tests/unit/DelegationHandler.test.ts`
 
 **群組命令路由（ADR-024）**：
@@ -122,7 +123,7 @@ npm run typecheck    # TypeScript 型別檢查
 | 修改 YAML schema | `src/schedule/schemas.ts` | `src/schedule/types.ts` |
 | 修改排程載入邏輯 | `src/schedule/ScheduleLoader.ts` | - |
 | 修改 cron 觸發邏輯 | `src/schedule/CronScheduler.ts` | `node-cron` |
-| 修改任務執行邏輯 | `src/schedule/ScheduleExecutor.ts` | `SDKQueryManager.ts`、`PathValidator.ts`、`constants.ts` |
+| 修改任務執行邏輯 | `src/schedule/ScheduleExecutor.ts` | `SDKQueryManager.ts`、`constants.ts` |
 | 修改執行通知 | `src/schedule/ScheduleNotifier.ts` | `telegramMarkdown.ts`（sendWithMarkdownFallback） |
 | 修改排程管理 API | `src/schedule/ScheduleManager.ts` | - |
 | 修改 /schedule 指令 | `src/adapters/commands/TelegramCommands.ts` | `handleSchedule*` 函數 |
@@ -133,7 +134,7 @@ npm run typecheck    # TypeScript 型別檢查
 
 **排程執行特性**：
 - 每次執行建立獨立 session（`schedule:{specId}:{uuid}`），不影響對話 session
-- Hooks：UserPromptSubmit（時間注入）+ PreToolUse（PathValidator）— 無 Stop hook、無 canUseTool
+- Hooks：UserPromptSubmit（時間注入）— 無 PreToolUse、無 Stop hook、無 canUseTool
 - 通知使用 `sendWithMarkdownFallback`（MarkdownV2 → Markdown fallback）
 - Schema 容錯：`type:"at"` → `"once"`、`datetime` → `at`
 - **Retry**：`retryAsync()` 包裝 executeQuery，3 次重試（5s→15s→45s backoff），每次 retry 新 session ID
@@ -254,11 +255,17 @@ npm run typecheck    # TypeScript 型別檢查
 |------------|--------------|
 | AgentLoader | `tests/unit/AgentLoader.test.ts` |
 | SessionManager | `tests/unit/SessionManager.test.ts` |
-| SDKQueryManager | `tests/unit/SDKQueryManager.test.ts` |
-| MessageProcessor | `tests/unit/MessageProcessor.test.ts` |
 | TelegramAdapter | `tests/unit/TelegramAdapter.test.ts` |
+| TelegramCommands | `tests/unit/TelegramCommands.test.ts` |
 | PermissionBridge | `tests/unit/PermissionBridge.test.ts` |
-| 持久化 | `tests/unit/persistence/` |
+| DelegationHandler | `tests/unit/DelegationHandler.test.ts` |
+| GroupBroadcaster | `tests/unit/GroupBroadcaster.test.ts` |
+| InitiativeEvaluator | `tests/unit/InitiativeEvaluator.test.ts` |
+| InitiativeHandler | `tests/unit/InitiativeHandler.test.ts` |
+| ConfigTransformer | `tests/unit/ConfigTransformer.test.ts` |
+| EventBus | `tests/unit/EventBus.test.ts` |
+| PathValidator | `tests/unit/PathValidator.test.ts` |
+| 持久化 | `tests/unit/ConversationRepository.test.ts`、`DatabaseManager.test.ts`、`SessionRepository.test.ts` |
 | 整合測試 | `tests/integration/` |
 
 ---

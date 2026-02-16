@@ -35,7 +35,7 @@
 **原因**：`settingSources: ['local']` 只載入權限設定，不會載入 `.claude/skills/` 目錄
 
 **解決方案**（v1.11.0）：
-1. 將 `settingSources` 改為 `['project']`
+1. 將 `settingSources` 改為 `['project', 'local']`（預設值）
 2. 保留明確傳遞 `systemPrompt` 參數確保 agent isolation
 3. SDK 會同時載入 skills 並優先使用傳入的 systemPrompt
 
@@ -239,7 +239,7 @@ const hooksModule = await import(pathToFileURL(hooksPath).href);
 - 即使 TypeScript type 標記為 optional，始終傳入 `updatedInput` 欄位
 - allow 回應格式：`{ behavior: 'allow', updatedInput: toolInput }`（傳入原始 toolInput）
 
-**相關檔案**：`src/core/MessageProcessor.ts`（canUseTool 閉包中的 allow 回應）
+**相關檔案**：`src/core/InteractionHandler.ts`（`buildCanUseTool` 閉包中的 allow 回應）
 
 **注意**：此問題可能在未來 SDK 版本中修復。若升級 SDK 後出現相關變更，可檢查是否仍需要此 workaround
 
@@ -314,14 +314,13 @@ const hooksModule = await import(pathToFileURL(hooksPath).href);
 
 **原因**：`agentLoader.list()` 只回傳已載入（快取）的 Agents
 
-**解決方案**：在 `src/index.ts` 啟動時呼叫 `loadAllAgents()`：
+**解決方案**：在 `src/AppBootstrap.ts` 啟動時呼叫 `loadAllAgents()`：
 
 ```typescript
 await agentLoader.loadAllAgents();
-logger.info({ loadedCount: agentLoader.list().length }, 'Agents loaded');
 ```
 
-**相關檔案**：`src/index.ts`
+**相關檔案**：`src/AppBootstrap.ts`（`initializeAgents` 方法）
 
 ---
 
@@ -331,7 +330,7 @@ logger.info({ loadedCount: agentLoader.list().length }, 'Agents loaded');
 
 **檢查項目**：
 1. `WEBUI_PASSWORD` 環境變數是否設定
-2. `WEBUI_JWT_SECRET` 環境變數是否設定（若未設定會使用預設值）
+2. `WEBUI_JWT_SECRET` 環境變數是否設定（未設定會拋出錯誤，不會使用預設值）
 3. 檢查瀏覽器 Cookie 是否被阻擋
 
 ---
@@ -368,7 +367,7 @@ this.app.use('/static', express.static(path.join(process.cwd(), 'public')));
 
 **原因**：Telegram Bot API 對每個 bot 分配**獨立的 `message_id`**。同一則群組訊息，Bot A 看到 `message_id=134`，Bot B 看到 `message_id=1585`。因此 `chatId:messageId` 不能作為跨 bot dedup key。
 
-**解決方案**：改用 `chatId:date:userId:command` 作為 dedup key。`ctx.message.date` 是 Telegram 伺服器端 Unix timestamp（秒），對同一則訊息所有 bot 看到的值一致。Dedup Set 存於 `globalThis` 確保跨 module 實例共享。
+**解決方案**：改用 `chatId:date:userId:command` 作為 dedup key。`ctx.message.date` 是 Telegram 伺服器端 Unix timestamp（秒），對同一則訊息所有 bot 看到的值一致。`DedupTracker` 實例存於 `globalThis` 確保跨 module 實例共享。
 
 **相關檔案**：`src/adapters/commands/TelegramCommands.ts`（`isGroupCommandProcessed`）
 

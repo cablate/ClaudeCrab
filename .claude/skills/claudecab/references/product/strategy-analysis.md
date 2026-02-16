@@ -1,3 +1,6 @@
+> **⚠️ 歷史文件 — 已策展歸檔**：策展版本請見 [`_archive/analysis/strategy-analysis-2026-02-08.md`](../_archive/analysis/strategy-analysis-2026-02-08.md)
+> 本檔案為原始開發紀錄，保留供完整追溯。
+
 # ClaudeCab 產品策略分析報告
 
 > **分析日期**：2026-02-08

@@ -12,8 +12,10 @@ agents/
 │   └── knowledge/
 │       ├── general/          # general 發布的內容
 │       │   ├── tools/
-│       │   └── cases/
-│       └── nitterbot/        # nitterbot 發布的內容
+│       │   ├── cases/
+│       │   ├── early-stage-fundraising-handbook.md
+│       │   └── ganttai-fundraising-audit-report.md
+│       └── nitterbot/        # nitterbot 發布的內容（目前為空）
 │
 ├── general/
 │   └── knowledge/            # general 私有工作區
@@ -22,7 +24,7 @@ agents/
 │       └── research/
 │
 └── nitterbot/
-    └── knowledge/            # nitterbot 私有工作區
+    └── knowledge/            # nitterbot 私有工作區（尚未建立）
 ```
 
 ## 權限規則
