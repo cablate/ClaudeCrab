@@ -8,6 +8,17 @@
 
 ## 版本歷史
 
+### v1.35 - ADR-031 Phase 2: Stop Hook 外部化
+
+**發布日期**：2026-02-16
+
+**Stop Hook 外部化**（ADR-031 Phase 2）：
+- 新建 `agents/_shared/hooks/memory-stop-checkpoint.ts` — 讀 stdin `stop_hook_active` flag，決定 allow/block
+- 各 agent `settings.local.json` 新增 `Stop` command-type hook 配置
+- 從 `MessageProcessor.ts` 移除硬編 Stop programmatic hook
+- 從 `constants.ts` 移除 `MEMORY_STOP_CHECKPOINT` 常數和 `buildMemoryStopCheckpoint()` 函式
+- UserPromptSubmit 經評估後保留在引擎（runtime 條件式內容無法有意義地靜態外部化）
+
 ### v1.34 - Galgame 美學統一 + 即時串流回覆（當前版本）
 
 **發布日期**：2026-02-16

@@ -6,7 +6,7 @@ import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager, type QueryResult } from './SDKQueryManager.js';
 import { InteractionHandler } from './InteractionHandler.js';
 import { EventBus } from './EventBus.js';
-import { buildPromptContext, buildMemoryStopCheckpoint } from './constants.js';
+import { buildPromptContext } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
@@ -637,25 +637,6 @@ export class MessageProcessor {
                               ),
                             },
                           }),
-                        ],
-                      },
-                    ],
-                    Stop: [
-                      {
-                        hooks: [
-                          async (input) => {
-                            // Only block once - if stop_hook_active is true, agent already did memory check
-                            const stopHookActive = (
-                              input as { stop_hook_active?: boolean }
-                            ).stop_hook_active;
-                            if (stopHookActive) {
-                              return {}; // Allow agent to stop
-                            }
-                            return {
-                              decision: 'block' as const,
-                              reason: buildMemoryStopCheckpoint(groupChatIdForContext),
-                            };
-                          },
                         ],
                       },
                     ],

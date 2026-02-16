@@ -2,7 +2,7 @@
 
 ## 狀態
 
-**PathValidator 已完成遷移**（2026-02-12）。UserPromptSubmit / Stop 仍在引擎內。
+**Phase 1+2 已實作**（2026-02-16）。PathValidator 和 Stop hook 已外部化。UserPromptSubmit 經評估後保留在引擎（內容為 runtime 條件式，無法有意義地靜態外部化）。
 
 ## 背景
 
@@ -84,11 +84,13 @@
 4. admin agent 不配置此 hook（天生有完整存取權）
 5. 從 `MessageProcessor.ts` 和 `ScheduleExecutor.ts` 移除硬編的 PathValidator hook
 
-### Phase 2: Memory/Stop Checkpoint 外部化
+### Phase 2: Stop Hook 外部化
 
-1. `UserPromptSubmit` hook → prompt 類型，內容從 `constants.ts` 移到 settings
-2. `Stop` hook → prompt 類型，同上
-3. 從引擎移除對應的硬編 hook
+1. `Stop` hook → command 類型外部腳本 `agents/_shared/hooks/memory-stop-checkpoint.ts`
+2. 腳本讀 stdin `{ stop_hook_active }` flag，決定 allow/block
+3. 各 agent `settings.local.json` 配置 Stop hook 指向此腳本
+4. 從 `MessageProcessor.ts` 移除硬編 Stop hook，從 `constants.ts` 移除相關常數
+5. `UserPromptSubmit` 保留在引擎 — 內容幾乎全是 runtime 條件式（時間、chatId、isNewSession、isGroupChat），無法有意義地拆到靜態設定
 
 ### Phase 3: 清理
 
