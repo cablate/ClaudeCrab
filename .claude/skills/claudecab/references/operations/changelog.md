@@ -8,6 +8,19 @@
 
 ## 版本歷史
 
+### v1.40 - Inline Image 自動發圖
+
+**發布日期**：2026-02-17
+
+**圖片自動發送**：
+- Agent 回覆中包含圖片路徑時，自動偵測並以 Telegram photo 發送
+- `BaseAdapter.sendPhoto()` 抽象方法 + `TelegramAdapter` 實作（grammy `InputFile` + rateLimiter）
+- `MessageProcessor.sendInlineImages()` — regex 偵測 → `existsSync` 驗證 → 發送 → strip 路徑
+- 支援格式：Windows 反斜線/正斜線、Unix 絕對路徑、相對路徑、backtick 包裹、markdown `![](path)` 語法
+- 整合於 `onIntermediateMessage` 和 `sendFinalResponse` 兩條路徑
+
+---
+
 ### v1.39 - RPG 角色管理面板 + 獨白 Per-Agent 設定
 
 **發布日期**：2026-02-17

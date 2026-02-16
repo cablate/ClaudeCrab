@@ -154,7 +154,8 @@ Promise-based 非同步權限橋接，用於連接 SDK 的 `canUseTool` callback
 6. SDKQueryManager 呼叫 `query()`（帶 `resume: sdkSessionId` + `onIntermediateMessage` callback + `canUseTool` via `additionalOptions`）
 7. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram
 8. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
-9. **Post-query 處理**（v1.17.0 拆分為 private methods）：`saveSDKSessionId()` → `updateInjectionCursor()` → `persistConversation()` → `sendFinalResponse()` → `emitBotRepliedEvent()`
+9. **Inline Image 自動發圖**（v1.40）：`sendInlineImages()` 偵測回覆中的圖片路徑（支援 Windows/Unix 絕對路徑、相對路徑、backtick 包裹、markdown image 語法），驗證檔案存在後透過 `adapter.sendPhoto()` 發送，再從文字中 strip 路徑
+10. **Post-query 處理**（v1.17.0 拆分為 private methods）：`saveSDKSessionId()` → `updateInjectionCursor()` → `persistConversation()` → `sendFinalResponse()` → `emitBotRepliedEvent()`
 
 ### InteractionHandler (`src/core/InteractionHandler.ts`)
 
@@ -334,7 +335,8 @@ Idle 自言自語排程器（Live page 用）：
 ### BaseAdapter (`src/adapters/BaseAdapter.ts`)
 
 所有平台 Adapter 的抽象基底類別：
-- 定義 `sendMessage`、`sendTypingIndicator` 等抽象方法
+- 定義 `sendMessage`、`sendTypingIndicator`、`sendPhoto` 等抽象方法
+- `sendPhoto(chatId, filePath, caption?)` — 發送本地圖片，預設回傳 not-implemented，子類 override
 - **權限審批預設方法**（v1.7.0）：提供 `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` 三個預設方法（no-op / auto-deny），子類可 override 實作平台特定的審批 UI
 
 ### TelegramAdapter (`src/adapters/TelegramAdapter.ts`)
@@ -347,6 +349,7 @@ Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 - 速率限制（35ms 最小間隔）
 - 指令處理（`commands/TelegramCommands.ts`）：`/start`, `/help`, `/reset` 等
 - **權限審批 UI**（v1.7.0）：Override `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` 三個方法；發送 InlineKeyboard（Allow / Deny 按鈕）；註冊 `callback_query` handler 處理使用者按鈕回應
+- **`sendPhoto` 實作**：使用 grammy `InputFile` 發送本地圖片，支援 caption，整合 rateLimiter
 - **Fire-and-forget message handler**（v1.7.0）：message handler 不 await processMessage，避免阻塞 grammy polling loop 造成 callback_query 死鎖
 - **allowed_updates**（v1.7.0）：`doStart` 明確指定 `allowed_updates: ['message', 'callback_query']` 確保接收按鈕回調事件
 

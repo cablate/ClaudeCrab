@@ -179,6 +179,17 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   ): Promise<SendResult>;
 
   /**
+   * Send a photo (image file) to the chat. Default no-op — subclasses override.
+   */
+  async sendPhoto(
+    _chatId: string,
+    _filePath: string,
+    _caption?: string,
+  ): Promise<SendResult> {
+    return { success: false, error: 'sendPhoto not implemented' };
+  }
+
+  /**
    * Send typing indicator
    */
   abstract sendTypingIndicator(chatId: string): Promise<void>;

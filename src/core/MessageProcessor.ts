@@ -24,6 +24,7 @@ import {
   type ToolEventEntry,
 } from './StatusMessageManager.js';
 import type { ActivityService } from './ActivityService.js';
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
 
@@ -554,9 +555,16 @@ export class MessageProcessor {
                     sendOpts.replyToMessageId = options.replyToMessageId;
                   }
 
+                  // Extract and send any inline images as photos
+                  const cleanedText = await this.sendInlineImages(text, adapter, chatId, sendOpts);
+
                   // Try MarkdownV2 first, fallback to Markdown on failure
+                  if (isNoiseResponse(cleanedText)) {
+                    intermediateMessages.push(text);
+                    return;
+                  }
                   const sendResult = await sendWithMarkdownFallback(
-                    adapter, chatId, text, sendOpts
+                    adapter, chatId, cleanedText, sendOpts
                   );
 
                   if (!sendResult.success) {
@@ -896,6 +904,58 @@ export class MessageProcessor {
    * Send the final response to the user with markdown fallback.
    * Returns the sent message ID if successful, undefined otherwise.
    */
+  /** Regex to match image file paths in response text */
+  private static readonly IMAGE_PATH_RE =
+    /(?:^|[\s`]|!\[[^\]]*\]\()(?<fp>(?:[A-Za-z]:[\\\/]|\/|[\w.-]+[\/\\])[^\s"'<>)`]*\.(?:png|jpe?g|gif|webp))\)?(?:[\s`]|$|[.。,，)）\]])/gim;
+
+  /**
+   * Extract image file paths from text, send them as photos, return cleaned text.
+   */
+  private async sendInlineImages(
+    text: string,
+    adapter: BaseAdapter,
+    chatId: string,
+    sendOpts?: SendOptions,
+  ): Promise<string> {
+    const paths: string[] = [];
+    const originals: string[] = [];
+    let match: RegExpExecArray | null;
+    const re = new RegExp(MessageProcessor.IMAGE_PATH_RE.source, MessageProcessor.IMAGE_PATH_RE.flags);
+    while ((match = re.exec(text)) !== null) {
+      const raw = (match.groups?.fp ?? match[1])?.trim();
+      if (!raw) continue;
+      // Try as-is, then resolve relative to project root
+      const resolved = existsSync(raw) ? raw : path.resolve(process.cwd(), raw);
+      if (existsSync(resolved)) {
+        paths.push(resolved);
+        originals.push(raw);
+      }
+    }
+    if (paths.length === 0) return text;
+
+    for (const p of paths) {
+      const result = await adapter.sendPhoto(chatId, p);
+      if (result.success) {
+        logger.debug({ chatId, filePath: p }, 'Sent inline image as photo');
+      } else {
+        logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline image');
+      }
+    }
+
+    // Strip matched file paths (and surrounding markdown image syntax) from text
+    let cleaned = text;
+    for (const raw of originals) {
+      // Remove markdown image syntax: ![...](path)
+      const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      cleaned = cleaned.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${escaped}\\s*\\)`, 'g'), '');
+      // Remove bare path references
+      cleaned = cleaned.replace(raw, '');
+    }
+    // Clean up empty backtick wrappers, markdown image tags, and excessive whitespace
+    cleaned = cleaned.replace(/`\s*`/g, '').replace(/!\[[^\]]*\]\(\s*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
+    return cleaned;
+  }
+
   private async sendFinalResponse(
     response: string,
     adapter: BaseAdapter,
@@ -911,10 +971,14 @@ export class MessageProcessor {
       sendOpts.replyToMessageId = options.replyToMessageId;
     }
 
+    // Extract and send any inline images as photos
+    const cleaned = await this.sendInlineImages(response, adapter, chatId, sendOpts);
+    if (isNoiseResponse(cleaned)) return undefined;
+
     const sendResult = await sendWithMarkdownFallback(
       adapter,
       chatId,
-      response,
+      cleaned,
       sendOpts
     );
 
