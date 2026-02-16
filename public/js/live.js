@@ -1208,7 +1208,11 @@ async function sendMessageToAgent(agentId, text) {
 // --- ADR-033: Interactive Prompts (Galgame Choices) ---
 
 function showPermissionPrompt(event) {
-  if (portraitOpenAgentId !== event.agentId) return;
+  // Auto-open portrait if not already viewing this agent
+  if (portraitOpenAgentId !== event.agentId) {
+    const agent = agentCards[event.agentId];
+    if (agent) openPortrait(agent);
+  }
 
   const container = document.querySelector('.dialogue-quick-replies');
   if (!container) return;
@@ -1227,7 +1231,11 @@ function showPermissionPrompt(event) {
 }
 
 function showQuestionPrompt(event) {
-  if (portraitOpenAgentId !== event.agentId) return;
+  // Auto-open portrait if not already viewing this agent
+  if (portraitOpenAgentId !== event.agentId) {
+    const agent = agentCards[event.agentId];
+    if (agent) openPortrait(agent);
+  }
 
   const container = document.querySelector('.dialogue-quick-replies');
   if (!container) return;
