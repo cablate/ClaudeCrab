@@ -1,5 +1,6 @@
 import type { ActivityService } from './ActivityService.js';
 import type { ReactionGenerator } from './ReactionGenerator.js';
+import type { AgentLoader } from './AgentLoader.js';
 import { logger } from '../utils/logger.js';
 
 const log = logger.child({ module: 'IdleMutterScheduler' });
@@ -7,6 +8,7 @@ const log = logger.child({ module: 'IdleMutterScheduler' });
 export interface IdleMutterSchedulerOptions {
   activityService: ActivityService;
   reactionGenerator: ReactionGenerator;
+  agentLoader: AgentLoader;
   /** Check interval in ms (default: 300_000 = 5 min) */
   checkIntervalMs?: number;
   /** Idle threshold in ms before eligible for mutter (default: 120_000 = 2 min) */
@@ -26,6 +28,7 @@ export interface IdleMutterSchedulerOptions {
 export class IdleMutterScheduler {
   private readonly activityService: ActivityService;
   private readonly reactionGenerator: ReactionGenerator;
+  private readonly agentLoader: AgentLoader;
   private readonly checkIntervalMs: number;
   private readonly idleThresholdMs: number;
   private readonly mutterChance: number;
@@ -39,6 +42,7 @@ export class IdleMutterScheduler {
   constructor(options: IdleMutterSchedulerOptions) {
     this.activityService = options.activityService;
     this.reactionGenerator = options.reactionGenerator;
+    this.agentLoader = options.agentLoader;
     this.checkIntervalMs = options.checkIntervalMs ?? 300_000;    // 5 min
     this.idleThresholdMs = options.idleThresholdMs ?? 120_000;    // 2 min
     this.mutterChance = options.mutterChance ?? 0.3;
@@ -82,20 +86,28 @@ export class IdleMutterScheduler {
     const now = Date.now();
 
     for (const agentId of agents) {
+      // Per-agent config override
+      const agent = this.agentLoader.get(agentId);
+      const mutterConfig = agent?.config.settings?.idleMutter;
+      if (mutterConfig?.enabled === false) continue;
+
+      const chance = mutterConfig?.chance ?? this.mutterChance;
+      const maxPerHour = mutterConfig?.maxPerHour ?? this.maxPerAgentPerHour;
+
       const idleMs = this.activityService.getIdleDuration(agentId);
 
       if (idleMs < this.idleThresholdMs) continue;
 
-      // Hourly cap check
-      if (this.isHourlyCapped(agentId, now)) {
+      // Hourly cap check (per-agent override)
+      if (this.isHourlyCapped(agentId, now, maxPerHour)) {
         log.debug({ agentId }, 'Mutter skipped: hourly cap reached');
         continue;
       }
 
-      // Random chance
+      // Random chance (per-agent override)
       const roll = Math.random();
-      if (roll > this.mutterChance) {
-        log.debug({ agentId, roll, chance: this.mutterChance }, 'Mutter skipped by probability');
+      if (roll > chance) {
+        log.debug({ agentId, roll, chance }, 'Mutter skipped by probability');
         continue;
       }
 
@@ -116,12 +128,12 @@ export class IdleMutterScheduler {
   }
 
   /** Check if agent has reached the hourly mutter cap */
-  private isHourlyCapped(agentId: string, now: number): boolean {
+  private isHourlyCapped(agentId: string, now: number, maxPerHour?: number): boolean {
     const history = this.mutterHistory.get(agentId);
     if (!history) return false;
     const oneHourAgo = now - 3_600_000;
     const recentCount = history.filter(ts => ts > oneHourAgo).length;
-    return recentCount >= this.maxPerAgentPerHour;
+    return recentCount >= (maxPerHour ?? this.maxPerAgentPerHour);
   }
 
   /** Record a mutter timestamp and prune old entries */

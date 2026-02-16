@@ -65,6 +65,8 @@ export interface PlatformOrchestratorOptions {
   groupBroadcaster?: GroupBroadcaster;
   /** v2.0: ActivityService for workflow visibility in delegation */
   activityService?: import('./ActivityService.js').ActivityService;
+  /** Speech-to-text provider for voice message transcription */
+  sttProvider?: import('./stt/index.js').STTProvider;
 }
 
 /**
@@ -81,6 +83,7 @@ export class PlatformOrchestrator {
   private readonly securityConfig: AdapterSecurityConfig | undefined;
   private readonly scheduleManager: ScheduleManager | undefined;
   private readonly groupBroadcaster: GroupBroadcaster;
+  private readonly sttProvider: import('./stt/index.js').STTProvider | undefined;
 
   constructor(options: PlatformOrchestratorOptions) {
     this.agentLoader = options.agentLoader;
@@ -88,6 +91,7 @@ export class PlatformOrchestrator {
     this.messageProcessor = options.messageProcessor;
     this.securityConfig = options.securityConfig;
     this.scheduleManager = options.scheduleManager;
+    this.sttProvider = options.sttProvider;
 
     // Initialize GroupBroadcaster for multi-bot group message handling (ADR-019)
     // Supports dependency injection for testing
@@ -385,6 +389,9 @@ export class PlatformOrchestrator {
       token,
       ...(this.securityConfig !== undefined
         ? { securityConfig: this.securityConfig }
+        : {}),
+      ...(this.sttProvider !== undefined
+        ? { sttProvider: this.sttProvider }
         : {}),
     };
 

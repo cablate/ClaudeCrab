@@ -8,6 +8,29 @@
 
 ## 版本歷史
 
+### v1.39 - RPG 角色管理面板 + 獨白 Per-Agent 設定
+
+**發布日期**：2026-02-17
+
+**角色管理面板（Live page）**：
+- Stats modal 改為 Tab 式設計：角色 / 裝備 / 排程 / 記憶 / 設定
+- 角色 tab：Bot 控制（啟動/停止）+ 24h 用量 bar
+- 裝備 tab：Skills 列表、查看 SKILL.md 內容、刪除 skill
+- 排程 tab：排程卡片、暫停/恢復/立即執行/刪除
+- 記憶 tab：核心檔案 + 每日日誌列表、點擊查看內容
+- 設定 tab：模型/tokens/turns/權限模式/委派/自主行動/獨白，全中文標籤 + 說明文字
+- Lazy loading：每個 tab 首次切換才 fetch API
+
+**閒置獨白 Per-Agent 設定**：
+- 新增 `settings.idleMutter` 配置：`enabled`（預設 true）、`chance`（預設 0.3）、`maxPerHour`（預設 3）
+- `IdleMutterScheduler` 注入 `AgentLoader`，迴圈中讀取 per-agent config 覆寫全域預設
+- 設定 tab 可直接開關獨白 + 調整參數
+
+**STT 語音轉文字**：
+- 新增 OpenAI Whisper STT provider（`src/core/stt/`）
+- TelegramAdapter 支援語音訊息（voice/audio）→ 轉文字處理
+- `.env` 新增 `STT_ENABLED`、`STT_API_KEY` 配置
+
 ### v1.38 - 新年主題 Title Screen + 編輯模式升級
 
 **發布日期**：2026-02-16

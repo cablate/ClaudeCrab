@@ -241,6 +241,13 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       });
     });
 
+    // Set up voice message handler (STT transcription)
+    this.bot.on('message:voice', (ctx) => {
+      void this.handleVoiceMessage(ctx).catch((error) => {
+        this.log.error({ error }, 'Unhandled error in voice handler');
+      });
+    });
+
     // Set up callback query handler (inline keyboard buttons)
     // Use bot.on("callback_query:data") for reliable update type detection in polling
     this.bot.on('callback_query:data', async (ctx) => {
@@ -517,6 +524,23 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       // Continue processing but with warning logged
     }
 
+    this.processIncomingMessage(ctx, message.text);
+  }
+
+  /**
+   * Shared message routing logic for both text and voice messages.
+   * Builds UnifiedMessage, logs, and routes to group or private pipeline.
+   */
+  private processIncomingMessage(
+    ctx: Context,
+    text: string,
+    extraMetadata?: Record<string, unknown>,
+  ): void {
+    const message = ctx.message!;
+    const from = message.from!;
+    const userId = from.id.toString();
+    const chatId = message.chat.id.toString();
+
     const displayName = [from.first_name, from.last_name]
       .filter(Boolean)
       .join(' ');
@@ -531,7 +555,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       platform: 'telegram',
       userId,
       chatId,
-      text: message.text,
+      text,
       timestamp: new Date(message.date * 1000),
       metadata: {
         originalMessageId: message.message_id.toString(),
@@ -540,6 +564,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         ...(from.username !== undefined ? { username: from.username } : {}),
         ...(chatTitle !== undefined ? { chatTitle } : {}),
         ...(replyToMessageId !== undefined ? { replyToMessageId } : {}),
+        ...extraMetadata,
       },
     };
 
@@ -548,14 +573,14 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
     // Group chat: emit group:message event for GroupBroadcaster to handle
     if (isGroupChat && this.botInfo !== null) {
-      const isMentioned = message.text.includes(`@${this.botInfo.username}`);
+      const isMentioned = text.includes(`@${this.botInfo.username}`);
       const isReplyToBot =
         message.reply_to_message?.from?.id === this.botInfo.id;
 
       // Extract FIRST mentioned bot username from message (e.g., "@bot_name" -> "bot_name")
       // ADR-019: Only the first @mentioned bot responds directly. Multiple @mentions
       // in a single message are handled by delegation (ADR-021/022), not by multi-responder routing.
-      const mentionMatch = /@(\w+)/.exec(message.text);
+      const mentionMatch = /@(\w+)/.exec(text);
       const mentionedBot = mentionMatch?.[1] ?? null;
 
       this.log.debug(
@@ -581,6 +606,90 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       void this.emitMessage(combined).catch((error) => {
         this.log.error({ error }, 'Error emitting debounced message');
       });
+    });
+  }
+
+  /**
+   * Handle incoming voice messages: download OGG → STT transcribe → route as text.
+   */
+  private async handleVoiceMessage(ctx: Context): Promise<void> {
+    const message = ctx.message;
+    if (message?.voice === undefined) {
+      return;
+    }
+
+    const from = message.from;
+    if (from === undefined) {
+      return;
+    }
+
+    // Filter out messages from other bots
+    if (from.is_bot === true) {
+      this.log.debug({ botId: from.id }, 'Ignoring voice from bot');
+      return;
+    }
+
+    const userId = from.id.toString();
+    const chatId = message.chat.id.toString();
+
+    // Allowlist check (pass empty text — only authorization matters for voice)
+    const validation = validateMessage('', userId, this.securityConfig);
+    if (!validation.valid && validation.error === 'unauthorized') {
+      auditLogger.logUnauthorizedAccess('telegram', userId, chatId);
+      this.log.warn({ userId, chatId }, 'Unauthorized voice access attempt');
+      await ctx.reply(getSecurityErrorMessage('unauthorized'));
+      return;
+    }
+
+    // Check STT availability
+    if (this.config.sttProvider === undefined) {
+      this.log.debug({ chatId }, 'Voice message received but STT not configured');
+      await ctx.reply('語音輸入功能未啟用，請使用文字輸入。');
+      return;
+    }
+
+    // Download voice file
+    let audioBuffer: Buffer;
+    try {
+      const file = await ctx.getFile();
+      const fileUrl = `https://api.telegram.org/file/bot${this.config.token}/${file.file_path}`;
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        throw new Error(`Voice download failed: ${response.status} ${response.statusText}`);
+      }
+      audioBuffer = Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+      this.log.error({ error, chatId, userId }, 'Failed to download voice file');
+      await ctx.reply('語音下載失敗，請重新嘗試。');
+      return;
+    }
+
+    // Transcribe via STT provider
+    let text: string;
+    let duration: number | undefined;
+    let language: string | undefined;
+    try {
+      const result = await this.config.sttProvider.transcribe(audioBuffer, {
+        fileName: 'voice.ogg',
+      });
+      text = result.text;
+      duration = result.duration;
+      language = result.language;
+    } catch (error) {
+      this.log.error({ error, chatId, userId }, 'STT transcription failed');
+      await ctx.reply('語音轉換失敗，請重新嘗試或改用文字輸入。');
+      return;
+    }
+
+    this.log.info(
+      { chatId, userId, duration, textLength: text.length },
+      'Voice message transcribed'
+    );
+
+    this.processIncomingMessage(ctx, text, {
+      isVoiceTranscription: true,
+      ...(duration !== undefined ? { voiceDuration: duration } : {}),
+      ...(language !== undefined ? { voiceLanguage: language } : {}),
     });
   }
 

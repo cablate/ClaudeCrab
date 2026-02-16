@@ -111,17 +111,6 @@
                   <div class="dialogue-text" id="dialogue-text"></div>
                 </div>
                 <div class="dialogue-emoji" id="dialogue-emoji"></div>
-                <!-- Agent Stats Panel — overlays dialogue text when active -->
-                <div class="dialogue-stats-panel" id="dialogue-stats-panel" style="display:none;">
-                  <div class="stats-panel-grid">
-                    <div class="stats-panel-item"><span class="stats-panel-label">24h 花費</span><span class="stats-panel-value" id="stats-cost">--</span></div>
-                    <div class="stats-panel-item"><span class="stats-panel-label">查詢數</span><span class="stats-panel-value" id="stats-queries">--</span></div>
-                    <div class="stats-panel-item"><span class="stats-panel-label">IN tokens</span><span class="stats-panel-value" id="stats-in">--</span></div>
-                    <div class="stats-panel-item"><span class="stats-panel-label">OUT tokens</span><span class="stats-panel-value" id="stats-out">--</span></div>
-                    <div class="stats-panel-item"><span class="stats-panel-label">Model</span><span class="stats-panel-value" id="stats-model">--</span></div>
-                    <div class="stats-panel-item"><span class="stats-panel-label">Bot</span><span class="stats-panel-value" id="stats-bot-status">--</span></div>
-                  </div>
-                </div>
               </div>
 
               <!-- Quick Reply Buttons -->
@@ -137,6 +126,108 @@
                 <button class="dialogue-send-btn" id="dialogue-send-btn">
                   <span class="send-text">送出</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agent Management Modal — RPG Character Sheet -->
+        <div class="stats-overlay" id="stats-overlay">
+          <div class="stats-backdrop"></div>
+          <div class="stats-modal">
+            <div class="stats-modal-header">
+              <div class="stats-modal-title-row">
+                <img class="stats-modal-portrait" id="stats-portrait" src="" alt="">
+                <div class="stats-modal-title-info">
+                  <span class="stats-modal-name" id="stats-agent-name">--</span>
+                  <div class="stats-modal-meta">
+                    <span class="stats-modal-model" id="stats-model">--</span>
+                    <span class="stats-modal-version" id="stats-version"></span>
+                  </div>
+                  <p class="stats-modal-desc" id="stats-description"></p>
+                </div>
+              </div>
+              <button class="stats-modal-close" id="stats-close">&times;</button>
+            </div>
+            <!-- Tab Nav -->
+            <nav class="stats-tab-nav">
+              <button class="stats-tab active" data-tab="overview">角色</button>
+              <button class="stats-tab" data-tab="skills">裝備</button>
+              <button class="stats-tab" data-tab="schedules">排程</button>
+              <button class="stats-tab" data-tab="memory">記憶</button>
+              <button class="stats-tab" data-tab="settings">設定</button>
+            </nav>
+            <!-- Tab Pages -->
+            <div class="stats-modal-body">
+              <!-- Tab 1: Overview -->
+              <div class="stats-page active" id="stats-page-overview">
+                <section class="stats-section">
+                  <h4 class="stats-section-title">Bot 狀態</h4>
+                  <div class="stats-bot-control" id="stats-bot-control">
+                    <div class="stats-bot-info">
+                      <span class="stats-bot-indicator" id="stats-bot-indicator"></span>
+                      <span class="stats-bot-label" id="stats-bot-label">--</span>
+                    </div>
+                    <button class="stats-bot-btn" id="stats-bot-btn">--</button>
+                  </div>
+                </section>
+                <section class="stats-section">
+                  <h4 class="stats-section-title">24h 資源消耗</h4>
+                  <div class="stats-bars">
+                    <div class="stats-bar-row">
+                      <span class="stats-bar-label">💰 花費</span>
+                      <div class="stats-bar-track"><div class="stats-bar-fill cost-fill" id="stats-cost-bar"></div></div>
+                      <span class="stats-bar-value" id="stats-cost">--</span>
+                    </div>
+                    <div class="stats-bar-row">
+                      <span class="stats-bar-label">⚡ 查詢</span>
+                      <div class="stats-bar-track"><div class="stats-bar-fill query-fill" id="stats-queries-bar"></div></div>
+                      <span class="stats-bar-value" id="stats-queries">--</span>
+                    </div>
+                    <div class="stats-bar-row">
+                      <span class="stats-bar-label">📥 IN</span>
+                      <div class="stats-bar-track"><div class="stats-bar-fill in-fill" id="stats-in-bar"></div></div>
+                      <span class="stats-bar-value" id="stats-in">--</span>
+                    </div>
+                    <div class="stats-bar-row">
+                      <span class="stats-bar-label">📤 OUT</span>
+                      <div class="stats-bar-track"><div class="stats-bar-fill out-fill" id="stats-out-bar"></div></div>
+                      <span class="stats-bar-value" id="stats-out">--</span>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <!-- Tab 2: Skills -->
+              <div class="stats-page" id="stats-page-skills">
+                <div class="stats-page-scroll" id="stats-skills-list">
+                  <div class="stats-empty">載入中...</div>
+                </div>
+              </div>
+              <!-- Tab 3: Schedules -->
+              <div class="stats-page" id="stats-page-schedules">
+                <div class="stats-page-scroll" id="stats-schedules-list">
+                  <div class="stats-empty">載入中...</div>
+                </div>
+              </div>
+              <!-- Tab 4: Memory -->
+              <div class="stats-page" id="stats-page-memory">
+                <div class="stats-page-scroll" id="stats-memory-list">
+                  <div class="stats-empty">載入中...</div>
+                </div>
+                <!-- Memory content viewer (hidden) -->
+                <div class="stats-memory-viewer" id="stats-memory-viewer" style="display:none;">
+                  <div class="stats-memory-viewer-header">
+                    <button class="stats-memory-back" id="stats-memory-back">&larr; 返回</button>
+                    <span class="stats-memory-filename" id="stats-memory-filename"></span>
+                  </div>
+                  <div class="stats-memory-content" id="stats-memory-content"></div>
+                </div>
+              </div>
+              <!-- Tab 5: Settings -->
+              <div class="stats-page" id="stats-page-settings">
+                <div class="stats-page-scroll" id="stats-settings-form">
+                  <div class="stats-empty">載入中...</div>
+                </div>
               </div>
             </div>
           </div>

@@ -152,6 +152,19 @@ export class AdapterError extends ClaudeCabError {
   }
 }
 
+export class STTError extends ClaudeCabError {
+  constructor(message: string, cause?: Error) {
+    super(
+      message,
+      'STT_TRANSCRIPTION_FAILED',
+      true,
+      '語音轉換失敗，請重新嘗試或改用文字輸入。',
+      cause
+    );
+    this.name = 'STTError';
+  }
+}
+
 
 /**
  * Error thrown for validation failures

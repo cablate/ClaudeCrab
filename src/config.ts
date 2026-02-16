@@ -24,6 +24,12 @@ export interface AppConfig {
   schedule: {
     enabled: boolean;
   };
+  stt: {
+    enabled: boolean;
+    provider: 'groq';
+    apiKey: string;
+    model: string;
+  };
 }
 
 /**
@@ -48,6 +54,12 @@ export function loadAppConfig(): AppConfig {
     },
     schedule: {
       enabled: process.env.SCHEDULE_ENABLED !== 'false', // Default enabled
+    },
+    stt: {
+      enabled: process.env.STT_ENABLED === 'true',
+      provider: (process.env.STT_PROVIDER ?? 'groq') as 'groq',
+      apiKey: process.env.STT_API_KEY ?? '',
+      model: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
     },
   };
 }

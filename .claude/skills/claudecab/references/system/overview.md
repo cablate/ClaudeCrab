@@ -316,6 +316,10 @@ Idle 自言自語排程器（Live page 用）：
 - 閒置超過閾值（`idleThresholdMs`）時有機率（`mutterChance`）觸發自言自語
 - 每 agent 每小時上限（`maxPerAgentPerHour`）
 - `hasActiveViewers()` 回調：僅在有人觀看 Live page 時觸發
+- **Per-agent 設定**：透過 `agent.json` 的 `settings.idleMutter` 覆寫全域預設
+  - `enabled`（預設 true）— 關閉則該 agent 不產生獨白
+  - `chance`（預設 0.3）— 觸發機率
+  - `maxPerHour`（預設 3）— 每小時上限
 
 ### Schedule 模組 (`src/schedule/`)
 
@@ -675,6 +679,11 @@ interface AgentConfig {
       mode?: 'work' | 'social';
       cooldown?: number;
       maxPerHour?: number;
+    };
+    idleMutter?: {              // 閒置獨白 per-agent 設定
+      enabled?: boolean;        // 預設 true
+      chance?: number;          // 觸發機率 0-1，預設 0.3
+      maxPerHour?: number;      // 每小時上限，預設 3
     };
   };
 }

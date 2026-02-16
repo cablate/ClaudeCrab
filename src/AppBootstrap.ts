@@ -37,6 +37,7 @@ import { SSEBroadcaster } from './webui/services/SSEBroadcaster.js';
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { AppConfig } from './config.js';
+import { createSTTProvider, type STTProvider } from './core/stt/index.js';
 import type { IQueryMetricsRepository } from './persistence/types.js';
 
 /** Interval for sending typing indicators to Telegram (ms) */
@@ -104,13 +105,19 @@ export class AppBootstrap {
       activityService
     );
 
+        // Create STT provider (optional — voice input disabled if no API key)
+    const sttProvider = this.config.stt.enabled && this.config.stt.apiKey
+      ? createSTTProvider(this.config.stt)
+      : undefined;
+
     this.orchestrator = this.createOrchestrator(
       agentLoader,
       sessionManager,
       messageProcessor,
       securityConfig,
       persistence,
-      activityService
+      activityService,
+      sttProvider
     );
 
     await this.orchestrator.startAll();
@@ -130,7 +137,7 @@ export class AppBootstrap {
     );
 
     // v2.0: Start idle mutter scheduler (cost-optimized: 5min interval, 30% chance, 3/hr cap, viewers-only)
-    this.initializeIdleMutterScheduler(activityService);
+    this.initializeIdleMutterScheduler(activityService, agentLoader);
 
     // v2.0: Track all agents for activity (so idle detection works from startup)
     for (const agentId of agentLoader.list()) {
@@ -338,13 +345,14 @@ export class AppBootstrap {
     });
   }
 
-  private createOrchestrator(
+    private createOrchestrator(
     agentLoader: AgentLoader,
     sessionManager: SessionManager,
     messageProcessor: MessageProcessor,
     securityConfig: ReturnType<typeof loadSecurityConfig>,
     persistence: PersistenceLayer | null,
-    activityService?: ActivityService
+    activityService?: ActivityService,
+    sttProvider?: STTProvider
   ): PlatformOrchestrator {
     logger.info('Initializing PlatformOrchestrator...');
 
@@ -372,6 +380,7 @@ export class AppBootstrap {
       ...(persistence?.queryMetricsRepository !== undefined
         ? { queryMetricsRepository: persistence.queryMetricsRepository }
         : {}),
+      ...(sttProvider !== undefined ? { sttProvider } : {}),
     });
   }
 
@@ -596,6 +605,7 @@ export class AppBootstrap {
    */
   private initializeIdleMutterScheduler(
     activityService: ActivityService,
+    agentLoader: AgentLoader,
   ): void {
     if (!this._reactionGenerator) {
       logger.warn('ReactionGenerator not available, skipping IdleMutterScheduler');
@@ -606,6 +616,7 @@ export class AppBootstrap {
     this.idleMutterScheduler = new IdleMutterScheduler({
       activityService,
       reactionGenerator: this._reactionGenerator,
+      agentLoader,
       hasActiveViewers: () => (broadcaster?.clientCount ?? 0) > 0,
     });
     this.idleMutterScheduler.start();

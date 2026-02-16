@@ -47,6 +47,16 @@ const InitiativeSettingsSchema = z.object({
 });
 
 /** Social mode settings — bot can chat naturally in groups without @mention */
+/** ADR: Idle mutter (monologue) settings — per-agent override */
+const IdleMutterSettingsSchema = z.object({
+  /** Enable idle mutter for this agent (default: true) */
+  enabled: z.boolean().optional(),
+  /** Probability of muttering when idle check fires (0-1, default: 0.3) */
+  chance: z.number().min(0).max(1).optional(),
+  /** Max mutters per hour (default: 3) */
+  maxPerHour: z.number().int().positive().optional(),
+});
+
 const SocialSettingsSchema = z.object({
   /** Enable social mode (default: false) */
   enabled: z.boolean().optional(),
@@ -75,6 +85,8 @@ export const AgentSettingsSchema = z.object({
   initiative: InitiativeSettingsSchema.optional(),
   /** Social mode settings */
   social: SocialSettingsSchema.optional(),
+  /** Idle mutter (monologue) settings */
+  idleMutter: IdleMutterSettingsSchema.optional(),
 });
 
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>;

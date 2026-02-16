@@ -1065,15 +1065,7 @@ function closePortrait() {
   closeBacklog();
   portraitOpenAgentId = null;
   // Reset stats panel
-  statsPanelOpen = false;
-  const statsPanel = document.getElementById('dialogue-stats-panel');
-  const statsBtn = document.getElementById('dialogue-stats-toggle');
-  const boxInner = document.getElementById('dialogue-box-inner');
-  const emoji = document.getElementById('dialogue-emoji');
-  if (statsPanel) statsPanel.style.display = 'none';
-  if (statsBtn) statsBtn.classList.remove('active');
-  if (boxInner) boxInner.style.visibility = '';
-  if (emoji) emoji.style.visibility = '';
+  closeStatsPanel();
 }
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('dialogue-backdrop') || e.target.classList.contains('dialogue-close')) {
@@ -1868,32 +1860,71 @@ function clearRosterNotification(agentId) {
 // --- Agent Stats Panel in Portrait ---
 
 let statsPanelOpen = false;
+let statsLoadedTabs = new Set();
+let statsCurrentAgentId = null;
 
 function toggleStatsPanel() {
-  const panel = document.getElementById('dialogue-stats-panel');
+  const overlay = document.getElementById('stats-overlay');
   const btn = document.getElementById('dialogue-stats-toggle');
-  const boxInner = document.getElementById('dialogue-box-inner');
-  const emoji = document.getElementById('dialogue-emoji');
-  if (!panel || !btn) return;
+  if (!overlay) return;
 
   statsPanelOpen = !statsPanelOpen;
-  panel.style.display = statsPanelOpen ? '' : 'none';
-  if (boxInner) boxInner.style.visibility = statsPanelOpen ? 'hidden' : '';
-  if (emoji) emoji.style.visibility = statsPanelOpen ? 'hidden' : '';
-  btn.classList.toggle('active', statsPanelOpen);
+  overlay.classList.toggle('active', statsPanelOpen);
+  if (btn) btn.classList.toggle('active', statsPanelOpen);
 
   if (statsPanelOpen && portraitOpenAgentId) {
-    loadAgentStatsPanel(portraitOpenAgentId);
+    statsCurrentAgentId = portraitOpenAgentId;
+    statsLoadedTabs.clear();
+    switchStatsTab('overview');
   }
 }
 
-async function loadAgentStatsPanel(agentId) {
+function closeStatsPanel() {
+  const overlay = document.getElementById('stats-overlay');
+  const btn = document.getElementById('dialogue-stats-toggle');
+  if (overlay) overlay.classList.remove('active');
+  if (btn) btn.classList.remove('active');
+  statsPanelOpen = false;
+  statsCurrentAgentId = null;
+}
+
+function switchStatsTab(tabName) {
+  document.querySelectorAll('.stats-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+  document.querySelectorAll('.stats-page').forEach(p => p.classList.toggle('active', p.id === `stats-page-${tabName}`));
+  if (!statsCurrentAgentId) return;
+  // Lazy load
+  if (!statsLoadedTabs.has(tabName)) {
+    statsLoadedTabs.add(tabName);
+    loadStatsTab(tabName, statsCurrentAgentId);
+  }
+}
+
+async function loadStatsTab(tab, agentId) {
+  switch (tab) {
+    case 'overview': return loadStatsOverview(agentId);
+    case 'skills': return loadStatsSkills(agentId);
+    case 'schedules': return loadStatsSchedules(agentId);
+    case 'memory': return loadStatsMemory(agentId);
+    case 'settings': return loadStatsSettings(agentId);
+  }
+}
+
+async function loadStatsOverview(agentId) {
   try {
-    const [usageRes, agentRes] = await Promise.all([
+    // Set agent name + portrait from local cache
+    const card = agentCards[agentId];
+    const nameEl = document.getElementById('stats-agent-name');
+    if (nameEl) nameEl.textContent = card?.name || agentId;
+    const portraitEl = document.getElementById('stats-portrait');
+    if (portraitEl && card?.portrait) portraitEl.src = card.portrait;
+
+    const [usageRes, agentRes, botRes] = await Promise.all([
       fetch(`/api/usage/daily?days=1&agent=${agentId}`).catch(() => null),
       fetch(`/api/agents/${agentId}`).catch(() => null),
+      fetch(`/api/agents/${agentId}/bot/status`).catch(() => null),
     ]);
 
+    // --- Usage bars ---
     if (usageRes && usageRes.ok) {
       const { daily } = await usageRes.json();
       let cost = 0, queries = 0, inT = 0, outT = 0;
@@ -1902,21 +1933,391 @@ async function loadAgentStatsPanel(agentId) {
       document.getElementById('stats-queries').textContent = String(queries);
       document.getElementById('stats-in').textContent = formatTokenCount(inT);
       document.getElementById('stats-out').textContent = formatTokenCount(outT);
+      const maxCost = 5, maxQueries = 50, maxTokens = 500000;
+      setBarWidth('stats-cost-bar', cost / maxCost);
+      setBarWidth('stats-queries-bar', queries / maxQueries);
+      setBarWidth('stats-in-bar', inT / maxTokens);
+      setBarWidth('stats-out-bar', outT / maxTokens);
     }
 
+    // --- Agent details (header) ---
     if (agentRes && agentRes.ok) {
       const data = await agentRes.json();
       document.getElementById('stats-model').textContent = data.model || '--';
+      const verEl = document.getElementById('stats-version');
+      if (verEl) verEl.textContent = data.version ? `v${data.version}` : '';
+      const descEl = document.getElementById('stats-description');
+      if (descEl) {
+        descEl.textContent = data.description || '';
+        descEl.style.display = data.description ? '' : 'none';
+      }
     }
 
-    // Bot status
-    const botRes = await fetch(`/api/agents/${agentId}/bot/status`).catch(() => null);
+    // --- Bot control ---
+    renderBotControl(botRes, agentId);
+  } catch { /* non-critical */ }
+}
+
+async function renderBotControl(botRes, agentId) {
+  const indicator = document.getElementById('stats-bot-indicator');
+  const label = document.getElementById('stats-bot-label');
+  const btn = document.getElementById('stats-bot-btn');
+  if (!indicator || !label || !btn) return;
+
+  btn.style.display = '';
+  let isRunning = false;
+  let platform = '';
+
+  try {
     if (botRes && botRes.ok) {
       const { status } = await botRes.json();
-      const label = status?.[0]?.status || 'no bot';
-      document.getElementById('stats-bot-status').textContent = label;
+      const s = status?.[0];
+      if (s && s.status === 'running') {
+        isRunning = true;
+        platform = s.platform || '';
+      }
     }
-  } catch { /* non-critical */ }
+  } catch { /* */ }
+
+  indicator.className = 'stats-bot-indicator ' + (isRunning ? 'running' : 'stopped');
+  label.textContent = isRunning ? `${platform} 運行中` : '未啟動';
+  btn.textContent = isRunning ? '⏹ 停止' : '▶ 啟動';
+  btn.className = 'stats-bot-btn ' + (isRunning ? 'stop' : 'start');
+  btn.onclick = () => toggleBotFromStats(agentId, isRunning);
+}
+
+async function toggleBotFromStats(agentId, isRunning) {
+  const action = isRunning ? 'stop' : 'start';
+  const btn = document.getElementById('stats-bot-btn');
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
+  try {
+    await toggleBot(agentId, action);
+    // Refresh bot status in stats panel
+    const botRes = await fetch(`/api/agents/${agentId}/bot/status`).catch(() => null);
+    renderBotControl(botRes, agentId);
+  } catch { /* */ }
+  if (btn) btn.disabled = false;
+}
+
+// Placeholder loaders for other tabs (will be implemented in subsequent steps)
+async function loadStatsSkills(agentId) {
+  const container = document.getElementById('stats-skills-list');
+  if (!container) return;
+  container.innerHTML = '<div class="stats-empty">載入中...</div>';
+  try {
+    const res = await fetch(`/api/agents/${agentId}/skills`);
+    if (!res.ok) { container.innerHTML = '<div class="stats-empty">無法載入</div>'; return; }
+    const { skills } = await res.json();
+    if (!skills.length) { container.innerHTML = '<div class="stats-empty">尚未安裝任何 Skill</div>'; return; }
+    container.innerHTML = skills.map(s => `
+      <div class="stats-skill-item">
+        <div class="stats-skill-info">
+          <span class="stats-skill-name">${escapeHtml(s.name)}</span>
+          <span class="stats-skill-desc">${escapeHtml(s.description || '')}</span>
+        </div>
+        <div class="stats-skill-actions">
+          <button class="stats-action-btn view" onclick="viewSkill('${agentId}','${escapeHtml(s.path)}')" title="查看">📖</button>
+          <button class="stats-action-btn delete" onclick="deleteSkill('${agentId}','${escapeHtml(s.path)}','${escapeHtml(s.name)}')" title="移除">🗑</button>
+        </div>
+      </div>
+    `).join('');
+  } catch { container.innerHTML = '<div class="stats-empty">載入失敗</div>'; }
+}
+
+async function viewSkill(agentId, skillPath) {
+  const container = document.getElementById('stats-skills-list');
+  if (!container) return;
+  try {
+    const res = await fetch(`/api/agents/${agentId}/skills/${skillPath}`);
+    if (!res.ok) return;
+    const { content } = await res.json();
+    container.innerHTML = `
+      <div class="stats-viewer">
+        <button class="stats-viewer-back" onclick="statsLoadedTabs.delete('skills');loadStatsSkills('${agentId}')">&larr; 返回</button>
+        <pre class="stats-viewer-content">${escapeHtml(content)}</pre>
+      </div>`;
+  } catch { /* */ }
+}
+
+async function deleteSkill(agentId, skillPath, skillName) {
+  if (!confirm(`確定要移除「${skillName}」嗎？`)) return;
+  try {
+    const res = await fetch(`/api/agents/${agentId}/skills/${skillPath}`, { method: 'DELETE' });
+    if (res.ok) { statsLoadedTabs.delete('skills'); loadStatsSkills(agentId); }
+  } catch { /* */ }
+}
+
+async function loadStatsSchedules(agentId) {
+  const container = document.getElementById('stats-schedules-list');
+  if (!container) return;
+  container.innerHTML = '<div class="stats-empty">載入中...</div>';
+  try {
+    const res = await fetch(`/api/agents/${agentId}/schedules`);
+    if (!res.ok) { container.innerHTML = '<div class="stats-empty">無法載入</div>'; return; }
+    const { schedules } = await res.json();
+    if (!schedules || !schedules.length) { container.innerHTML = '<div class="stats-empty">尚無排程任務</div>'; return; }
+    container.innerHTML = schedules.map(s => {
+      const spec = s.spec || s;
+      const enabled = spec.enabled !== false;
+      const cron = spec.trigger?.cron || spec.trigger?.interval || '--';
+      const nextRun = s.nextRun ? new Date(s.nextRun).toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '--';
+      const lastOk = s.lastExecution?.success;
+      const lastTime = s.lastExecution?.startedAt ? new Date(s.lastExecution.startedAt).toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '--';
+      const schedId = spec.id;
+      return `
+        <div class="stats-schedule-card ${enabled ? '' : 'paused'}">
+          <div class="stats-schedule-header">
+            <span class="stats-schedule-name">${enabled ? '⏰' : '⏸'} ${escapeHtml(spec.name || schedId)}</span>
+            <span class="stats-schedule-cron">${escapeHtml(String(cron))}</span>
+          </div>
+          <div class="stats-schedule-meta">
+            <span>上次：${lastTime} ${lastOk === true ? '✅' : lastOk === false ? '❌' : ''}</span>
+            <span>下次：${nextRun}</span>
+          </div>
+          <div class="stats-schedule-actions">
+            <button class="stats-action-btn" onclick="scheduleAction('${agentId}','${schedId}','run')">▶ 執行</button>
+            <button class="stats-action-btn" onclick="scheduleAction('${agentId}','${schedId}','${enabled ? 'pause' : 'resume'}')">${enabled ? '⏸ 暫停' : '▶ 恢復'}</button>
+            <button class="stats-action-btn delete" onclick="scheduleAction('${agentId}','${schedId}','delete')">🗑</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch { container.innerHTML = '<div class="stats-empty">載入失敗</div>'; }
+}
+
+async function scheduleAction(agentId, schedId, action) {
+  if (action === 'delete' && !confirm('確定要刪除此排程？')) return;
+  try {
+    const method = action === 'delete' ? 'DELETE' : 'POST';
+    const url = action === 'delete'
+      ? `/api/agents/${agentId}/schedules/${schedId}`
+      : `/api/agents/${agentId}/schedules/${schedId}/${action}`;
+    const res = await fetch(url, { method });
+    if (res.ok) { statsLoadedTabs.delete('schedules'); loadStatsSchedules(agentId); }
+  } catch { /* */ }
+}
+
+async function loadStatsMemory(agentId) {
+  const listEl = document.getElementById('stats-memory-list');
+  const viewerEl = document.getElementById('stats-memory-viewer');
+  if (!listEl) return;
+  if (viewerEl) viewerEl.style.display = 'none';
+  listEl.style.display = '';
+  listEl.innerHTML = '<div class="stats-empty">載入中...</div>';
+  try {
+    const res = await fetch(`/api/agents/${agentId}/memory`);
+    if (!res.ok) { listEl.innerHTML = '<div class="stats-empty">無法載入</div>'; return; }
+    const data = await res.json();
+    const coreFiles = (data.coreFiles || []).filter(f => f.size > 0);
+    const dailyLogs = data.dailyLogs || data.memoryFiles || [];
+    let html = '';
+    if (coreFiles.length) {
+      html += '<h4 class="stats-section-title" style="padding:0.5rem 0 0.3rem;">核心檔案</h4>';
+      html += coreFiles.map(f => memoryFileRow(agentId, f)).join('');
+    }
+    if (dailyLogs.length) {
+      html += '<h4 class="stats-section-title" style="padding:0.75rem 0 0.3rem;">每日日誌</h4>';
+      html += dailyLogs.map(f => memoryFileRow(agentId, f)).join('');
+    }
+    if (!html) html = '<div class="stats-empty">無記憶檔案</div>';
+    listEl.innerHTML = html;
+  } catch { listEl.innerHTML = '<div class="stats-empty">載入失敗</div>'; }
+}
+
+function memoryFileRow(agentId, f) {
+  const icon = f.name.includes('MEMORY') ? '📝' : f.name.includes('USER') ? '👤' : f.name.includes('soul') ? '🧠' : f.name.includes('identity') ? '🪪' : f.name.includes('CLAUDE') ? '📋' : '📅';
+  const size = f.size > 1024 ? `${(f.size/1024).toFixed(1)} KB` : `${f.size} B`;
+  const date = f.modified ? new Date(f.modified).toLocaleDateString('zh-TW', {month:'2-digit',day:'2-digit'}) : '';
+  return `<div class="stats-memory-row">
+    <span class="stats-memory-icon">${icon}</span>
+    <span class="stats-memory-name">${escapeHtml(f.name)}</span>
+    <span class="stats-memory-size">${size}</span>
+    <span class="stats-memory-date">${date}</span>
+    <button class="stats-action-btn view" onclick="viewMemoryFile('${agentId}','${escapeHtml(f.path)}','${escapeHtml(f.name)}')">查看</button>
+  </div>`;
+}
+
+async function viewMemoryFile(agentId, filePath, fileName) {
+  const listEl = document.getElementById('stats-memory-list');
+  const viewerEl = document.getElementById('stats-memory-viewer');
+  const contentEl = document.getElementById('stats-memory-content');
+  const nameEl = document.getElementById('stats-memory-filename');
+  if (!viewerEl || !contentEl) return;
+  if (listEl) listEl.style.display = 'none';
+  viewerEl.style.display = 'flex';
+  if (nameEl) nameEl.textContent = fileName;
+  contentEl.textContent = '載入中...';
+  try {
+    const res = await fetch(`/api/agents/${agentId}/memory/file?path=${encodeURIComponent(filePath)}`);
+    if (!res.ok) { contentEl.textContent = '無法載入'; return; }
+    const { content } = await res.json();
+    contentEl.textContent = content || '（空檔案）';
+  } catch { contentEl.textContent = '載入失敗'; }
+}
+
+async function loadStatsSettings(agentId) {
+  const container = document.getElementById('stats-settings-form');
+  if (!container) return;
+  container.innerHTML = '<div class="stats-empty">載入中...</div>';
+  try {
+    const res = await fetch(`/api/agents/${agentId}`);
+    if (!res.ok) { container.innerHTML = '<div class="stats-empty">無法載入</div>'; return; }
+    const data = await res.json();
+    const cfg = data.config || {};
+    const settings = cfg.settings || {};
+    const delegation = settings.delegation || {};
+    const initiative = settings.initiative || {};
+
+    container.innerHTML = `
+      <section class="stats-section">
+        <h4 class="stats-section-title">模型與回覆</h4>
+        <div class="stats-form-group">
+          <label class="stats-form-label">使用模型<small>決定 AI 的能力等級和回應速度</small></label>
+          <select class="stats-form-select" id="cfg-model">
+            <option value="haiku" ${cfg.model==='haiku'?'selected':''}>haiku（快速輕量）</option>
+            <option value="sonnet" ${cfg.model==='sonnet'||!cfg.model?'selected':''}>sonnet（均衡）</option>
+            <option value="opus" ${cfg.model==='opus'?'selected':''}>opus（最強）</option>
+          </select>
+        </div>
+        <div class="stats-form-group">
+          <label class="stats-form-label">每次回覆上限<small>AI 單次回覆最多產出多少 token</small></label>
+          <input class="stats-form-input" type="number" id="cfg-maxTokens" value="${cfg.maxTokens||''}" placeholder="預設">
+        </div>
+        <div class="stats-form-group">
+          <label class="stats-form-label">最大回合數<small>單次對話中 AI 最多來回幾輪</small></label>
+          <input class="stats-form-input" type="number" id="cfg-maxTurns" value="${settings.maxTurns||''}" placeholder="預設">
+        </div>
+        <div class="stats-form-group">
+          <label class="stats-form-label">權限模式<small>AI 使用工具時的授權方式</small></label>
+          <select class="stats-form-select" id="cfg-permissionMode">
+            <option value="" ${!settings.permissionMode?'selected':''}>預設</option>
+            <option value="default" ${settings.permissionMode==='default'?'selected':''}>每次都問</option>
+            <option value="acceptEdits" ${settings.permissionMode==='acceptEdits'?'selected':''}>自動接受編輯</option>
+            <option value="bypassPermissions" ${settings.permissionMode==='bypassPermissions'?'selected':''}>跳過所有權限</option>
+            <option value="plan" ${settings.permissionMode==='plan'?'selected':''}>只規劃不執行</option>
+          </select>
+        </div>
+      </section>
+      <section class="stats-section">
+        <h4 class="stats-section-title">團隊協作</h4>
+        <div class="stats-form-toggle">
+          <div class="stats-form-toggle-text">
+            <span class="stats-form-toggle-title">接收委派任務</span>
+            <small>其他成員可以把工作分配給我</small>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="cfg-delegation-inbound" ${delegation.inbound!==false?'checked':''}><span class="toggle-slider"></span></label>
+        </div>
+        <div class="stats-form-toggle">
+          <div class="stats-form-toggle-text">
+            <span class="stats-form-toggle-title">發起委派任務</span>
+            <small>我可以把工作分配給其他成員</small>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="cfg-delegation-outbound" ${delegation.outbound!==false?'checked':''}><span class="toggle-slider"></span></label>
+        </div>
+      </section>
+      <section class="stats-section">
+        <h4 class="stats-section-title">自主行動</h4>
+        <div class="stats-form-toggle">
+          <div class="stats-form-toggle-text">
+            <span class="stats-form-toggle-title">啟用自主行動</span>
+            <small>閒置時主動找事做，不等指令</small>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="cfg-initiative-enabled" ${initiative.enabled?'checked':''} onchange="document.getElementById('cfg-initiative-details').style.display=this.checked?'':'none'"><span class="toggle-slider"></span></label>
+        </div>
+        <div id="cfg-initiative-details" style="display:${initiative.enabled?'':'none'};">
+          <div class="stats-form-group">
+            <label class="stats-form-label">行動模式<small>決定自主行動的方向</small></label>
+            <select class="stats-form-select" id="cfg-initiative-mode">
+              <option value="work" ${initiative.mode==='work'||!initiative.mode?'selected':''}>工作優先</option>
+              <option value="social" ${initiative.mode==='social'?'selected':''}>社交優先</option>
+              <option value="full" ${initiative.mode==='full'?'selected':''}>全部</option>
+            </select>
+          </div>
+          <div class="stats-form-group">
+            <label class="stats-form-label">冷卻時間<small>兩次自主行動的最短間隔（秒）</small></label>
+            <input class="stats-form-input" type="number" id="cfg-initiative-cooldown" value="${initiative.cooldown||300}">
+          </div>
+          <div class="stats-form-group">
+            <label class="stats-form-label">每小時上限<small>自主行動次數限制</small></label>
+            <input class="stats-form-input" type="number" id="cfg-initiative-maxPerHour" value="${initiative.maxPerHour||5}">
+          </div>
+        </div>
+      </section>
+      <section class="stats-section">
+        <h4 class="stats-section-title">閒置獨白</h4>
+        <div class="stats-form-toggle">
+          <div class="stats-form-toggle-text">
+            <span class="stats-form-toggle-title">啟用獨白</span>
+            <small>閒置時自言自語，展現角色個性</small>
+          </div>
+          <label class="toggle-switch"><input type="checkbox" id="cfg-mutter-enabled" ${(settings.idleMutter?.enabled!==false)?'checked':''} onchange="document.getElementById('cfg-mutter-details').style.display=this.checked?'':'none'"><span class="toggle-slider"></span></label>
+        </div>
+        <div id="cfg-mutter-details" style="display:${(settings.idleMutter?.enabled!==false)?'':'none'};">
+          <div class="stats-form-group">
+            <label class="stats-form-label">觸發機率<small>每次檢查時產生獨白的機率（0~1）</small></label>
+            <input class="stats-form-input" type="number" id="cfg-mutter-chance" value="${settings.idleMutter?.chance??0.3}" step="0.1" min="0" max="1">
+          </div>
+          <div class="stats-form-group">
+            <label class="stats-form-label">每小時上限<small>獨白次數限制</small></label>
+            <input class="stats-form-input" type="number" id="cfg-mutter-maxPerHour" value="${settings.idleMutter?.maxPerHour??3}" min="0">
+          </div>
+        </div>
+      </section>
+      <div class="stats-save-row">
+        <button class="stats-save-btn" onclick="saveAgentSettings('${agentId}')">💾 儲存變更</button>
+      </div>
+    `;
+  } catch { container.innerHTML = '<div class="stats-empty">載入失敗</div>'; }
+}
+
+async function saveAgentSettings(agentId) {
+  const btn = document.querySelector('.stats-save-btn');
+  if (btn) { btn.textContent = '儲存中...'; btn.disabled = true; }
+  const body = {
+    model: document.getElementById('cfg-model')?.value || undefined,
+    maxTokens: parseInt(document.getElementById('cfg-maxTokens')?.value) || null,
+    settings: {
+      maxTurns: parseInt(document.getElementById('cfg-maxTurns')?.value) || null,
+      permissionMode: document.getElementById('cfg-permissionMode')?.value || null,
+      delegation: {
+        inbound: document.getElementById('cfg-delegation-inbound')?.checked ?? true,
+        outbound: document.getElementById('cfg-delegation-outbound')?.checked ?? true,
+      },
+      initiative: {
+        enabled: document.getElementById('cfg-initiative-enabled')?.checked ?? false,
+        mode: document.getElementById('cfg-initiative-mode')?.value || 'work',
+        cooldown: parseInt(document.getElementById('cfg-initiative-cooldown')?.value) || 300,
+        maxPerHour: parseInt(document.getElementById('cfg-initiative-maxPerHour')?.value) || 5,
+      },
+      idleMutter: {
+        enabled: document.getElementById('cfg-mutter-enabled')?.checked ?? true,
+        chance: parseFloat(document.getElementById('cfg-mutter-chance')?.value) || 0.3,
+        maxPerHour: parseInt(document.getElementById('cfg-mutter-maxPerHour')?.value) || 3,
+      },
+    },
+  };
+  try {
+    const res = await fetch(`/api/agents/${agentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      // Reload agent
+      await fetch(`/api/agents/${agentId}/reload`, { method: 'POST' });
+      if (btn) { btn.textContent = '✅ 已儲存'; setTimeout(() => { btn.textContent = '💾 儲存變更'; btn.disabled = false; }, 1500); }
+    } else {
+      if (btn) { btn.textContent = '❌ 失敗'; setTimeout(() => { btn.textContent = '💾 儲存變更'; btn.disabled = false; }, 1500); }
+    }
+  } catch {
+    if (btn) { btn.textContent = '❌ 錯誤'; setTimeout(() => { btn.textContent = '💾 儲存變更'; btn.disabled = false; }, 1500); }
+  }
+}
+
+function setBarWidth(id, ratio) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const pct = Math.min(Math.max(ratio * 100, 0), 100);
+  requestAnimationFrame(() => { el.style.width = pct + '%'; });
 }
 
 // --- Game Menu Event Listeners ---
@@ -1940,8 +2341,17 @@ function initGameMenu() {
     });
   });
 
-  // Stats panel toggle in portrait
+  // Stats modal toggle + close + tabs
   document.getElementById('dialogue-stats-toggle')?.addEventListener('click', toggleStatsPanel);
+  document.getElementById('stats-close')?.addEventListener('click', closeStatsPanel);
+  document.querySelector('.stats-backdrop')?.addEventListener('click', closeStatsPanel);
+  document.querySelectorAll('.stats-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchStatsTab(tab.dataset.tab));
+  });
+  document.getElementById('stats-memory-back')?.addEventListener('click', () => {
+    document.getElementById('stats-memory-list').style.display = '';
+    document.getElementById('stats-memory-viewer').style.display = 'none';
+  });
 
   // Clickable HUD stats → open menu tab
   document.querySelectorAll('.mini-stat.clickable').forEach(stat => {

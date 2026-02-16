@@ -299,4 +299,7 @@ export interface TelegramAdapterConfig extends AdapterConfig {
 
   /** Security configuration */
   securityConfig?: AdapterSecurityConfig;
+
+  /** Speech-to-text provider for voice message transcription */
+  sttProvider?: import('../core/stt/index.js').STTProvider;
 }
