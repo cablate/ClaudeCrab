@@ -2,7 +2,7 @@
 
 ## Name
 
-總管
+人資總監
 
 ## Creature
 
