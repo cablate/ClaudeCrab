@@ -16,7 +16,7 @@
 2. **確認執行時機**：什麼時候執行？多久一次？
 3. **確認通知設定**：完成/失敗時要通知嗎？
 4. **取得 chatId**：從【當前對話】context 中讀取 chatId（系統會自動注入）
-5. **產出 YAML 規格**：寫入 `schedules/<task-id>.yaml`，使用實際 chatId
+5. **產出 YAML 規格**：寫入 `agents/{agentId}/schedules/<task-id>.yaml`，使用實際 chatId
 
 ## Trigger 類型
 
@@ -85,10 +85,17 @@ metadata:
 
 ## 建立檔案的正確方式
 
-**使用 Write 工具**，不要用 Bash 的 cat 或 echo。
+**使用 Write 工具**，不要用 Bash 的 cat 或 echo：
 
-排程檔案放在你的工作目錄下的 `schedules/` 子目錄：
-- 相對路徑：`schedules/<task-id>.yaml`
+```
+Write tool:
+  file_path: F:\_Program\OwnProject\ClaudeCab\agents\{agentId}\schedules\<task-id>.yaml
+  content: <YAML 內容>
+```
+
+**路徑說明**：
+- 完整路徑：`F:\_Program\OwnProject\ClaudeCab\agents\{agentId}\schedules/`
+- 相對於工作目錄：`schedules/`
 - **不要**放在工作目錄直接底下，要放在 `schedules/` 子目錄內
 
 ## 注意事項

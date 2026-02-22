@@ -1,6 +1,6 @@
 # Skill Proficiency Levels
 
-**更新日期**：2026-02-22
+**更新日期**：2026-02-23
 
 ## Domain Skills
 
@@ -40,11 +40,11 @@
 - 狀態：首次使用
 - 備註：今日兩次（生成 RPG 按鈕、生成 Galgame 按鈕）
 
-### agent-browser ★☆☆☆☆ Novice
-- 使用次數：3
-- 最後使用：2026-02-21
+### agent-browser ★★☆☆☆ Competent
+- 使用次數：4
+- 最後使用：2026-02-23
 - 狀態：活躍使用
-- 備註：查閱 ECPay 發票查詢 API 文件
+- 備註：查閱 ECPay 發票查詢 API 文件；完整分析 madebypan.com 網站設計風格（截圖+樣式擷取+模塊拆解）
 
 ### find-skills ★☆☆☆☆ Novice
 - 使用次數：5
@@ -56,11 +56,11 @@
 - 最後使用：2026-01-30
 - 狀態：偶爾使用
 
-### dom-remotion-mastery ★☆☆☆☆ Novice
-- 使用次數：3
+### dom-remotion-mastery ★★☆☆☆ Competent
+- 使用次數：5
 - 最後使用：2026-02-22
-- 狀態：活躍開發
-- 備註：建立完整 Skill 架構；擴充 ecosystem-integration.md；完成 Code Review（發現缺音訊/Debug 指南）
+- 狀態：實戰驗證中
+- 備註：建立 Skill 架構；擴充 ecosystem；Code Review；首次實戰 — ClaudeCrab 30 秒宣傳影片完整實作（6 個場景 + 元件）
 
 ### dom-remotion-best-practices ★☆☆☆☆ Novice
 - 使用次數：1

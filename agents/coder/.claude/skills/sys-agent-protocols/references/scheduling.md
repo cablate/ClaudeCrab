@@ -16,7 +16,7 @@
 2. **確認執行時機**：什麼時候執行？多久一次？
 3. **確認通知設定**：完成/失敗時要通知嗎？
 4. **取得 chatId**：從【當前對話】context 中讀取 chatId（系統會自動注入）
-5. **產出 YAML 規格**：寫入 `schedules/<task-id>.yaml`，使用實際 chatId
+5. **產出 YAML 規格**：寫入 `agents/{agentId}/schedules/<task-id>.yaml`，使用實際 chatId
 
 ## Trigger 類型
 
@@ -94,9 +94,9 @@ Write tool:
 ```
 
 **路徑說明**：
-- 完整路徑：`F:\_Program\OwnProject\ClaudeCab\agents\general\schedules/`
-- 相對於工作目錄：`schedules/`（你的工作目錄是 `agents/general/`）
-- **不要**放在 `agents/general/` 直接底下，要放在 `schedules/` 子目錄內
+- 完整路徑：`F:\_Program\OwnProject\ClaudeCab\agents\coder\schedules/`
+- 相對於工作目錄：`schedules/`（你的工作目錄是 `agents/coder/`）
+- **不要**放在 `agents/coder/` 直接底下，要放在 `schedules/` 子目錄內
 
 ## 注意事項
 

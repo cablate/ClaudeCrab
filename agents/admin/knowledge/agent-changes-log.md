@@ -9,6 +9,49 @@
 
 ---
 
+## 2026-02-23
+
+### [Coder] ClaudeCab 專案權限開放（白名單限定 agents 子目錄）
+
+**Proposal**：
+- Coder 需要存取 ClaudeCab 主專案（`F:\_Program\OwnProject\ClaudeCab`）
+- 但不能存取其他員工的目錄，避免跨員工操作
+- 用黑名單會漏改（新增員工時），改用白名單更安全
+
+**改動內容**：
+更新 `agents/coder/.claude/hooks/project-whitelist.ts`：
+1. `ALLOWED_PROJECTS` 加入 `F:\_Program\OwnProject\ClaudeCab`
+2. 新增 `CLAUDECAB_AGENTS_WHITELIST`：只允許 `agents/coder` 和 `agents/_shared`
+3. 更新 `isPathAllowed()` 函數：
+   - ClaudeCab `agents/` 目錄下，只有白名單內的子目錄可存取
+   - ClaudeCab 其他部分（`src/`、`package.json` 等）正常存取
+   - 新增員工自動被排除，不用手動維護黑名單
+
+**影響範圍**：僅 Coder
+
+**管理經驗**：權限控制用白名單比黑名單安全，新增項目時不會遺漏
+
+---
+
+### [全員] Scheduling 路徑統一更新
+
+**Proposal**：
+- 排程檔案路徑從 `schedules/` 改為 `agents/{agentId}/schedules/`
+- General 已先更新，其他 agent 需要對齊
+
+**改動內容**：
+更新以下 agent 的 `sys-agent-protocols/references/scheduling.md`：
+- admin：路徑改為 `agents/admin/schedules/`
+- coder：路徑改為 `agents/coder/schedules/`
+- transcriber：路徑改為 `agents/transcriber/schedules/`
+- _example：保持 `{agentId}` 作為範本
+
+**影響範圍**：全員（General 已事先更新）
+
+**驗證結果**：所有 agent 的 scheduling.md 已統一格式
+
+---
+
 ## 2026-02-19
 
 ### [Coder] 金流專案白名單存取權限
@@ -419,7 +462,117 @@ Coder 反映：啟動時讀了 sys-self-evolution，但長對話後記憶衰減�
 
 ---
 
-## 2026-02-22
+## 2026-02-23
+
+### [Coder] Persona 自主更新：新增 Staff Engineer 心態
+
+**Proposal**：Coder 自主研究並更新 persona，強化開發能力指導原則。
+
+**改動內容**：
+- Coder 自行更新 `agents/coder/.claude/skills/sys-persona/SKILL.md`
+- 新增「Staff Engineer 心態」區塊（8 項核心心態）：
+  - Force Multiplication（力量倍增）
+  - Handling Ambiguity（處理模糊）
+  - Strategic Alignment（策略對齊）
+  - Asking the Right Questions（問對問題）
+  - Extreme Ownership（極致當責）
+  - Looking Ahead（前瞻思維）
+  - Enabling Others（賦能他人）
+  - Influence Without Authority（無權影響力）
+- 新增來源引用（StaffEng.com、Staff Engineer's Path 等）
+
+**影響範圍**：僅 Coder
+
+**管理經驗**：
+- 員工可以自主演化 persona，不需要每次都由 Admin 操作
+- 品質不錯，有研究來源、有實踐指引
+- 注意：skill 名稱是 `sys-persona` 但 startup protocol 調用 `/persona`，需要對齊
+
+---
+
+### [Admin] 補齊 Stop hook 設定
+
+**Proposal**：發現 Admin 的 settings.local.json 沒有配置 Stop hook，導致記憶檢查不會觸發。
+
+**改動內容**：
+- 更新 `agents/admin/.claude/settings.local.ungsong`
+- 新增 Stop hook 指向 `../_shared/hooks/memory-stop-checkpoint.ts`
+
+**影響範圍**：僅 Admin
+
+**管理經驗**：
+- 新建員工時要確保 Stop hook 有配置
+- Admin 自己也要遵守同樣的規範
+- ClaudeCab SDK 確實會讀取 settings.local.json 的 hooks 設定（不只是 CLI）
+
+---
+
+### [Coder] Persona skill 改名對齊
+
+**Proposal**：Coder 的 persona skill 名為 `sys-persona`，但 startup protocol 調用的是 `/persona`，名稱不匹配會導致載入失敗。
+
+**改動內容**：
+- 將 `agents/coder/.claude/skills/sys-persona` 改名為 `persona`
+
+**影響範圍**：僅 Coder
+
+---
+
+### [新建] Transcriber 轉錄專員
+
+**Proposal**：使用者要求將秘書的轉錄工具、規則、已轉錄內容等全部移交給專職員工，讓秘書不再處理具體轉錄工作。
+
+**改動內容**：
+
+1. **建立新員工** `agents/transcriber/`
+   - `agent.json`：名稱「轉錄專員」，avatar 🎙️
+   - `settings.local.json`：sonnet 模型，含 Bash、chrome-devtools 權限
+   - `.mcp.json`：serena + chrome-devtools
+
+2. **遷移 Skills**（從 General 複製）
+   - `dom-turboscribe`：TurboScribe 轉錄工具（含 scripts、output、references）
+   - `lecture-digest-generator`：逐字稿知識萃取
+
+3. **遷移 Knowledge**（從 General 複製）
+   - `turboscribe-api-complete.md`
+   - `turboscribe-n8n.json`
+   - `header.md`（TurboScribe cookies）
+
+4. **配置系統 Skills**
+   - `sys-agent-protocols`
+   - `sys-role-boundary`（已填寫職責範圍）
+   - `sys-self-evolution`
+   - `persona`（已填寫 identity + soul）
+   - `dom-find-mcp`
+
+5. **建立基礎檔案**
+   - `CLAUDE.md`
+   - `MEMORY.md`
+   - `USER.md`
+
+**影響範圍**：新增員工
+
+**後續工作**：
+- 待使用者提供 Telegram Bot Token
+
+---
+
+### [General] 移除轉錄職責
+
+**Proposal**：轉錄工作已移交 Transcriber，更新秘書的職責邊界。
+
+**改動內容**：
+- 更新 `sys-role-boundary/SKILL.md`
+- 核心職責移除「影片轉錄（TurboScribe）、講座分析」
+- 「不該我做的事」新增「影片轉錄、逐字稿處理 → 找 Transcriber」
+
+**影響範圍**：僅 General
+
+**管理經驗**：
+- 職責移交時，兩邊都要更新：新員工加入職責、原員工移除職責
+- Skills 和 Knowledge 可以複製（不是搬移），保留原始來源以防需要回溯
+
+---
 
 ### [Coder] 新增 remotions 專案完整權限
 

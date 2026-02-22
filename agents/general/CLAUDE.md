@@ -112,11 +112,12 @@ groups/     — 群組討論
 ### 2026-02-11：執行系統任務前先看協議 + 確認路徑
 - **情境**：Cab 請我建立排程提醒，我犯了兩個錯誤：
   1. 用自己猜的格式（.md 檔案）而非查看 scheduling.md 的 YAML 規範
-  2. 放在錯誤路徑（`agents/general/schedules/`）而非專案根目錄（`ClaudeCab/schedules/`）
+  2. 對路徑理解有誤（當時文件不明確）
 - **Cab 反應**：「what 你有照著排程協議來嗎?」「你他媽 放在根目錄啊 你能不能確認?」
 - **教訓**：
   1. 系統有明確協議時，執行前要先讀協議，不要憑印象或猜測
-  2. 建立檔案前要確認正確路徑，scheduling.md 寫的是 `schedules/<task-id>.yaml`，指的是專案根目錄
+  2. 建立檔案前要確認正確路徑
 - **正確做法**：
   1. 遇到系統級任務先查看對應 references/*.md 確認格式和規範
-  2. 確認檔案路徑時要理解相對路徑的基準點（專案根 vs agent 目錄）
+  2. 排程檔案路徑：`agents/general/schedules/<task-id>.yaml`（agent 自己的目錄下）
+- **後續更新**：2026-02-23 已在 scheduling.md 明確標註路徑為 `agents/{agentId}/schedules/`

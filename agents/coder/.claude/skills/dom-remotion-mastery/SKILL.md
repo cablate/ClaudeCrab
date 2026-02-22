@@ -36,6 +36,7 @@ metadata:
 | [core-patterns.md](references/core-patterns.md) | Remotion 核心 API 模式 | 實作動畫時 |
 | [ecosystem-integration.md](references/ecosystem-integration.md) | 生態系整合（D3/Three/Lottie/Rive/Skia/GIF/Anime.js） | 需要特定視覺化時 |
 | [visual-catalog.md](references/visual-catalog.md) | 視覺效果目錄與實作指引 | 設計分鏡/選擇效果時 |
+| [lessons-learned.md](references/lessons-learned.md) | 實戰經驗與踩坑記錄 | 開始新專案前 |
 | `dom-remotion-best-practices` | 官方技術參考 | 查閱具體 API 細節時 |
 
 ### 行銷層
