@@ -278,19 +278,61 @@ export class ScheduleManager {
    * Sync schedules for an agent: load from disk and register any not yet registered.
    * Used after agent queries complete (agent may have created schedule files via Write tool).
    */
-  async syncSchedulesForAgent(agentId: string): Promise<number> {
+  async syncSchedulesForAgent(agentId: string): Promise<{ added: number; updated: number; removed: number }> {
     const specs = await this.loader.loadForAgent(agentId);
-    let newCount = 0;
+    const result = { added: 0, updated: 0, removed: 0 };
 
-    for (const spec of specs) {
-      if (spec.metadata.enabled && !this.scheduler.isRegistered(spec.id)) {
-        this.scheduler.register(agentId, spec);
-        newCount++;
-        logger.info(`[ScheduleManager] Auto-registered new schedule: ${spec.id}`);
+    // Build a set of current spec IDs for this agent
+    const currentSpecIds = new Set(specs.map(s => s.id));
+
+    // Get all registered schedules for this agent
+    const registeredIds = this.scheduler.getRegisteredIds();
+    const agentRegisteredIds = registeredIds.filter(id => {
+      const info = this.scheduler.getScheduleInfo(id);
+      return info?.agentId === agentId;
+    });
+
+    // 1. Remove schedules that no longer exist in YAML files
+    for (const registeredId of agentRegisteredIds) {
+      if (!currentSpecIds.has(registeredId)) {
+        this.scheduler.unregister(registeredId);
+        result.removed++;
+        logger.info(`[ScheduleManager] Auto-unregistered removed schedule: ${registeredId}`);
       }
     }
 
-    return newCount;
+    // 2. Add new schedules and update existing ones
+    for (const spec of specs) {
+      const isRegistered = this.scheduler.isRegistered(spec.id);
+      const existingInfo = isRegistered ? this.scheduler.getScheduleInfo(spec.id) : null;
+
+      if (spec.metadata.enabled) {
+        if (!isRegistered) {
+          // New schedule
+          this.scheduler.register(agentId, spec);
+          result.added++;
+          logger.info(`[ScheduleManager] Auto-registered new schedule: ${spec.id}`);
+        } else if (existingInfo) {
+          // Check if spec has changed (compare JSON representation)
+          const existingJson = JSON.stringify(existingInfo.spec);
+          const newJson = JSON.stringify(spec);
+          if (existingJson !== newJson) {
+            // Re-register with updated spec
+            this.scheduler.unregister(spec.id);
+            this.scheduler.register(agentId, spec);
+            result.updated++;
+            logger.info(`[ScheduleManager] Auto-updated schedule: ${spec.id}`);
+          }
+        }
+      } else if (isRegistered) {
+        // Schedule was disabled, unregister it
+        this.scheduler.unregister(spec.id);
+        result.removed++;
+        logger.info(`[ScheduleManager] Auto-unregistered disabled schedule: ${spec.id}`);
+      }
+    }
+
+    return result;
   }
 
   /**
