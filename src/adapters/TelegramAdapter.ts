@@ -845,6 +845,33 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   }
 
   /**
+   * Send a document/file to a Telegram chat
+   */
+  override async sendDocument(
+    chatId: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<SendResult> {
+    if (this.bot === null) {
+      return { success: false, error: 'Bot not initialized' };
+    }
+
+    try {
+      const result = await this.rateLimiter.execute(async () => {
+        const opts: Record<string, unknown> = {};
+        if (caption) opts.caption = caption.substring(0, 1024);
+        return this.bot!.api.sendDocument(chatId, new InputFile(filePath), opts);
+      });
+
+      return { success: true, messageId: result.message_id.toString() };
+    } catch (error) {
+      const errorMessage = this.formatError(error);
+      this.log.error({ error, chatId, filePath }, 'Failed to send document');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
    * Send typing indicator
    */
   async sendTypingIndicator(chatId: string): Promise<void> {

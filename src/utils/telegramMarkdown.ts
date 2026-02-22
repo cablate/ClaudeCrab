@@ -8,7 +8,11 @@ import type { SendOptions, SendResult } from '../adapters/types.js';
  */
 export function convertToTelegramMarkdown(text: string): string | null {
   try {
-    return telegramifyMarkdown(text, 'escape');
+    let converted = telegramifyMarkdown(text, 'escape');
+    // telegramify-markdown outputs \\# but Telegram expects \#
+    // Fix double-escaped hash symbols
+    converted = converted.replace(/\\\\#/g, '\\#');
+    return converted;
   } catch {
     return null;
   }

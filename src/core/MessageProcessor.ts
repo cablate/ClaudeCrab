@@ -556,7 +556,10 @@ export class MessageProcessor {
                   }
 
                   // Extract and send any inline images as photos
-                  const cleanedText = await this.sendInlineImages(text, adapter, chatId, sendOpts);
+                  let cleanedText = await this.sendInlineImages(text, adapter, chatId, sendOpts);
+
+                  // Extract and send any inline documents as files
+                  cleanedText = await this.sendInlineDocuments(cleanedText, adapter, chatId, sendOpts);
 
                   // Try MarkdownV2 first, fallback to Markdown on failure
                   if (isNoiseResponse(cleanedText)) {
@@ -908,6 +911,10 @@ export class MessageProcessor {
   private static readonly IMAGE_PATH_RE =
     /(?:^|[\s`]|!\[[^\]]*\]\()(?<fp>(?:[A-Za-z]:[\\\/]|\/|[\w.-]+[\/\\])[^\s"'<>)`]*\.(?:png|jpe?g|gif|webp))\)?(?:[\s`]|$|[.。,，)）\]])/gim;
 
+  /** Regex to match document file paths in response text (md, pdf, txt, json, yaml, etc.) */
+  private static readonly DOCUMENT_PATH_RE =
+    /(?:^|[\s`])(?<fp>(?:[A-Za-z]:[\\/]|\/|[\w.-]+[\/\\])[^\s"'<>)`]*\.(?:md|pdf|txt|json|ya?ml|csv|xlsx?|docx?|html))(?:[\s`]|$|[.。,，)）\]])/gim;
+
   /**
    * Extract image file paths from text, send them as photos, return cleaned text.
    */
@@ -956,6 +963,61 @@ export class MessageProcessor {
     return cleaned;
   }
 
+  /**
+   * Extract document file paths from text, send them as documents, return cleaned text.
+   */
+  private async sendInlineDocuments(
+    text: string,
+    adapter: BaseAdapter,
+    chatId: string,
+    _sendOpts?: SendOptions,
+  ): Promise<string> {
+    logger.info({ text: text.substring(0, 200) }, '[sendInlineDocuments] called');
+    const paths: string[] = [];
+    const originals: string[] = [];
+    let match: RegExpExecArray | null;
+    const re = new RegExp(MessageProcessor.DOCUMENT_PATH_RE.source, MessageProcessor.DOCUMENT_PATH_RE.flags);
+    while ((match = re.exec(text)) !== null) {
+      const raw = (match.groups?.fp ?? match[1])?.trim();
+      if (!raw) continue;
+      // Try as-is, then resolve relative to project root
+      const asIs = existsSync(raw);
+      const resolved = asIs ? raw : path.resolve(process.cwd(), raw);
+      const resolvedExists = existsSync(resolved);
+      
+      if (resolvedExists) {
+        paths.push(resolved);
+        originals.push(raw);
+      } else {
+        // Log why path was not matched - helps debug "file not found" issues
+        logger.warn({ raw, resolved, asIs, resolvedExists }, '[sendInlineDocuments] Path matched but file not found');
+      }
+    }
+    if (paths.length === 0) return text;
+
+    for (const p of paths) {
+      const result = await adapter.sendDocument(chatId, p);
+      if (result.success) {
+        logger.info({ chatId, filePath: p }, 'Sent inline document');
+      } else {
+        logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline document');
+      }
+    }
+
+    // Strip matched file paths from text (but keep as reference in a cleaner format)
+    let cleaned = text;
+    for (const raw of originals) {
+      const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Remove markdown link syntax: [text](path)
+      cleaned = cleaned.replace(new RegExp(`\\[[^\\]]*\\]\\(\\s*${escaped}\\s*\\)`, 'g'), '');
+      // Remove bare path references
+      cleaned = cleaned.replace(new RegExp(escaped, 'g'), '');
+    }
+    // Clean up excessive whitespace
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+    return cleaned;
+  }
+
   private async sendFinalResponse(
     response: string,
     adapter: BaseAdapter,
@@ -972,7 +1034,11 @@ export class MessageProcessor {
     }
 
     // Extract and send any inline images as photos
-    const cleaned = await this.sendInlineImages(response, adapter, chatId, sendOpts);
+    let cleaned = await this.sendInlineImages(response, adapter, chatId, sendOpts);
+    if (isNoiseResponse(cleaned)) return undefined;
+
+    // Extract and send any inline documents as files
+    cleaned = await this.sendInlineDocuments(cleaned, adapter, chatId, sendOpts);
     if (isNoiseResponse(cleaned)) return undefined;
 
     const sendResult = await sendWithMarkdownFallback(

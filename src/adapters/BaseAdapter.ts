@@ -190,6 +190,21 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   }
 
   /**
+   * Send a document/file to a chat
+   * @param chatId - The chat to send to
+   * @param filePath - Path to the file
+   * @param caption - Optional caption
+   * @returns SendResult with success status
+   */
+  async sendDocument(
+    _chatId: string,
+    _filePath: string,
+    _caption?: string,
+  ): Promise<SendResult> {
+    return { success: false, error: 'sendDocument not implemented' };
+  }
+
+  /**
    * Send typing indicator
    */
   abstract sendTypingIndicator(chatId: string): Promise<void>;

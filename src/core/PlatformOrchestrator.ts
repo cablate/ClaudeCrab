@@ -406,6 +406,14 @@ export class PlatformOrchestrator {
       ...(this.scheduleManager !== undefined
         ? { scheduleManager: this.scheduleManager }
         : {}),
+      ...(this.securityConfig !== undefined
+        ? {
+            securityConfig: {
+              allowedUsers: this.securityConfig.allowedUsers,
+              whitelistEnabled: this.securityConfig.whitelistEnabled,
+            },
+          }
+        : {}),
       // ADR-024: Group command support
       getGroupBotMembers: (chatId: string) => {
         const memberAgentIds = this.groupBroadcaster.getGroupMembers(chatId);

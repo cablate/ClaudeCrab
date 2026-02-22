@@ -63,6 +63,12 @@ export interface CommandDependencies {
   /** Schedule manager for schedule operations (optional) */
   scheduleManager?: ScheduleManager;
 
+  /** Security config for admin-only commands like /restart */
+  securityConfig?: {
+    allowedUsers: string[];
+    whitelistEnabled: boolean;
+  };
+
   /** ADR-024: Get group member bot infos for /members command */
   getGroupBotMembers?: (chatId: string) => Array<{
     agentId: string;
@@ -733,6 +739,66 @@ async function handleStatus(
   await ctx.reply(message, { parse_mode: 'HTML' });
 }
 
+
+/**
+ * /restart command — admin-only, triggers graceful restart via PM2
+ * Only works for users in allowedUsers list
+ */
+async function handleRestart(
+  ctx: Context,
+  deps: CommandDependencies
+): Promise<void> {
+  const userId = ctx.from?.id.toString();
+  if (userId === undefined) {
+    await ctx.reply('⚠️ 無法識別使用者身份');
+    return;
+  }
+
+  // Check if user is in allowedUsers
+  const securityConfig = deps.securityConfig;
+  if (securityConfig === undefined) {
+    await ctx.reply('⚠️ 安全設定未配置，無法執行此指令');
+    return;
+  }
+
+  const isAllowed = !securityConfig.whitelistEnabled || 
+    securityConfig.allowedUsers.includes(userId);
+  
+  if (!isAllowed) {
+    logger.warn({ userId, agentId: deps.agentId }, 'Unauthorized /restart attempt');
+    await ctx.reply('⛔ 你沒有權限執行此指令');
+    return;
+  }
+
+  logger.info({ userId, agentId: deps.agentId }, 'Restart command received, running pre-flight check...');
+  await ctx.reply('🔍 正在檢查程式碼...');
+
+  // Pre-flight check: run tsc --noEmit to catch TypeScript errors
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+
+  try {
+    await execAsync('npx tsc --noEmit', { cwd: process.cwd(), timeout: 60000 });
+  } catch (error) {
+    const err = error as { stderr?: string; stdout?: string };
+    const errorOutput = err.stderr || err.stdout || 'Unknown error';
+    logger.error({ error: errorOutput }, 'TypeScript check failed, aborting restart');
+    await ctx.reply(`❌ TypeScript 檢查失敗，取消重啟：\n\n<code>${errorOutput.slice(0, 500)}</code>`, { parse_mode: 'HTML' });
+    return;
+  }
+
+  // All checks passed
+  logger.info({ userId, agentId: deps.agentId }, 'Pre-flight check passed, initiating restart');
+  await ctx.reply('✅ 檢查通過！🔄 正在重啟 ClaudeCab...\n\n稍後我會重新上線！');
+
+  // Graceful shutdown - PM2 will auto-restart
+  setTimeout(() => {
+    logger.info('Graceful shutdown initiated via /restart command');
+    process.exit(0);
+  }, 1000);
+}
+
 export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   start: handleStart,
   help: handleHelp,
@@ -741,4 +807,5 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   schedule: handleSchedule,
   members: handleMembers,
   status: handleStatus,
+  restart: handleRestart,
 };
