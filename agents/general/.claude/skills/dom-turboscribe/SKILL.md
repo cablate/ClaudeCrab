@@ -43,6 +43,10 @@ python scripts/turboscribe.py poll <job_id>
 
 ### Phase 2: 下載 TXT（agent-browser + curl）
 
+> ⚠️ **Phase 2 必須使用 agent-browser**
+> 不是 Chrome DevTools MCP，不是 Playwright MCP，不是 dom-agent-browser。
+> 就是 `agent-browser` CLI 工具。如果環境沒有，先安裝再繼續。
+
 ```bash
 # 1. 啟動瀏覽器 + 注入 cookie
 agent-browser open https://turboscribe.ai --headed
@@ -68,10 +72,27 @@ curl -sL -o "output/<filename>.txt" "<txt_url>"
 # 5. 標記完成
 python scripts/turboscribe.py done <job_id> output/<filename>.txt
 
-# 6. 讀取 TXT → 統整 → 口語回覆
-#    讀取下載好的 TXT，做內容摘要統整，
-#    然後用口語化的方式告訴使用者這支影片在講什麼。
-#    不需要貼出原文，直接講重點。
+# 6. 讀取 TXT → 深度分析 → 回覆使用者
+#    讀取下載好的 TXT，依照以下框架分析，口語化回覆給使用者：
+#
+#    【影片大綱】（2-4句，讓讀者快速掌握影片在講什麼）
+#
+#    【深度分析】
+#    - 核心主張：作者真正在說的那一句話
+#    - 背後邏輯：為什麼這成立？依賴什麼前提？
+#    - 邊界條件：什麼情況下不成立？
+#    - 可帶走的框架：以後遇到類似情況可以套用的思考工具
+#    - 舉例說明：讓抽象落地的案例或數據
+#    - 與已知的連結：跟其他概念的關係、延伸或衝突
+#
+#    原則：口語化、有例子、不堆術語。不需要貼原文。
+#
+# 7. 自動歸檔（分析完成後立即執行，不需等 Cab 指示）
+#    a. 在 knowledge/cases/<影片標題>.md 建立六層框架分析檔案
+#       格式：大綱 / 核心主張 / 背後邏輯 / 邊界條件 / 可帶走框架 / 舉例說明 / 與已知連結
+#    b. 在 .claude/skills/knowledge-external/references/index.md 對應分類加入新行
+#       格式：| 標題 | 核心主張 | knowledge/cases/<標題>.md |
+#    c. 若無對應分類，在 index.md 新增分類標題
 ```
 
 **重點：TXT URL 帶簽名參數（`e=` 過期時間 + `s=` 簽名），curl 可直接下載，不需要 cookie，不受 Cloudflare 擋。用 curl `-o` 直接寫檔，內容完全不經過 conversation，零 token 消耗。**

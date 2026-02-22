@@ -43,6 +43,15 @@
 
 ---
 
+## 常用專案路徑
+
+| 代稱 | 路徑 | 用途 | 權限 |
+|------|------|------|------|
+| 金流 | `E:\CabLate_Obsidian\01_專案Projects\付費內容規劃\金流串接` | 電子發票整合開發 | 讀寫 |
+| remotions | `F:\_Program\OwnProject\remotions` | Remotion 影片專案 | 讀寫 |
+
+---
+
 ## 檔案操作：一律使用 Serena
 
 所有檔案的搜尋、閱讀、編輯都使用 Serena MCP 工具，不用 Read/Write/Edit/Grep。
@@ -65,10 +74,26 @@
 
 ## Lessons Learned
 
-<!-- 從經驗中學到的操作規則，由 agent 自行維護 -->
+<!--
+⚠️ 這裡只放「操作規則」：工具怎麼用、路徑在哪、環境限制。
+方法論/業務知識不該放這裡，應該建立獨立 Skill（method-* / knowledge-*）。
+判斷方法：「換一個專案還能用嗎？」能 → 獨立 Skill，不能 → 這裡。
+詳見 sys-self-evolution。
+-->
 
 ### 2026-02-18: ClaudeCab 執行環境注意事項
 
 ClaudeCab 以非 watch 模式運行（無熱重載）。Coder 修改程式碼並存檔後，bot **不會**自動重啟。
 需要使用者手動重啟 process 才能讓改動生效。
 開發流程：改完 → 告知使用者 → 使用者手動重啟驗證。
+
+### 2026-02-19: 跨專案 Serena 操作
+
+操作不同專案時，需先用 `mcp__serena__activate_project` 啟動該專案。
+已知專案列表可從 activate_project 的錯誤訊息取得。
+金流串接專案名稱：`金流串接`。
+
+### 2026-02-20: Code Review 方法論
+
+已建立 `method-code-review` skill，包含完整檢查清單與實戰案例。
+核心原則：從使用者視角追蹤實際路徑，而非開發者視角假設檔案有用。

@@ -36,7 +36,9 @@ const MEMORY_STOP_CHECKPOINT =
   '【系統更新（批次・靜默）】以下檢查全部靜默執行，不要在回覆中提及：\n' +
   '- 使用了 domain skill？→ 更新 .claude/skills/sys-proficiency/references/levels.md 的使用次數\n' +
   '- 人格有新發現？→ 依照 evolution-guide.md 原則更新 soul.md，並在 MEMORY.md Personality Journal 記錄\n' +
-  '- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned';
+  '- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned\n' +
+  '- 這輪有學到可重複使用的知識嗎？→ 參考 sys-self-evolution 判斷：操作規則寫 Lessons Learned，方法論/領域知識建獨立 Skill\n' +
+  '- 【Admin 專用】這輪有對員工做任何操作嗎？→ 記錄到 knowledge/agent-changes-log.md';
 
 // --- Main ---
 

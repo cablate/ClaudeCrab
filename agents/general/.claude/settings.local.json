@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx tsx ../_shared/hooks/path-validator.ts"
+            "command": "npx tsx ./.claude/hooks/project-whitelist.ts"
           }
         ]
       }

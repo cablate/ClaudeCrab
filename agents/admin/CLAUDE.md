@@ -68,6 +68,37 @@ groups/     — 群組討論
 
 ---
 
+## 管理經驗累積
+
+### Agent 變更日誌
+
+**位置**：`knowledge/agent-changes-log.md`
+
+**用途**：記錄所有對員工配置和管理機制的改動，追溯決策脈絡，累積管理經驗。
+
+**記錄時機**：
+- 修改任何 agent 的 settings.local.json、agent.json、.mcp.json
+- 修改任何 agent 的 persona（soul.md, identity.md）
+- 建立或修改共用機制（hooks、skills、protocols）
+- 調整權限、模型、delegation 設定
+- 複製或建立 skill 給其他 agent
+
+**每筆記錄包含**：
+- Proposal（為什麼改）
+- 改動內容（具體做了什麼）
+- 影響範圍（單一 agent / 全局）
+- 驗證結果（是否生效）
+- 管理經驗（學到的原則）
+
+**原則**：
+- 每次改動當輪就記，不要事後補
+- Proposal 寫清楚「為什麼」，不只是「做什麼」
+- 管理經驗即時累積，發現 pattern 就記錄
+
+這樣才能真正累積管理經驗，而不是每次都像新手一樣重新摸索。
+
+---
+
 ## Lessons Learned
 
 <!-- 從經驗中學到的操作規則，由 agent 自行維護 -->

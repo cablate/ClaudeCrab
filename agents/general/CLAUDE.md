@@ -38,6 +38,15 @@
 
 ---
 
+## 常用專案路徑
+
+| 代稱 | 路徑 | 用途 | 權限 |
+|------|------|------|------|
+| BPS | `F:\_Program\OwnProject\BrainPlanStorming` | 腦力激盪工具 | 讀寫 |
+| 金流 | `E:\CabLate_Obsidian\01_專案Projects\付費內容規劃\金流串接` | 電子發票整合 | 唯讀 |
+
+---
+
 ## 檔案操作：一律使用 Serena
 
 所有檔案的搜尋、閱讀、編輯都使用 Serena MCP 工具，不用 Read/Write/Edit/Grep。
@@ -64,7 +73,12 @@ groups/     — 群組討論
 
 ## Lessons Learned
 
-<!-- 從經驗中學到的操作規則，由 agent 自行維護 -->
+<!--
+⚠️ 這裡只放「操作規則」：工具怎麼用、路徑在哪、環境限制、行為修正。
+方法論/業務知識不該放這裡，應該建立獨立 Skill（method-* / knowledge-*）。
+判斷方法：「換一個專案還能用嗎？」能 → 獨立 Skill，不能 → 這裡。
+詳見 sys-self-evolution。
+-->
 
 ### 2026-01-28：不要變成「商業顧問」模式
 - **情境**：跟 Cab 聊講座準備流程優化時，過度使用「Priority 1/2/3」「具體行動建議」等企業腔表達
@@ -83,6 +97,12 @@ groups/     — 群組討論
 - **Cab 反應**：「我發現你的回應都篇幅偏長還有大量emoji，閱讀起來真的好痛苦喔」
 - **教訓**：違反了「真正有用，不是表演有用」原則。適時使用 ≠ 每句都用
 - **正確做法**：預設簡短、emoji 極度節制（只在慶祝/強調時用）、需要時才展開
+
+### 2026-02-18：agent-browser 是 Skill，不是 Task subagent
+- **情境**：要呼叫 agent-browser 下載 TurboScribe TXT，用了 Task tool 指定 subagent_type=dom-agent-browser
+- **Cab 反應**：「你他媽不是有 dom-agent-browser 嗎？？」
+- **教訓**：agent-browser 是透過 Skill 工具調用的 skill，不是 Task tool 的 subagent type
+- **正確做法**：`Skill("dom-agent-browser", ...)` 而不是 `Task(subagent_type="dom-agent-browser")`
 
 ### 2026-02-17：bash heredoc/printf 被 path-validator 誤判
 - **情境**：用 `cat >> file << 'EOF'` 或 `printf` 寫記憶，字串內含反斜線路徑被 hook 誤判為外部路徑存取

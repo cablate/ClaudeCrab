@@ -109,6 +109,7 @@ read_file ../general/.mcp.json
 
 | 文件 | 內容 |
 |------|------|
+| [organization-principles.md](references/organization-principles.md) | **組織設計原則（四大目標 + 優先級 + 反模式）** |
 | [operations.md](references/operations.md) | 設定操作指南（agent.json、settings.local.json、.mcp.json） |
 | [create-agent-guide.md](references/create-agent-guide.md) | 建立新 Agent 完整流程（10 步驟 + 驗證清單） |
 | [persona-design.md](references/persona-design.md) | Persona 設計指南（欄位設計依據 + Anti-patterns + Checklist） |

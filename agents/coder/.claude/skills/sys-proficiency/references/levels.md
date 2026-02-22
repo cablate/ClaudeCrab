@@ -1,6 +1,6 @@
 # Skill Proficiency Levels
 
-**更新日期**：2026-02-17（session 3）
+**更新日期**：2026-02-22
 
 ## Domain Skills
 
@@ -23,10 +23,16 @@
 - 備註：處理商業說故事主題 SRT，產出混合型（觀念+案例）學習指南
 
 ### agentskill-expertise ★★☆☆☆ Competent
-- 使用次數：3
-- 最後使用：2026-02-17
+- 使用次數：5
+- 最後使用：2026-02-20
 - 狀態：活躍使用
-- 備註：今日兩次（dom-image-gen 設計與 review、dom-turboscribe 封裝）
+- 備註：更新常見誤區與 Review checklist（觸發情境重疊）
+
+### dom-engineering-wisdom ★☆☆☆☆ Novice
+- 使用次數：1
+- 最後使用：2026-02-20
+- 狀態：首次建立
+- 備註：建立工程師方法論累積知識庫，首個主題「建立領域知識庫」
 
 ### dom-image-gen ★☆☆☆☆ Novice
 - 使用次數：2
@@ -35,9 +41,10 @@
 - 備註：今日兩次（生成 RPG 按鈕、生成 Galgame 按鈕）
 
 ### agent-browser ★☆☆☆☆ Novice
-- 使用次數：2
-- 最後使用：2026-02-02
-- 狀態：新安裝
+- 使用次數：3
+- 最後使用：2026-02-21
+- 狀態：活躍使用
+- 備註：查閱 ECPay 發票查詢 API 文件
 
 ### find-skills ★☆☆☆☆ Novice
 - 使用次數：5
@@ -48,6 +55,18 @@
 - 使用次數：3
 - 最後使用：2026-01-30
 - 狀態：偶爾使用
+
+### dom-remotion-mastery ★☆☆☆☆ Novice
+- 使用次數：3
+- 最後使用：2026-02-22
+- 狀態：活躍開發
+- 備註：建立完整 Skill 架構；擴充 ecosystem-integration.md；完成 Code Review（發現缺音訊/Debug 指南）
+
+### dom-remotion-best-practices ★☆☆☆☆ Novice
+- 使用次數：1
+- 最後使用：2026-02-22
+- 狀態：首次研讀
+- 備註：作為官方參考研讀，不修改；用於建立 dom-remotion-mastery 的技術基礎
 
 ---
 
