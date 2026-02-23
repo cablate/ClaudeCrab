@@ -68,6 +68,12 @@
 - 狀態：首次研讀
 - 備註：作為官方參考研讀，不修改；用於建立 dom-remotion-mastery 的技術基礎
 
+### proj-claudecab ★★★☆☆ Proficient
+- 使用次數：11
+- 最後使用：2026-02-23
+- 狀態：活躍開發
+- 備註：v1.43 Schedule model override + 本地音效通知功能實作完成；session 重新校準
+
 ---
 
 *此檔案由 bot 自動維護。每次使用 domain skill 後批次更新。*

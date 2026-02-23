@@ -1,6 +1,6 @@
 # Skill Proficiency Levels
 
-**更新日期**：2026-02-22 18:40
+**更新日期**：2026-02-23
 
 ## Domain Skills
 
@@ -22,17 +22,17 @@
 - 狀態：首次使用
 - 備註：處理商業說故事主題 SRT，產出混合型（觀念+案例）學習指南
 
-### agentskill-expertise ★★☆☆☆ Competent
-- 使用次數：6
-- 最後使用：2026-02-22
+### agentskill-expertise ★★★★★ Master
+- 使用次數：10
+- 最後使用：2026-02-23
 - 狀態：活躍使用
-- 備註：method-course-article-writing 設計評估——定位從「通用內容生產線」收窄為「課程文章寫作」，避免過度抽象
+- 備註：dom-seo 完整 Review——Progressive Disclosure 執行優秀、原則導向設計、結構完整、通過所有檢查項目
 
-### dom-image-gen ★☆☆☆☆ Novice
-- 使用次數：2
-- 最後使用：2026-02-17
-- 狀態：首次使用
-- 備註：今日兩次（生成 RPG 按鈕、生成 Galgame 按鈕）
+### dom-image-gen ★★★★☆ Expert
+- 使用次數：44
+- 最後使用：2026-02-23
+- 狀態：活躍使用
+- 備註：Cab 視覺形象系統建立——參考圖工作流、semi-chibi 比例技術、三類圖包標準化（TypeA/B/C）、表情包批量生成（驚訝/開心/思考/難過/興奮/害羞）
 
 ### agent-browser ★★☆☆☆ Competent
 - 使用次數：7
@@ -55,6 +55,12 @@
 - 使用次數：3
 - 最後使用：2026-01-30
 - 狀態：偶爾使用
+
+### dom-seo ★★☆☆☆ Competent
+- 使用次數：2
+- 最後使用：2026-02-23
+- 狀態：建立完成，協作機制文檔化
+- 備註：整合 darkseoking 現代技術 + SEO Handbook，Progressive Disclosure 重構（SKILL.md 1800 tokens + 5 references 55KB），建立與寫作 Skill 協作流程文件
 
 ---
 
