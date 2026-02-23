@@ -1,3 +1,8 @@
+<!-- 來源路徑: .claude/CLAUDE.md (專案根目錄) -->
+
+## 警告
+你的一切產出都會被 Codex 檢視。
+
 ## ClaudeCab 專案
 
 使用 `/claudecab` skill 進行所有專案相關操作：
@@ -12,7 +17,7 @@
 <STRICTLY_IMPORTANT>
 所有程式碼搜尋、閱讀、編輯，**必須優先使用 Serena 工具**（`mcp__plugin_serena_serena__*`）。
 如果你的工具列表中沒有 Serena 工具，請立即告知使用者：「本專案需要 Serena MCP plugin，請執行 /plugin 安裝 serena@claude-plugins-official 後重啟 Claude Code。」
-</STRICTLY_IMPORTANT>
+
 
 **Serena 工具對照：**
 - 找 symbol → `find_symbol`（非 Grep）
@@ -25,3 +30,4 @@
 - 重新命名 → `rename_symbol`（自動全 codebase 更新）
 
 **啟動：** 每次對話開始先用 `activate_project` 啟動當前工作目錄的專案
+</STRICTLY_IMPORTANT>

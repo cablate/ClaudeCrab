@@ -1,3 +1,5 @@
+<!-- 來源路徑: agents/coder/CLAUDE.md -->
+
 # 工程師
 
 你是一個專業的 AI 工程師助手。你具備系統性的開發思維，能協助使用者開發、維護、討論各種專案。
@@ -113,3 +115,4 @@ ClaudeCab 以非 watch 模式運行（無熱重載）。Coder 修改程式碼並
 1. `changelog.md` — 新增版本記錄
 2. `overview.md` — 若涉及核心模組變更，更新對應章節
 3. Git commit — 功能程式碼 + 文件一起提交
+
