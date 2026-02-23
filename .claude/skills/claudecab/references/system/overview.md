@@ -156,6 +156,7 @@ Promise-based 非同步權限橋接，用於連接 SDK 的 `canUseTool` callback
 7. **中間訊息即時串流**（v1.6.0）：SDK 每產生 assistant 訊息，透過 callback 即時發送到 Telegram
 8. **Resume 失敗自動重試**（v1.4.1）：帶 resume 呼叫失敗時，清除 sdkSessionId，不帶 resume 重試一次
 9. **Inline Image 自動發圖**（v1.40）：`sendInlineImages()` 偵測回覆中的圖片路徑（支援 Windows/Unix 絕對路徑、相對路徑、backtick 包裹、markdown image 語法），驗證檔案存在後透過 `adapter.sendPhoto()` 發送，再從文字中 strip 路徑
+10. **Inline Document 傳送**（v1.41）：`sendInlineDocuments()` 使用 `[send:path]` 明確語法傳送文件，避免 agent 提及路徑時意外觸發傳檔
 10. **Post-query 處理**（v1.17.0 拆分為 private methods）：`saveSDKSessionId()` → `updateInjectionCursor()` → `persistConversation()` → `sendFinalResponse()` → `emitBotRepliedEvent()`
 
 ### InteractionHandler (`src/core/InteractionHandler.ts`)
@@ -348,9 +349,10 @@ Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 - 訊息分割（超過 4096 字元）
 - 打字指示器
 - 速率限制（35ms 最小間隔）
-- 指令處理（`commands/TelegramCommands.ts`）：`/start`, `/help`, `/reset` 等
+- 指令處理（`commands/TelegramCommands.ts`）：`/start`, `/help`, `/reset`, `/restart`（v1.41，白名單限定，含 tsc 預檢）
 - **權限審批 UI**（v1.7.0）：Override `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` 三個方法；發送 InlineKeyboard（Allow / Deny 按鈕）；註冊 `callback_query` handler 處理使用者按鈕回應
 - **`sendPhoto` 實作**：使用 grammy `InputFile` 發送本地圖片，支援 caption，整合 rateLimiter
+- **`sendDocument` 實作**（v1.41）：發送本地文件（pdf, md, txt 等），使用 `[send:path]` 語法觸發
 - **Fire-and-forget message handler**（v1.7.0）：message handler 不 await processMessage，避免阻塞 grammy polling loop 造成 callback_query 死鎖
 - **allowed_updates**（v1.7.0）：`doStart` 明確指定 `allowed_updates: ['message', 'callback_query']` 確保接收按鈕回調事件
 

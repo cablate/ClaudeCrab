@@ -8,31 +8,39 @@
 
 ## 版本歷史
 
-### v1.41 - Table Markdown 轉換 + 通用規則注入
+### v1.41 - Table Markdown 轉換 + PM2 整合 + 文件傳送
 
 **發布日期**：2026-02-23
+
+**PM2 Process 管理**：
+- 新增 `ecosystem.config.cjs` — PM2 配置檔（cluster mode, auto-restart）
+- 新增 `/restart` 指令 — 白名單使用者可遠端重啟 bot（含 tsc 預檢）
+- `PlatformOrchestrator` 新增 `restartBot()` 方法
+
+**文件自動傳送**：
+- 新增 `[send:path]` 明確語法 — 取代先前的路徑自動偵測，避免誤觸發
+- `BaseAdapter.sendDocument()` + `TelegramAdapter` 實作（grammy InputFile）
+- `MessageProcessor.sendInlineDocuments()` — 偵測 `[send:path]` 語法並傳送
 
 **Table Markdown 智能轉換**：
 - Telegram 不支援 markdown table 語法（`| --- |` 原樣顯示）
 - 新增 `convertTablesToTelegramFormat()` — 偵測並轉換所有 markdown table
-- 新增 `parseMarkdownTable()` — 解析 table 為結構化資料（headers + rows）
 - 所有表格統一轉換為列表格式：`• col1: val1 | col2: val2 | col3: val3`
-- 整合於 `convertToTelegramMarkdown()` — 先處理 table 再傳給 `telegramifyMarkdown`，避免 escape 問題
 
 **通用規則注入機制**：
 - `AgentLoader.loadSystemPrompt()` 新增 `getGlobalStaticRules()` — 引擎層通用規則統一注入
-- 檔案傳送語法 `[send:path]` 從 `constants.ts` 動態注入移至 AgentLoader 靜態注入
-- 設計原則：無 runtime 變數的規則 → L0（CLAUDE.md / AgentLoader 靜態）；有變數 → L1（buildPromptContext 動態）
+- 設計原則：無 runtime 變數的規則 → L0（靜態）；有變數 → L1（動態）
 
-**Agent SDK CLAUDE.md 載入研究**：
-- 確認 SDK 需要 `settingSources: ['project']` 才會自動載入 CLAUDE.md
-- 發現 ClaudeCab 目前重複載入 CLAUDE.md（SDK 自動 + 手動 append）
-- 待評估方案：A) 移除手動讀取讓 SDK 處理；B) 移除 settingSources 中的 'project'
+**MarkdownV2 修復**：
+- 修復 `#` escape 問題（telegramify-markdown 輸出 `\\#` 但 Telegram 需要 `\#`）
 
 **修改檔案**：
-- `src/utils/telegramMarkdown.ts` — table 轉換功能
-- `src/core/AgentLoader.ts` — `getGlobalStaticRules()` + `loadSystemPrompt()` 整合
-- `src/core/constants.ts` — 移除 `buildPromptContext()` 中的檔案傳送規則
+- `ecosystem.config.cjs` — PM2 配置（新增）
+- `src/adapters/commands/TelegramCommands.ts` — /restart 指令
+- `src/adapters/BaseAdapter.ts` + `TelegramAdapter.ts` — sendDocument
+- `src/core/MessageProcessor.ts` — sendInlineDocuments + [send:path] 語法
+- `src/utils/telegramMarkdown.ts` — table 轉換 + # escape 修復
+- `src/core/AgentLoader.ts` — getGlobalStaticRules()
 
 ---
 
