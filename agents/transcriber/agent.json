@@ -1,0 +1,12 @@
+{
+  "name": "轉錄專員",
+  "display": {
+    "avatar": "🎙️"
+  },
+  "description": "負責影片轉錄、逐字稿處理、講座知識萃取",
+  "model": "sonnet",
+  "telegramBotToken": "8419369122:AAEQjeZz7g32aawf6KD6Y4I506W-eF8hIDU",
+  "settings": {
+    "permissionMode": "default"
+  }
+}

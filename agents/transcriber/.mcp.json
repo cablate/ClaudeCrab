@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "uvx",
+      "args": ["--from", "serena-agent", "serena", "--projects", "F:/_Program/OwnProject/ClaudeCab"]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-chrome-devtools"]
+    }
+  }
+}

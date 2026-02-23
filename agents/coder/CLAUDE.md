@@ -106,3 +106,10 @@ ClaudeCab 以非 watch 模式運行（無熱重載）。Coder 修改程式碼並
 1. 給路徑前先確認檔案存在
 2. 如果是從記憶中取得的路徑，也要重新驗證
 3. 不確定時用 `list_dir` 列出目錄內容再選擇正確檔案
+
+### 2026-02-23: ClaudeCab 功能開發後主動更新文件
+
+**規則**：開發 ClaudeCab 功能後，主動更新 proj-claudecab skill 文件並 commit：
+1. `changelog.md` — 新增版本記錄
+2. `overview.md` — 若涉及核心模組變更，更新對應章節
+3. Git commit — 功能程式碼 + 文件一起提交

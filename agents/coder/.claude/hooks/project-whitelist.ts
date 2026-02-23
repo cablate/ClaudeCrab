@@ -13,6 +13,13 @@ import * as fs from 'node:fs';
 const ALLOWED_PROJECTS = [
   'E:\\CabLate_Obsidian\\01_專案Projects\\付費內容規劃\\金流串接',
   'F:\\_Program\\OwnProject\\remotions',
+  'F:\\_Program\\OwnProject\\ClaudeCab',
+];
+
+// For ClaudeCab, only these subpaths within agents/ are allowed
+const CLAUDECAB_AGENTS_WHITELIST = [
+  'F:\\_Program\\OwnProject\\ClaudeCab\\agents\\coder',
+  'F:\\_Program\\OwnProject\\ClaudeCab\\agents\\_shared',
 ];
 
 // --- Types ---
@@ -82,10 +89,26 @@ function extractPathsFromCommand(command: string): string[] {
 
 function isPathAllowed(targetPath: string): boolean {
   const normalized = normalizePath(targetPath);
-  return ALLOWED_PROJECTS.some(allowed => {
+  
+  // Check if in whitelist
+  const matchedProject = ALLOWED_PROJECTS.find(allowed => {
     const normalizedAllowed = normalizePath(allowed);
     return normalized.startsWith(normalizedAllowed);
   });
+  
+  if (!matchedProject) return false;
+  
+  // Special handling for ClaudeCab agents/ directory
+  const claudecabAgentsPath = normalizePath('F:\\_Program\\OwnProject\\ClaudeCab\\agents');
+  if (normalized.startsWith(claudecabAgentsPath)) {
+    // Must be in coder/ or _shared/ only
+    return CLAUDECAB_AGENTS_WHITELIST.some(allowed => {
+      const normalizedAllowed = normalizePath(allowed);
+      return normalized.startsWith(normalizedAllowed);
+    });
+  }
+  
+  return true;
 }
 
 // --- Standard path-validator logic ---

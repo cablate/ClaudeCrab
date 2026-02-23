@@ -610,6 +610,31 @@ Coder 反映：啟動時讀了 sys-self-evolution，但長對話後記憶衰減�
 
 ---
 
+### [General] 移除 dom-turboscribe Skill（方案 B 執行）
+
+**Proposal**：
+- 轉錄員已啟動成功，需要明確區分秘書和轉錄員的職責
+- 秘書的 `sys-role-boundary` 已定義「轉錄需求轉介給轉錄專員」
+- 但秘書還保有轉錄工具，協議與配置不一致
+- 使用者選擇方案 B（部分保留）
+
+**改動內容**：
+- 刪除 `agents/general/.claude/skills/dom-turboscribe/`
+- 保留 `lecture-digest-generator`（秘書可處理別人給的逐字稿，只是不自己轉錄）
+
+**影響範圍**：僅 General
+
+**驗證結果**：
+- 秘書不再有 `dom-turboscribe` skill
+- 轉錄員是唯一有轉錄工具的員工
+
+**管理經驗**：
+- 職責移交時，協議更新和工具移除要同步
+- 方案 B（部分保留）適用於：「不做某類工作」但「可處理該類工作的產出」的情境
+- 例如：不轉錄影片，但可處理別人給的逐字稿
+
+---
+
 ## 格式說明
 
 每筆記錄包含：

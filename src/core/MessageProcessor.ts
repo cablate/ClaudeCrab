@@ -911,9 +911,12 @@ export class MessageProcessor {
   private static readonly IMAGE_PATH_RE =
     /(?:^|[\s`]|!\[[^\]]*\]\()(?<fp>(?:[A-Za-z]:[\\\/]|\/|[\w.-]+[\/\\])[^\s"'<>)`]*\.(?:png|jpe?g|gif|webp))\)?(?:[\s`]|$|[.。,，)）\]])/gim;
 
-  /** Regex to match document file paths in response text (md, pdf, txt, json, yaml, etc.) */
-  private static readonly DOCUMENT_PATH_RE =
-    /(?:^|[\s`])(?<fp>(?:[A-Za-z]:[\\/]|\/|[\w.-]+[\/\\])[^\s"'<>)`]*\.(?:md|pdf|txt|json|ya?ml|csv|xlsx?|docx?|html))(?:[\s`]|$|[.。,，)）\]])/gim;
+  /**
+   * Explicit send syntax: [send:path/to/file.ext]
+   * Only files wrapped in this syntax will be auto-sent to user.
+   * This prevents accidental file sending when agent merely mentions a path.
+   */
+  private static readonly DOCUMENT_PATH_RE = /\[send:(?<fp>[^\]]+)\]/gim;
 
   /**
    * Extract image file paths from text, send them as photos, return cleaned text.
@@ -1004,14 +1007,12 @@ export class MessageProcessor {
       }
     }
 
-    // Strip matched file paths from text (but keep as reference in a cleaner format)
+    // Strip [send:path] syntax from text after sending
     let cleaned = text;
     for (const raw of originals) {
       const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Remove markdown link syntax: [text](path)
-      cleaned = cleaned.replace(new RegExp(`\\[[^\\]]*\\]\\(\\s*${escaped}\\s*\\)`, 'g'), '');
-      // Remove bare path references
-      cleaned = cleaned.replace(new RegExp(escaped, 'g'), '');
+      // Remove [send:path] syntax
+      cleaned = cleaned.replace(new RegExp(`\\[send:\\s*${escaped}\\s*\\]`, 'gi'), '');
     }
     // Clean up excessive whitespace
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
