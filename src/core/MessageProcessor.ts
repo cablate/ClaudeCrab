@@ -24,6 +24,11 @@ import {
   type ToolEventEntry,
 } from './StatusMessageManager.js';
 import type { ActivityService } from './ActivityService.js';
+import type { AgentCallService } from '../services/AgentCallService.js';
+import {
+  createAgentCallMcpServer,
+  getAgentCallToolNames,
+} from '../tools/notifyAgentTool.js';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
@@ -85,6 +90,12 @@ export interface MessageProcessorOptions {
    * Activity service for personality-driven lifecycle reactions (v2.0).
    */
   activityService?: ActivityService;
+
+  /**
+   * Notification service for cross-agent communication.
+   * When provided, agents can send notifications to each other via Custom Tools.
+   */
+  agentCallService?: AgentCallService;
 }
 
 /**
@@ -150,6 +161,7 @@ export class MessageProcessor {
   private readonly contextInjector: ContextInjector | undefined;
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly activityService: ActivityService | undefined;
+  private readonly agentCallService: AgentCallService | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -164,6 +176,7 @@ export class MessageProcessor {
     this.contextInjector = options.contextInjector;
     this.queryMetricsRepository = options.queryMetricsRepository;
     this.activityService = options.activityService;
+    this.agentCallService = options.agentCallService;
 
     logger.info('MessageProcessor initialized');
   }
@@ -524,6 +537,14 @@ export class MessageProcessor {
         'Final prompt built'
       );
 
+      // Create agent call MCP server for cross-agent communication
+      const agentCallMcpServer = this.agentCallService
+        ? createAgentCallMcpServer(this.agentCallService, {
+            agentId,
+            chatId,
+          })
+        : undefined;
+
       // Helper: execute SDK query with retry for rate limit / transient errors
       const executeWithRetry = async (resumeId: string | undefined) => {
         return await retryAsync(
@@ -539,6 +560,15 @@ export class MessageProcessor {
                 // Otherwise let SDK use its default (unlimited turns)
                 ...(agent.config.settings?.maxTurns !== undefined
                   ? { maxTurns: agent.config.settings.maxTurns }
+                  : {}),
+                // Cross-agent call tools (when agentCallService is available)
+                ...(agentCallMcpServer !== undefined
+                  ? {
+                      mcpServers: {
+                        'agent-call': agentCallMcpServer,
+                      },
+                      allowedTools: getAgentCallToolNames(),
+                    }
                   : {}),
                 resume: resumeId,
                 onIntermediateMessage: async (text: string): Promise<void> => {

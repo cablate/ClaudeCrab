@@ -39,6 +39,7 @@ import * as path from 'node:path';
 import type { AppConfig } from './config.js';
 import { createSTTProvider, type STTProvider } from './core/stt/index.js';
 import type { IQueryMetricsRepository } from './persistence/types.js';
+import { AgentCallService } from './services/AgentCallService.js';
 
 /** Interval for sending typing indicators to Telegram (ms) */
 const TYPING_INDICATOR_INTERVAL_MS = 5000;
@@ -316,8 +317,17 @@ export class AppBootstrap {
     queryMetricsRepository: QueryMetricsRepository | undefined,
     activityService?: ActivityService,
   ): MessageProcessor {
+    // Create agent call service for cross-agent communication
+    // Uses MessageProcessor.processMessage() to ensure full processing flow (typing, formatting, etc.)
+    // Note: Uses lazy getter since MessageProcessor isn't created yet (circular dependency)
+    let messageProcessorRef: MessageProcessor | undefined;
+    const agentCallService = new AgentCallService(
+      agentLoader,
+      () => messageProcessorRef
+    );
+
     // Note: getAdapter and getBotInfo reference orchestrator via closure (lazy resolution)
-    return new MessageProcessor({
+    const messageProcessor = new MessageProcessor({
       sessionManager,
       getAdapter: (platform, agentId) =>
         this.orchestrator?.getRegistry().get(platform, agentId),
@@ -342,7 +352,13 @@ export class AppBootstrap {
       eventBus: getEventBus(),
       ...(contextInjector !== undefined ? { contextInjector } : {}),
       ...(activityService !== undefined ? { activityService } : {}),
+      agentCallService,
     });
+
+    // Complete the circular reference: AgentCallService needs MessageProcessor
+    messageProcessorRef = messageProcessor;
+
+    return messageProcessor;
   }
 
     private createOrchestrator(

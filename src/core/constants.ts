@@ -26,6 +26,14 @@ export const STARTUP_PROTOCOL_REMINDER =
   '【啟動協議】新 session，回覆前先完成 CLAUDE.md 規定的 Startup Protocol。';
 
 /**
+ * Cross-agent call tools reminder.
+ * Agents can use these tools to trigger other agents.
+ */
+export const CROSS_AGENT_CALL_CONTEXT = `【跨 Agent 呼叫】
+可用工具：call_agent — 觸發其他 Agent 執行任務（fire-and-forget，不等待回覆）
+使用時機：需要其他 Agent 協助處理任務、通知有新工作、請求審閱或回饋時。`;
+
+/**
  * Build the complete prompt context with current time.
  * Time is displayed in Asia/Taipei timezone.
  */
@@ -56,6 +64,7 @@ export function buildPromptContext(
 
   if (isNewSession) {
     context += `\n${STARTUP_PROTOCOL_REMINDER}`;
+    context += `\n${CROSS_AGENT_CALL_CONTEXT}`;
   }
 
   if (groupChatId) {

@@ -324,6 +324,20 @@ Idle 自言自語排程器（Live page 用）：
   - `chance`（預設 0.3）— 觸發機率
   - `maxPerHour`（預設 3）— 每小時上限
 
+### AgentCallService (`src/services/AgentCallService.ts`)
+
+跨 Agent 呼叫服務（v1.42）：
+- `callAgent(from, to, message, options)` — fire-and-forget 觸發其他 Agent 執行任務
+- **透過 MessageProcessor.processMessage()** 執行，確保完整流程：typing 狀態、session 管理、回覆格式化
+- 構造 `UnifiedMessage` 傳入，行為與使用者直接傳訊息一致
+- 需要 `chatId` 參數讓目標 agent 可以回覆到原聊天室
+- **循環依賴處理**：使用 lazy getter `() => messageProcessorRef` 解決 MessageProcessor ↔ AgentCallService 的循環依賴
+
+**MCP Tool 整合**：
+- `notifyAgentTool.ts` 提供 `createAgentCallMcpServer()` 建立 Custom MCP Tool
+- 工具名稱：`mcp__agent-call__call_agent`
+- Agent 可在執行中透過此工具呼叫其他 Agent
+
 ### Schedule 模組 (`src/schedule/`)
 
 排程系統（agent 可建立定時任務）：

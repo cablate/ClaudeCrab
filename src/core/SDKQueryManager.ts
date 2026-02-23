@@ -1,4 +1,4 @@
-import { query, type Query, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, type Query, type Options, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import type { LoadedAgent } from '../types/agent.js';
 import type { ToolEvent } from '../adapters/types.js';
 import { logger } from '../utils/logger.js';
@@ -84,6 +84,19 @@ export interface ExecuteQueryOptions {
    * Events include: tool_use (started), tool_result (completed), tool_progress (in-progress updates).
    */
   onToolEvent?: (event: ToolEvent) => void | Promise<void>;
+
+  /**
+   * Custom MCP servers to inject into the query.
+   * Used for cross-agent notification and other custom tools.
+   * Note: When mcpServers is provided, prompt will be wrapped in AsyncIterable format.
+   */
+  mcpServers?: Record<string, McpSdkServerConfigWithInstance>;
+
+  /**
+   * List of allowed tool names when using custom MCP servers.
+   * Format: mcp__{server_name}__{tool_name}
+   */
+  allowedTools?: string[];
 }
 
 /**
@@ -189,8 +202,37 @@ export class SDKQueryManager {
     );
 
     // Create query
+    // When mcpServers is provided, wrap prompt in AsyncIterable format (SDK requirement)
+    const hasMcpServers = options.mcpServers && Object.keys(options.mcpServers).length > 0;
+
+    // Add mcpServers to SDK options if provided
+    if (hasMcpServers && options.mcpServers) {
+      (sdkOptions as Options & { mcpServers: Record<string, McpSdkServerConfigWithInstance> }).mcpServers = options.mcpServers;
+      if (options.allowedTools) {
+        sdkOptions.allowedTools = options.allowedTools;
+      }
+      logger.info(
+        { sessionId, mcpServers: Object.keys(options.mcpServers) },
+        'Custom MCP servers enabled for query'
+      );
+    }
+
+    // Create async generator for prompt when MCP servers are used
+    // SDKUserMessage requires parent_tool_use_id and session_id fields
+    async function* generatePromptMessages() {
+      yield {
+        type: 'user' as const,
+        message: {
+          role: 'user' as const,
+          content: prompt,
+        },
+        parent_tool_use_id: null,
+        session_id: options.resume ?? '',
+      };
+    }
+
     const q = query({
-      prompt,
+      prompt: hasMcpServers ? generatePromptMessages() : prompt,
       options: sdkOptions,
     });
 
