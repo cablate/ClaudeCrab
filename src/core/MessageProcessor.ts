@@ -27,6 +27,7 @@ import type { ActivityService } from './ActivityService.js';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
+import { playSound } from '../utils/localSound.js';
 
 /** Debounce delay for status message updates */
 const STATUS_DEBOUNCE_MS = 2000;
@@ -345,6 +346,9 @@ export class MessageProcessor {
               effectiveUserId,
               'idle'
             );
+
+            // Play completion sound (non-blocking)
+            playSound('C:\\Windows\\Media\\Ring01.wav').catch(() => {});
 
             return {
               success: true,

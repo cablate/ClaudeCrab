@@ -141,10 +141,10 @@ export class SDKQueryManager {
     const startTime = Date.now();
 
     // Build SDK options
-    // Use 'project' to load skills from .claude/skills/
+    // Use 'project' to auto-load CLAUDE.md from cwd and parent directories
     // Use 'local' to load permissions from .claude/settings.local.json
-    // System prompt is passed explicitly to ensure agent isolation
-    // (the explicit systemPrompt parameter should override any CLAUDE.md found by SDK)
+    // SDK automatically loads CLAUDE.md when settingSources includes 'project',
+    // so we don't need to manually append systemPrompt anymore.
     const sdkOptions: Options = {
       cwd: options.cwd,
       settingSources: options.settingSources ?? ['project', 'local'],
@@ -152,10 +152,8 @@ export class SDKQueryManager {
       ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
       abortController,
       // Don't override tools - let SDK read from agent's .claude/settings.json
-      // Pass system prompt as preset append to preserve Claude Code's built-in prompt
-      ...(options.systemPrompt
-        ? { systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: options.systemPrompt } }
-        : {}),
+      // Use Claude Code preset without manual append - SDK auto-loads CLAUDE.md via settingSources
+      systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const },
       // Resume from previous session if provided
       ...(options.resume ? { resume: options.resume } : {}),
       // Merge additional options
