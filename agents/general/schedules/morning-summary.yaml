@@ -23,6 +23,9 @@ notification:
   onError: true
   platform: telegram
   chatId: "1491057815"
+  localSound:
+    onComplete: "C:\\Windows\\Media\\Ring01.wav"
+    onError: "C:\\Windows\\Media\\Ring01.wav"
 metadata:
   createdAt: 2026-02-06T02:50:00+08:00
   createdBy: conversation

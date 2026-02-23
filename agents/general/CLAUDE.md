@@ -121,3 +121,9 @@ groups/     — 群組討論
   1. 遇到系統級任務先查看對應 references/*.md 確認格式和規範
   2. 排程檔案路徑：`agents/general/schedules/<task-id>.yaml`（agent 自己的目錄下）
 - **後續更新**：2026-02-23 已在 scheduling.md 明確標註路徑為 `agents/{agentId}/schedules/`
+
+### 2026-02-23：統一表情生成，不要分散生成
+- **情境**：生成表情包時，先生成 typeA 的驚訝表情，再分別生成 typeB、typeC 的不同表情（工作、哭泣）
+- **Cab 反應**：「靠北，統一表情啊，一次一組很難理解嗎」
+- **教訓**：同一個表情要一次生成 A/B/C 三種類型，方便使用者比較和理解各類型的差異
+- **正確做法**：一個表情 = 一組三張（typeA + typeB + typeC），同時生成，不要分散
