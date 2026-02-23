@@ -8,6 +8,63 @@
 
 ## 版本歷史
 
+### v1.44 - StopHook Prompt 優化
+
+**發布日期**：2026-02-23
+
+**問題**：對話後期（context 過長時），StopHook 觸發的記憶檢查可能輸出重複的上輪回覆內容。
+
+**修復**：
+- 強化 `MEMORY_STOP_CHECKPOINT` prompt，開頭加入明確警告：「這不是對話延續——禁止回覆使用者、禁止重複上輪內容」
+- 精簡 prompt 內容（~400字 → ~200字），節省 token
+- 檢查項改用簡潔格式，保留核心指令
+
+**修改檔案**：
+- `agents/_shared/hooks/memory-stop-checkpoint.ts`
+
+---
+
+### v1.43 - Schedule Model Override + 本地音效通知
+
+**發布日期**：2026-02-23
+
+**Schedule 模型設定**：
+- `ExecutionSchema` 新增 `model` 欄位（`'sonnet' | 'opus' | 'haiku'`）
+- 允許 schedule YAML 指定執行用的模型，覆蓋 SDK 預設
+- 用途：低優先級任務用 haiku 省錢，重要任務指定 opus
+
+**本地語音通知**：
+- `NotificationSchema` 新增 `localSound` 欄位
+- Schedule 完成或失敗時可播放本地音效檔
+- 新增 `src/utils/localSound.ts` — `playSound()` 函數（使用 sound-play 套件）
+- 新增 `src/types/sound-play.d.ts` — type declaration
+- 非阻塞播放，失敗靜默處理（不影響主流程）
+
+**YAML 用法範例**：
+```yaml
+execution:
+  agent: general
+  prompt: "..."
+  model: haiku  # 使用便宜的 haiku 模型
+
+notification:
+  onComplete: true
+  chatId: "xxx"
+  localSound:
+    onComplete: "C:/sounds/done.mp3"
+    onError: "C:/sounds/error.mp3"
+```
+
+**修改檔案**：
+- `src/schedule/schemas.ts` — ExecutionSchema + NotificationSchema
+- `src/schedule/ScheduleExecutor.ts` — 傳遞 model 到 additionalOptions
+- `src/schedule/ScheduleNotifier.ts` — notifyComplete/notifyError 呼叫 playSound
+- `src/utils/localSound.ts` — 新增
+- `src/types/sound-play.d.ts` — 新增
+- `package.json` — 新增 sound-play 依賴
+
+---
+
 ### v1.42 - Hot Add Agent（不重啟載入新 Agent）
 
 **發布日期**：2026-02-23

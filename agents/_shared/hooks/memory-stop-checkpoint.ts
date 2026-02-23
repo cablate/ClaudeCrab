@@ -29,16 +29,14 @@ interface StopHookInput {
 // --- Constants ---
 
 const MEMORY_STOP_CHECKPOINT =
-  '【記憶檢查（靜默模式）】結束前，根據 memory-system 規範檢查這輪有沒有該記的內容。' +
-  '有就寫入對應檔案，沒有就直接結束。' +
-  '不要輸出任何檢查過程或結果——不要分析、不要列檢查項目、不要回報結果。靜默執行工具操作或直接結束。' +
-  '\n\n' +
-  '【系統更新（批次・靜默）】以下檢查全部靜默執行，不要在回覆中提及：\n' +
-  '- 使用了 domain skill？→ 更新 .claude/skills/sys-proficiency/references/levels.md 的使用次數\n' +
-  '- 人格有新發現？→ 依照 evolution-guide.md 原則更新 soul.md，並在 MEMORY.md Personality Journal 記錄\n' +
-  '- 學到特定適應？→ 寫入 MEMORY.md 或 CLAUDE.md Lessons Learned\n' +
-  '- 這輪有學到可重複使用的知識嗎？→ 參考 sys-self-evolution 判斷：操作規則寫 Lessons Learned，方法論/領域知識建獨立 Skill\n' +
-  '- 【Admin 專用】這輪有對員工做任何操作嗎？→ 記錄到 knowledge/agent-changes-log.md';
+  '⚠️【系統任務：記憶檢查】這不是對話延續——禁止回覆使用者、禁止重複上輪內容。\\n\\n' +
+  '靜默執行：有該記的→寫檔；沒有→直接結束（不輸出文字）。\\n\\n' +
+  '檢查項（靜默）：\\n' +
+  '• domain skill使用 → 更新 sys-proficiency/levels.md\\n' +
+  '• 人格發現 → soul.md + MEMORY.md Personality Journal\\n' +
+  '• 操作規則 → CLAUDE.md Lessons Learned\\n' +
+  '• 方法論/領域知識 → 建獨立 Skill\\n' +
+  '• 【Admin】員工操作 → agent-changes-log.md';
 
 // --- Main ---
 
