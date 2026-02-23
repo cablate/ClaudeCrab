@@ -88,6 +88,15 @@ export class AgentLoader implements IAgentRepository {
             continue;
           }
 
+          // Skip directories starting with underscore (disabled agents)
+          if (entry.name.startsWith('_')) {
+            logger.debug(
+              { dir: entry.name },
+              'Skipping disabled agent directory (starts with _)'
+            );
+            continue;
+          }
+
           // Check if directory contains agent.json
           const configPath = path.join(
             this.agentsDir,

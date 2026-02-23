@@ -8,6 +8,32 @@
 
 ## 版本歷史
 
+### v1.42 - Hot Add Agent（不重啟載入新 Agent）
+
+**發布日期**：2026-02-23
+
+**Hot Sync 機制**：
+- 新增 `/restart all` 指令 — 不重啟 process 即可載入新增的 agent 或停止已刪除的 agent
+- Delta-based sync：比對磁碟 vs 記憶體，只處理差異
+- 參考 Schedule 系統的 hot reload 架構設計
+
+**技術實作**：
+- `AgentLoader.scanAgents()` — 更新為跳過 `_` 開頭的目錄（可用於暫時停用 agent）
+- `PlatformOrchestrator.getLoadedAgentIds()` — 取得目前運行中的 agent 清單
+- `PlatformOrchestrator.syncAgents()` — 核心同步邏輯，新增/移除 agent
+- `CommandDependencies.syncAgents` — 傳遞給 TelegramCommands 使用
+
+**使用方式**：
+- `/restart` — 完整重啟（現有功能）
+- `/restart all` — Hot sync agents（新功能）
+
+**修改檔案**：
+- `src/core/AgentLoader.ts` — scanAgents() 跳過 _ 開頭目錄
+- `src/core/PlatformOrchestrator.ts` — getLoadedAgentIds(), syncAgents()
+- `src/adapters/commands/TelegramCommands.ts` — /restart all 支援
+
+---
+
 ### v1.41 - Table Markdown 轉換 + PM2 整合 + 文件傳送
 
 **發布日期**：2026-02-23

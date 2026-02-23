@@ -282,6 +282,62 @@ export class PlatformOrchestrator {
   }
 
   /**
+   * Get unique agent IDs that are currently loaded and running
+   */
+  getLoadedAgentIds(): string[] {
+    const adapters = this.getRunningAdapters();
+    // Get unique agentIds (one agent may have multiple platform adapters)
+    return [...new Set(adapters.map((a) => a.agentId))];
+  }
+
+  /**
+   * Sync agents: load new agents and stop removed agents
+   * Delta-based sync similar to ScheduleManager.syncSchedulesForAgent()
+   */
+  async syncAgents(): Promise<{ added: string[]; removed: string[] }> {
+    const diskIds = await this.agentLoader.scanAgents();
+    const memoryIds = this.getLoadedAgentIds();
+
+    const toAdd = diskIds.filter((id) => !memoryIds.includes(id));
+    const toRemove = memoryIds.filter((id) => !diskIds.includes(id));
+
+    // Load new agents
+    for (const id of toAdd) {
+      logger.info({ agentId: id }, '[Hot Add] Loading new agent');
+      try {
+        await this.startBotForAgent(id);
+      } catch (error) {
+        logger.error(
+          { agentId: id, error },
+          '[Hot Add] Failed to load agent'
+        );
+      }
+    }
+
+    // Stop removed agents
+    for (const id of toRemove) {
+      logger.info({ agentId: id }, '[Hot Remove] Stopping agent');
+      try {
+        await this.stopBotForAgent(id);
+      } catch (error) {
+        logger.error(
+          { agentId: id, error },
+          '[Hot Remove] Failed to stop agent'
+        );
+      }
+    }
+
+    if (toAdd.length > 0 || toRemove.length > 0) {
+      logger.info(
+        { added: toAdd, removed: toRemove },
+        '[Sync] Agent sync completed'
+      );
+    }
+
+    return { added: toAdd, removed: toRemove };
+  }
+
+  /**
    * Get the adapter registry (for lookups by platform + agentId).
    */
   getRegistry(): AdapterRegistry {
@@ -442,6 +498,7 @@ export class PlatformOrchestrator {
         });
       },
       getBotStatus: (aid: string) => this.getBotStatusForAgent(aid),
+      syncAgents: () => this.syncAgents(),
     };
     adapter.setCommandDependencies(commandDeps);
 

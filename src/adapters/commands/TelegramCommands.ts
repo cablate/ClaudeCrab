@@ -79,6 +79,9 @@ export interface CommandDependencies {
 
   /** ADR-024: Get bot running status for /status command */
   getBotStatus?: (agentId: string) => 'running' | 'stopped' | 'error' | 'no-token';
+
+  /** Sync agents: hot add/remove agents without restart */
+  syncAgents?: () => Promise<{ added: string[]; removed: string[] }>;
 }
 
 /**
@@ -742,7 +745,9 @@ async function handleStatus(
 
 /**
  * /restart command — admin-only, triggers graceful restart via PM2
- * Only works for users in allowedUsers list
+ * Supports:
+ * - /restart — full process restart (PM2 will auto-restart)
+ * - /restart all — hot sync agents (add new, remove deleted)
  */
 async function handleRestart(
   ctx: Context,
@@ -770,6 +775,44 @@ async function handleRestart(
     return;
   }
 
+  // Parse argument: /restart all triggers hot sync instead of full restart
+  const text = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+  const args = text.split(/\s+/).slice(1);
+  const isHotSync = args[0]?.toLowerCase() === 'all';
+
+  if (isHotSync) {
+    // Hot sync mode: add new agents, remove deleted agents
+    if (!deps.syncAgents) {
+      await ctx.reply('⚠️ Hot sync 功能未配置');
+      return;
+    }
+
+    logger.info({ userId, agentId: deps.agentId }, 'Hot sync agents requested');
+    await ctx.reply('🔄 正在同步 agents...');
+
+    try {
+      const result = await deps.syncAgents();
+      
+      if (result.added.length === 0 && result.removed.length === 0) {
+        await ctx.reply('✅ 所有 agents 已是最新狀態，無需變更');
+      } else {
+        const lines: string[] = ['✅ Agent 同步完成！'];
+        if (result.added.length > 0) {
+          lines.push(`\n🆕 新增: ${result.added.join(', ')}`);
+        }
+        if (result.removed.length > 0) {
+          lines.push(`\n🗑️ 移除: ${result.removed.join(', ')}`);
+        }
+        await ctx.reply(lines.join(''));
+      }
+    } catch (error) {
+      logger.error({ error }, 'Hot sync failed');
+      await ctx.reply('❌ 同步失敗，請查看 logs');
+    }
+    return;
+  }
+
+  // Full restart mode
   logger.info({ userId, agentId: deps.agentId }, 'Restart command received, running pre-flight check...');
   await ctx.reply('🔍 正在檢查程式碼...');
 
