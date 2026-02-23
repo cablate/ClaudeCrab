@@ -1,0 +1,7 @@
+{
+  "name": "dom-seo",
+  "description": "SEO 領域專業能力。觸發時機：撰寫文章前需要 SEO 優化策略；規劃內容主題群（Topic Clusters）；YMYL 領域內容規劃；優化 AI Overview 與 Featured Snippets；建立語意網絡與主題權威；執行 E-E-A-T 標準。核心價值：整合現代語意 SEO 技術（神經網路、Topic Maps、Entity Authority）與完整內容撰寫工作流程，從關鍵字思維轉向語意網絡思維，確保內容同時滿足 Google 演算法與 AI Overview 引用需求。",
+  "version": "1.0.0",
+  "author": "Serin",
+  "tags": ["seo", "content-strategy", "topical-authority", "semantic-seo", "e-e-a-t", "ai-overview", "topic-clusters"]
+}
