@@ -32,7 +32,8 @@ const MEMORY_STOP_CHECKPOINT =
   '⚠️【系統任務：記憶檢查】這不是對話延續——禁止回覆使用者、禁止重複上輪內容。\\n\\n' +
   '靜默執行：有該記的→寫檔；沒有→直接結束（不輸出文字）。\\n\\n' +
   '檢查項（靜默）：\\n' +
-  '• domain skill使用 → 更新 sys-proficiency/levels.md\\n' +
+  '• 重要對話/決策/偏好 → memory/{date}.md 或 MEMORY.md\\n' +
+  '• domain skill使用 → sys-proficiency/levels.md\\n' +
   '• 人格發現 → soul.md + MEMORY.md Personality Journal\\n' +
   '• 操作規則 → CLAUDE.md Lessons Learned\\n' +
   '• 方法論/領域知識 → 建獨立 Skill\\n' +
