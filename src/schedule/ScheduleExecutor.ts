@@ -89,6 +89,8 @@ export class ScheduleExecutor {
                   : {}),
                 additionalOptions: {
                   abortController,
+                  // Pass model override if specified in schedule config
+                  ...(spec.execution.model ? { model: spec.execution.model } : {}),
                   hooks: {
                     UserPromptSubmit: [
                       {

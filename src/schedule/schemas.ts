@@ -34,6 +34,8 @@ export const ExecutionSchema = z.object({
   prompt: z.string(),
   maxTurns: z.number().positive().optional(),
   timeout: z.number().positive().optional(),
+  /** Model override: 'sonnet' | 'opus' | 'haiku'. If not specified, uses SDK default. */
+  model: z.enum(['sonnet', 'opus', 'haiku']).optional(),
 });
 
 // Notification configuration schema
@@ -42,6 +44,13 @@ export const NotificationSchema = z.object({
   onError: z.boolean().optional(),
   platform: z.string().optional(),
   chatId: z.string().optional(),
+  /** Local sound notification - plays audio file on schedule completion/error */
+  localSound: z
+    .object({
+      onComplete: z.string().optional(),
+      onError: z.string().optional(),
+    })
+    .optional(),
 });
 
 // Metadata schema

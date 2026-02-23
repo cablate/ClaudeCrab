@@ -9,6 +9,7 @@ import type { QueryResult } from '../core/SDKQueryManager.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
 import { logger } from '../utils/logger.js';
+import { playSound } from '../utils/localSound.js';
 
 export class ScheduleNotifier {
   // Map key is agentId (not platform), since each agent has its own adapter
@@ -40,6 +41,13 @@ export class ScheduleNotifier {
     } catch (error) {
       logger.error({ error, scheduleId: spec.id }, '[ScheduleNotifier] Failed to send notification');
     }
+
+    // Play local sound if configured (non-blocking)
+    if (spec.notification?.localSound?.onComplete) {
+      playSound(spec.notification.localSound.onComplete).catch(() => {
+        // Already logged in playSound
+      });
+    }
   }
 
   /**
@@ -70,6 +78,13 @@ export class ScheduleNotifier {
         { error: notifyError, scheduleId: spec.id },
         '[ScheduleNotifier] Failed to send error notification'
       );
+    }
+
+    // Play local sound if configured (non-blocking)
+    if (spec.notification?.localSound?.onError) {
+      playSound(spec.notification.localSound.onError).catch(() => {
+        // Already logged in playSound
+      });
     }
   }
 
