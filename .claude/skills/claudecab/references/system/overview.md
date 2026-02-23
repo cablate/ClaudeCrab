@@ -96,6 +96,7 @@ claudecab/
 - 支援代理繼承（extends）
 - Zod 驗證配置結構
 - **動態 SystemPrompt 讀取**（v1.5.1）：`readSystemPrompt(agentId)` 每次從磁碟重新讀取 CLAUDE.md，支援 Agent 在 runtime 自主更新系統提示詞
+- **通用規則注入**（v1.41）：`loadSystemPrompt()` 自動 append `getGlobalStaticRules()` 返回的引擎層通用規則（如 `[send:path]` 檔案傳送語法）
 
 ```typescript
 interface IAgentRepository {

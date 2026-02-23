@@ -284,28 +284,48 @@ export class AgentLoader implements IAgentRepository {
     agentPath: string,
     config: AgentConfig
   ): Promise<string> {
+    let prompt = '';
+
     // Priority 1: systemPrompt directly in config
     if (config.systemPrompt !== undefined) {
-      return config.systemPrompt;
+      prompt = config.systemPrompt;
     }
-
     // Priority 2: systemPromptFile specified in config
-    if (config.systemPromptFile !== undefined) {
+    else if (config.systemPromptFile !== undefined) {
       const promptPath = path.isAbsolute(config.systemPromptFile)
         ? config.systemPromptFile
         : path.join(agentPath, config.systemPromptFile);
-      return this.readSystemPromptFile(promptPath);
+      prompt = await this.readSystemPromptFile(promptPath);
+    }
+    // Priority 3: Default system-prompt.md file
+    else {
+      const defaultPath = path.join(agentPath, DEFAULT_SYSTEM_PROMPT_FILE);
+      try {
+        prompt = await this.readSystemPromptFile(defaultPath);
+      } catch {
+        // No system prompt file, continue with empty string
+        logger.debug({ agentPath }, 'No system prompt found, using empty string');
+      }
     }
 
-    // Priority 3: Default system-prompt.md file
-    const defaultPath = path.join(agentPath, DEFAULT_SYSTEM_PROMPT_FILE);
-    try {
-      return await this.readSystemPromptFile(defaultPath);
-    } catch {
-      // No system prompt file, return empty string
-      logger.debug({ agentPath }, 'No system prompt found, using empty string');
-      return '';
+    // Append global static rules (engine-level conventions that apply to all agents)
+    const globalRules = this.getGlobalStaticRules();
+    if (globalRules.length > 0) {
+      prompt = prompt.length > 0 ? `${prompt}\n\n${globalRules}` : globalRules;
     }
+
+    return prompt;
+  }
+
+
+  /**
+   * Returns global static rules that apply to all agents.
+   * These are engine-level conventions that don't change at runtime.
+   */
+  private getGlobalStaticRules(): string {
+    return `
+【檔案傳送】要傳送檔案給使用者時，使用 [send:完整路徑] 語法（如 [send:F:\\output\\report.pdf]）。僅標記路徑不會自動傳送。
+`.trim();
   }
 
   /**
