@@ -635,6 +635,47 @@ Coder 反映：啟動時讀了 sys-self-evolution，但長對話後記憶衰減�
 
 ---
 
+### [General → Transcriber] knowledge-external 移交
+
+**Proposal**：
+- 秘書的 `knowledge-external` skill 依賴 `dom-turboscribe`（歸檔流程需要轉錄工具）
+- 但秘書已沒有 `dom-turboscribe`，skill 功能不完整
+- 轉錄員有工具但沒有知識庫存放位置
+- 整個移交讓職責一致
+
+**改動內容**：
+- 複製 `agents/general/.claude/skills/knowledge-external/` → `agents/transcriber/.claude/skills/`
+- 複製 `agents/general/knowledge/cases/` → `agents/transcriber/knowledge/cases/`
+- 刪除 `agents/general/.claude/skills/knowledge-external/`
+
+**影響範圍**：General + Transcriber
+
+**驗證結果**：
+- 轉錄員現在有完整的轉錄 + 歸檔能力
+- 秘書不再有這個 skill
+
+**管理經驗**：
+- Skill 移交時要連同相關的 knowledge 目錄一起移
+- 依賴關係斷裂（tool 移走但 knowledge skill 留下）是常見疏漏
+
+---
+
+### [General] 自主新增 dom-seo Skill
+
+**Proposal**：秘書自主新增 SEO 領域專業能力 skill。
+
+**改動內容**：
+- 新增 `agents/general/.claude/skills/dom-seo/`
+- 完整結構：SKILL.md + references（modern-techniques、writing-workflow、eeat-standards、technical-seo、tools、collaboration-workflow）
+
+**影響範圍**：僅 General
+
+**管理經驗**：
+- 員工可以自主建立 domain skill，不需要每次都由 Admin 操作
+- 命名符合 `dom-*` 慣例
+
+---
+
 ## 格式說明
 
 每筆記錄包含：
