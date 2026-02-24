@@ -338,6 +338,21 @@ Idle 自言自語排程器（Live page 用）：
 - 工具名稱：`mcp__agent-call__call_agent`
 - Agent 可在執行中透過此工具呼叫其他 Agent
 
+### TTSService (`src/services/TTSService.ts`)
+
+統一 TTS 服務（v1.42）：
+- 封裝 TTS Provider，管理語音生成、檔案存放、本地播放
+- **檔案路徑**：`temp/tts/tts_{timestamp}.mp3`
+- **自動清理**：>1 小時或 >50 檔自動刪除舊檔
+- `speak(text, options?)` — 生成語音並選擇性播放
+- `playLocal(filePath)` — 使用 `sound-play` 播放 MP3
+
+**MCP Tool 整合**：
+- `ttsTool.ts` 提供 `createTTSMcpServer()` 建立 Custom MCP Tool
+- 工具名稱：`mcp__tts__speak`
+- Agent 可在對話結束前透過此工具生成語音摘要並播放
+- 參數：`text`（建議 50 字內）、`language`（Chinese/English/Japanese/Korean）
+
 ### Schedule 模組 (`src/schedule/`)
 
 排程系統（agent 可建立定時任務）：
@@ -526,7 +541,7 @@ agents/general/
 ├── agent.json                 # ClaudeCab 元資料
 ├── CLAUDE.md                  # 系統提示詞（引導 → skills）
 ├── BOOTSTRAP.md               # 首次啟動儀式（完成後由 agent 自行刪除）
-├── USER.md                    # 使用者檔案（身份、偏好）
+├── USER.md                    # 使用者檔案（身份、偏好、Observations）
 ├── MEMORY.md                  # 長期記憶（篩選過的持久事實）
 ├── EQUIPMENT.md               # 已安裝工具清單
 ├── knowledge/                 # 私有知識產出（草稿區）
@@ -540,6 +555,48 @@ agents/general/
 └── memory/                    # 每日日誌
     └── YYYY-MM-DD.md
 ```
+
+#### USER.md Observations 區塊（v1.43）
+
+USER.md 新增 `## Observations` 區塊，讓 Agent 記錄對使用者的動態觀察。這是「即時捕捉 + 定期整理」兩層機制的核心：
+
+```markdown
+## Observations
+
+對使用者的動態觀察。這裡記錄的不是靜態事實，而是你在互動中觀察到的東西。
+
+### 對使用者的理解
+
+<!--
+記錄類型：
+- 思考模式：「使用者傾向先問『為什麼』再問『怎麼做』」
+- 偏好：「使用者不喜歡太長的回覆」
+- 盲點：「使用者容易在 X 情境下忽略 Y」
+- 成長：「使用者以前會 A，現在會 B 了」
+- 價值觀：「使用者重視 X 勝過 Y」
+-->
+
+### 感受與 Murmur
+
+<!--
+記錄你對互動的感受和內心話。這讓你更像「人」，也讓使用者能回顧「員工怎麼看我」。
+
+格式：YYYY-MM-DD：[當下的感受或內心話]
+
+範例：
+- 2026-02-24：今天使用者有點焦躁，我盡量簡短回
+- 2026-02-24：使用者又臨時改方向了，但這次改得好
+-->
+```
+
+**設計目的**：
+- 讓 Agent 累積對使用者的真實理解，而非每次都從頭猜
+- 讓使用者能回顧「員工怎麼看我」— 這是有價值的自我覺察素材
+- 讓 Agent 更像「人」— 有觀點、有感受
+
+**觸發機制**：
+- `memory-stop-checkpoint.ts` Stop hook 新增檢查項：「對使用者的觀察 → USER.md Observations」
+- 每次 session 結束前強制提醒 Agent 檢查
 
 ### 共享知識區（v1.12.0）
 

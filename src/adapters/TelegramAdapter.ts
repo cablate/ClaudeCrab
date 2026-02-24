@@ -872,6 +872,35 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   }
 
   /**
+   * Send an audio file to a Telegram chat (displayed as playable audio)
+   */
+  override async sendAudio(
+    chatId: string,
+    audio: Buffer,
+    options?: { duration?: number; caption?: string; filename?: string },
+  ): Promise<SendResult> {
+    if (this.bot === null) {
+      return { success: false, error: 'Bot not initialized' };
+    }
+
+    try {
+      const result = await this.rateLimiter.execute(async () => {
+        const opts: Record<string, unknown> = {};
+        if (options?.duration !== undefined) opts.duration = options.duration;
+        if (options?.caption) opts.caption = options.caption.substring(0, 1024);
+        const filename = options?.filename ?? 'audio.mp3';
+        return this.bot!.api.sendAudio(chatId, new InputFile(audio, filename), opts);
+      });
+
+      return { success: true, messageId: result.message_id.toString() };
+    } catch (error) {
+      const errorMessage = this.formatError(error);
+      this.log.error({ error, chatId }, 'Failed to send audio');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
    * Send typing indicator
    */
   async sendTypingIndicator(chatId: string): Promise<void> {

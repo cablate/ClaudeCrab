@@ -1,6 +1,7 @@
 import type { UnifiedMessage } from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
-import type { SendOptions } from '../adapters/types.js';
+import type { SendOptions, SendResult } from '../adapters/types.js';
+import fs from 'node:fs';
 import type { IConversationRepository, IQueryMetricsRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager, type QueryResult } from './SDKQueryManager.js';
@@ -29,6 +30,11 @@ import {
   createAgentCallMcpServer,
   getAgentCallToolNames,
 } from '../tools/notifyAgentTool.js';
+import {
+  createTTSMcpServer,
+  getTTSToolNames,
+} from '../tools/ttsTool.js';
+import type { TTSService } from '../services/TTSService.js';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
@@ -96,6 +102,12 @@ export interface MessageProcessorOptions {
    * When provided, agents can send notifications to each other via Custom Tools.
    */
   agentCallService?: AgentCallService;
+
+  /**
+   * TTS service for text-to-speech.
+   * When provided, agents can generate and play voice messages via Custom Tools.
+   */
+  ttsService?: TTSService;
 }
 
 /**
@@ -162,6 +174,7 @@ export class MessageProcessor {
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly activityService: ActivityService | undefined;
   private readonly agentCallService: AgentCallService | undefined;
+  private readonly ttsService: TTSService | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -177,6 +190,7 @@ export class MessageProcessor {
     this.queryMetricsRepository = options.queryMetricsRepository;
     this.activityService = options.activityService;
     this.agentCallService = options.agentCallService;
+    this.ttsService = options.ttsService;
 
     logger.info('MessageProcessor initialized');
   }
@@ -545,6 +559,27 @@ export class MessageProcessor {
           })
         : undefined;
 
+      // Create TTS MCP server for text-to-speech
+      const ttsMcpServer = this.ttsService
+        ? createTTSMcpServer(this.ttsService, {
+            agentId,
+            chatId,
+          })
+        : undefined;
+
+      // Build dynamic mcpServers and allowedTools
+      const mcpServers: Record<string, ReturnType<typeof createAgentCallMcpServer>> = {};
+      const allowedTools: string[] = [];
+
+      if (agentCallMcpServer) {
+        mcpServers['agent-call'] = agentCallMcpServer;
+        allowedTools.push(...getAgentCallToolNames());
+      }
+      if (ttsMcpServer) {
+        mcpServers['tts'] = ttsMcpServer;
+        allowedTools.push(...getTTSToolNames());
+      }
+
       // Helper: execute SDK query with retry for rate limit / transient errors
       const executeWithRetry = async (resumeId: string | undefined) => {
         return await retryAsync(
@@ -561,14 +596,9 @@ export class MessageProcessor {
                 ...(agent.config.settings?.maxTurns !== undefined
                   ? { maxTurns: agent.config.settings.maxTurns }
                   : {}),
-                // Cross-agent call tools (when agentCallService is available)
-                ...(agentCallMcpServer !== undefined
-                  ? {
-                      mcpServers: {
-                        'agent-call': agentCallMcpServer,
-                      },
-                      allowedTools: getAgentCallToolNames(),
-                    }
+                // Custom MCP tools (agent-call, tts, etc.)
+                ...(Object.keys(mcpServers).length > 0
+                  ? { mcpServers, allowedTools }
                   : {}),
                 resume: resumeId,
                 onIntermediateMessage: async (text: string): Promise<void> => {
@@ -1032,12 +1062,31 @@ export class MessageProcessor {
     }
     if (paths.length === 0) return text;
 
+    // Audio file extensions
+    const audioExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac']);
+
     for (const p of paths) {
-      const result = await adapter.sendDocument(chatId, p);
-      if (result.success) {
-        logger.info({ chatId, filePath: p }, 'Sent inline document');
+      const ext = path.extname(p).toLowerCase();
+      const isAudio = audioExtensions.has(ext);
+      
+      let result: SendResult;
+      if (isAudio) {
+        // Read file into buffer for sendAudio
+        const audioBuffer = await fs.promises.readFile(p);
+        const filename = path.basename(p);
+        result = await adapter.sendAudio(chatId, audioBuffer, { filename });
+        if (result.success) {
+          logger.info({ chatId, filePath: p }, 'Sent inline audio');
+        } else {
+          logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline audio');
+        }
       } else {
-        logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline document');
+        result = await adapter.sendDocument(chatId, p);
+        if (result.success) {
+          logger.info({ chatId, filePath: p }, 'Sent inline document');
+        } else {
+          logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline document');
+        }
       }
     }
 
@@ -1101,6 +1150,8 @@ export class MessageProcessor {
 
     return undefined;
   }
+
+
 
   /**
    * Emit bot:replied event for group chat context injection (ADR-019).

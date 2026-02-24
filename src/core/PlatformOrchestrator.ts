@@ -67,6 +67,8 @@ export interface PlatformOrchestratorOptions {
   activityService?: import('./ActivityService.js').ActivityService;
   /** Speech-to-text provider for voice message transcription */
   sttProvider?: import('./stt/index.js').STTProvider;
+  /** Text-to-speech provider for voice message synthesis */
+  ttsProvider?: import('./tts/index.js').TTSProvider;
 }
 
 /**
@@ -84,6 +86,7 @@ export class PlatformOrchestrator {
   private readonly scheduleManager: ScheduleManager | undefined;
   private readonly groupBroadcaster: GroupBroadcaster;
   private readonly sttProvider: import('./stt/index.js').STTProvider | undefined;
+  private readonly ttsProvider: import('./tts/index.js').TTSProvider | undefined;
 
   constructor(options: PlatformOrchestratorOptions) {
     this.agentLoader = options.agentLoader;
@@ -92,6 +95,7 @@ export class PlatformOrchestrator {
     this.securityConfig = options.securityConfig;
     this.scheduleManager = options.scheduleManager;
     this.sttProvider = options.sttProvider;
+    this.ttsProvider = options.ttsProvider;
 
     // Initialize GroupBroadcaster for multi-bot group message handling (ADR-019)
     // Supports dependency injection for testing
@@ -448,6 +452,9 @@ export class PlatformOrchestrator {
         : {}),
       ...(this.sttProvider !== undefined
         ? { sttProvider: this.sttProvider }
+        : {}),
+      ...(this.ttsProvider !== undefined
+        ? { ttsProvider: this.ttsProvider }
         : {}),
     };
 

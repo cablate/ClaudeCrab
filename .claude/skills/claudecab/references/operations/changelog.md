@@ -8,6 +8,82 @@
 
 ## 版本歷史
 
+### v1.46 - TTS Custom Tool + 語音通知
+
+**發布日期**：2026-02-24
+
+**背景**：
+- 延續 v1.42 TTS 模組，讓 Agent 可以主動呼叫語音功能
+- 使用者需求：對話結束時生成語音摘要並播放
+
+**新增功能**：
+
+1. **TTSService 統一服務** (`src/services/TTSService.ts`)
+   - 封裝 TTS Provider，管理語音生成、檔案存放、本地播放
+   - 檔案路徑：`temp/tts/tts_{timestamp}.mp3`
+   - 自動清理：>1 小時或 >50 檔自動刪除舊檔
+   - `speak(text, options?)` — 生成語音並選擇性播放
+   - `playLocal(filePath)` — 使用 `sound-play` 播放 MP3
+
+2. **TTS Custom Tool** (`src/tools/ttsTool.ts`)
+   - `mcp__tts__speak` — Agent 可透過此工具生成語音摘要並播放
+   - 參數：`text`（建議 50 字內）、`language`（Chinese/English/Japanese/Korean）
+
+3. **localSound.ts 擴展**
+   - 使用 `sound-play` 套件支援 MP3/M4A/OGG/FLAC 播放
+   - WAV 維持 PowerShell 方式（較快）
+
+4. **System Prompt 說明**
+   - `getGlobalStaticRules()` 新增 Custom Tools 使用說明
+   - 指示 Agent「對話結束前，使用 TTS 工具生成簡短語音摘要並播放」
+
+**新增檔案**：
+- `src/services/TTSService.ts`
+- `src/tools/ttsTool.ts`
+
+**修改檔案**：
+- `src/utils/localSound.ts` — 擴展支援多種音訊格式
+- `src/core/MessageProcessor.ts` — 整合 TTS MCP server
+- `src/core/AgentLoader.ts` — 新增 Custom Tools 說明
+- `src/AppBootstrap.ts` — 建立 TTSService 並注入
+
+---
+
+### v1.45 - USER.md Observations（對使用者的觀察）
+
+**發布日期**：2026-02-24
+
+**背景**：
+- Agent 跟使用者互動久了，應該累積對他的觀察（思考模式、偏好、盲點、成長、感受）
+- 但原本 USER.md 只放靜態事實，沒有機制讓 Agent 記錄觀察
+- 關鍵問題：日誌階段做分析的前提是對話中有記下來，漏記就補不回來
+
+**新增機制**：
+
+1. **USER.md Observations 區塊**
+   - `### 對使用者的理解`：思考模式、偏好、盲點、成長、價值觀
+   - `### 感受與 Murmur`：Agent 對互動的感受和內心話
+   - 讓 Agent 更像「人」，也讓使用者能回顧「員工怎麼看我」
+
+2. **Stop Hook 新增檢查項**
+   - 「對使用者的觀察 → USER.md Observations（思考模式/偏好/盲點/成長/感受/murmur）」
+   - 每次 session 結束前強制提醒 Agent 檢查
+
+3. **memory-system.md 新增章節**
+   - 「對使用者的觀察」— 定義七種觀察類型和記錄位置
+   - 強調「即時捕捉」的重要性
+
+**設計原則**：
+- 兩層機制：即時捕捉（對話中）+ 定期整理（日誌）
+- Stop hook 是確保即時捕捉的關鍵——在 Agent 想結束前強制提醒
+
+**修改檔案**：
+- `agents/_example/USER.md` — 新增 Observations 區塊
+- `agents/_example/.claude/skills/sys-agent-protocols/references/memory-system.md` — 新增章節
+- `agents/_shared/hooks/memory-stop-checkpoint.ts` — 新增檢查項
+
+---
+
 ### v1.44 - StopHook Prompt 優化
 
 **發布日期**：2026-02-23

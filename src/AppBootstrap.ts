@@ -38,6 +38,8 @@ import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { AppConfig } from './config.js';
 import { createSTTProvider, type STTProvider } from './core/stt/index.js';
+import { createTTSProvider, type TTSProvider } from './core/tts/index.js';
+import { TTSService } from './services/TTSService.js';
 import type { IQueryMetricsRepository } from './persistence/types.js';
 import { AgentCallService } from './services/AgentCallService.js';
 
@@ -97,19 +99,25 @@ export class AppBootstrap {
     this.activityService = this.createActivityService(agentLoader, persistence);
     const activityService = this.activityService;
 
+    // Create STT provider (optional — voice input disabled if no API key)
+    const sttProvider = this.config.stt.enabled && this.config.stt.apiKey
+      ? createSTTProvider(this.config.stt)
+      : undefined;
+
+    // Create TTS provider (optional — voice output disabled if no API token)
+    const ttsProvider = this.config.tts.enabled && this.config.tts.apiToken
+      ? createTTSProvider(this.config.tts)
+      : undefined;
+
     const messageProcessor = this.createMessageProcessor(
       sessionManager,
       agentLoader,
       persistence?.conversationRepository,
       persistence?.contextInjector,
       persistence?.queryMetricsRepository,
-      activityService
+      activityService,
+      ttsProvider
     );
-
-        // Create STT provider (optional — voice input disabled if no API key)
-    const sttProvider = this.config.stt.enabled && this.config.stt.apiKey
-      ? createSTTProvider(this.config.stt)
-      : undefined;
 
     this.orchestrator = this.createOrchestrator(
       agentLoader,
@@ -118,7 +126,8 @@ export class AppBootstrap {
       securityConfig,
       persistence,
       activityService,
-      sttProvider
+      sttProvider,
+      ttsProvider
     );
 
     await this.orchestrator.startAll();
@@ -316,6 +325,7 @@ export class AppBootstrap {
     contextInjector: ContextInjector | undefined,
     queryMetricsRepository: QueryMetricsRepository | undefined,
     activityService?: ActivityService,
+    ttsProvider?: TTSProvider,
   ): MessageProcessor {
     // Create agent call service for cross-agent communication
     // Uses MessageProcessor.processMessage() to ensure full processing flow (typing, formatting, etc.)
@@ -325,6 +335,15 @@ export class AppBootstrap {
       agentLoader,
       () => messageProcessorRef
     );
+
+    // Create TTS service if provider is available
+    const ttsService = ttsProvider
+      ? new TTSService({
+          provider: ttsProvider,
+          defaultVoiceId: this.config.tts.defaultVoiceId,
+          defaultLanguage: 'Chinese',
+        })
+      : undefined;
 
     // Note: getAdapter and getBotInfo reference orchestrator via closure (lazy resolution)
     const messageProcessor = new MessageProcessor({
@@ -353,6 +372,7 @@ export class AppBootstrap {
       ...(contextInjector !== undefined ? { contextInjector } : {}),
       ...(activityService !== undefined ? { activityService } : {}),
       agentCallService,
+      ...(ttsService !== undefined ? { ttsService } : {}),
     });
 
     // Complete the circular reference: AgentCallService needs MessageProcessor
@@ -368,7 +388,8 @@ export class AppBootstrap {
     securityConfig: ReturnType<typeof loadSecurityConfig>,
     persistence: PersistenceLayer | null,
     activityService?: ActivityService,
-    sttProvider?: STTProvider
+    sttProvider?: STTProvider,
+    ttsProvider?: TTSProvider
   ): PlatformOrchestrator {
     logger.info('Initializing PlatformOrchestrator...');
 
@@ -397,6 +418,7 @@ export class AppBootstrap {
         ? { queryMetricsRepository: persistence.queryMetricsRepository }
         : {}),
       ...(sttProvider !== undefined ? { sttProvider } : {}),
+      ...(ttsProvider !== undefined ? { ttsProvider } : {}),
     });
   }
 

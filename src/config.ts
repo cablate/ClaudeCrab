@@ -30,6 +30,13 @@ export interface AppConfig {
     apiKey: string;
     model: string;
   };
+  tts: {
+    enabled: boolean;
+    provider: 'replicate';
+    apiToken: string;
+    model: string;
+    defaultVoiceId: string;
+  };
 }
 
 /**
@@ -60,6 +67,13 @@ export function loadAppConfig(): AppConfig {
       provider: (process.env.STT_PROVIDER ?? 'groq') as 'groq',
       apiKey: process.env.STT_API_KEY ?? '',
       model: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
+    },
+    tts: {
+      enabled: process.env.TTS_ENABLED === 'true',
+      provider: (process.env.TTS_PROVIDER ?? 'replicate') as 'replicate',
+      apiToken: process.env.REPLICATE_API_TOKEN ?? '',
+      model: process.env.TTS_MODEL ?? 'minimax/speech-2.8-turbo',
+      defaultVoiceId: process.env.TTS_DEFAULT_VOICE_ID ?? '',
     },
   };
 }

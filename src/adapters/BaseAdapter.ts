@@ -205,6 +205,21 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   }
 
   /**
+   * Send an audio file to a chat (playable audio message)
+   * @param chatId - The chat to send to
+   * @param audio - Audio buffer (MP3, OGG, etc.)
+   * @param options - Optional settings (duration, caption)
+   * @returns SendResult with success status
+   */
+  async sendAudio(
+    _chatId: string,
+    _audio: Buffer,
+    _options?: { duration?: number; caption?: string; filename?: string },
+  ): Promise<SendResult> {
+    return { success: false, error: 'sendAudio not implemented' };
+  }
+
+  /**
    * Send typing indicator
    */
   abstract sendTypingIndicator(chatId: string): Promise<void>;

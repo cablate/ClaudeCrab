@@ -302,4 +302,7 @@ export interface TelegramAdapterConfig extends AdapterConfig {
 
   /** Speech-to-text provider for voice message transcription */
   sttProvider?: import('../core/stt/index.js').STTProvider;
+
+  /** Text-to-speech provider for voice message synthesis */
+  ttsProvider?: import('../core/tts/index.js').TTSProvider;
 }
