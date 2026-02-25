@@ -163,15 +163,47 @@ export async function retryAsync<T>(
 }
 
 /**
+ * HTTP status codes that indicate retryable errors
+ */
+const RETRYABLE_STATUS_CODES = new Set([
+  408, // Request Timeout
+  429, // Too Many Requests (Rate Limit)
+  500, // Internal Server Error
+  502, // Bad Gateway
+  503, // Service Unavailable
+  504, // Gateway Timeout
+  529, // Site Overloaded (Cloudflare)
+]);
+
+/**
+ * Get HTTP status code from error if available
+ */
+function getErrorStatus(error: unknown): number | undefined {
+  if (error && typeof error === 'object' && 'status' in error) {
+    const status = (error as { status: unknown }).status;
+    if (typeof status === 'number') {
+      return status;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Check if an error is a rate limit error
  */
 export function isRateLimitError(error: unknown): boolean {
+  // Check status code first (most reliable)
+  const status = getErrorStatus(error);
+  if (status === 429) {
+    return true;
+  }
+  
+  // Fallback to message check for errors without status
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     return (
       message.includes('rate limit') ||
-      message.includes('too many requests') ||
-      message.includes('429')
+      message.includes('too many requests')
     );
   }
   return false;
@@ -181,9 +213,17 @@ export function isRateLimitError(error: unknown): boolean {
  * Check if an error is a transient/network error that should be retried
  */
 export function isTransientError(error: unknown): boolean {
+  // Check status code first (most reliable)
+  const status = getErrorStatus(error);
+  if (status !== undefined && RETRYABLE_STATUS_CODES.has(status)) {
+    return true;
+  }
+  
+  // Fallback to message check for connection errors without status
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     return (
+      // Connection/network errors (no HTTP status)
       message.includes('timeout') ||
       message.includes('network') ||
       message.includes('connection') ||
@@ -191,10 +231,7 @@ export function isTransientError(error: unknown): boolean {
       message.includes('econnrefused') ||
       message.includes('etimedout') ||
       message.includes('socket') ||
-      message.includes('503') ||
-      message.includes('502') ||
-      message.includes('500') ||
-      message.includes('529') ||
+      // API-specific transient errors
       message.includes('overloaded') ||
       message.includes('tool_use ids must be unique') ||
       message.includes('concurrency')

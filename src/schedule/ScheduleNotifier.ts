@@ -134,13 +134,7 @@ export class ScheduleNotifier {
     ];
 
     if (result.response) {
-      // Truncate long responses
-      const maxLength = 1000;
-      let response = result.response;
-      if (response.length > maxLength) {
-        response = response.substring(0, maxLength) + '...(truncated)';
-      }
-      lines.push(response);
+      lines.push(result.response);
     } else {
       lines.push('任務已成功執行。');
     }

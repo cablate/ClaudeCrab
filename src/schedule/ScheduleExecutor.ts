@@ -224,14 +224,6 @@ export class ScheduleExecutor {
    * Summarize a response for storage
    */
   private summarizeResult(response: string): string {
-    if (response) {
-      // Truncate long responses
-      const maxLength = 500;
-      if (response.length > maxLength) {
-        return response.substring(0, maxLength) + '...';
-      }
-      return response;
-    }
-    return 'Execution completed';
+    return response || 'Execution completed';
   }
 }
