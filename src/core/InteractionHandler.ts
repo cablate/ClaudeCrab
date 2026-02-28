@@ -9,6 +9,7 @@
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import { PermissionBridge } from './PermissionBridge.js';
 import { QuestionBridge } from './QuestionBridge.js';
+import { ExitPlanModeBridge } from './ExitPlanModeBridge.js';
 import { getEventBus } from './EventBus.js';
 import { logger } from '../utils/logger.js';
 
@@ -55,12 +56,14 @@ export class InteractionHandler {
   // Static registries — allow Web UI API to resolve bridges by requestId
   static readonly permissionRegistry = new Map<string, PermissionBridge>();
   static readonly questionRegistry = new Map<string, QuestionBridge>();
+  static readonly exitPlanModeRegistry = new Map<string, ExitPlanModeBridge>();
 
   private readonly adapter: BaseAdapter;
   private readonly chatId: string;
   private readonly agentId: string;
   private readonly permissionBridge: PermissionBridge;
   private readonly questionBridge: QuestionBridge;
+  private readonly exitPlanModeBridge: ExitPlanModeBridge;
 
   constructor(adapter: BaseAdapter, chatId: string, timeoutMs = 120_000, agentId = '') {
     this.adapter = adapter;
@@ -68,6 +71,7 @@ export class InteractionHandler {
     this.agentId = agentId;
     this.permissionBridge = new PermissionBridge(timeoutMs);
     this.questionBridge = new QuestionBridge(timeoutMs);
+    this.exitPlanModeBridge = new ExitPlanModeBridge(timeoutMs);
 
     // Wire up adapter resolvers to bridges
     adapter.setPermissionResolver((requestId, decision) => {
@@ -91,7 +95,23 @@ export class InteractionHandler {
     adapter.setQuestionResolver((requestId, answer) => {
       if (answer === null) {
         this.questionBridge.resolveQuestion(requestId, { answer: null });
+      } else if (answer === '__CANCELLED__') {
+        // Custom input timed out or cancelled
+        this.questionBridge.resolveQuestion(requestId, { answer: null });
+      } else if (answer.startsWith('__CUSTOM__:')) {
+        // Custom input from "Other" option
+        const customAnswer = answer.slice('__CUSTOM__:'.length);
+        this.questionBridge.resolveQuestion(requestId, {
+          answer: customAnswer,
+        });
+      } else if (answer.startsWith('__MULTISELECT__:')) {
+        // Multi-select: comma-separated labels
+        const selectedLabels = answer.slice('__MULTISELECT__:'.length);
+        this.questionBridge.resolveQuestion(requestId, {
+          answer: selectedLabels,
+        });
       } else {
+        // Normal option selection by index
         const optionLabels = this.questionBridge.getOptionLabels(requestId);
         const optionIndex = parseInt(answer, 10);
         const selectedLabel = optionLabels?.[optionIndex] ?? answer;
@@ -99,6 +119,13 @@ export class InteractionHandler {
           answer: selectedLabel,
         });
       }
+    });
+
+    adapter.setExitPlanModeResolver((requestId, decision) => {
+      this.exitPlanModeBridge.resolveReview(requestId, {
+        approved: decision === 'approve',
+        message: decision === 'approve' ? undefined : 'User rejected the plan',
+      });
     });
   }
 
@@ -121,6 +148,11 @@ export class InteractionHandler {
         return this.handleAskUserQuestion(toolInput, options);
       }
 
+      // Handle ExitPlanMode tool with dedicated UI
+      if (toolName === 'ExitPlanMode') {
+        return this.handleExitPlanMode(toolInput, options);
+      }
+
       // Normal permission flow for other tools
       return this.handlePermission(toolName, toolInput, options);
     };
@@ -131,7 +163,11 @@ export class InteractionHandler {
    */
   dispose(): void {
     this.permissionBridge.cancelAll();
+    this.questionBridge.cancelAll();
+    this.exitPlanModeBridge.cancelAll();
     this.adapter.setPermissionResolver(() => {});
+    this.adapter.setQuestionResolver(() => {});
+    this.adapter.setExitPlanModeResolver(() => {});
   }
 
   // --- Private handlers ---
@@ -354,6 +390,76 @@ export class InteractionHandler {
     return {
       behavior: 'deny',
       message: decision.message ?? 'User denied permission',
+      toolUseID: options.toolUseID,
+    };
+  }
+
+
+  private async handleExitPlanMode(
+    toolInput: Record<string, unknown>,
+    options: CanUseToolOptions
+  ): Promise<CanUseToolResult> {
+    const allowedPrompts = toolInput.allowedPrompts as
+      | Array<{ tool: string; prompt: string }>
+      | undefined;
+
+    const { requestId, promise } = this.exitPlanModeBridge.requestReview(
+      allowedPrompts,
+      { signal: options.signal }
+    );
+
+    // Register bridge for Web UI resolution + broadcast via SSE
+    InteractionHandler.exitPlanModeRegistry.set(requestId, this.exitPlanModeBridge);
+    void promise.finally(() => InteractionHandler.exitPlanModeRegistry.delete(requestId));
+
+    getEventBus().emitSync('interaction', {
+      type: 'plan_review_request' as const,
+      requestId,
+      agentId: this.agentId,
+      allowedPrompts,
+    });
+
+    const promptResult = await this.adapter.sendExitPlanModePrompt(this.chatId, {
+      requestId,
+      allowedPrompts,
+    });
+
+    if (!promptResult.success) {
+      logger.warn(
+        { error: promptResult.error, chatId: this.chatId },
+        'Failed to send plan review prompt, auto-rejecting'
+      );
+      this.exitPlanModeBridge.resolveReview(requestId, {
+        approved: false,
+        message: 'Failed to send plan review prompt',
+      });
+    }
+
+    const decision = await promise;
+
+    // Update the prompt message with the decision
+    if (promptResult.messageId) {
+      const statusText = decision.approved
+        ? '✅ 計畫已核准'
+        : '❌ 計畫已拒絕';
+      await this.adapter.updateExitPlanModePrompt(
+        this.chatId,
+        promptResult.messageId,
+        statusText
+      );
+    }
+
+    if (decision.approved) {
+      return {
+        behavior: 'allow',
+        updatedInput: toolInput,
+        toolUseID: options.toolUseID,
+      };
+    }
+
+    return {
+      behavior: 'deny',
+      message: decision.message ?? 'User rejected the plan',
       toolUseID: options.toolUseID,
     };
   }

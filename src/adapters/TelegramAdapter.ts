@@ -12,6 +12,9 @@ import type {
   QuestionPromptOptions,
   QuestionPromptResult,
   QuestionResolver,
+  ExitPlanModePromptOptions,
+  ExitPlanModePromptResult,
+  ExitPlanModeResolver,
 } from './types.js';
 import { DEFAULT_RATE_LIMIT } from './types.js';
 import {
@@ -133,6 +136,39 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
   /** Callback for resolving AskUserQuestion responses */
   private questionResolver: QuestionResolver | null = null;
+
+  /** Callback for resolving ExitPlanMode decisions */
+  private exitPlanModeResolver: ExitPlanModeResolver | null = null;
+
+  /**
+   * Tracks chats awaiting custom input for AskUserQuestion "Other" option.
+   * Key: chatId, Value: { requestId, promptMessageId, timer }
+   */
+  private readonly awaitingCustomInput = new Map<
+    string,
+    {
+      requestId: string;
+      promptMessageId: string;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+
+  /** Timeout for custom input (60 seconds) */
+  private static readonly CUSTOM_INPUT_TIMEOUT_MS = 60_000;
+
+  /**
+   * Tracks multi-select state for AskUserQuestion with multiSelect: true.
+   * Key: requestId, Value: { selectedIndices, messageId, chatId, options }
+   */
+  private readonly multiSelectState = new Map<
+    string,
+    {
+      selectedIndices: Set<number>;
+      messageId: string;
+      chatId: string;
+      options: Array<{ label: string; description: string }>;
+    }
+  >();
 
   /** Maximum message length for Telegram */
   static readonly MAX_MESSAGE_LENGTH = 4096;
@@ -311,6 +347,183 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         return;
       }
 
+      // Handle question "Other" callbacks (q_other_<requestId>)
+      const qOtherMatch = /^q_other_(.+)$/.exec(data);
+      if (qOtherMatch !== null) {
+        const requestId = qOtherMatch[1] as string;
+        const chatId = ctx.chat?.id.toString();
+
+        if (chatId === undefined) {
+          await ctx.answerCallbackQuery({ text: '❌ 無法識別對話' });
+          return;
+        }
+
+        if (this.questionResolver === null) {
+          this.log.warn(
+            { requestId },
+            'Question resolver not set for custom input'
+          );
+          await ctx.answerCallbackQuery({
+            text: '⏳ Question session expired',
+          });
+          return;
+        }
+
+        // Set up awaiting custom input state
+        const timer = setTimeout(() => {
+          const pending = this.awaitingCustomInput.get(chatId);
+          if (pending?.requestId === requestId) {
+            this.awaitingCustomInput.delete(chatId);
+            this.log.warn({ requestId, chatId }, 'Custom input timed out');
+            // Resolve with null to cancel the question
+            if (this.questionResolver !== null) {
+              this.questionResolver(requestId, '__CANCELLED__');
+            }
+          }
+        }, TelegramAdapter.CUSTOM_INPUT_TIMEOUT_MS);
+
+        // Store the message ID from callback query message
+        const promptMessageId = ctx.callbackQuery.message?.message_id?.toString() ?? '';
+
+        this.awaitingCustomInput.set(chatId, {
+          requestId,
+          promptMessageId,
+          timer,
+        });
+
+        this.log.info({ requestId, chatId }, 'Awaiting custom input for question');
+
+        // Reply to prompt user for input
+        const replyToId = parseInt(promptMessageId, 10);
+        await this.rateLimiter.execute(async () => {
+          if (!isNaN(replyToId) && replyToId > 0) {
+            await this.bot!.api.sendMessage(
+              chatId,
+              '📝 請輸入您的答案：',
+              { reply_to_message_id: replyToId }
+            );
+          } else {
+            await this.bot!.api.sendMessage(chatId, '📝 請輸入您的答案：');
+          }
+        });
+
+        await ctx.answerCallbackQuery({ text: '請輸入您的答案' });
+        return;
+      }
+
+      // Handle multi-select toggle callbacks (q_toggle_<requestId>:<optionIndex>)
+      const qToggleMatch = /^q_toggle_([^:]+):(\d+)$/.exec(data);
+      if (qToggleMatch !== null) {
+        const requestId = qToggleMatch[1] as string;
+        const optionIndex = parseInt(qToggleMatch[2] as string, 10);
+
+        const state = this.multiSelectState.get(requestId);
+        if (state === undefined) {
+          await ctx.answerCallbackQuery({ text: '⏳ Session expired' });
+          return;
+        }
+
+        // Toggle selection
+        if (state.selectedIndices.has(optionIndex)) {
+          state.selectedIndices.delete(optionIndex);
+        } else {
+          state.selectedIndices.add(optionIndex);
+        }
+
+        // Update keyboard to show selected state
+        const keyboard = new InlineKeyboard();
+        state.options.forEach((opt, index) => {
+          const isSelected = state.selectedIndices.has(index);
+          const prefix = isSelected ? '✓ ' : '';
+          keyboard.text(`${prefix}${opt.label}`, `q_toggle_${requestId}:${index}`);
+          if ((index + 1) % 2 === 0 && index < state.options.length - 1) {
+            keyboard.row();
+          }
+        });
+        keyboard.row();
+        keyboard.text('✅ 確認選擇', `q_confirm_${requestId}`);
+        keyboard.row();
+        keyboard.text('📝 其他', `q_other_${requestId}`);
+
+        // Update the message keyboard
+        await this.rateLimiter.execute(async () => {
+          await this.bot!.api.editMessageReplyMarkup(
+            state.chatId,
+            parseInt(state.messageId, 10),
+            { reply_markup: keyboard }
+          );
+        });
+
+        const selectedCount = state.selectedIndices.size;
+        await ctx.answerCallbackQuery({ text: `已選 ${selectedCount} 項` });
+        return;
+      }
+
+      // Handle multi-select confirm callbacks (q_confirm_<requestId>)
+      const qConfirmMatch = /^q_confirm_(.+)$/.exec(data);
+      if (qConfirmMatch !== null) {
+        const requestId = qConfirmMatch[1] as string;
+
+        const state = this.multiSelectState.get(requestId);
+        if (state === undefined) {
+          await ctx.answerCallbackQuery({ text: '⏳ Session expired' });
+          return;
+        }
+
+        if (this.questionResolver === null) {
+          this.log.warn({ requestId }, 'Question resolver not set for multi-select confirm');
+          await ctx.answerCallbackQuery({ text: '⏳ Session expired' });
+          return;
+        }
+
+        // Get selected labels
+        const selectedLabels = Array.from(state.selectedIndices)
+          .sort((a, b) => a - b)
+          .map((index) => state.options[index]?.label ?? '')
+          .filter((label) => label !== '');
+
+        if (selectedLabels.length === 0) {
+          await ctx.answerCallbackQuery({ text: '請至少選擇一項' });
+          return;
+        }
+
+        // Clean up state
+        this.multiSelectState.delete(requestId);
+
+        // Resolve with __MULTISELECT__: prefix and comma-separated labels
+        const answer = `__MULTISELECT__:${selectedLabels.join(',')}`;
+        this.log.info({ requestId, selectedLabels }, 'Multi-select confirmed');
+        this.questionResolver(requestId, answer);
+
+        await ctx.answerCallbackQuery({ text: `✅ 已選 ${selectedLabels.length} 項` });
+        return;
+      }
+
+      // Handle ExitPlanMode callbacks (plan_approve, plan_reject)
+      const planMatch = /^plan_(approve|reject):(.+)$/.exec(data);
+      if (planMatch !== null) {
+        const decision = planMatch[1] as 'approve' | 'reject';
+        const requestId = planMatch[2] as string;
+
+        if (this.exitPlanModeResolver === null) {
+          this.log.warn(
+            { requestId },
+            'ExitPlanMode resolver not set, session may have expired'
+          );
+          await ctx.answerCallbackQuery({
+            text: '⏳ Plan review session expired',
+          });
+          return;
+        }
+
+        this.log.info({ requestId, decision }, 'Plan review decision received');
+        this.exitPlanModeResolver(requestId, decision);
+
+        const answerText = decision === 'approve' ? '✅ 已核准' : '❌ 已拒絕';
+        await ctx.answerCallbackQuery({ text: answerText });
+        return;
+      }
+
       // Unknown callback format — log and ignore
       this.log.debug({ data }, 'Unknown callback query format, ignoring');
     });
@@ -485,6 +698,30 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
     const userId = from.id.toString();
     const chatId = message.chat.id.toString();
+
+    // Check if this chat is awaiting custom input for AskUserQuestion
+    const pendingCustom = this.awaitingCustomInput.get(chatId);
+    if (pendingCustom !== undefined) {
+      // Clear the timeout and state
+      clearTimeout(pendingCustom.timer);
+      this.awaitingCustomInput.delete(chatId);
+
+      const customAnswer = message.text.trim();
+      this.log.info(
+        { requestId: pendingCustom.requestId, chatId, answerLength: customAnswer.length },
+        'Custom input received for question'
+      );
+
+      // Resolve the question with the custom answer
+      // Use special prefix to indicate this is a custom answer, not an option index
+      if (this.questionResolver !== null) {
+        this.questionResolver(pendingCustom.requestId, `__CUSTOM__:${customAnswer}`);
+      }
+
+      // Acknowledge receipt
+      await ctx.reply('✅ 已收到您的答案');
+      return;
+    }
 
     // Security validation
     const validation = validateMessage(
@@ -1085,25 +1322,49 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     }
 
     try {
-      // Build keyboard with one button per option
       const keyboard = new InlineKeyboard();
-      options.options.forEach((opt, index) => {
-        keyboard.text(opt.label, `q_opt_${options.requestId}:${index}`);
-        // Add row break every 2 options for better layout
-        if ((index + 1) % 2 === 0 && index < options.options.length - 1) {
-          keyboard.row();
-        }
-      });
+
+      if (options.multiSelect) {
+        // Multi-select mode: use toggle buttons with confirm
+        options.options.forEach((opt, index) => {
+          keyboard.text(opt.label, `q_toggle_${options.requestId}:${index}`);
+          // Add row break every 2 options for better layout
+          if ((index + 1) % 2 === 0 && index < options.options.length - 1) {
+            keyboard.row();
+          }
+        });
+
+        // Add confirm and other buttons on new rows
+        keyboard.row();
+        keyboard.text('✅ 確認選擇', `q_confirm_${options.requestId}`);
+        keyboard.row();
+        keyboard.text('📝 其他', `q_other_${options.requestId}`);
+      } else {
+        // Single-select mode: original behavior
+        options.options.forEach((opt, index) => {
+          keyboard.text(opt.label, `q_opt_${options.requestId}:${index}`);
+          // Add row break every 2 options for better layout
+          if ((index + 1) % 2 === 0 && index < options.options.length - 1) {
+            keyboard.row();
+          }
+        });
+
+        // Add "Other" button on a new row (SDK says this is auto-provided)
+        keyboard.row();
+        keyboard.text('📝 其他', `q_other_${options.requestId}`);
+      }
 
       // Format the question text
       const optionDescriptions = options.options
         .map((opt, i) => `${i + 1}. **${opt.label}**: ${opt.description}`)
         .join('\n');
 
+      const multiSelectHint = options.multiSelect ? '\n_(可多選，選完後點「✅ 確認選擇」)_' : '';
+
       const text = [
         `❓ *${options.header}*`,
         '',
-        options.question,
+        options.question + multiSelectHint,
         '',
         optionDescriptions,
       ].join('\n');
@@ -1114,6 +1375,16 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
           reply_markup: keyboard,
         });
       });
+
+      // Initialize multi-select state if needed
+      if (options.multiSelect) {
+        this.multiSelectState.set(options.requestId, {
+          selectedIndices: new Set(),
+          messageId: result.message_id.toString(),
+          chatId,
+          options: options.options,
+        });
+      }
 
       return {
         success: true,
@@ -1151,6 +1422,95 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       this.log.warn(
         { error, chatId, messageId },
         'Failed to update question prompt'
+      );
+    }
+  }
+
+
+  // ============================================================
+  // ExitPlanMode Prompt (Plan Review UI)
+  // ============================================================
+
+  /**
+   * Store the ExitPlanMode resolver callback for plan review handling.
+   */
+  override setExitPlanModeResolver(resolver: ExitPlanModeResolver): void {
+    this.exitPlanModeResolver = resolver;
+  }
+
+  /**
+   * Send a plan review prompt with inline keyboard buttons (Approve / Reject).
+   */
+  override async sendExitPlanModePrompt(
+    chatId: string,
+    options: ExitPlanModePromptOptions
+  ): Promise<ExitPlanModePromptResult> {
+    if (this.bot === null) {
+      return { success: false, error: 'Bot not initialized' };
+    }
+
+    try {
+      const keyboard = new InlineKeyboard()
+        .text('✅ 核准', `plan_approve:${options.requestId}`)
+        .text('❌ 拒絕', `plan_reject:${options.requestId}`);
+
+      // Format allowed prompts for display
+      const allowedList = options.allowedPrompts?.length
+        ? options.allowedPrompts.map((p) => `• ${p.tool}: ${p.prompt}`).join('\n')
+        : '（無特殊權限需求）';
+
+      const text = [
+        '📋 *Plan Review*',
+        '',
+        'Claude 已完成計畫，請審核：',
+        '',
+        '*執行時需要的權限：*',
+        allowedList,
+      ].join('\n');
+
+      const result = await this.rateLimiter.execute(async () => {
+        return this.bot!.api.sendMessage(chatId, text, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard,
+        });
+      });
+
+      return {
+        success: true,
+        messageId: result.message_id.toString(),
+      };
+    } catch (error) {
+      const errorMessage = this.formatError(error);
+      this.log.error({ error, chatId }, 'Failed to send plan review prompt');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Update a plan review prompt message after the user's decision.
+   */
+  override async updateExitPlanModePrompt(
+    chatId: string,
+    messageId: string,
+    text: string
+  ): Promise<void> {
+    if (this.bot === null) {
+      return;
+    }
+
+    try {
+      await this.rateLimiter.execute(async () => {
+        await this.bot!.api.editMessageText(
+          chatId,
+          parseInt(messageId, 10),
+          text,
+          { parse_mode: 'Markdown' }
+        );
+      });
+    } catch (error) {
+      this.log.warn(
+        { error, chatId, messageId },
+        'Failed to update plan review prompt'
       );
     }
   }
