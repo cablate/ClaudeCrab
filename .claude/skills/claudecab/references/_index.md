@@ -24,6 +24,7 @@
 | 文件 | 用途 |
 |------|------|
 | [overview.md](system/overview.md) | 技術架構、技術棧、目錄結構（含 25+ 核心模組說明） |
+| [module-map.md](system/module-map.md) | **模組地圖與耦合分析**：分層總覽、群聚圖、依賴矩陣、風險評估、檔案尺寸一覽 |
 | [trigger-mechanism-map.md](system/trigger-mechanism-map.md) | 事件流、觸發路徑、Social/Initiative/Delegation cascade 風險分析 |
 | [skill-based-character-system.md](system/skill-based-character-system.md) | **Skill-Based Character System 完整設計**：system/persona/domain 三層架構、遷移現況追蹤 |
 | [shared-knowledge.md](system/shared-knowledge.md) | **共享知識區架構**：跨 Agent 知識發佈/訂閱機制、權限規則、目錄結構 |

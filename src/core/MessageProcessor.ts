@@ -1,7 +1,6 @@
 import type { UnifiedMessage } from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import type { SendOptions, SendResult } from '../adapters/types.js';
-import fs from 'node:fs';
 import type { IConversationRepository, IQueryMetricsRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager, type QueryResult } from './SDKQueryManager.js';
@@ -11,6 +10,14 @@ import { buildPromptContext } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
+import {
+  isNoiseResponse,
+  sendFinalResponse,
+  sendErrorToUser,
+  sendInlineImages,
+  sendInlineDocuments,
+} from './ResponseSender.js';
+import { buildMcpSetup } from './McpToolSetup.js';
 import { formatBotLabel } from '../utils/format.js';
 import {
   retryAsync,
@@ -26,17 +33,8 @@ import {
 } from './StatusMessageManager.js';
 import type { ActivityService } from './ActivityService.js';
 import type { AgentCallService } from '../services/AgentCallService.js';
-import {
-  createAgentCallMcpServer,
-  getAgentCallToolNames,
-} from '../tools/notifyAgentTool.js';
-import {
-  createTTSMcpServer,
-  getTTSToolNames,
-} from '../tools/ttsTool.js';
+
 import type { TTSService } from '../services/TTSService.js';
-import { existsSync } from 'node:fs';
-import * as path from 'node:path';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
 import { playSound } from '../utils/localSound.js';
 
@@ -130,23 +128,8 @@ export interface ProcessingResult {
   sessionId?: string;
 }
 
-/**
- * Noise response patterns that should not be sent to users.
- * Matches SDK placeholders, stop-hook memory checkpoint outputs, etc.
- */
-const NOISE_PATTERNS = [
-  /^No response requested\.?$/i,
-  /^No significant events?\b/i,
-  /^Nothing (?:significant|notable|important) to (?:record|note|report)\b/i,
-  /^沒有(?:重要|顯著|值得).*(?:記錄|紀錄|回報)/,
-];
-
-/** Returns true if the text is a noise/no-op response that should be suppressed. */
-function isNoiseResponse(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return true;
-  return NOISE_PATTERNS.some(pattern => pattern.test(trimmed));
-}
+// Noise filtering, inline media extraction, response delivery, and error
+// formatting are delegated to ResponseSender.
 
 /**
  * Processes incoming messages and sends responses via adapters.
@@ -426,7 +409,7 @@ export class MessageProcessor {
       });
 
       // Send error message to user
-      await this.sendErrorToUser(adapter, chatId, err);
+      await sendErrorToUser(adapter, chatId, err);
 
       return {
         success: false,
@@ -551,34 +534,12 @@ export class MessageProcessor {
         'Final prompt built'
       );
 
-      // Create agent call MCP server for cross-agent communication
-      const agentCallMcpServer = this.agentCallService
-        ? createAgentCallMcpServer(this.agentCallService, {
-            agentId,
-            chatId,
-          })
-        : undefined;
-
-      // Create TTS MCP server for text-to-speech
-      const ttsMcpServer = this.ttsService
-        ? createTTSMcpServer(this.ttsService, {
-            agentId,
-            chatId,
-          })
-        : undefined;
-
-      // Build dynamic mcpServers and allowedTools
-      const mcpServers: Record<string, ReturnType<typeof createAgentCallMcpServer>> = {};
-      const allowedTools: string[] = [];
-
-      if (agentCallMcpServer) {
-        mcpServers['agent-call'] = agentCallMcpServer;
-        allowedTools.push(...getAgentCallToolNames());
-      }
-      if (ttsMcpServer) {
-        mcpServers['tts'] = ttsMcpServer;
-        allowedTools.push(...getTTSToolNames());
-      }
+      // Build MCP servers and allowed tools from available services
+      const { mcpServers, allowedTools } = buildMcpSetup(
+        this.agentCallService,
+        this.ttsService,
+        { agentId, chatId },
+      );
 
       // Helper: execute SDK query with retry for rate limit / transient errors
       const executeWithRetry = async (resumeId: string | undefined) => {
@@ -620,10 +581,10 @@ export class MessageProcessor {
                   }
 
                   // Extract and send any inline images as photos
-                  let cleanedText = await this.sendInlineImages(text, adapter, chatId, sendOpts);
+                  let cleanedText = await sendInlineImages(text, adapter, chatId, sendOpts);
 
                   // Extract and send any inline documents as files
-                  cleanedText = await this.sendInlineDocuments(cleanedText, adapter, chatId, sendOpts);
+                  cleanedText = await sendInlineDocuments(cleanedText, adapter, chatId, sendOpts);
 
                   // Try MarkdownV2 first, fallback to Markdown on failure
                   if (isNoiseResponse(cleanedText)) {
@@ -793,7 +754,7 @@ export class MessageProcessor {
       const fullResponse = allResponses.join('\n\n');
 
       // Send final response and track message ID
-      const finalMessageId = await this.sendFinalResponse(
+      const finalMessageId = await sendFinalResponse(
         result.response, adapter, chatId, agentId, options
       );
       if (finalMessageId !== undefined) {
@@ -967,189 +928,7 @@ export class MessageProcessor {
     }
   }
 
-  /**
-   * Send the final response to the user with markdown fallback.
-   * Returns the sent message ID if successful, undefined otherwise.
-   */
-  /** Regex to match image file paths in response text */
-  private static readonly IMAGE_PATH_RE =
-    /(?:^|[\s`]|!\[[^\]]*\]\()(?<fp>(?:[A-Za-z]:[\\\/]|\/|[\w.-]+[\/\\])[^\s"'<>)`]*\.(?:png|jpe?g|gif|webp))\)?(?:[\s`]|$|[.。,，)）\]])/gim;
 
-  /**
-   * Explicit send syntax: [send:path/to/file.ext]
-   * Only files wrapped in this syntax will be auto-sent to user.
-   * This prevents accidental file sending when agent merely mentions a path.
-   */
-  private static readonly DOCUMENT_PATH_RE = /\[send:(?<fp>[^\]]+)\]/gim;
-
-  /**
-   * Extract image file paths from text, send them as photos, return cleaned text.
-   */
-  private async sendInlineImages(
-    text: string,
-    adapter: BaseAdapter,
-    chatId: string,
-    sendOpts?: SendOptions,
-  ): Promise<string> {
-    const paths: string[] = [];
-    const originals: string[] = [];
-    let match: RegExpExecArray | null;
-    const re = new RegExp(MessageProcessor.IMAGE_PATH_RE.source, MessageProcessor.IMAGE_PATH_RE.flags);
-    while ((match = re.exec(text)) !== null) {
-      const raw = (match.groups?.fp ?? match[1])?.trim();
-      if (!raw) continue;
-      // Try as-is, then resolve relative to project root
-      const resolved = existsSync(raw) ? raw : path.resolve(process.cwd(), raw);
-      if (existsSync(resolved)) {
-        paths.push(resolved);
-        originals.push(raw);
-      }
-    }
-    if (paths.length === 0) return text;
-
-    for (const p of paths) {
-      const result = await adapter.sendPhoto(chatId, p);
-      if (result.success) {
-        logger.debug({ chatId, filePath: p }, 'Sent inline image as photo');
-      } else {
-        logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline image');
-      }
-    }
-
-    // Strip matched file paths (and surrounding markdown image syntax) from text
-    let cleaned = text;
-    for (const raw of originals) {
-      // Remove markdown image syntax: ![...](path)
-      const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      cleaned = cleaned.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${escaped}\\s*\\)`, 'g'), '');
-      // Remove bare path references
-      cleaned = cleaned.replace(raw, '');
-    }
-    // Clean up empty backtick wrappers, markdown image tags, and excessive whitespace
-    cleaned = cleaned.replace(/`\s*`/g, '').replace(/!\[[^\]]*\]\(\s*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
-    return cleaned;
-  }
-
-  /**
-   * Extract document file paths from text, send them as documents, return cleaned text.
-   */
-  private async sendInlineDocuments(
-    text: string,
-    adapter: BaseAdapter,
-    chatId: string,
-    _sendOpts?: SendOptions,
-  ): Promise<string> {
-    logger.info({ text: text.substring(0, 200) }, '[sendInlineDocuments] called');
-    const paths: string[] = [];
-    const originals: string[] = [];
-    let match: RegExpExecArray | null;
-    const re = new RegExp(MessageProcessor.DOCUMENT_PATH_RE.source, MessageProcessor.DOCUMENT_PATH_RE.flags);
-    while ((match = re.exec(text)) !== null) {
-      const raw = (match.groups?.fp ?? match[1])?.trim();
-      if (!raw) continue;
-      // Try as-is, then resolve relative to project root
-      const asIs = existsSync(raw);
-      const resolved = asIs ? raw : path.resolve(process.cwd(), raw);
-      const resolvedExists = existsSync(resolved);
-      
-      if (resolvedExists) {
-        paths.push(resolved);
-        originals.push(raw);
-      } else {
-        // Log why path was not matched - helps debug "file not found" issues
-        logger.warn({ raw, resolved, asIs, resolvedExists }, '[sendInlineDocuments] Path matched but file not found');
-      }
-    }
-    if (paths.length === 0) return text;
-
-    // Audio file extensions
-    const audioExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac']);
-
-    for (const p of paths) {
-      const ext = path.extname(p).toLowerCase();
-      const isAudio = audioExtensions.has(ext);
-      
-      let result: SendResult;
-      if (isAudio) {
-        // Read file into buffer for sendAudio
-        const audioBuffer = await fs.promises.readFile(p);
-        const filename = path.basename(p);
-        result = await adapter.sendAudio(chatId, audioBuffer, { filename });
-        if (result.success) {
-          logger.info({ chatId, filePath: p }, 'Sent inline audio');
-        } else {
-          logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline audio');
-        }
-      } else {
-        result = await adapter.sendDocument(chatId, p);
-        if (result.success) {
-          logger.info({ chatId, filePath: p }, 'Sent inline document');
-        } else {
-          logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline document');
-        }
-      }
-    }
-
-    // Strip [send:path] syntax from text after sending
-    let cleaned = text;
-    for (const raw of originals) {
-      const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Remove [send:path] syntax
-      cleaned = cleaned.replace(new RegExp(`\\[send:\\s*${escaped}\\s*\\]`, 'gi'), '');
-    }
-    // Clean up excessive whitespace
-    cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
-    return cleaned;
-  }
-
-  private async sendFinalResponse(
-    response: string,
-    adapter: BaseAdapter,
-    chatId: string,
-    agentId: string,
-    options?: { isGroupChat?: boolean; replyToMessageId?: string }
-  ): Promise<string | undefined> {
-    // Skip noise responses (empty, SDK placeholders, stop-hook outputs)
-    if (isNoiseResponse(response)) return undefined;
-
-    const sendOpts: SendOptions = {};
-    if (options?.isGroupChat && options?.replyToMessageId) {
-      sendOpts.replyToMessageId = options.replyToMessageId;
-    }
-
-    // Extract and send any inline images as photos
-    let cleaned = await this.sendInlineImages(response, adapter, chatId, sendOpts);
-    if (isNoiseResponse(cleaned)) return undefined;
-
-    // Extract and send any inline documents as files
-    cleaned = await this.sendInlineDocuments(cleaned, adapter, chatId, sendOpts);
-    if (isNoiseResponse(cleaned)) return undefined;
-
-    const sendResult = await sendWithMarkdownFallback(
-      adapter,
-      chatId,
-      cleaned,
-      sendOpts
-    );
-
-    if (!sendResult.success) {
-      logger.warn(
-        { error: sendResult.error, chatId },
-        'Failed to send response'
-      );
-      return undefined;
-    }
-
-    if (sendResult.messageId) {
-      logger.debug(
-        { chatId, agentId, lastSentMessageId: sendResult.messageId },
-        'Final message sent successfully'
-      );
-      return sendResult.messageId;
-    }
-
-    return undefined;
-  }
 
 
 
@@ -1231,84 +1010,6 @@ export class MessageProcessor {
       agentId: session.agentId,
       userId: session.userId,
     };
-  }
-
-  /**
-   * Send error message to user
-   */
-  private async sendErrorToUser(
-    adapter: BaseAdapter,
-    chatId: string,
-    error: Error
-  ): Promise<void> {
-    const userMessage = this.getUserFriendlyError(error);
-
-    try {
-      await adapter.sendMessage(chatId, userMessage);
-    } catch (sendError) {
-      logger.error(
-        { error: sendError, chatId },
-        'Failed to send error message to user'
-      );
-    }
-  }
-
-  /**
-   * Convert error to user-friendly message
-   */
-  private getUserFriendlyError(error: Error): string {
-    const message = error.message.toLowerCase();
-
-    // Check for rate limit errors
-    if (isRateLimitError(error)) {
-      return '抱歉，目前請求過於頻繁，請稍後再試。';
-    }
-
-    // Check for timeout errors
-    if (message.includes('timeout') || message.includes('etimedout')) {
-      return '抱歉，處理超時，請重新發送您的訊息。';
-    }
-
-    // Check for network/connection errors
-    if (isTransientError(error) && !message.includes('500')) {
-      return '抱歉，網路連線發生問題，請檢查網路後重試。';
-    }
-
-    // Check for authentication errors
-    if (
-      message.includes('auth') ||
-      message.includes('401') ||
-      message.includes('403')
-    ) {
-      return '抱歉，服務授權發生問題，請聯繫管理員。';
-    }
-
-    // Check for server errors
-    if (
-      message.includes('500') ||
-      message.includes('502') ||
-      message.includes('503')
-    ) {
-      return '抱歉，服務暫時無法使用，請稍後再試。';
-    }
-
-    // Check for invalid request errors
-    if (message.includes('invalid') || message.includes('400')) {
-      return '抱歉，您的請求無法處理，請嘗試修改訊息內容。';
-    }
-
-    // Check for content filtering
-    if (message.includes('content') || message.includes('filter')) {
-      return '抱歉，您的訊息內容無法處理，請嘗試修改訊息內容。';
-    }
-
-    // Check for context length errors
-    if (message.includes('context') || message.includes('token')) {
-      return '抱歉，對話過長，請使用 /reset 指令重置對話。';
-    }
-
-    // Generic error message
-    return '抱歉，處理您的訊息時發生錯誤。請稍後再試。';
   }
 
   /**

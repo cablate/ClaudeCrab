@@ -34,134 +34,8 @@ import {
 import { auditLogger } from '../utils/audit.js';
 import { getEventBus } from '../core/EventBus.js';
 import type { GroupMessagePayload } from '../types/events.js';
-import { retryAsync, isTransientError } from '../utils/retry.js';
-
-/** Latency statistics shape */
-interface LatencyStats {
-  count: number;
-  avgMs: number;
-  minMs: number;
-  maxMs: number;
-  p50Ms: number;
-  p95Ms: number;
-}
-
-const EMPTY_LATENCY_STATS: LatencyStats = { count: 0, avgMs: 0, minMs: 0, maxMs: 0, p50Ms: 0, p95Ms: 0 };
-
-/** Compute percentile-based latency stats from a sample array */
-function computeLatencyStats(samples: readonly number[]): LatencyStats {
-  if (samples.length === 0) return { ...EMPTY_LATENCY_STATS };
-  const sorted = [...samples].sort((a, b) => a - b);
-  const count = sorted.length;
-  const sum = sorted.reduce((a, b) => a + b, 0);
-  return {
-    count,
-    avgMs: Math.round(sum / count),
-    minMs: sorted[0] ?? 0,
-    maxMs: sorted[count - 1] ?? 0,
-    p50Ms: sorted[Math.floor(count * 0.5)] ?? 0,
-    p95Ms: sorted[Math.floor(count * 0.95)] ?? 0,
-  };
-}
-
-/**
- * Rate limiter for Telegram API requests
- */
-class RateLimiter {
-  private readonly config: RateLimitConfig;
-  private lastRequestTime: number = 0;
-  private readonly queue: Array<{
-    fn: () => Promise<void>;
-    resolve: () => void;
-    reject: (error: unknown) => void;
-  }> = [];
-  private processing: boolean = false;
-
-  // Latency tracking
-  private readonly latencyHistory: number[] = [];
-  private static readonly MAX_HISTORY_SIZE = 100;
-
-  constructor(config: RateLimitConfig) {
-    this.config = config;
-  }
-
-  async execute<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.queue.length >= this.config.maxQueueSize) {
-      throw new Error('Rate limit queue full');
-    }
-
-    return new Promise((resolve, reject) => {
-      this.queue.push({
-        fn: async () => {
-          const startTime = Date.now();
-          try {
-            const result = await retryAsync(fn, {
-              maxAttempts: 4,
-              initialDelayMs: 1000,
-              backoffMultiplier: 2,
-              isRetryable: isTransientError,
-            });
-            this.recordLatency(Date.now() - startTime);
-            resolve(result);
-          } catch (error) {
-            this.recordLatency(Date.now() - startTime);
-            reject(error instanceof Error ? error : new Error(String(error)));
-          }
-        },
-        resolve: () => {},
-        reject: (err: unknown) =>
-          reject(err instanceof Error ? err : new Error(String(err))),
-      });
-
-      void this.processQueue();
-    });
-  }
-
-  private recordLatency(latencyMs: number): void {
-    this.latencyHistory.push(latencyMs);
-    if (this.latencyHistory.length > RateLimiter.MAX_HISTORY_SIZE) {
-      this.latencyHistory.shift();
-    }
-  }
-
-  private async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0) {
-      return;
-    }
-
-    this.processing = true;
-
-    while (this.queue.length > 0) {
-      const now = Date.now();
-      const elapsed = now - this.lastRequestTime;
-      const waitTime = Math.max(0, this.config.minIntervalMs - elapsed);
-
-      if (waitTime > 0) {
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
-      }
-
-      const item = this.queue.shift();
-      if (item !== undefined) {
-        this.lastRequestTime = Date.now();
-        try {
-          await item.fn();
-        } catch (error) {
-          item.reject(error);
-        }
-      }
-    }
-
-    this.processing = false;
-  }
-
-  get queueSize(): number {
-    return this.queue.length;
-  }
-
-  getLatencyStats(): LatencyStats {
-    return computeLatencyStats(this.latencyHistory);
-  }
-}
+import { RateLimiter, computeLatencyStats, type LatencyStats } from './RateLimiter.js';
+import { TelegramCallbackHandler } from './TelegramCallbackHandler.js';
 
 /**
  * Default security configuration
@@ -192,35 +66,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   /** Callback for resolving ExitPlanMode decisions */
   private exitPlanModeResolver: ExitPlanModeResolver | null = null;
 
-  /**
-   * Tracks chats awaiting custom input for AskUserQuestion "Other" option.
-   * Key: chatId, Value: { requestId, promptMessageId, timer }
-   */
-  private readonly awaitingCustomInput = new Map<
-    string,
-    {
-      requestId: string;
-      promptMessageId: string;
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
-
-  /** Timeout for custom input (60 seconds) */
-  private static readonly CUSTOM_INPUT_TIMEOUT_MS = 60_000;
-
-  /**
-   * Tracks multi-select state for AskUserQuestion with multiSelect: true.
-   * Key: requestId, Value: { selectedIndices, messageId, chatId, options }
-   */
-  private readonly multiSelectState = new Map<
-    string,
-    {
-      selectedIndices: Set<number>;
-      messageId: string;
-      chatId: string;
-      options: Array<{ label: string; description: string }>;
-    }
-  >();
+  private callbackHandler: TelegramCallbackHandler | null = null;
 
   /**
    * Message arrival latency tracking (message.date vs receive time)
@@ -344,251 +190,19 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       });
     });
 
-    // Set up callback query handler (inline keyboard buttons)
-    // Use bot.on("callback_query:data") for reliable update type detection in polling
-    this.bot.on('callback_query:data', async (ctx) => {
-      const data = ctx.callbackQuery.data;
-      this.log.debug({ callbackData: data }, 'Received callback query');
-
-      // Handle permission callbacks (perm_allow, perm_always, perm_deny)
-      const permMatch = /^perm_(allow|always|deny):(.+)$/.exec(data);
-      if (permMatch !== null) {
-        const decision = permMatch[1] as 'allow' | 'always' | 'deny';
-        const requestId = permMatch[2] as string;
-
-        if (this.permissionResolver === null) {
-          this.log.warn(
-            { requestId },
-            'Permission resolver not set, session may have expired'
-          );
-          await ctx.answerCallbackQuery({
-            text: '⏳ Permission session expired',
-          });
-          return;
-        }
-
-        this.log.info(
-          { requestId, decision, toolUseID: requestId },
-          'Permission decision received'
-        );
-        this.permissionResolver(requestId, decision);
-
-        const answerText =
-          decision === 'allow'
-            ? '✅ Allowed'
-            : decision === 'always'
-              ? '✅ Always Allowed'
-              : '❌ Denied';
-        await ctx.answerCallbackQuery({ text: answerText });
-        return;
-      }
-
-      // Handle question option callbacks (q_opt_<requestId>:<optionIndex>)
-      const qMatch = /^q_opt_([^:]+):(\d+)$/.exec(data);
-      if (qMatch !== null) {
-        const requestId = qMatch[1] as string;
-        const optionIndex = parseInt(qMatch[2] as string, 10);
-
-        if (this.questionResolver === null) {
-          this.log.warn(
-            { requestId },
-            'Question resolver not set, session may have expired'
-          );
-          await ctx.answerCallbackQuery({
-            text: '⏳ Question session expired',
-          });
-          return;
-        }
-
-        // Store the option index; actual label resolution happens in MessageProcessor
-        this.log.info({ requestId, optionIndex }, 'Question option selected');
-        this.questionResolver(requestId, optionIndex.toString());
-        await ctx.answerCallbackQuery({ text: '✅ Selected' });
-        return;
-      }
-
-      // Handle question "Other" callbacks (q_other_<requestId>)
-      const qOtherMatch = /^q_other_(.+)$/.exec(data);
-      if (qOtherMatch !== null) {
-        const requestId = qOtherMatch[1] as string;
-        const chatId = ctx.chat?.id.toString();
-
-        if (chatId === undefined) {
-          await ctx.answerCallbackQuery({ text: '❌ 無法識別對話' });
-          return;
-        }
-
-        if (this.questionResolver === null) {
-          this.log.warn(
-            { requestId },
-            'Question resolver not set for custom input'
-          );
-          await ctx.answerCallbackQuery({
-            text: '⏳ Question session expired',
-          });
-          return;
-        }
-
-        // Set up awaiting custom input state
-        const timer = setTimeout(() => {
-          const pending = this.awaitingCustomInput.get(chatId);
-          if (pending?.requestId === requestId) {
-            this.awaitingCustomInput.delete(chatId);
-            this.log.warn({ requestId, chatId }, 'Custom input timed out');
-            // Resolve with null to cancel the question
-            if (this.questionResolver !== null) {
-              this.questionResolver(requestId, '__CANCELLED__');
-            }
-          }
-        }, TelegramAdapter.CUSTOM_INPUT_TIMEOUT_MS);
-
-        // Store the message ID from callback query message
-        const promptMessageId = ctx.callbackQuery.message?.message_id?.toString() ?? '';
-
-        this.awaitingCustomInput.set(chatId, {
-          requestId,
-          promptMessageId,
-          timer,
-        });
-
-        this.log.info({ requestId, chatId }, 'Awaiting custom input for question');
-
-        // Reply to prompt user for input
-        const replyToId = parseInt(promptMessageId, 10);
-        await this.rateLimiter.execute(async () => {
-          if (!isNaN(replyToId) && replyToId > 0) {
-            await this.bot!.api.sendMessage(
-              chatId,
-              '📝 請輸入您的答案：',
-              { reply_to_message_id: replyToId }
-            );
-          } else {
-            await this.bot!.api.sendMessage(chatId, '📝 請輸入您的答案：');
-          }
-        });
-
-        await ctx.answerCallbackQuery({ text: '請輸入您的答案' });
-        return;
-      }
-
-      // Handle multi-select toggle callbacks (q_toggle_<requestId>:<optionIndex>)
-      const qToggleMatch = /^q_toggle_([^:]+):(\d+)$/.exec(data);
-      if (qToggleMatch !== null) {
-        const requestId = qToggleMatch[1] as string;
-        const optionIndex = parseInt(qToggleMatch[2] as string, 10);
-
-        const state = this.multiSelectState.get(requestId);
-        if (state === undefined) {
-          await ctx.answerCallbackQuery({ text: '⏳ Session expired' });
-          return;
-        }
-
-        // Toggle selection
-        if (state.selectedIndices.has(optionIndex)) {
-          state.selectedIndices.delete(optionIndex);
-        } else {
-          state.selectedIndices.add(optionIndex);
-        }
-
-        // Update keyboard to show selected state
-        const keyboard = new InlineKeyboard();
-        state.options.forEach((opt, index) => {
-          const isSelected = state.selectedIndices.has(index);
-          const prefix = isSelected ? '✓ ' : '';
-          keyboard.text(`${prefix}${opt.label}`, `q_toggle_${requestId}:${index}`);
-          if ((index + 1) % 2 === 0 && index < state.options.length - 1) {
-            keyboard.row();
-          }
-        });
-        keyboard.row();
-        keyboard.text('✅ 確認選擇', `q_confirm_${requestId}`);
-        keyboard.row();
-        keyboard.text('📝 其他', `q_other_${requestId}`);
-
-        // Answer callback immediately for responsive UX
-        const selectedCount = state.selectedIndices.size;
-        await ctx.answerCallbackQuery({ text: `已選 ${selectedCount} 項` });
-
-        // Update the message keyboard (can be slightly delayed)
-        this.rateLimiter.execute(async () => {
-          await this.bot!.api.editMessageReplyMarkup(
-            state.chatId,
-            parseInt(state.messageId, 10),
-            { reply_markup: keyboard }
-          );
-        }).catch((err) => {
-          this.log.warn({ err, requestId }, 'Failed to update keyboard');
-        });
-        return;
-      }
-
-      // Handle multi-select confirm callbacks (q_confirm_<requestId>)
-      const qConfirmMatch = /^q_confirm_(.+)$/.exec(data);
-      if (qConfirmMatch !== null) {
-        const requestId = qConfirmMatch[1] as string;
-
-        const state = this.multiSelectState.get(requestId);
-        if (state === undefined) {
-          await ctx.answerCallbackQuery({ text: '⏳ Session expired' });
-          return;
-        }
-
-        if (this.questionResolver === null) {
-          this.log.warn({ requestId }, 'Question resolver not set for multi-select confirm');
-          await ctx.answerCallbackQuery({ text: '⏳ Session expired' });
-          return;
-        }
-
-        // Get selected labels
-        const selectedLabels = Array.from(state.selectedIndices)
-          .sort((a, b) => a - b)
-          .map((index) => state.options[index]?.label ?? '')
-          .filter((label) => label !== '');
-
-        if (selectedLabels.length === 0) {
-          await ctx.answerCallbackQuery({ text: '請至少選擇一項' });
-          return;
-        }
-
-        // Clean up state
-        this.multiSelectState.delete(requestId);
-
-        // Resolve with __MULTISELECT__: prefix and comma-separated labels
-        const answer = `__MULTISELECT__:${selectedLabels.join(',')}`;
-        this.log.info({ requestId, selectedLabels }, 'Multi-select confirmed');
-        this.questionResolver(requestId, answer);
-
-        await ctx.answerCallbackQuery({ text: `✅ 已選 ${selectedLabels.length} 項` });
-        return;
-      }
-
-      // Handle ExitPlanMode callbacks (plan_approve, plan_reject)
-      const planMatch = /^plan_(approve|reject):(.+)$/.exec(data);
-      if (planMatch !== null) {
-        const decision = planMatch[1] as 'approve' | 'reject';
-        const requestId = planMatch[2] as string;
-
-        if (this.exitPlanModeResolver === null) {
-          this.log.warn(
-            { requestId },
-            'ExitPlanMode resolver not set, session may have expired'
-          );
-          await ctx.answerCallbackQuery({
-            text: '⏳ Plan review session expired',
-          });
-          return;
-        }
-
-        this.log.info({ requestId, decision }, 'Plan review decision received');
-        this.exitPlanModeResolver(requestId, decision);
-
-        const answerText = decision === 'approve' ? '✅ 已核准' : '❌ 已拒絕';
-        await ctx.answerCallbackQuery({ text: answerText });
-        return;
-      }
-
-      // Unknown callback format — log and ignore
-      this.log.debug({ data }, 'Unknown callback query format, ignoring');
+    // Set up callback query handler (delegated to TelegramCallbackHandler)
+    this.callbackHandler = new TelegramCallbackHandler({
+      rateLimiter: this.rateLimiter,
+      getBot: () => this.bot,
+      getPermissionResolver: () => this.permissionResolver,
+      getQuestionResolver: () => this.questionResolver,
+      getExitPlanModeResolver: () => this.exitPlanModeResolver,
+      log: this.log,
+    });
+    this.bot.on('callback_query:data', (ctx) => {
+      void this.callbackHandler!.handle(ctx).catch((error) => {
+        this.log.error({ error }, 'Unhandled error in callback handler');
+      });
     });
 
     // Verify bot token by getting bot info
@@ -757,6 +371,8 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     }
     this.messageBuffer.clear();
 
+    this.callbackHandler?.dispose();
+    this.callbackHandler = null;
     this.bot = null;
   }
 
@@ -797,26 +413,12 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     const chatId = message.chat.id.toString();
 
     // Check if this chat is awaiting custom input for AskUserQuestion
-    const pendingCustom = this.awaitingCustomInput.get(chatId);
-    if (pendingCustom !== undefined) {
-      // Clear the timeout and state
-      clearTimeout(pendingCustom.timer);
-      this.awaitingCustomInput.delete(chatId);
-
-      const customAnswer = message.text.trim();
-      this.log.info(
-        { requestId: pendingCustom.requestId, chatId, answerLength: customAnswer.length },
-        'Custom input received for question'
-      );
-
-      // Resolve the question with the custom answer
-      // Use special prefix to indicate this is a custom answer, not an option index
-      if (this.questionResolver !== null) {
-        this.questionResolver(pendingCustom.requestId, `__CUSTOM__:${customAnswer}`);
-      }
-
-      // Acknowledge receipt
-      await ctx.reply('✅ 已收到您的答案');
+    if (this.callbackHandler?.tryHandleCustomInput(
+      chatId,
+      message.text,
+      this.questionResolver,
+      (msg: string) => ctx.reply(msg),
+    )) {
       return;
     }
 
@@ -1475,12 +1077,12 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
       // Initialize multi-select state if needed
       if (options.multiSelect) {
-        this.multiSelectState.set(options.requestId, {
-          selectedIndices: new Set(),
-          messageId: result.message_id.toString(),
+        this.callbackHandler!.initMultiSelectState(
+          options.requestId,
+          result.message_id.toString(),
           chatId,
-          options: options.options,
-        });
+          options.options,
+        );
       }
 
       return {

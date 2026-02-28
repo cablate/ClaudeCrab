@@ -37,10 +37,10 @@ claudecab/
 │   ├── index.ts           # 精簡入口（~20 行，委派給 AppBootstrap）
 │   ├── config.ts           # 集中化環境變數解析（AppConfig）
 │   ├── AppBootstrap.ts     # 應用生命週期管理（初始化 + 關機序列）
-│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus, PlatformOrchestrator, StatusMessageManager, InteractionHandler, ActivityService, GroupBroadcaster, DelegationHandler, etc.
-│   ├── persistence/       # SQLite 持久化層
+│   ├── core/              # AgentLoader, SessionManager, SDKQueryManager, EventBus, PlatformOrchestrator, MessageProcessor, ResponseSender, McpToolSetup, StatusMessageManager, InteractionHandler, ActivityService, GroupBroadcaster, DelegationHandler, etc.
+│   ├── persistence/       # SQLite 持久化層（DatabaseManager, migrations, 8 Repositories）
 │   ├── schedule/          # 排程系統（CronScheduler, ScheduleManager, ScheduleExecutor, etc.）
-│   ├── adapters/          # TelegramAdapter, BaseAdapter, commands/TelegramCommands
+│   ├── adapters/          # TelegramAdapter, BaseAdapter, RateLimiter, TelegramCallbackHandler, commands/{TelegramCommands, ScheduleCommands}
 │   ├── webui/             # Express + EJS 管理介面
 │   │   ├── WebUIServer.ts
 │   │   ├── routes/        # 頁面路由
@@ -146,7 +146,7 @@ Promise-based 非同步權限橋接，用於連接 SDK 的 `canUseTool` callback
 
 ### MessageProcessor (`src/core/MessageProcessor.ts`)
 
-處理訊息流程（SDK 模式），v1.17.0 重構後約 1,065 行，職責分離至 InteractionHandler 和 StatusMessageManager：
+處理訊息流程（SDK 模式），經 v1.17.0 + v1.45 重構後約 1,092 行。回應投遞委派 ResponseSender，MCP 組裝委派 McpToolSetup，互動橋接委派 InteractionHandler，狀態訊息委派 StatusMessageManager：
 1. 接收 UnifiedMessage
 2. 取得/建立 Session
 3. **動態讀取 systemPrompt**（v1.5.1）：透過 `getSystemPrompt(agentId)` 函數注入
@@ -372,13 +372,14 @@ Idle 自言自語排程器（Live page 用）：
 
 ### TelegramAdapter (`src/adapters/TelegramAdapter.ts`)
 
-Telegram 平台整合（每個 Agent 一個 Bot 實例）：
+Telegram 平台整合（每個 Agent 一個 Bot 實例），v1.45 重構後速率限制委派 `RateLimiter.ts`，callback 處理委派 `TelegramCallbackHandler.ts`：
 - grammy Bot 封裝
 - 建構時綁定 `agentId`
 - 訊息分割（超過 4096 字元）
 - 打字指示器
-- 速率限制（35ms 最小間隔）
-- 指令處理（`commands/TelegramCommands.ts`）：`/start`, `/help`, `/reset`, `/restart`（v1.41，白名單限定，含 tsc 預檢）
+- 速率限制（委派 `RateLimiter`：35ms 最小間隔 + 指數退避重試）
+- Callback 處理（委派 `TelegramCallbackHandler`：6 種 callback 類型分派）
+- 指令處理（`commands/TelegramCommands.ts` + `ScheduleCommands.ts`）：`/start`, `/help`, `/reset`, `/restart`（v1.41，白名單限定，含 tsc 預檢）
 - **權限審批 UI**（v1.7.0）：Override `sendPermissionPrompt`、`updatePermissionPrompt`、`setPermissionResolver` 三個方法；發送 InlineKeyboard（Allow / Deny 按鈕）；註冊 `callback_query` handler 處理使用者按鈕回應
 - **`sendPhoto` 實作**：使用 grammy `InputFile` 發送本地圖片，支援 caption，整合 rateLimiter
 - **`sendDocument` 實作**（v1.41）：發送本地文件（pdf, md, txt 等），使用 `[send:path]` 語法觸發
@@ -388,7 +389,8 @@ Telegram 平台整合（每個 Agent 一個 Bot 實例）：
 ### Persistence 層 (`src/persistence/`)
 
 SQLite 持久化：
-- `DatabaseManager.ts` - 連線管理、Schema 初始化（v8）、WAL 模式、線性 migration 鏈（v1→v8）
+- `DatabaseManager.ts` - 連線管理、WAL 模式（Schema 和 migration 邏輯委派至 `migrations.ts`）
+- `migrations.ts` - Schema 定義（v8）、線性 migration 鏈（v1→v8）、`runMigrations()` 函式
 - `SessionRepository.ts` - Session CRUD、過期清理、`sdkSessionId` 存儲（UNIQUE: platform + agent_id + user_id）
 - `ConversationRepository.ts` - 對話歷史 CRUD（SDK 訊息持久化，供 WebUI 查看）
 - `GroupMemberRepository.ts`（v1.18.0）- 群組成員持久化（platform + chat_id + agent_id），供重啟後還原成員關係
