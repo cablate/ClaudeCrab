@@ -262,15 +262,15 @@ export class ScheduleManager {
       return false;
     }
 
-    // Unregister old version
-    this.scheduler.unregister(scheduleId);
+    // Unregister old version using canonical ID from spec
+    this.scheduler.unregister(spec.id);
 
     // Register new version
     if (spec.metadata.enabled) {
       this.scheduler.register(agentId, spec);
     }
 
-    logger.info(`[ScheduleManager] Reloaded schedule: ${scheduleId}`);
+    logger.info(`[ScheduleManager] Reloaded schedule: ${spec.id}`);
     return true;
   }
 

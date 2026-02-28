@@ -36,8 +36,6 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.19",
-    "@anthropic-ai/claude-code": "^2.1.19",
-    "@anthropic-ai/sdk": "^0.71.2",
     "adm-zip": "^0.5.16",
     "async-mutex": "^0.5.0",
     "better-sqlite3": "^12.6.2",

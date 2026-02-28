@@ -83,7 +83,7 @@ export class ScheduleExecutor {
               {
                 cwd: agent.path,
                 systemPrompt: agent.systemPrompt,
-                settingSources: ['project'],
+                settingSources: ['project', 'local'],
                 ...(spec.execution.maxTurns !== undefined
                   ? { maxTurns: spec.execution.maxTurns }
                   : {}),

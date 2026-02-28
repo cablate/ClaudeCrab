@@ -62,14 +62,16 @@ export class ScheduleLoader {
           const parsed = parseYaml(content);
           const spec = validateScheduleSpec(parsed);
 
-          // Canonical ID = filename without extension
+          // Canonical ID = agentId/filename (without extension)
+          // This ensures uniqueness across agents with same filename
           const filenameId = file.replace(/\.ya?ml$/, '');
+          const canonicalId = `${agentId}/${filenameId}`;
           if (spec.id !== filenameId) {
             logger.warn(
               `[ScheduleLoader] Schedule ID mismatch: file="${file}" has id="${spec.id}", using filename "${filenameId}" as canonical ID`
             );
-            spec.id = filenameId;
           }
+          spec.id = canonicalId;
 
           schedules.push(spec);
           logger.debug(`[ScheduleLoader] Loaded schedule: ${spec.id} from ${agentId}`);
@@ -91,14 +93,17 @@ export class ScheduleLoader {
    * Load a specific schedule by ID
    */
   async loadById(agentId: string, scheduleId: string): Promise<ScheduleSpec | null> {
-    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${scheduleId}.yaml`);
+    // scheduleId may be in format "agentId/filename" or just "filename"
+    // Extract the filename part for file lookup
+    const filename = scheduleId.includes('/') ? scheduleId.split('/').pop()! : scheduleId;
+    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${filename}.yaml`);
 
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       const parsed = parseYaml(content);
       const spec = validateScheduleSpec(parsed);
-      // Ensure ID matches filename
-      spec.id = scheduleId;
+      // Ensure ID is in canonical format: agentId/filename
+      spec.id = `${agentId}/${filename}`;
       return spec;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -113,7 +118,9 @@ export class ScheduleLoader {
    */
   async save(agentId: string, spec: ScheduleSpec): Promise<void> {
     const schedulesDir = path.join(this.agentsDir, agentId, 'schedules');
-    const filePath = path.join(schedulesDir, `${spec.id}.yaml`);
+    // Extract filename from spec.id (may be "agentId/filename" or just "filename")
+    const filename = spec.id.includes('/') ? spec.id.split('/').pop()! : spec.id;
+    const filePath = path.join(schedulesDir, `${filename}.yaml`);
 
     // Validate spec before saving
     const validation = safeValidateScheduleSpec(spec);
@@ -124,8 +131,9 @@ export class ScheduleLoader {
     // Ensure schedules directory exists
     await fs.mkdir(schedulesDir, { recursive: true });
 
-    // Write YAML file
-    const yamlContent = stringifyYaml(spec, {
+    // Write YAML file - save with filename as id, not the full canonical id
+    const specToSave = { ...spec, id: filename };
+    const yamlContent = stringifyYaml(specToSave, {
       indent: 2,
       lineWidth: 0, // Don't wrap lines
     });
@@ -138,7 +146,9 @@ export class ScheduleLoader {
    * Delete a schedule
    */
   async delete(agentId: string, scheduleId: string): Promise<boolean> {
-    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${scheduleId}.yaml`);
+    // Extract filename from scheduleId (may be "agentId/filename" or just "filename")
+    const filename = scheduleId.includes('/') ? scheduleId.split('/').pop()! : scheduleId;
+    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${filename}.yaml`);
 
     try {
       await fs.unlink(filePath);
@@ -156,7 +166,9 @@ export class ScheduleLoader {
    * Check if a schedule exists
    */
   async exists(agentId: string, scheduleId: string): Promise<boolean> {
-    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${scheduleId}.yaml`);
+    // Extract filename from scheduleId (may be "agentId/filename" or just "filename")
+    const filename = scheduleId.includes('/') ? scheduleId.split('/').pop()! : scheduleId;
+    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${filename}.yaml`);
 
     try {
       await fs.access(filePath);
@@ -177,7 +189,9 @@ export class ScheduleLoader {
       const files = await fs.readdir(schedulesDir);
       for (const file of files) {
         if (file.endsWith('.yaml') || file.endsWith('.yml')) {
-          ids.push(file.replace(/\.ya?ml$/, ''));
+          // Return canonical ID format: agentId/filename
+          const filename = file.replace(/\.ya?ml$/, '');
+          ids.push(`${agentId}/${filename}`);
         }
       }
     } catch {

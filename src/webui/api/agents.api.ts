@@ -1156,6 +1156,13 @@ export function createAgentsApiRouter(): Router {
   // ============================================================
 
   /**
+   * Helper to extract filename from canonical schedule ID (e.g., "admin/daily-digest" -> "daily-digest")
+   */
+  function extractScheduleFilename(scheduleId: string): string {
+    return scheduleId.includes('/') ? scheduleId.split('/').pop()! : scheduleId;
+  }
+
+  /**
    * GET /api/agents/:id/schedules - List schedules for an agent
    */
   router.get('/:id/schedules', async (req, res) => {
@@ -1337,7 +1344,8 @@ export function createAgentsApiRouter(): Router {
     }
 
     const scheduleId = req.params.scheduleId;
-    const schedulePath = path.join(agent.path, 'schedules', `${scheduleId}.yaml`);
+    const filename = extractScheduleFilename(scheduleId);
+    const schedulePath = path.join(agent.path, 'schedules', `${filename}.yaml`);
 
     try {
       const content = await fs.readFile(schedulePath, 'utf-8');
@@ -1386,7 +1394,8 @@ export function createAgentsApiRouter(): Router {
       return;
     }
 
-    const schedulePath = path.join(agent.path, 'schedules', `${scheduleId}.yaml`);
+    const filename = extractScheduleFilename(scheduleId);
+    const schedulePath = path.join(agent.path, 'schedules', `${filename}.yaml`);
 
     try {
       await fs.writeFile(schedulePath, content, 'utf-8');
