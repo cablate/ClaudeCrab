@@ -2,6 +2,7 @@ import type { LoadedAgent } from './agent.js';
 import type { UserSession } from './session.js';
 import type { ClaudeCabError } from './errors.js';
 import type { UnifiedMessage } from '../adapters/types.js';
+import type { ConnectionState } from '../adapters/ConnectionHealthMonitor.js';
 
 // ADR-019: ObserveMode removed - only @mentioned bot processes, no silent mode
 
@@ -47,6 +48,14 @@ export interface EventMap {
 
   /** Fired when an interactive prompt needs user response (ADR-033) */
   'interaction': InteractionEvent;
+
+  /** Fired when Telegram connection health state changes */
+  'connection:healthChanged': {
+    agentId: string;
+    previousState: ConnectionState;
+    newState: ConnectionState;
+    details: { consecutiveFailures: number; recentP95Ms: number };
+  };
 }
 
 /**
@@ -189,4 +198,5 @@ export const EVENT_NAMES: EventName[] = [
   'group:message',
   'bot:replied',
   'interaction',
+  'connection:healthChanged',
 ];

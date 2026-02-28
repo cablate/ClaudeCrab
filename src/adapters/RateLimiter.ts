@@ -1,5 +1,6 @@
 import type { RateLimitConfig } from './types.js';
 import { retryAsync, isTransientError } from '../utils/retry.js';
+import type { ConnectionHealthMonitor } from './ConnectionHealthMonitor.js';
 
 /** Latency statistics shape */
 export interface LatencyStats {
@@ -46,8 +47,13 @@ export class RateLimiter {
   private readonly latencyHistory: number[] = [];
   private static readonly MAX_HISTORY_SIZE = 100;
 
-  constructor(config: RateLimitConfig) {
+  private healthMonitor: ConnectionHealthMonitor | undefined;
+  private retryCount = 0;
+  private failureCount = 0;
+
+  constructor(config: RateLimitConfig, healthMonitor?: ConnectionHealthMonitor) {
     this.config = config;
+    this.healthMonitor = healthMonitor;
   }
 
   async execute<T>(fn: () => Promise<T>): Promise<T> {
@@ -59,17 +65,26 @@ export class RateLimiter {
       this.queue.push({
         fn: async () => {
           const startTime = Date.now();
+          let localRetries = 0;
           try {
             const result = await retryAsync(fn, {
               maxAttempts: 4,
               initialDelayMs: 1000,
               backoffMultiplier: 2,
               isRetryable: isTransientError,
+              onRetry: () => { localRetries++; },  // unused params omitted
             });
-            this.recordLatency(Date.now() - startTime);
+            const latency = Date.now() - startTime;
+            this.recordLatency(latency);
+            this.retryCount += localRetries;
+            this.healthMonitor?.recordSuccess(latency);
             resolve(result);
           } catch (error) {
-            this.recordLatency(Date.now() - startTime);
+            const latency = Date.now() - startTime;
+            this.recordLatency(latency);
+            this.retryCount += localRetries;
+            this.failureCount++;
+            this.healthMonitor?.recordFailure();
             reject(error instanceof Error ? error : new Error(String(error)));
           }
         },
@@ -126,4 +141,10 @@ export class RateLimiter {
   getLatencyStats(): LatencyStats {
     return computeLatencyStats(this.latencyHistory);
   }
+
+  /** Retry and failure counters since process start */
+  getRetryStats(): { retries: number; failures: number } {
+    return { retries: this.retryCount, failures: this.failureCount };
+  }
+
 }

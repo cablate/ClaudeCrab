@@ -17,6 +17,7 @@ import type {
   ExitPlanModeResolver,
 } from './types.js';
 import { DEFAULT_RATE_LIMIT } from './types.js';
+import { ConnectionHealthMonitor, type ConnectionState } from './ConnectionHealthMonitor.js';
 import {
   COMMAND_HANDLERS,
   routeGroupCommand,
@@ -76,6 +77,14 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   /** Ignore message latency above 10 min (clock skew) */
   private static readonly MAX_REASONABLE_LATENCY_MS = 600_000;
 
+  /** Connection health monitor for proactive alerting */
+  private readonly connectionHealth = new ConnectionHealthMonitor();
+  /** Last active chat ID for proactive alerts */
+  private lastActiveChatId: string | null = null;
+  /** Cooldown to prevent alert spam (epoch ms) */
+  private alertCooldownUntil = 0;
+  private static readonly ALERT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
   /** Maximum message length for Telegram */
   static readonly MAX_MESSAGE_LENGTH = 4096;
 
@@ -99,7 +108,8 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
   constructor(config: TelegramAdapterConfig) {
     super(config);
-    this.rateLimiter = new RateLimiter(config.rateLimit ?? DEFAULT_RATE_LIMIT);
+    this.rateLimiter = new RateLimiter(config.rateLimit ?? DEFAULT_RATE_LIMIT, this.connectionHealth);
+    this.setupConnectionHealthAlerts();
     // Cast from unknown to CommandDependencies (type is defined in commands module)
     this.commandDeps = config.commandDependencies as
       | CommandDependencies
@@ -147,7 +157,11 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
    * Initialize the bot instance
    */
   protected async doInitialize(): Promise<void> {
-    this.bot = new Bot(this.config.token);
+    this.bot = new Bot(this.config.token, {
+      client: {
+        timeoutSeconds: 60, // default 500s is too long; 60s covers long-poll + API response
+      },
+    });
 
     // Set up error handler
     this.bot.catch((err) => {
@@ -311,19 +325,24 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     bot.command('apistats', async (ctx: Context) => {
       const apiStats = this.rateLimiter.getLatencyStats();
       const msgStats = this.getMessageLatencyStats();
+      const retryStats = this.rateLimiter.getRetryStats();
+      const healthInfo = this.connectionHealth.getHealthInfo();
+
+      const stateEmoji = healthInfo.state === 'healthy' ? '✅' : healthInfo.state === 'degraded' ? '⚠️' : '❌';
+      const durationMin = Math.round(healthInfo.stateDurationMs / 60_000);
+
       const text = [
         '📊 *Telegram Latency Stats*',
         '',
-        '*API Call Latency* (sendMessage, etc.)',
-        `  Requests: ${apiStats.count}`,
-        `  Avg: ${apiStats.avgMs}ms | P50: ${apiStats.p50Ms}ms | P95: ${apiStats.p95Ms}ms`,
-        `  Min: ${apiStats.minMs}ms | Max: ${apiStats.maxMs}ms`,
-        `  Queue: ${this.rateLimiter.queueSize}`,
+        `🔗 連線健康: ${stateEmoji} ${healthInfo.state} (${durationMin}m)`,
+        `   連續失敗: ${healthInfo.consecutiveFailures} | Recent P95: ${healthInfo.recentP95Ms}ms`,
         '',
-        '*Message Arrival Latency* (polling delay)',
-        `  Messages: ${msgStats.count}`,
-        `  Avg: ${msgStats.avgMs}ms | P50: ${msgStats.p50Ms}ms | P95: ${msgStats.p95Ms}ms`,
-        `  Min: ${msgStats.minMs}ms | Max: ${msgStats.maxMs}ms`,
+        `📤 *API Call* (N=${apiStats.count})`,
+        `   Avg: ${apiStats.avgMs}ms | P50: ${apiStats.p50Ms}ms | P95: ${apiStats.p95Ms}ms`,
+        `   Retries: ${retryStats.retries} | Failures: ${retryStats.failures} | Queue: ${this.rateLimiter.queueSize}`,
+        '',
+        `📥 *Message Arrival* (N=${msgStats.count})`,
+        `   Avg: ${msgStats.avgMs}ms | P50: ${msgStats.p50Ms}ms | P95: ${msgStats.p95Ms}ms`,
       ].join('\n');
       await ctx.reply(text, { parse_mode: 'Markdown' });
     });
@@ -345,6 +364,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       this.log.info('Starting bot in polling mode');
       void this.bot.start({
         allowed_updates: ['message', 'callback_query'],
+        timeout: 30, // explicit long-poll timeout (grammY default is 30, but make it auditable)
         onStart: (botInfo) => {
           this.log.info({ username: botInfo.username }, 'Bot started polling');
         },
@@ -411,6 +431,9 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
     const userId = from.id.toString();
     const chatId = message.chat.id.toString();
+
+    // Track last active chat for proactive alerts
+    this.lastActiveChatId = chatId;
 
     // Check if this chat is awaiting custom input for AskUserQuestion
     if (this.callbackHandler?.tryHandleCustomInput(
@@ -1318,5 +1341,46 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
    */
   getMessageLatencyStats(): LatencyStats {
     return computeLatencyStats(this.messageLatencyHistory);
+  }
+
+  /**
+   * Set up connection health change alerts.
+   * When state degrades, sends a warning to the last active chat.
+   * When state recovers, sends a recovery notice.
+   */
+  private setupConnectionHealthAlerts(): void {
+    this.connectionHealth.onStateChange = (prev: ConnectionState, next: ConnectionState, info) => {
+
+      // Emit event for EventBus consumers
+      getEventBus().emit('connection:healthChanged', {
+        agentId: this.config.agentId,
+        previousState: prev,
+        newState: next,
+        details: {
+          consecutiveFailures: info.consecutiveFailures,
+          recentP95Ms: info.recentP95Ms,
+        },
+      });
+
+      // Send user-facing alert if we have a chat to notify
+      if (this.lastActiveChatId === null || this.bot === null) return;
+
+      const now = Date.now();
+      if (now < this.alertCooldownUntil) return;
+      this.alertCooldownUntil = now + TelegramAdapter.ALERT_COOLDOWN_MS;
+
+      let alertText: string;
+      if (next === 'healthy') {
+        alertText = `✅ Telegram 連線已恢復正常\nP95 延遲: ${info.recentP95Ms}ms`;
+      } else {
+        const icon = next === 'unhealthy' ? '❌' : '⚠️';
+        alertText = `${icon} Telegram 連線品質下降\nP95 延遲: ${info.recentP95Ms}ms | 連續失敗: ${info.consecutiveFailures}`;
+      }
+
+      // Fire-and-forget alert
+      void this.bot.api.sendMessage(this.lastActiveChatId, alertText).catch((err) => {
+        this.log.warn({ error: err }, 'Failed to send connection health alert');
+      });
+    };
   }
 }
