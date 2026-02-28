@@ -333,9 +333,8 @@ export class AgentLoader implements IAgentRepository {
    */
   private getGlobalStaticRules(): string {
     return `
-【檔案傳送】要傳送檔案給使用者時，使用 [send:完整路徑] 語法（如 [send:F:\\output\\report.pdf]）。僅標記路徑不會自動傳送。
-
 【Custom Tools】
+• 檔案傳送 (mcp__file-send__send_file)：傳送檔案給使用者。參數：path（檔案完整路徑）、caption（可選說明）。自動偵測檔案類型（圖片/音檔/文件）並以最適合的方式傳送。
 • TTS 語音播放 (mcp__tts__speak)：對話結束前，使用此工具生成簡短語音摘要並播放。參數：text（建議50字內）、language（Chinese/English/Japanese/Korean）。
 • 跨 Agent 呼叫 (mcp__agent-call__call_agent)：需要其他 Agent 協助時使用（fire-and-forget）。參數：targetAgent（admin/coder/general）、message、priority（low/normal/high）。
 

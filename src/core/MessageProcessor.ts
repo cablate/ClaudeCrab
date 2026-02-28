@@ -14,8 +14,6 @@ import {
   isNoiseResponse,
   sendFinalResponse,
   sendErrorToUser,
-  sendInlineImages,
-  sendInlineDocuments,
 } from './ResponseSender.js';
 import { buildMcpSetup } from './McpToolSetup.js';
 import { formatBotLabel } from '../utils/format.js';
@@ -538,6 +536,7 @@ export class MessageProcessor {
       const { mcpServers, allowedTools } = buildMcpSetup(
         this.agentCallService,
         this.ttsService,
+        adapter,
         { agentId, chatId },
       );
 
@@ -580,19 +579,13 @@ export class MessageProcessor {
                     sendOpts.replyToMessageId = options.replyToMessageId;
                   }
 
-                  // Extract and send any inline images as photos
-                  let cleanedText = await sendInlineImages(text, adapter, chatId, sendOpts);
-
-                  // Extract and send any inline documents as files
-                  cleanedText = await sendInlineDocuments(cleanedText, adapter, chatId, sendOpts);
-
                   // Try MarkdownV2 first, fallback to Markdown on failure
-                  if (isNoiseResponse(cleanedText)) {
+                  if (isNoiseResponse(text)) {
                     intermediateMessages.push(text);
                     return;
                   }
                   const sendResult = await sendWithMarkdownFallback(
-                    adapter, chatId, cleanedText, sendOpts
+                    adapter, chatId, text, sendOpts
                   );
 
                   if (!sendResult.success) {

@@ -223,6 +223,18 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   }
 
   /**
+   * Send a video to a chat (displayed as playable video).
+   * Override in platform-specific adapters.
+   */
+  async sendVideo(
+    _chatId: string,
+    _filePath: string,
+    _caption?: string,
+  ): Promise<SendResult> {
+    return { success: false, error: 'sendVideo not implemented' };
+  }
+
+  /**
    * Send typing indicator
    */
   abstract sendTypingIndicator(chatId: string): Promise<void>;

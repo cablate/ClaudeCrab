@@ -13,8 +13,13 @@ import {
   createTTSMcpServer,
   getTTSToolNames,
 } from '../tools/ttsTool.js';
+import {
+  createSendFileMcpServer,
+  getSendFileToolNames,
+} from '../tools/sendFileTool.js';
 import type { AgentCallService } from '../services/AgentCallService.js';
 import type { TTSService } from '../services/TTSService.js';
+import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 
 export interface McpSetupContext {
   agentId: string;
@@ -32,6 +37,7 @@ export interface McpSetupResult {
 export function buildMcpSetup(
   agentCallService: AgentCallService | undefined,
   ttsService: TTSService | undefined,
+  adapter: BaseAdapter,
   ctx: McpSetupContext,
 ): McpSetupResult {
   const mcpServers: Record<string, ReturnType<typeof createAgentCallMcpServer>> = {};
@@ -48,6 +54,11 @@ export function buildMcpSetup(
     mcpServers['tts'] = server;
     allowedTools.push(...getTTSToolNames());
   }
+
+  // File sending (always available — no optional service needed)
+  const sendFileServer = createSendFileMcpServer(adapter, ctx.chatId);
+  mcpServers['file-send'] = sendFileServer;
+  allowedTools.push(...getSendFileToolNames());
 
   return { mcpServers, allowedTools };
 }

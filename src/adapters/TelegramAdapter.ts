@@ -808,6 +808,33 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   }
 
   /**
+   * Send a video to a Telegram chat (displayed as playable video)
+   */
+  override async sendVideo(
+    chatId: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<SendResult> {
+    if (this.bot === null) {
+      return { success: false, error: 'Bot not initialized' };
+    }
+
+    try {
+      const result = await this.rateLimiter.execute(async () => {
+        const opts: Record<string, unknown> = {};
+        if (caption) opts.caption = caption.substring(0, 1024);
+        return this.bot!.api.sendVideo(chatId, new InputFile(filePath), opts);
+      });
+
+      return { success: true, messageId: result.message_id.toString() };
+    } catch (error) {
+      const errorMessage = this.formatError(error);
+      this.log.error({ error, chatId, filePath }, 'Failed to send video');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
    * Send an audio file to a Telegram chat (displayed as playable audio)
    */
   override async sendAudio(

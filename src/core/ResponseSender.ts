@@ -11,9 +11,7 @@ import type { SendOptions } from '../adapters/types.js';
 import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
 import { isRateLimitError, isTransientError } from '../utils/retry.js';
 import { logger } from '../utils/logger.js';
-import { existsSync } from 'node:fs';
-import fs from 'node:fs';
-import * as path from 'node:path';
+
 
 // ---------------------------------------------------------------------------
 // Noise filtering
@@ -30,120 +28,6 @@ export function isNoiseResponse(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length === 0) return true;
   return NOISE_PATTERNS.some(pattern => pattern.test(trimmed));
-}
-
-// ---------------------------------------------------------------------------
-// Inline media regex
-// ---------------------------------------------------------------------------
-
-export const IMAGE_PATH_RE =
-  /(?:^|[\s`]|!\[[^\]]*\]\()(?<fp>(?:[A-Za-z]:[\\\/]|\/|[\w.-]+[\/\\])[^\s"'<>)`]*\.(?:png|jpe?g|gif|webp))\)?(?:[\s`]|$|[.。,，)）\]])/gim;
-
-export const DOCUMENT_PATH_RE = /\[send:(?<fp>[^\]]+)\]/gim;
-
-// ---------------------------------------------------------------------------
-// Inline media extraction & sending
-// ---------------------------------------------------------------------------
-
-export async function sendInlineImages(
-  text: string,
-  adapter: BaseAdapter,
-  chatId: string,
-  sendOpts?: SendOptions,
-): Promise<string> {
-  const paths: string[] = [];
-  const originals: string[] = [];
-  let match: RegExpExecArray | null;
-  const re = new RegExp(IMAGE_PATH_RE.source, IMAGE_PATH_RE.flags);
-  while ((match = re.exec(text)) !== null) {
-    const raw = (match.groups?.fp ?? match[1])?.trim();
-    if (!raw) continue;
-    const resolved = existsSync(raw) ? raw : path.resolve(process.cwd(), raw);
-    if (existsSync(resolved)) {
-      paths.push(resolved);
-      originals.push(raw);
-    }
-  }
-  if (paths.length === 0) return text;
-
-  for (const p of paths) {
-    const result = await adapter.sendPhoto(chatId, p);
-    if (result.success) {
-      logger.debug({ chatId, filePath: p }, 'Sent inline image as photo');
-    } else {
-      logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline image');
-    }
-  }
-
-  let cleaned = text;
-  for (const raw of originals) {
-    const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    cleaned = cleaned.replace(new RegExp(`!\\[[^\\]]*\\]\\(\\s*${escaped}\\s*\\)`, 'g'), '');
-    cleaned = cleaned.replace(raw, '');
-  }
-  cleaned = cleaned.replace(/`\s*`/g, '').replace(/!\[[^\]]*\]\(\s*\)/g, '').replace(/\n{3,}/g, '\n\n').trim();
-  return cleaned;
-}
-
-export async function sendInlineDocuments(
-  text: string,
-  adapter: BaseAdapter,
-  chatId: string,
-  _sendOpts?: SendOptions,
-): Promise<string> {
-  logger.info({ text: text.substring(0, 200) }, '[sendInlineDocuments] called');
-  const paths: string[] = [];
-  const originals: string[] = [];
-  let match: RegExpExecArray | null;
-  const re = new RegExp(DOCUMENT_PATH_RE.source, DOCUMENT_PATH_RE.flags);
-  while ((match = re.exec(text)) !== null) {
-    const raw = (match.groups?.fp ?? match[1])?.trim();
-    if (!raw) continue;
-    const asIs = existsSync(raw);
-    const resolved = asIs ? raw : path.resolve(process.cwd(), raw);
-    const resolvedExists = existsSync(resolved);
-
-    if (resolvedExists) {
-      paths.push(resolved);
-      originals.push(raw);
-    } else {
-      logger.warn({ raw, resolved, asIs, resolvedExists }, '[sendInlineDocuments] Path matched but file not found');
-    }
-  }
-  if (paths.length === 0) return text;
-
-  const audioExtensions = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac']);
-
-  for (const p of paths) {
-    const ext = path.extname(p).toLowerCase();
-    const isAudio = audioExtensions.has(ext);
-
-    if (isAudio) {
-      const audioBuffer = await fs.promises.readFile(p);
-      const filename = path.basename(p);
-      const result = await adapter.sendAudio(chatId, audioBuffer, { filename });
-      if (result.success) {
-        logger.info({ chatId, filePath: p }, 'Sent inline audio');
-      } else {
-        logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline audio');
-      }
-    } else {
-      const result = await adapter.sendDocument(chatId, p);
-      if (result.success) {
-        logger.info({ chatId, filePath: p }, 'Sent inline document');
-      } else {
-        logger.warn({ chatId, filePath: p, error: result.error }, 'Failed to send inline document');
-      }
-    }
-  }
-
-  let cleaned = text;
-  for (const raw of originals) {
-    const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    cleaned = cleaned.replace(new RegExp(`\\[send:\\s*${escaped}\\s*\\]`, 'gi'), '');
-  }
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
-  return cleaned;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,13 +48,7 @@ export async function sendFinalResponse(
     sendOpts.replyToMessageId = options.replyToMessageId;
   }
 
-  let cleaned = await sendInlineImages(response, adapter, chatId, sendOpts);
-  if (isNoiseResponse(cleaned)) return undefined;
-
-  cleaned = await sendInlineDocuments(cleaned, adapter, chatId, sendOpts);
-  if (isNoiseResponse(cleaned)) return undefined;
-
-  const sendResult = await sendWithMarkdownFallback(adapter, chatId, cleaned, sendOpts);
+  const sendResult = await sendWithMarkdownFallback(adapter, chatId, response, sendOpts);
 
   if (!sendResult.success) {
     logger.warn({ error: sendResult.error, chatId }, 'Failed to send response');
