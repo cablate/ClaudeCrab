@@ -193,76 +193,78 @@ export class InteractionHandler {
       };
     }
 
-    const firstQuestion = questions[0];
-    if (firstQuestion === undefined) {
-      return {
-        behavior: 'allow',
-        updatedInput: toolInput,
-        toolUseID: options.toolUseID,
-      };
-    }
-
-    const optionLabels = firstQuestion.options.map((opt) => opt.label);
-
-    const { requestId, promise } = this.questionBridge.requestQuestion(
-      firstQuestion.question,
-      firstQuestion.header,
-      optionLabels,
-      { signal: options.signal }
-    );
-
-    // Register bridge for Web UI resolution + broadcast via SSE
-    InteractionHandler.questionRegistry.set(requestId, this.questionBridge);
-    void promise.finally(() => InteractionHandler.questionRegistry.delete(requestId));
-
-    getEventBus().emitSync('interaction', {
-      type: 'question_request',
-      requestId,
-      agentId: this.agentId,
-      question: firstQuestion.question,
-      header: firstQuestion.header,
-      options: firstQuestion.options,
-      multiSelect: firstQuestion.multiSelect,
-    });
-
-    const promptResult = await this.adapter.sendQuestionPrompt(this.chatId, {
-      requestId,
-      question: firstQuestion.question,
-      header: firstQuestion.header,
-      options: firstQuestion.options,
-      multiSelect: firstQuestion.multiSelect,
-    });
-
-    if (!promptResult.success) {
-      logger.warn(
-        { error: promptResult.error, chatId: this.chatId, toolName: 'AskUserQuestion' },
-        'Failed to send question prompt, auto-cancelling'
-      );
-      this.questionBridge.resolveQuestion(requestId, { answer: null });
-    }
-
-    const questionAnswer = await promise;
-
-    // Update the prompt message with the selection
-    if (promptResult.messageId !== undefined && questionAnswer.answer !== null) {
-      const statusText = `✅ Selected: *${questionAnswer.answer}*`;
-      await this.adapter.updateQuestionPrompt(
-        this.chatId,
-        promptResult.messageId,
-        statusText
-      );
-    }
-
-    if (questionAnswer.answer === null) {
-      return {
-        behavior: 'deny',
-        message: 'User cancelled the question',
-        toolUseID: options.toolUseID,
-      };
-    }
-
     const answers: Record<string, string> = {};
-    answers[firstQuestion.question] = questionAnswer.answer;
+
+    // Process each question sequentially
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i];
+      if (question === undefined) continue;
+
+      const optionLabels = question.options.map((opt) => opt.label);
+
+      const { requestId, promise } = this.questionBridge.requestQuestion(
+        question.question,
+        question.header,
+        optionLabels,
+        { signal: options.signal }
+      );
+
+      // Register bridge for Web UI resolution + broadcast via SSE
+      InteractionHandler.questionRegistry.set(requestId, this.questionBridge);
+      void promise.finally(() => InteractionHandler.questionRegistry.delete(requestId));
+
+      getEventBus().emitSync('interaction', {
+        type: 'question_request',
+        requestId,
+        agentId: this.agentId,
+        question: question.question,
+        header: question.header,
+        options: question.options,
+        multiSelect: question.multiSelect,
+      });
+
+      // Add question number indicator for multi-question flows
+      const questionIndicator = questions.length > 1 ? `(${i + 1}/${questions.length}) ` : '';
+
+      const promptResult = await this.adapter.sendQuestionPrompt(this.chatId, {
+        requestId,
+        question: questionIndicator + question.question,
+        header: question.header,
+        options: question.options,
+        multiSelect: question.multiSelect,
+      });
+
+      if (!promptResult.success) {
+        logger.warn(
+          { error: promptResult.error, chatId: this.chatId, toolName: 'AskUserQuestion' },
+          'Failed to send question prompt, auto-cancelling'
+        );
+        this.questionBridge.resolveQuestion(requestId, { answer: null });
+      }
+
+      const questionAnswer = await promise;
+
+      // Update the prompt message with the selection
+      if (promptResult.messageId !== undefined && questionAnswer.answer !== null) {
+        const statusText = `✅ Selected: *${questionAnswer.answer}*`;
+        await this.adapter.updateQuestionPrompt(
+          this.chatId,
+          promptResult.messageId,
+          statusText
+        );
+      }
+
+      // If user cancels any question, abort the entire flow
+      if (questionAnswer.answer === null) {
+        return {
+          behavior: 'deny',
+          message: `User cancelled question ${i + 1} of ${questions.length}`,
+          toolUseID: options.toolUseID,
+        };
+      }
+
+      answers[question.question] = questionAnswer.answer;
+    }
 
     return {
       behavior: 'allow',

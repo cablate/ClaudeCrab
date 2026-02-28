@@ -34,6 +34,35 @@ import {
 import { auditLogger } from '../utils/audit.js';
 import { getEventBus } from '../core/EventBus.js';
 import type { GroupMessagePayload } from '../types/events.js';
+import { retryAsync, isTransientError } from '../utils/retry.js';
+
+/** Latency statistics shape */
+interface LatencyStats {
+  count: number;
+  avgMs: number;
+  minMs: number;
+  maxMs: number;
+  p50Ms: number;
+  p95Ms: number;
+}
+
+const EMPTY_LATENCY_STATS: LatencyStats = { count: 0, avgMs: 0, minMs: 0, maxMs: 0, p50Ms: 0, p95Ms: 0 };
+
+/** Compute percentile-based latency stats from a sample array */
+function computeLatencyStats(samples: readonly number[]): LatencyStats {
+  if (samples.length === 0) return { ...EMPTY_LATENCY_STATS };
+  const sorted = [...samples].sort((a, b) => a - b);
+  const count = sorted.length;
+  const sum = sorted.reduce((a, b) => a + b, 0);
+  return {
+    count,
+    avgMs: Math.round(sum / count),
+    minMs: sorted[0] ?? 0,
+    maxMs: sorted[count - 1] ?? 0,
+    p50Ms: sorted[Math.floor(count * 0.5)] ?? 0,
+    p95Ms: sorted[Math.floor(count * 0.95)] ?? 0,
+  };
+}
 
 /**
  * Rate limiter for Telegram API requests
@@ -48,6 +77,10 @@ class RateLimiter {
   }> = [];
   private processing: boolean = false;
 
+  // Latency tracking
+  private readonly latencyHistory: number[] = [];
+  private static readonly MAX_HISTORY_SIZE = 100;
+
   constructor(config: RateLimitConfig) {
     this.config = config;
   }
@@ -60,10 +93,18 @@ class RateLimiter {
     return new Promise((resolve, reject) => {
       this.queue.push({
         fn: async () => {
+          const startTime = Date.now();
           try {
-            const result = await fn();
+            const result = await retryAsync(fn, {
+              maxAttempts: 4,
+              initialDelayMs: 1000,
+              backoffMultiplier: 2,
+              isRetryable: isTransientError,
+            });
+            this.recordLatency(Date.now() - startTime);
             resolve(result);
           } catch (error) {
+            this.recordLatency(Date.now() - startTime);
             reject(error instanceof Error ? error : new Error(String(error)));
           }
         },
@@ -74,6 +115,13 @@ class RateLimiter {
 
       void this.processQueue();
     });
+  }
+
+  private recordLatency(latencyMs: number): void {
+    this.latencyHistory.push(latencyMs);
+    if (this.latencyHistory.length > RateLimiter.MAX_HISTORY_SIZE) {
+      this.latencyHistory.shift();
+    }
   }
 
   private async processQueue(): Promise<void> {
@@ -108,6 +156,10 @@ class RateLimiter {
 
   get queueSize(): number {
     return this.queue.length;
+  }
+
+  getLatencyStats(): LatencyStats {
+    return computeLatencyStats(this.latencyHistory);
   }
 }
 
@@ -169,6 +221,14 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       options: Array<{ label: string; description: string }>;
     }
   >();
+
+  /**
+   * Message arrival latency tracking (message.date vs receive time)
+   */
+  private readonly messageLatencyHistory: number[] = [];
+  private static readonly MAX_LATENCY_HISTORY = 100;
+  /** Ignore message latency above 10 min (clock skew) */
+  private static readonly MAX_REASONABLE_LATENCY_MS = 600_000;
 
   /** Maximum message length for Telegram */
   static readonly MAX_MESSAGE_LENGTH = 4096;
@@ -445,17 +505,20 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         keyboard.row();
         keyboard.text('📝 其他', `q_other_${requestId}`);
 
-        // Update the message keyboard
-        await this.rateLimiter.execute(async () => {
+        // Answer callback immediately for responsive UX
+        const selectedCount = state.selectedIndices.size;
+        await ctx.answerCallbackQuery({ text: `已選 ${selectedCount} 項` });
+
+        // Update the message keyboard (can be slightly delayed)
+        this.rateLimiter.execute(async () => {
           await this.bot!.api.editMessageReplyMarkup(
             state.chatId,
             parseInt(state.messageId, 10),
             { reply_markup: keyboard }
           );
+        }).catch((err) => {
+          this.log.warn({ err, requestId }, 'Failed to update keyboard');
         });
-
-        const selectedCount = state.selectedIndices.size;
-        await ctx.answerCallbackQuery({ text: `已選 ${selectedCount} 項` });
         return;
       }
 
@@ -629,6 +692,27 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       { commands: Object.keys(COMMAND_HANDLERS) },
       'Command handlers registered'
     );
+
+    // Internal /apistats command for latency monitoring
+    bot.command('apistats', async (ctx: Context) => {
+      const apiStats = this.rateLimiter.getLatencyStats();
+      const msgStats = this.getMessageLatencyStats();
+      const text = [
+        '📊 *Telegram Latency Stats*',
+        '',
+        '*API Call Latency* (sendMessage, etc.)',
+        `  Requests: ${apiStats.count}`,
+        `  Avg: ${apiStats.avgMs}ms | P50: ${apiStats.p50Ms}ms | P95: ${apiStats.p95Ms}ms`,
+        `  Min: ${apiStats.minMs}ms | Max: ${apiStats.maxMs}ms`,
+        `  Queue: ${this.rateLimiter.queueSize}`,
+        '',
+        '*Message Arrival Latency* (polling delay)',
+        `  Messages: ${msgStats.count}`,
+        `  Avg: ${msgStats.avgMs}ms | P50: ${msgStats.p50Ms}ms | P95: ${msgStats.p95Ms}ms`,
+        `  Min: ${msgStats.minMs}ms | Max: ${msgStats.maxMs}ms`,
+      ].join('\n');
+      await ctx.reply(text, { parse_mode: 'Markdown' });
+    });
   }
 
   /**
@@ -683,6 +767,19 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     const message = ctx.message;
     if (message === undefined || message.text === undefined) {
       return;
+    }
+
+    // Track message arrival latency (message.date is Unix timestamp in seconds)
+    if (message.date !== undefined) {
+      const messageTimestamp = message.date * 1000; // Convert to ms
+      const arrivalLatency = Date.now() - messageTimestamp;
+      if (arrivalLatency >= 0 && arrivalLatency < TelegramAdapter.MAX_REASONABLE_LATENCY_MS) {
+        // Ignore negative or >10min (clock skew)
+        this.messageLatencyHistory.push(arrivalLatency);
+        if (this.messageLatencyHistory.length > TelegramAdapter.MAX_LATENCY_HISTORY) {
+          this.messageLatencyHistory.shift();
+        }
+      }
     }
 
     const from = message.from;
@@ -1585,5 +1682,12 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
    */
   getBot(): Bot | null {
     return this.bot;
+  }
+
+  /**
+   * Get message arrival latency statistics (polling delay)
+   */
+  getMessageLatencyStats(): LatencyStats {
+    return computeLatencyStats(this.messageLatencyHistory);
   }
 }

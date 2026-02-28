@@ -57,10 +57,10 @@
 - 狀態：偶爾使用
 
 ### dom-avatar-video ★★★★☆ Expert
-- 使用次數：15
+- 使用次數：16
 - 最後使用：2026-02-28
 - 狀態：活躍使用
-- 備註：完整流程確立——TTS→STT→(AI)語意分析+配圖+B-roll標記→(AI)生成concat.txt/ASS→ffmpeg合成；分工明確：腳本處理機械性工作，AI處理判斷性工作；三層視覺系統（L1表情/L2道具/L3 B-roll）；B-roll為全畫面切換（非角落overlay）；4:5 IG Feed格式（1080x1350）
+- 備註：完整流程驗證——完成首支含B-roll的影片；流程：TTS→STT→(AI)語意分析+配圖+B-roll標記→(AI)生成concat.txt/ASS→ffmpeg合成；分工：腳本處理機械性工作，AI處理判斷性工作；三層視覺系統（L1表情/L2道具/L3 B-roll）；B-roll全畫面切換；4:5 IG Feed格式
 
 ### dom-seo ★★☆☆☆ Competent
 - 使用次數：2
