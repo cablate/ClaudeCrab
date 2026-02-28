@@ -146,7 +146,7 @@ export interface SessionStateChangedPayload {
  * Interactive prompt event (ADR-033: Web UI galgame-style choices)
  */
 export interface InteractionEvent {
-  type: 'permission_request' | 'question_request';
+  type: 'permission_request' | 'question_request' | 'plan_review_request';
   requestId: string;
   agentId: string;
   // Permission fields
@@ -157,6 +157,8 @@ export interface InteractionEvent {
   header?: string;
   options?: Array<{ label: string; description: string }>;
   multiSelect?: boolean;
+  // Plan review fields
+  allowedPrompts?: Array<{ tool: string; prompt: string }> | undefined;
 }
 
 /**

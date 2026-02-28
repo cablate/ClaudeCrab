@@ -166,6 +166,36 @@ export interface QuestionPromptResult {
  */
 export type QuestionResolver = (requestId: string, answer: string | null) => void;
 
+/**
+ * Options for sending an ExitPlanMode prompt to the user.
+ */
+export interface ExitPlanModePromptOptions {
+  /** Unique ID for this request */
+  requestId: string;
+  /** Path to the plan file, if available */
+  planFilePath?: string | undefined;
+  /** List of permissions the plan will need */
+  allowedPrompts?: Array<{
+    tool: string;
+    prompt: string;
+  }> | undefined;
+}
+
+/**
+ * Result of sending an ExitPlanMode prompt.
+ */
+export interface ExitPlanModePromptResult {
+  success: boolean;
+  /** The message ID of the sent prompt (for later editing) */
+  messageId?: string | undefined;
+  error?: string | undefined;
+}
+
+/**
+ * Callback signature for resolving an ExitPlanMode decision from the adapter.
+ */
+export type ExitPlanModeResolver = (requestId: string, decision: 'approve' | 'reject') => void;
+
 
 // ============================================================
 // Tool Event Types (for status message feature)

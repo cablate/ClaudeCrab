@@ -34,6 +34,12 @@ export const CROSS_AGENT_CALL_CONTEXT = `【跨 Agent 呼叫】
 使用時機：需要其他 Agent 協助處理任務、通知有新工作、請求審閱或回饋時。`;
 
 /**
+ * Skill proactive invocation reminder.
+ * Reminds agents to check if any skills are applicable to the current task.
+ */
+export const SKILL_REMINDER_CONTEXT = `【Skill 檢查】這輪任務有適用的 skill 嗎？符合觸發時機就主動調用。`;
+
+/**
  * Build the complete prompt context with current time.
  * Time is displayed in Asia/Taipei timezone.
  */
@@ -77,6 +83,9 @@ export function buildPromptContext(
   if (chatId) {
     context += `\n【當前對話】platform: telegram, chatId: ${chatId}`;
   }
+
+  // Always remind agents to check for applicable skills
+  context += `\n${SKILL_REMINDER_CONTEXT}`;
 
   return context;
 }

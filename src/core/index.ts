@@ -34,6 +34,11 @@ export {
   type QuestionRequestInfo,
 } from './QuestionBridge.js';
 export {
+  ExitPlanModeBridge,
+  type PlanReviewDecision,
+  type PlanReviewRequestInfo,
+} from './ExitPlanModeBridge.js';
+export {
   GroupBroadcaster,
   type GroupBroadcasterOptions,
 } from './GroupBroadcaster.js';

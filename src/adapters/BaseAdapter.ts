@@ -11,6 +11,9 @@ import type {
   QuestionPromptOptions,
   QuestionPromptResult,
   QuestionResolver,
+  ExitPlanModePromptOptions,
+  ExitPlanModePromptResult,
+  ExitPlanModeResolver,
 } from './types.js';
 import { getEventBus } from '../core/EventBus.js';
 import { logger } from '../utils/logger.js';
@@ -303,6 +306,60 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * Default: no-op. Subclasses override to wire platform-specific callback routing.
    */
   setQuestionResolver(_resolver: QuestionResolver): void {
+    // Default: no-op
+  }
+
+  // ============================================================
+  // ExitPlanMode Prompt (Plan Review UI)
+  // ============================================================
+
+  /**
+   * Send an ExitPlanMode prompt to the user (Plan Review).
+   * Default implementation sends a text-only message (no interactive buttons).
+   * Subclasses should override for interactive prompts (e.g., Telegram InlineKeyboard).
+   */
+  async sendExitPlanModePrompt(
+    chatId: string,
+    options: ExitPlanModePromptOptions
+  ): Promise<ExitPlanModePromptResult> {
+    const allowedList = options.allowedPrompts?.length
+      ? options.allowedPrompts.map((p) => `• ${p.tool}: ${p.prompt}`).join('\n')
+      : '（無特殊權限）';
+
+    const text = [
+      '📋 Plan Review',
+      '',
+      'Claude 已完成計畫，請審核：',
+      '',
+      '需要的權限：',
+      allowedList,
+    ].join('\n');
+
+    const result = await this.sendMessage(chatId, text);
+    return {
+      success: result.success,
+      messageId: result.messageId,
+      error: result.error,
+    };
+  }
+
+  /**
+   * Update an ExitPlanMode prompt message after the user's decision.
+   * Default: no-op. Subclasses override to edit the original message.
+   */
+  async updateExitPlanModePrompt(
+    _chatId: string,
+    _messageId: string,
+    _text: string
+  ): Promise<void> {
+    // Default: no-op
+  }
+
+  /**
+   * Register a callback for ExitPlanMode decisions from the platform.
+   * Default: no-op. Subclasses override to wire platform-specific callback routing.
+   */
+  setExitPlanModeResolver(_resolver: ExitPlanModeResolver): void {
     // Default: no-op
   }
 
