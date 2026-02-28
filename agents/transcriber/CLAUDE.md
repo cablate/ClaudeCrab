@@ -63,3 +63,7 @@
 判斷方法：「換一個專案還能用嗎？」能 → 獨立 Skill，不能 → 這裡。
 詳見 sys-self-evolution。
 -->
+
+### TurboScribe 腳本路徑
+
+`turboscribe.py` 實際路徑在 `.claude/skills/dom-turboscribe/scripts/turboscribe.py`，不是專案根目錄的 `scripts/turboscribe.py`。

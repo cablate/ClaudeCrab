@@ -1,0 +1,13 @@
+# L3 概念圖示 Overlay 配置
+# 格式: start_time,duration,icon_file
+# 位置: 右上角 (x=900, y=50)
+
+1.80,1.5,concept_template.png
+12.02,1.5,concept_ai.png
+13.24,1.5,concept_template.png
+14.10,1.5,concept_traffic.png
+16.24,1.5,concept_ai.png
+27.10,2.0,concept_idea.png
+30.00,1.5,concept_hook.png
+30.64,1.5,concept_cta.png
+31.46,1.5,concept_template.png

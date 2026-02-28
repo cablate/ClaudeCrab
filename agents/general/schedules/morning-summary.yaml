@@ -29,4 +29,5 @@ notification:
 metadata:
   createdAt: 2026-02-06T02:50:00+08:00
   createdBy: conversation
-  enabled: true
+  enabled: false
+  disabledReason: "2026-02-26 功能價值不明確，先停用"

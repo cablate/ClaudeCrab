@@ -76,10 +76,14 @@ agents/nitterbot/
 agents/test/
 agents/leader/
 
-# Root-level test/verification screenshots
+# Root-level test/verification files
 /*.png
 /*.jpg
 /*.jpeg
+/*.mp3
+/*.wav
+/*.ogg
+/*.m4a
 
 # Playwright MCP screenshots
 .playwright-mcp/

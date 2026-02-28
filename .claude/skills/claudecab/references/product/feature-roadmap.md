@@ -50,10 +50,19 @@
 
 ---
 
-## 2. 跨 Agent 主動通訊機制
+## 2. 跨 Agent 主動通訊機制 ✅ 已完成
 
 ### 需求
 讓員工（Agent A）可以主動通知主管（Agent B），而非由使用者手動轉達。
+
+### 狀態
+✅ **已完成** — 2026-02-24
+
+**實作內容：**
+- MCP Server `agent-call` 提供 `call_agent` tool
+- Agent 可呼叫 `mcp__agent-call__call_agent(targetAgent, message, priority)` 通知其他 Agent
+- 訊息存入 `agents/{targetAgent}/inbox/{timestamp}.json`
+- 支援 low/normal/high 優先級
 
 ### 情境範例
 ```
@@ -269,7 +278,7 @@ metadata:
 | 項目 | 狀態 | 實作難度 | 備註 |
 |------|:----:|:--------:|------|
 | `/restart` 指令 | ✅ 完成 | 低 | PM2 + TypeScript 檢查 |
-| 跨 Agent 通知 | ⏳ 待做 | 中 | 設計後做 |
+| 跨 Agent 通知 | ✅ 完成 | 中 | MCP tool `call_agent` |
 | AstrBot 借鏡 | 📚 參考 | - | 長期參考 |
 | MaiBot 借鏡 | 📚 參考 | - | 長期參考 |
 | 表格格式化 | ⏳ 待做 | 中 | 可優先做 |
@@ -351,10 +360,20 @@ Agent：影片已完成！ F:\_Program\OwnProject\remotions\out\promo.mp4
 
 ---
 
-## 7. Agent 傳送語音訊息（TTS）
+## 7. Agent 傳送語音訊息（TTS）✅ 已完成
 
 ### 需求
 讓 Agent 可以將文字轉語音（TTS）後傳送 Telegram 語音訊息。
+
+### 狀態
+✅ **已完成** — 2026-02-24
+
+**實作內容：**
+- TTS 模組架構：Factory + Provider 模式（與 STT 一致）
+- `src/core/tts/` — TTSProvider interface、ReplicateTTSProvider、工廠函數
+- MiniMax Speech 2.8 Turbo via Replicate API
+- `sendAudio()` 方法已加入 TelegramAdapter
+- 環境變數：`TTS_ENABLED`, `REPLICATE_API_TOKEN`, `TTS_MODEL`, `TTS_DEFAULT_VOICE_ID`
 
 ### 可行性
 ✅ **可行，實作難度中**
@@ -746,7 +765,7 @@ adjutant:
 | 項目 | 狀態 | 實作難度 | 備註 |
 |------|:----:|:--------:|------|
 | `/restart` 指令 | ✅ 完成 | 低 | PM2 + TypeScript 檢查 |
-| 跨 Agent 通知 | ⏳ 待做 | 中 | **需先設計架構**，封裝成 Custom Tool，研究 SDK query 的 tool 機制 |
+| 跨 Agent 通知 | ✅ 完成 | 中 | MCP tool `call_agent` |
 | AstrBot 借鏡 | 📚 參考 | - | 長期參考 |
 | MaiBot 借鏡 | 📚 參考 | - | 長期參考 |
 | 表格格式化 | ⏳ 待做 | 中 | 可優先做 |

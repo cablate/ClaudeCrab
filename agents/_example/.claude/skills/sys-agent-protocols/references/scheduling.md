@@ -41,6 +41,7 @@ trigger:
   timezone: Asia/Taipei
 execution:
   agent: general
+  model: opus  # 可選：opus, sonnet, haiku（不寫則用 agent 預設）
   prompt: |
     回顧今天的對話，整理重點到 memory/今天日期.md
 notification:
@@ -98,7 +99,56 @@ Write tool:
 - 相對於工作目錄：`schedules/`
 - **不要**放在工作目錄直接底下，要放在 `schedules/` 子目錄內
 
-## 注意事項
+## 模型指定
+
+```yaml
+execution:
+  agent: general
+  model: opus  # 可選：opus, sonnet, haiku
+  prompt: "你的任務指令"
+```
+
+- 不寫 `model`：用該 agent 的 `.claude/settings.local.json` 裡的 model，或 SDK 預設值
+- 例如 coder 的 settings.local.json 有 `"model": "opus"`，所以 coder 的 schedule 沒指定就會用 opus
+
+## Prompt 設計原則（重要）
+
+排程在**獨立 session** 執行，沒有對話上下文。Prompt 必須對「無上下文的新人」足夠明確：
+
+### 必須明確指定的項目
+
+1. **檔案位置**：給完整路徑或明確說「根目錄」「memory/ 目錄」
+   - ✗ 「更新 USER.md」（會不知道在哪）
+   - ✓ 「更新根目錄的 USER.md（與 CLAUDE.md 同層）」
+
+2. **操作類型**：是「新建」還是「更新既有檔案」
+   - ✗ 「建立 MEMORY.md」（可能重複建立）
+   - ✓ 「USER.md 已存在，你是更新，不是新建」
+
+3. **格式參照**：如果有既有格式，要求先讀取
+   - ✓ 「先讀取現有檔案，理解既有結構，再追加/修改」
+
+4. **輸出行為**：期望 AI 做什麼回傳什麼
+   - ✗ 「整理摘要」（可能只回「已完成」）
+   - ✓ 「整理摘要後，直接輸出摘要內容」
+
+### 常見錯誤
+
+| 錯誤 | 後果 | 正確寫法 |
+|-----|-----|---------|
+| 「更新 USER.md」 | 在錯誤位置建新檔 | 「更新根目錄的 USER.md」 |
+| 「讀取昨天日誌」 | 不知道日期怎麼算 | 「讀取 memory/2026-02-25.md」或提供日期計算邏輯 |
+| 「整理並回報」 | 只回「沒什麼好記的」 | 「整理後直接輸出完整內容」 |
+
+### Prompt 自檢清單
+
+建立排程前，檢查 prompt 是否回答了：
+- [ ] 要操作的檔案在哪裡？（完整路徑）
+- [ ] 是新建還是更新？
+- [ ] 格式有沒有參照標準？
+- [ ] 執行完要輸出什麼？
+
+## 其他注意事項
 
 - 排程任務會在**獨立 session** 執行，不會延續當前對話
 - 但你有 Startup Protocol，會自動讀取記憶檔案，具備足夠 context

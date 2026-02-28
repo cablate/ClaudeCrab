@@ -1,0 +1,67 @@
+# === 標題段（0-6.92s）拆成 2 段 ===
+# 「經營一年，我發現模板根本沒用」→ 強調
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-excited-celebrate.png'
+duration 3.28
+
+# 「經營一年的經驗是，爆文完全複製不了」→ 無奈
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-embarrassed.png'
+duration 3.64
+
+# === 轉場 ===
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/black.png'
+duration 0.44
+
+# === 正文段 1（7.36-15.36s）拆成 2 段 ===
+# 「我到現在還是會納悶，為什麼某篇隨便打的文」→ 困惑
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-thinking.png'
+duration 3.94
+
+# 「沒給AI看，沒套模板，流量反而最好」→ 驚訝
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-surprised.png'
+duration 4.06
+
+# === 正文段 2（15.74-25.22s）拆成 3 段 ===
+# 「我也問過AI很多次」→ 困惑
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-thinking.png'
+duration 1.56
+
+# 「為什麼我的貼文...題材好」→ 陳述
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-standard.png'
+duration 6.54
+
+# 「但我總覺得還有別的」→ 懷疑
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-thinking.png'
+duration 1.38
+
+# === 正文段 3-9 ===
+# 「後來我想通了」→ 發現（燈泡亮）
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-surprised.png'
+duration 1.64
+
+# 「話題跟觀點才是真正的關鍵」→ 強調
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-excited-celebrate.png'
+duration 2.54
+
+# 「什麼hook，cta，模板套路」→ 嘲諷/無奈
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-embarrassed.png'
+duration 2.76
+
+# 「對我來說不只沒用用了」→ 否定
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-sad-pleading.png'
+duration 2.6
+
+# 「反而更差」→ 否定加強（暫用 sad-pleading，因為 typeC 尺寸不一致）
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-sad-pleading.png'
+duration 0.84
+
+# 「所以現在我只問自己一件事」→ 結論/轉折
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-standard.png'
+duration 2.74
+
+# 「這個當下大家想聽什麼」→ 提問/結尾（+1秒停留）
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/typeA-happy-peace.png'
+duration 3.62
+
+# === 結束畫面 ===
+file 'F:/_Program/OwnProject/ClaudeCab/agents/general/output/avatar-expressions/endcard.png'
+duration 2.0

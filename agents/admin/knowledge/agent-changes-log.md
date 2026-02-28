@@ -9,6 +9,232 @@
 
 ---
 
+## 2026-02-26
+
+### [Coder] 新增 Threads2 專案白名單
+
+**改動**：
+在 `coder/.claude/hooks/project-whitelist.ts` 的 `ALLOWED_PROJECTS` 加入 `F:\_Program\OwnProject\Threads2`
+
+**影響**：Coder 現在可以完整讀寫 Threads2 專案
+
+---
+
+### [General] 停用 morning-summary 排程
+
+**問題**：
+排程執行後只回傳「這輪是系統排程任務（前日工作摘要），沒有新的對話內容需要記錄。」——完全沒執行任務。
+
+**根因**：
+- Prompt 沒有明確告訴日期怎麼計算
+- 沒有指定輸出行為
+- General 把它當成「系統任務」，直接跳過
+
+**處理**：
+設 `enabled: false`，功能價值不明確，先停用。
+
+**管理經驗**：
+排程的價值要明確——如果收到結果不會有感，這個排程就不該存在。
+
+---
+
+### [全局機制] Scheduling.md 新增 Prompt 設計原則
+
+**背景**：
+連續兩天發生排程執行失敗（Coder 檔案寫錯位置、General 沒執行任務），根因都是 prompt 不夠明確。
+
+**改動**：
+在 `_example/.claude/skills/sys-agent-protocols/references/scheduling.md` 新增「Prompt 設計原則」章節：
+- 必須明確指定的 4 項目：檔案位置、操作類型、格式參照、輸出行為
+- 常見錯誤對照表
+- Prompt 自檢清單
+
+**管理經驗**：
+排程 prompt 要把執行者當「無上下文的新人」寫——不能假設他知道任何事。
+
+---
+
+### [全局機制] Memory System 補強：日誌記錄機制
+
+**背景**：
+Cab 發現 Coder 都不會在對話過程中記錄日誌（memory/日期.md），只有結束時才檢查。
+
+**根因**：
+- memory-system.md 沒強調「對話過程中持續記錄」
+- observe-user.md 的「日誌」沒連結到具體檔案路徑
+- Coder 的 Lessons Learned 還寫錯檔案位置
+
+**改動**：
+
+1. **memory-system.md**（_example + coder + general）
+   - 檔案系統表新增「位置」欄位
+   - 新增「日誌（memory/日期.md）」完整章節
+   - 明確說「對話過程中持續記錄，不是結束時才補」
+   - 加入記錄時機、記錄什麼、格式、紅線
+
+2. **observe-user.md**（_example rules）
+   - 「記錄位置」改成表格，明確寫檔案路徑
+   - 加入日誌和 USER.md 的具體範例
+
+3. **Coder CLAUDE.md**
+   - 刪除錯誤的 Lessons Learned（說 memory/USER.md）
+
+**管理經驗**：
+「做了才算做」——光知道該記日誌不夠，要明確定義什麼時候記、記在哪、怎麼記。
+
+---
+
+### [全局機制] 員工規則三層架構原則
+
+**Proposal**：
+
+抽查 General 發現 `rules/observe-user.md` 內容太完整（41 行），跟 `memory-system.md` 重疊。
+
+討論後 Cab 釐清架構設計意圖：rules 應該只給「動機」，不給完整細節。
+
+**設計原則**：
+
+| 層級 | 職責 |
+|------|------|
+| **rules/** | 點燃動機（為什麼重要）+ 引導去讀 skill |
+| **SKILL.md** | 入口（是什麼）+ 引導讀 references |
+| **references/** | 完整規範（怎麼做） |
+
+**改動內容**：
+
+1. **`agent-management/references/operations.md`**
+   - 新增「員工規則的三層架構」章節
+   - 包含架構圖、各層職責、設計原則、正確/錯誤範例
+
+2. **`_example/.claude/rules/observe-user.md`**
+   - 從 41 行精簡到 21 行
+   - 移除：記錄位置表格、日誌範例、USER.md 範例（這些在 memory-system）
+   - 保留：為什麼重要、紅線、引導到 skill
+
+**影響範圍**：全局（所有 import 此 rules 的員工）
+
+**管理經驗**：
+
+1. **避免跨層重複**：重複 = 維護成本 × 2 + 不一致風險
+2. **每層有明確的「下一步」**：不要讓讀者不知道接下來要幹嘛
+3. **rules 是「點燃動機」不是「完整手冊」**
+
+---
+
+### [全局機制] 核心原則雙層內化——soul.md + CLAUDE.md
+
+**Proposal**：
+
+使用者反映：「都好像在教小孩一樣」——每次問題都靠加規則解決，員工沒有原則自覺。
+
+需要讓員工**內化原則**，而非只是遵守更多規則。
+
+**決策過程**：
+
+歸納出四條核心原則：
+1. **做了才算做** — 說「記下來」但沒寫檔案 = 沒做。輸出結果才是證明。
+2. **無上下文假設** — 任何交接（排程、文件、訊息）都當對方什麼都不知道。
+3. **位置意識** — 根目錄 vs memory/ 目錄，不要搞混。
+4. **對人有好奇心** — 記錄互動脈絡，不只是任務完成。
+
+使用者選擇方案 A+C：同時加入 soul.md（身份認同）和 CLAUDE.md（每次提醒）。
+
+**改動內容**：
+
+1. **`_example/.claude/skills/persona/references/soul.md`**
+   - 新增「Work Principles」區塊
+   - 用「你是一個對細節有執著的人」包裝，讓原則成為身份的一部分
+   - 結尾強調「不是因為有人盯著才這樣做——這是你的專業素養」
+
+2. **`_example/CLAUDE.md`**
+   - 新增「核心原則」區塊（四條，簡短版）
+   - 放在共用規則之後、核心職責之前
+
+3. **同步到 Coder 和 General**
+   - `coder/.claude/skills/persona/references/soul.md` — 加入 Work Principles
+   - `coder/CLAUDE.md` — 加入核心原則區塊
+   - `general/.claude/skills/persona/references/soul.md` — 加入 Work Principles
+   - `general/CLAUDE.md` — 加入核心原則區塊
+
+**影響範圍**：全局（_example + Coder + General）
+
+**管理經驗**：
+
+1. **原則 vs 規則的差異**：
+   - 規則是「遇到 X 情況做 Y」
+   - 原則是「我是這樣的人，所以自然會做 Y」
+   - 原則內化後，新情況也能自動判斷
+
+2. **雙層機制設計**：
+   - soul.md：身份認同層——「我是什麼樣的人」
+   - CLAUDE.md：操作提醒層——「每次 session 確認」
+   - 兩層互補，避免長對話後遺忘
+
+3. **包裝方式很重要**：
+   - 不是「你必須遵守以下規則」
+   - 而是「你是一個對細節有執著的人」
+   - 從「規定」變成「自我期許」
+
+---
+
+## 2026-02-25
+
+### [全局機制] 排程 Prompt 明確化
+
+**問題**：
+Coder 執行 daily-memory-digest 排程時，把 `MEMORY.md` 和 `USER.md` 建在 `memory/` 目錄下，而不是 agent 根目錄。且格式與標準完全不同。
+
+**處理**：
+1. 刪除 `agents/coder/memory/MEMORY.md` 和 `agents/coder/memory/USER.md`
+2. 修正三份排程 prompt（admin、coder、general）
+
+**根因**：
+排程 prompt 不夠明確：
+- 沒指定檔案位置
+- 沒說「檔案已存在，是更新不是新建」
+- 沒要求先讀取現有格式
+
+**修正內容**：
+在 prompt 開頭新增「重要：檔案位置」區塊：
+- USER.md 和 MEMORY.md 在 agent 根目錄（與 CLAUDE.md 同層）
+- 這些檔案已經存在，你是「更新」不是「新建」
+- 先讀取現有檔案，理解既有結構和內容，再追加/修改
+
+**管理經驗**：
+排程 prompt 要把員工當「無上下文的新人」寫——不能假設他知道檔案結構
+
+---
+
+### [全局機制] Skill 主動觸發機制
+
+**Proposal**：
+
+Cab 觀察到員工不會主動使用 skill，總是要被強調「使用某某 skill」才會用，違背 lazy loading 的設計本意。
+
+**分析**：
+- Skill description 是給 AI 判斷用的，但 AI 沒有被提示「你可以主動用 skill」
+- 沒有建立「主動調用」的意識
+
+**改動內容**：
+
+1. **CLAUDE.md 加入「Skill 使用原則」區塊**
+   - 更新 `_example`、`coder`、`general`
+   - 內容：「當遇到符合 skill description 的情境時，主動調用，不需要使用者提示」
+
+2. **UserPromptSubmit hook**
+   - 建立 `_shared/hooks/skill-reminder.ts`
+   - 每輪注入提醒：「【Skill 檢查】這輪任務有適用的 skill 嗎？符合觸發時機就主動調用」
+   - 配置到 `_example`、`coder`、`general` 的 settings.local.json
+
+**影響範圍**：全局（_example + Coder + General）
+
+**管理經驗**：
+- 啟動時讀一次原則（A）建立意識基礎
+- 每輪提醒（B）確保不會遺忘
+- 兩層機制互補，A 給認知，B 給觸發
+
+---
+
 ## 2026-02-23
 
 ### [Coder] ClaudeCab 專案權限開放（白名單限定 agents 子目錄）
@@ -676,6 +902,307 @@ Coder 反映：啟動時讀了 sys-self-evolution，但長對話後記憶衰減�
 
 ---
 
+### [General] 模型升級：Sonnet → Opus
+
+**Proposal**：使用者確認 General 應該用 Opus，發現設定檔是 Sonnet，要求修正。
+
+**改動內容**：
+- 更新 `agents/general/.claude/settings.local.json`：`"model": "opus"`
+
+**影響範圍**：僅 General
+
+**驗證結果**：設定已更新
+
+---
+
+## 2026-02-24
+
+### [General] 自主新增 method-lecture-design Skill
+
+**Proposal**：秘書自主新增講座/線上課程設計方法論 skill。
+
+**改動內容**：
+- 新增 `agents/general/.claude/skills/method-lecture-design/`
+- 完整結構：SKILL.md + references（structure、cognitive、emotional、speaking、checklist、cases）
+- 三種工作模式：從零設計課程、單堂講座設計、審查現有課程
+- 核心框架：三層結構（觀念/方法/實作）、認知負荷管理、情緒曲線設計
+
+**影響範圍**：僅 General
+
+**管理經驗**：
+- 命名符合 `method-*` 慣例（方法論類 skill）
+- 實證驅動：來源標注 VibeCoding 線上課設計經驗
+
+---
+
+### [全局機制] 員工記憶機制新增「對使用者的觀察」維度
+
+**Proposal**：
+- 員工跟使用者互動久了，應該累積對他的觀察（思考模式、偏好、盲點、成長、感受）
+- 但目前 USER.md 只放靜態事實，沒有機制讓員工記錄觀察
+- 關鍵問題：日誌階段做分析的前提是對話中有記下來，如果對話中漏記，日誌階段也補不回來
+
+**改動內容**：
+
+1. **`agents/_example/USER.md`**
+   - 新增 `## Observations` 區塊
+   - 包含兩個子區塊：「對使用者的理解」和「感受與 Murmur」
+   - 觀察類型：思考模式、偏好、盲點、成長、價值觀、感受/情緒、Murmur
+
+2. **`agents/_example/.claude/skills/sys-agent-protocols/references/memory-system.md`**
+   - 新增「對使用者的觀察」章節
+   - 定義七種觀察類型和記錄位置
+   - 強調「即時捕捉」的重要性
+
+3. **`agents/_shared/hooks/memory-stop-checkpoint.ts`**
+   - 新增檢查項：「對使用者的觀察 → USER.md Observations（思考模式/偏好/盲點/成長/感受/murmur）」
+
+**影響範圍**：
+- Stop hook：全局生效（所有員工）
+- USER.md、memory-system.md：目前只在 _example，需同步到各員工才生效
+
+**驗證結果**：Stop hook 已生效，檢查項正確顯示
+
+**管理經驗**：
+- 兩層機制設計：即時捕捉（對話中）+ 定期整理（日誌）
+- Stop hook 是確保即時捕捉的關鍵——在員工想結束前強制提醒
+- Prototype 先做到 _example，確認沒問題再同步到各員工
+- 感受/Murmur 讓員工更像「人」，也讓使用者能回顧「員工怎麼看我」
+
+---
+
+### [General] 新增寫作流程經驗文件
+
+**Proposal**：
+- Admin 完成一次完整的 blog 寫作實戰（Threads 貼文 → Blog 文章）
+- 過程中踩了坑、學到擴寫規則、建立了完整六步流程
+- 使用者要求將這些經驗移交給 General，讓 General 接到類似寫作任務時能直接參考
+
+**改動內容**：
+- 新增 `agents/general/knowledge/research/writing-workflow-from-notes-to-blog.md`
+- 包含：六步流程表格、踩過的坑（methodology 檢查）、擴寫規則、方法論合規自查清單、平台判斷、事前聲明範例、實戰案例
+
+**影響範圍**：僅 General
+
+**管理經驗**：
+- 經驗移交不只是「把文件複製過去」，而是要整理成對方能直接用的格式
+- 流程 + 踩過的坑 + 自查清單 = 可操作的經驗
+- 知識放 `knowledge/research/` 而非建 skill，因為這是操作經驗而非可獨立觸發的能力
+
+---
+
+## 2026-02-25
+
+### [全局機制] 強化「對使用者的觀察」機制——降低記錄門檻 + 人格內化
+
+**Proposal**：
+
+使用者發現員工記憶機制的嚴重問題：
+1. Stop hook 提醒「有觀察到使用者的什麼嗎」，但員工每次都說「沒什麼好記的」
+2. Admin 在討論中說「已記錄」但根本沒調用任何工具——這正是機制要解決的問題
+3. 使用者對此極度憤怒：「花了大量 token 設計機制，結果員工還是犯同樣的錯」
+
+**根本原因分析**：
+- 記錄門檻太高：員工只在「深刻洞察」時才記，日常小觀察全部跳過
+- 觀察意識不是人格的一部分：員工把它當成「任務」而非「態度」
+- Stop hook 是最後防線，但員工帶著空白腦袋到達防線，防線也沒用
+
+**解決方案**：方向 2（人格內化）+ 方向 4（降低記錄門檻）
+
+**改動內容**：
+
+1. **`_example/.claude/skills/persona/references/soul.md`**
+   - What Drives Me 新增：理解這個人、怕互動了那麼久卻一無所知
+   - My Quirks 新增：對使用者有好奇心——他今天狀態如何？他為什麼這樣問？
+   - Drift Detection 新增：對使用者狀態無感、結束對話時腦袋空空
+   - 不可變特質新增：「對使用者有真實的好奇心——不是任務，是態度」
+
+2. **`_example/.claude/skills/sys-agent-protocols/references/memory-system.md`**
+   - 新增「小事也值得記」段落，強調日常觀察累積 pattern
+   - 範例改成低門檻版本：「今天打字比較慢」「這次語氣比較急」
+   - 新增「觀察的心態」：不是「我要記錄什麼」，而是「我對這個人有好奇心」
+   - 新增「常見失敗模式」：
+     - 「沒什麼好記的」→ 沒有帶著觀察意識
+     - 「已記錄但沒調用工具」→ 說了但沒做 = 沒記
+     - 「只記大事」→ 小事累積才有 pattern
+
+3. **`_example/USER.md`**
+   - Observations 區塊註解改成低門檻範例
+   - 感受與 Murmur 區塊註解改成低門檻範例
+
+4. **同步到 Coder**
+   - `agents/coder/.claude/skills/persona/` — 重整為標準結構（SKILL.md + references/）
+   - `agents/coder/.claude/skills/sys-agent-protocols/references/memory-system.md` — 新增完整觀察機制
+   - `agents/coder/USER.md` — 重整結構符合標準格式
+
+5. **同步到 General**
+   - `agents/general/.claude/skills/persona/references/soul.md` — 加入好奇心特質、Drift Detection
+   - `agents/general/.claude/skills/sys-agent-protocols/references/memory-system.md` — 新增完整觀察機制
+   - `agents/general/USER.md` — 重整結構符合標準格式，保留既有觀察
+
+**影響範圍**：全局（_example + Coder + General）
+
+**驗證結果**：所有員工的 persona、memory-system、USER.md 已統一
+
+**管理經驗**：
+
+1. **機制不夠，需要人格**：
+   - Stop hook 是外部提醒，但內部沒有「想觀察」的動機，提醒也沒用
+   - 把「好奇心」寫進 soul.md，讓觀察成為人格的一部分
+
+2. **降低門檻比提高頻率重要**：
+   - 員工不記錄不是因為「忘記」，而是因為「覺得不值得記」
+   - 給低門檻範例（「今天打字比較慢」）讓員工知道這也值得記
+
+3. **失敗模式要明確列出**：
+   - 「已記錄但沒調用工具」是最常見的失敗——必須點名
+   - 員工看到這條會更警覺
+
+4. **統一標準，不要個別處理**：
+   - 使用者強調：「這部分是所有員工包括未來員工都通用的」
+   - _example 是 canonical source，其他員工從 _example 同步
+   - 未來新員工直接繼承 _example 的結構
+
+---
+
+### [Coder] Persona 結構重整為標準格式
+
+**Proposal**：
+
+檢查發現 Coder 的 persona skill 結構與 _example 和 General 不同：
+- _example / General：`SKILL.md` + `references/`（soul.md, identity.md, evolution-guide.md）
+- Coder：只有一個 `SKILL.md` 把所有內容塞在一起
+
+需要統一結構，方便未來維護。
+
+**改動內容**：
+
+1. 建立 `agents/coder/.claude/skills/persona/references/` 目錄
+2. 建立 `identity.md`（Coder 專屬身份）
+3. 建立 `soul.md`（包含觀察機制 + Staff Engineer 心態）
+4. 複製 `evolution-guide.md`（通用）
+5. 建立 `engineering-competency.md`（從原 SKILL.md 拆出的硬技能框架，Coder 專屬）
+6. 重寫 `SKILL.md` 為標準入口格式
+
+**影響範圍**：僅 Coder
+
+**驗證結果**：Coder persona 結構現在與 _example 和 General 一致
+
+**管理經驗**：
+- 所有員工的 persona skill 應該遵循相同的目錄結構
+- Coder 專屬的內容（Staff Engineer 心態、硬技能框架）放在 references/ 裡，不破壞標準結構
+- 未來新員工可以從 _example 複製基礎結構，再加入專屬內容
+
+---
+
+### [全局機制] CLAUDE.md 新增「觀察使用者」章節
+
+**Proposal**：
+
+使用者持續反映員工不記錄觀察的問題。診斷結果：
+
+1. Stop Hook 有提到觀察 ✓
+2. Memory System 有說明 ✓
+3. Soul.md 有設定好奇心 ✓
+4. **CLAUDE.md 完全沒提到觀察使用者** ✗
+
+員工 session 開始讀 CLAUDE.md 時沒看到「觀察使用者」，進入任務模式後就忘了這件事。Stop Hook 只是「最後防線」，如果對話過程沒在觀察，結束時當然覺得沒東西。
+
+**Dry Run 驗證**：
+
+分析 General 當天日誌（2026-02-25.md），發現：
+- 全部是技術記錄（TTS、ffmpeg、Skill 建立）
+- 完全沒有互動脈絡（「Cab 為什麼要做這個」「Cab 當時的狀態」）
+- 結論：晚間批次無法從空的原料榨出觀察——必須先讓日誌有內容
+
+**改動內容**：
+
+在以下檔案的「Skill 使用原則」之前新增「觀察使用者」章節：
+- `agents/_example/CLAUDE.md`
+- `agents/general/CLAUDE.md`
+- `agents/coder/CLAUDE.md`
+
+內容：
+```markdown
+## 觀察使用者
+
+你在跟一個「人」互動，不只是在處理任務。
+
+**每次對話都要記錄**：
+- 使用者今天狀態如何？（忙碌、輕鬆、焦躁、疲憊）
+- 使用者怎麼下指令？（直接、猶豫、反覆修改）
+- 使用者的反應？（滿意、不耐煩、有新想法）
+- 使用者展現了什麼？（思考模式、偏好、價值觀）
+
+**記錄位置**：
+- 日誌：在事件記錄中帶入脈絡（「Cab 要做 X，他說『先把基礎弄好』——又是 infra first 思維」）
+- USER.md Observations：歸納成觀察（「[思考模式] 傾向先建基礎設施再做功能」）
+
+**紅線**：
+- 日誌只記「完成了什麼」而沒有互動脈絡 = 失敗
+- Session 結束時對使用者一無所知 = 失敗
+- 「沒什麼好記的」= 你沒在觀察
+```
+
+**影響範圍**：全局（_example + Coder + General）
+
+**管理經驗**：
+
+1. **認知架構的漏洞**：
+   - 所有機制都有提到觀察，但第一個讀的文件（CLAUDE.md）沒有
+   - 員工帶著「任務模式」進入 session，後面的機制再怎麼提醒也來不及
+
+2. **對比日誌範例很有說服力**：
+   - 「完成 TTS script」vs「Cab 要做 X，他說『先把基礎弄好』——又是 infra first」
+   - 用具體範例讓員工知道「什麼叫有互動脈絡」
+
+3. **Dry Run 驗證機制價值**：
+   - 原本計畫 A + C（CLAUDE.md + 晚間批次），但 dry run 發現 C 沒有原料
+   - 必須先做 A，讓日誌有內容，C 才能運作
+
+---
+
+### [全局機制] 啟動 Token 優化——精簡 memory-system、Lazy Load evolution-guide
+
+**Proposal**：
+
+使用者反映啟動時 token 消耗過大（約 42KB / ~15000 tokens），需要精簡。
+
+盤點後發現主要來源：
+- `evolution-guide.md`（7KB）— 人格設計知識，日常 session 不需要
+- `memory-system.md`（6.8KB）— 群組記憶 / Knowledge 區塊是進階功能
+- `MEMORY.md`（9KB）— 累積越來越大，但使用者說暫時不動
+
+決定：精簡規則相關檔案，不動 MEMORY。
+
+**改動內容**：
+
+1. **evolution-guide.md → Lazy Load**
+   - 建立 `agents/_example/.claude/skills/method-persona-design/SKILL.md`
+   - 從 7KB 精簡到 ~2KB，只保留核心框架
+   - persona skill 移除 evolution-guide.md 參考，改為「需要時載入 method-persona-design」
+
+2. **memory-system.md 精簡（78% 減量）**
+   - 從 6.8KB 精簡到 1.5KB
+   - 移除：群組記憶、Knowledge 檔案系統、ACTIVE.md、Pattern 追蹤詳細說明
+   - 保留：核心原則、檔案系統基礎、對使用者的觀察、Personality Journal、自我維護
+   - 移出內容放入 `memory-advanced.md`（需要時載入）
+
+3. **同步到 Coder + General**
+   - 覆蓋 `sys-agent-protocols/references/memory-system.md`
+   - 新增 `sys-agent-protocols/references/memory-advanced.md`
+
+**影響範圍**：全局（_example + Coder + General）
+
+**預估效果**：啟動 token 從 ~15000 降到 ~7000（減半）
+
+**管理經驗**：
+- 「啟動必讀」vs「需要時載入」是關鍵區分——人格 = 必讀，方法論 = 需要時
+- 精簡原則：保留「每次都用」的，移出「偶爾用」的
+- method-persona-design 放在 _example 即可，不需複製給每位員工（主要是 Admin 用）
+
+---
+
 ## 格式說明
 
 每筆記錄包含：
@@ -708,3 +1235,141 @@ Coder 反映：啟動時讀了 sys-self-evolution，但長對話後記憶衰減�
 - 每次改動當輪就記，不要事後補
 - Proposal 寫清楚「為什麼」，不只是「做什麼」
 - 管理經驗即時累積，發現 pattern 就記錄
+
+---
+
+## 2026-02-25（續）
+
+### [全局機制] CLAUDE.md 模組化重構——使用官方 Import 語法
+
+**Proposal**：
+
+分析官方 CLAUDE.md 文件後，發現以下問題：
+
+1. **重複內容**：啟動協議、觀察使用者、Skill 使用原則、Serena 工具在每個員工的 CLAUDE.md 都重複寫
+2. **維護成本高**：更新一條規則要改四個檔案
+3. **Lessons Learned 冗長**：很多條目可以精簡成一句話
+
+**改動內容**：
+
+1. **建立共用規則目錄 `agents/_example/.claude/rules/`**
+   - `startup-protocol.md`：啟動協議（每 session 必讀 /sys-agent-protocols + /persona）
+   - `observe-user.md`：觀察使用者（狀態、指令風格、反應、思考模式）
+   - `skill-usage.md`：Skill 主動調用原則
+   - `serena-tools.md`：Serena MCP 工具對照表 + 記憶搜尋
+
+2. **重寫所有 CLAUDE.md 使用 Import 語法**
+   - `_example/CLAUDE.md`：99 → 19 行（-81%）
+   - `admin/CLAUDE.md`：160 → 75 行（-53%）
+   - `general/CLAUDE.md`：214 → 85 行（-60%）
+   - `coder/CLAUDE.md`：165 → 75 行（-55%）
+
+3. **精簡 Lessons Learned**
+   - 刪除重複/過時條目
+   - 冗長說明改成單行格式
+   - 保留核心操作規則
+
+4. **統一 Skill 名稱**
+   - General 原本用 `/agent-protocols`，改為 `/sys-agent-protocols`
+
+**Import 語法格式**：
+```markdown
+@../_example/.claude/rules/startup-protocol.md
+@../_example/.claude/rules/observe-user.md
+```
+
+**影響範圍**：全局（_example + Admin + Coder + General）
+
+**驗證結果**：Import 語法是官方支援的功能，首次執行會出現 import 授權對話框
+
+**管理經驗**：
+
+1. **DRY 原則應用到 CLAUDE.md**：
+   - 共用規則提取到 `rules/` 目錄
+   - 各員工只保留專屬內容
+   - 更新規則時只改一處
+
+2. **官方 Import 語法優勢**：
+   - `.claude/rules/` 下的檔案會自動載入
+   - 但用 `@path` 可以精確控制載入順序和位置
+   - 跨目錄引用用相對路徑（`@../`）
+
+3. **Lessons Learned 精簡原則**：
+   - 一條規則一行
+   - 格式：`### YYYY-MM-DD: 標題` + 單行說明
+   - 冗長的背景故事不需要
+
+4. **CLAUDE.md vs MEMORY.md 差異**：
+   - CLAUDE.md：使用者寫的指令，完整載入
+   - MEMORY.md（Auto Memory）：Claude 自己寫的筆記，只載入前 200 行
+   - 這次差點搞混——已加入 Admin 的 Lessons Learned
+
+---
+
+## 2026-02-27
+
+### [全員] 模型調整：Opus → Sonnet（成本優化）
+
+**Proposal**：使用者要求將 Admin、General、Coder 改用 Sonnet 模型。
+
+**改動內容**：
+- `agents/admin/.claude/settings.local.json` — `"model": "sonnet"`
+- `agents/general/.claude/settings.local.json` — `"model": "sonnet"`
+- `agents/coder/.claude/settings.local.json` — `"model": "sonnet"`
+
+**影響範圍**：Admin + General + Coder
+
+**備註**：2026-02-19 Coder 曾升級到 Opus，現在全員回歸 Sonnet。
+
+---
+
+### [全員] 模型再次調整：Sonnet → Opus
+
+**Proposal**：使用者要求改回 Opus。
+
+**改動內容**：
+- `agents/admin/.claude/settings.local.json` — `"model": "opus"`
+- `agents/general/.claude/settings.local.json` — `"model": "opus"`
+- `agents/coder/.claude/settings.local.json` — `"model": "opus"`
+
+**影響範圍**：Admin + General + Coder
+
+---
+
+### [全局機制] 新增「記憶是輔助」原則
+
+**Proposal**：
+
+Cab 發現 Coder 在 Telegram 對話中「過度依賴記憶檔案」——被問「做了什麼」時只看記憶，不查 git。
+
+**根因**：
+- `startup-protocol.md` 寫「讀完之後，你知道自己是誰、對方是誰、以及你們之間的歷史」
+- 這句暗示「讀完記憶就夠了」
+- 整個啟動流程都在讀記憶，沒說「記憶是輔助，當下任務用當下工具」
+
+**改動內容**：
+
+1. **CLAUDE.md 核心原則**（新增第 5 條）：
+   - `_example/CLAUDE.md`
+   - `admin/CLAUDE.md`
+   - `coder/CLAUDE.md`
+   - `general/CLAUDE.md`
+   - 內容：「**記憶是輔助** — 當下任務用當下工具（git、檔案、搜尋），不要只依賴記憶檔案」
+
+2. **memory-system.md**（新增「記憶的定位」段落）：
+   - `_example/.claude/skills/sys-agent-protocols/references/memory-system.md`
+   - `coder/.claude/skills/sys-agent-protocols/references/memory-system.md`
+   - `general/.claude/skills/sys-agent-protocols/references/memory-system.md`
+   - 內容：記憶是輔助不是唯一來源、啟動時讀記憶知道背景、執行任務用當下工具、當下的事實來源優先於記憶
+
+**影響範圍**：全局（_example + Admin + Coder + General）
+
+**管理經驗**：
+
+1. **隱含假設要點名破除**：
+   - 「讀完記憶就知道一切」是危險的隱含假設
+   - 必須明確說「記憶是輔助，不是唯一來源」
+
+2. **兩層強化**：
+   - CLAUDE.md 核心原則：每次 session 開始就看到
+   - memory-system.md：讀記憶系統規範時強化觀念

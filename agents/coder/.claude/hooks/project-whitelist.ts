@@ -14,6 +14,7 @@ const ALLOWED_PROJECTS = [
   'E:\\CabLate_Obsidian\\01_專案Projects\\付費內容規劃\\金流串接',
   'F:\\_Program\\OwnProject\\remotions',
   'F:\\_Program\\OwnProject\\ClaudeCab',
+  'F:\\_Program\\OwnProject\\Threads2',
 ];
 
 // For ClaudeCab, only these subpaths within agents/ are allowed

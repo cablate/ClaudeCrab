@@ -1,0 +1,15 @@
+file 'avatar-expressions/typeA-happy-peace.png'
+duration 2.24
+file 'avatar-expressions/typeA-standard.png'
+duration 1.84
+file 'avatar-expressions/typeA-thinking.png'
+duration 1.22
+file 'avatar-expressions/typeA-standard.png'
+duration 1.48
+file 'avatar-expressions/typeA-happy-peace.png'
+duration 1.44
+file 'avatar-expressions/typeA-excited-celebrate.png'
+duration 3.84
+file 'avatar-expressions/typeA-happy-peace.png'
+duration 2.74
+file 'avatar-expressions/typeA-happy-peace.png'

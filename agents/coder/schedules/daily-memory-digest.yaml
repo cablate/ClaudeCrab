@@ -1,0 +1,50 @@
+id: daily-memory-digest
+name: 夜間記憶整理
+trigger:
+  type: cron
+  cron: "0 23 * * *"  # 每晚 23:00
+  timezone: Asia/Taipei
+execution:
+  agent: coder
+  model: sonnet
+  prompt: |
+    ## 任務：整理自己的記憶
+
+    **重要：檔案位置**
+    - USER.md 和 MEMORY.md 在 agent 根目錄（與 CLAUDE.md 同層），不是 memory/ 目錄
+    - 這些檔案已經存在，你是「更新」不是「新建」
+    - 先讀取現有檔案，理解既有結構和內容，再追加/修改
+
+    **步驟**：
+    1. 讀取今天的日誌 `memory/今天日期.md`
+    2. 從日誌中析出對使用者的觀察 → 追加到根目錄 `USER.md` 的 Observations 區塊
+    3. 重複出現的觀察 → 升級到根目錄 `MEMORY.md` 的 Recurring Patterns 區塊
+    4. 檢查 MEMORY.md 有無過時/錯放內容 → 清理
+    5. **日誌重整**：將流水帳轉成高品質工作日誌，覆蓋原檔
+
+       重整原則：
+       - 按主題分組，不按時間排列
+       - 每個主題：做了什麼 → 為什麼 → 結果/學到什麼
+       - 保留互動脈絡（Cab 的狀態、反應、決策原因）
+       - 刪除純操作記錄（讀取檔案、執行指令）
+       - 保留有未來參考價值的內容（踩坑、決策、發現）
+
+       格式：
+       ```
+       # 2026-XX-XX
+
+       ## [主題]
+       - 背景：為什麼做這件事
+       - 過程：關鍵步驟和決策
+       - 結果：完成什麼、學到什麼
+       - Cab 狀態：（如有觀察）
+       ```
+notification:
+  onComplete: true
+  onError: true
+  platform: telegram
+  chatId: "1491057815"
+metadata:
+  createdAt: 2026-02-25T14:30:00+08:00
+  createdBy: conversation
+  enabled: true

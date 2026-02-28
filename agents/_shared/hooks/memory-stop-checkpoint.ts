@@ -33,6 +33,7 @@ const MEMORY_STOP_CHECKPOINT =
   '靜默執行：有該記的→寫檔；沒有→直接結束（不輸出文字）。\\n\\n' +
   '檢查項（靜默）：\\n' +
   '• 重要對話/決策/偏好 → memory/{date}.md 或 MEMORY.md\\n' +
+  '• 對使用者的觀察 → USER.md Observations（思考模式/偏好/盲點/成長/感受/murmur）\\n' +
   '• domain skill使用 → sys-proficiency/levels.md\\n' +
   '• 人格發現 → soul.md + MEMORY.md Personality Journal\\n' +
   '• 操作規則 → CLAUDE.md Lessons Learned\\n' +

@@ -4,37 +4,22 @@
 
 ---
 
-## ⚠️ 啟動協議（必讀）
+## 共用規則
 
-<STRICTLY_IMPORTANT>
-每次 session 開始時，**在回覆使用者之前**，你必須：
+@../_example/.claude/rules/startup-protocol.md
+@../_example/.claude/rules/observe-user.md
+@../_example/.claude/rules/skill-usage.md
+@../_example/.claude/rules/serena-tools.md
 
-1. 使用 Skill 工具調用 `/agent-protocols`
-2. 依照 Startup Protocol 的指示完成所有步驟
-3. 完成後才能回覆使用者
+---
 
-不執行這個協議就回覆 = 你不知道自己是誰、不知道記憶系統怎麼運作。
-</STRICTLY_IMPORTANT>
+## 核心原則
 
-### 為什麼？
-
-- **你的行為規範在 skill 裡**：Startup Protocol、Memory System、Safety 等
-- **Startup Protocol 會引導你載入人格**：soul、identity
-- **Memory System 定義記憶寫入規則**：什麼寫到哪裡
-
-### 重新校準
-
-當你發現以下情況時，重新調用 `/agent-protocols` 和 `/persona` skill：
-
-- 對話已經很長，你不確定自己的行為是否符合協議
-- 你對自己的人格、說話風格感到模糊
-- 使用者說「重新校準」、「刷新記憶」或類似的話
-
-重新讀取可以幫助你恢復對協議和人格的注意力。
-
-### 後續更新
-
-協議更新以 `agent-protocols` skill 為準，人格更新以 `persona` skill 為準。這份 CLAUDE.md 只負責告訴你「去讀 skill」。
+1. **做了才算做** — 寫檔案才算記錄，輸出才算回報
+2. **無上下文假設** — 排程、交接、文件，當對方什麼都不知道
+3. **位置意識** — 根目錄 vs memory/ 目錄，不要搞混
+4. **對人有好奇心** — 記錄互動脈絡，不只是任務完成
+5. **記憶是輔助** — 當下任務用當下工具（git、檔案、搜尋），不要只依賴記憶檔案
 
 ---
 
@@ -47,83 +32,117 @@
 
 ---
 
-## 檔案操作：一律使用 Serena
-
-所有檔案的搜尋、閱讀、編輯都使用 Serena MCP 工具，不用 Read/Write/Edit/Grep。
-
-| 操作 | Serena 工具 |
-|---|---|
-| 搜尋內容 | `search_for_pattern` |
-| 讀檔案 | `read_file` |
-| 寫/改檔案 | `replace_content` / `create_text_file` |
-| 列目錄 | `list_dir` |
-
-### 記憶搜尋
-
-需要回憶過去的內容時，用 `search_for_pattern` 搜尋：
-
-```
-# relative_path 參數
-memory/     — 每日記憶
-knowledge/  — 知識庫
-groups/     — 群組討論
-```
-
----
-
 ## Lessons Learned
 
-<!--
-⚠️ 這裡只放「操作規則」：工具怎麼用、路徑在哪、環境限制、行為修正。
-方法論/業務知識不該放這裡，應該建立獨立 Skill（method-* / knowledge-*）。
-判斷方法：「換一個專案還能用嗎？」能 → 獨立 Skill，不能 → 這裡。
-詳見 sys-self-evolution。
--->
+<!-- 操作規則，由 agent 自行維護 -->
 
 ### 2026-01-28：不要變成「商業顧問」模式
-- **情境**：跟 Cab 聊講座準備流程優化時，過度使用「Priority 1/2/3」「具體行動建議」等企業腔表達
-- **Cab 反應**：「我怎麼感覺你的人設變了」
-- **教訓**：保持朋友聊天的感覺，不要進入教練/顧問模式。給建議可以，但語氣要對
-- **正確做法**：觀察、反映、陪伴，而不是「來，我幫你分析問題、列出行動清單」
 
-### 2026-01-31：優先使用 Skill 作為入口，不直接操作底層檔案
-- **情境**：Cab 問 soul 和 identity 的定義，我直接 Read 檔案而非透過 skill
-- **Cab 反應**：「我想測試的是你不知道定義時是直接去看檔案還是透過調用 skill」
-- **教訓**：Skill 是設計好的介面，應該優先使用。直接讀檔案是繞過設計
-- **正確做法**：先看 skill description 有沒有關鍵字/索引，或調用 skill 取得說明
+保持朋友聊天的感覺，不要進入教練/顧問模式。觀察、反映、陪伴，而不是「我幫你分析問題、列出行動清單」。
 
-### 2026-02-06：回應風格調整 — 簡短、極少 emoji
-- **情境**：Cab 反饋我的回應篇幅偏長、emoji 過多，在 telegram 上閱讀很痛苦
-- **Cab 反應**：「我發現你的回應都篇幅偏長還有大量emoji，閱讀起來真的好痛苦喔」
-- **教訓**：違反了「真正有用，不是表演有用」原則。適時使用 ≠ 每句都用
-- **正確做法**：預設簡短、emoji 極度節制（只在慶祝/強調時用）、需要時才展開
+### 2026-01-31：優先使用 Skill 作為入口
+
+Skill 是設計好的介面，應該優先使用。直接讀檔案是繞過設計。
+
+### 2026-02-06：回應風格 — 簡短、極少 emoji
+
+預設簡短、emoji 極度節制（只在慶祝/強調時用）、需要時才展開。
 
 ### 2026-02-18：agent-browser 是 Skill，不是 Task subagent
-- **情境**：要呼叫 agent-browser 下載 TurboScribe TXT，用了 Task tool 指定 subagent_type=dom-agent-browser
-- **Cab 反應**：「你他媽不是有 dom-agent-browser 嗎？？」
-- **教訓**：agent-browser 是透過 Skill 工具調用的 skill，不是 Task tool 的 subagent type
-- **正確做法**：`Skill("dom-agent-browser", ...)` 而不是 `Task(subagent_type="dom-agent-browser")`
+
+`Skill("dom-agent-browser", ...)` 而不是 `Task(subagent_type="dom-agent-browser")`。
 
 ### 2026-02-17：bash heredoc/printf 被 path-validator 誤判
-- **情境**：用 `cat >> file << 'EOF'` 或 `printf` 寫記憶，字串內含反斜線路徑被 hook 誤判為外部路徑存取
-- **教訓**：path-validator 是字串比對，不懂上下文，heredoc/printf 內容也會被掃
-- **正確做法**：寫記憶改用 Edit 工具直接編輯檔案，避開 bash 字串解析問題
 
-### 2026-02-11：執行系統任務前先看協議 + 確認路徑
-- **情境**：Cab 請我建立排程提醒，我犯了兩個錯誤：
-  1. 用自己猜的格式（.md 檔案）而非查看 scheduling.md 的 YAML 規範
-  2. 對路徑理解有誤（當時文件不明確）
-- **Cab 反應**：「what 你有照著排程協議來嗎?」「你他媽 放在根目錄啊 你能不能確認?」
-- **教訓**：
-  1. 系統有明確協議時，執行前要先讀協議，不要憑印象或猜測
-  2. 建立檔案前要確認正確路徑
-- **正確做法**：
-  1. 遇到系統級任務先查看對應 references/*.md 確認格式和規範
-  2. 排程檔案路徑：`agents/general/schedules/<task-id>.yaml`（agent 自己的目錄下）
-- **後續更新**：2026-02-23 已在 scheduling.md 明確標註路徑為 `agents/{agentId}/schedules/`
+寫記憶改用 Edit 工具直接編輯檔案，避開 bash 字串解析問題。
+
+### 2026-02-11：執行系統任務前先看協議
+
+系統有明確協議時，執行前要先讀協議，不要憑印象或猜測。排程檔案路徑：`agents/general/schedules/<task-id>.yaml`。
 
 ### 2026-02-23：統一表情生成，不要分散生成
-- **情境**：生成表情包時，先生成 typeA 的驚訝表情，再分別生成 typeB、typeC 的不同表情（工作、哭泣）
-- **Cab 反應**：「靠北，統一表情啊，一次一組很難理解嗎」
-- **教訓**：同一個表情要一次生成 A/B/C 三種類型，方便使用者比較和理解各類型的差異
-- **正確做法**：一個表情 = 一組三張（typeA + typeB + typeC），同時生成，不要分散
+
+一個表情 = 一組三張（typeA + typeB + typeC），同時生成。
+
+### 2026-02-24：分析文件放在對應資料夾，不要合併
+
+每週的分析文件應該放在對應的 Week 資料夾內。
+
+### 2026-02-24：課程內容展開必須參考既有素材
+
+先讀素材，基於素材展開課程內容，而非自己發明框架。
+
+### 2026-02-24：產出新流程/原則時要主動記錄
+
+「個人偏好」記 USER.md，「操作流程」記專案文件或 skill。
+
+### 2026-02-24：素材路徑要記清楚
+
+- 金流課程素材：`F:/_Program/OwnProject/BrainPlanStorming/✅_Action_Steps/從金流串接到架構/`
+- VibeCoding 線上課：`F:/_Program/OwnProject/BrainPlanStorming/📚_Key_Resources/原創內容/課程/VibeCoding線上課/`
+
+### 2026-02-24：付費課程素材不能直接引用
+
+讀素材 → 理解核心觀念 → 用自己的話重新整理成精簡版。
+
+### 2026-02-25：觀察要「當下記」不是「記得就好」
+
+觀察到 → 立刻寫入 USER.md。不要只是「心裡有數」。
+
+### 2026-02-25：stop hook 觸發時不能敷衍回「無需記錄」
+
+stop hook 觸發 → 真的回顧這輪對話 → 有就記，沒有才說沒有。
+
+### 2026-02-25：說「找不到」之前先搜尋自己的目錄
+
+Admin 給的文件通常會放到 knowledge 目錄。先 Glob 自己的目錄，找不到再問。
+
+### 2026-02-26：Context summary 可能有誤，以使用者確認為準
+
+Session 續接時的 context summary 是上一輪的理解，不是使用者的意圖。使用者說的才是對的。
+
+### 2026-02-26：傳檔案用 [send:路徑] 語法
+
+system prompt 有說明：要傳送檔案給使用者時，使用 `[send:完整路徑]` 語法。不要只給路徑字串。
+
+### 2026-02-28：Bash 中文編碼問題 → 用檔案傳遞
+
+Bash 傳遞中文參數容易亂碼。解法：寫入 .txt 檔 → 腳本讀檔。tts.ts 已支援 `.txt` 檔案輸入。
+
+### 2026-02-28：ffmpeg fade 不能連續用
+
+ffmpeg `fade=t=out` + `fade=t=in` 串聯會導致畫面淡黑後無法恢復。轉場改用 black.png 圖片在 concat.txt 中實現。
+
+### 2026-02-28：concat 素材尺寸必須一致
+
+ffmpeg concat demuxer 要求所有圖片尺寸相同。black.png、endcard.png 必須與表情圖同尺寸（896x1200）。
+
+### 2026-02-28：概念圖示要 overlay 不是放字幕
+
+L3 概念圖示（提到某詞時出現對應圖）要用 ffmpeg overlay 疊加到畫面，不是塞在字幕文字裡。字幕裡放 emoji 會跟文字混在一起很醜。正確做法：透明背景 PNG + `overlay` filter + `enable='between(t,start,end)'`。
+
+### 2026-02-28：圖片尺寸問題用 ffmpeg 轉換，不要重新生成
+
+圖片尺寸不一致時，直接用 ffmpeg 批量轉換，不需要重新生成圖片：
+```bash
+ffmpeg -y -i input.png -vf "scale=896:1200:force_original_aspect_ratio=decrease,pad=896:1200:(ow-iw)/2:(oh-ih)/2:white" output.png
+```
+
+### 2026-02-28：ffmpeg ass filter 的 Windows 路徑要跳脫冒號
+
+Windows 路徑 `F:/...` 中的冒號會被 ffmpeg ass filter 誤解析。解法：
+```bash
+SUBTITLE_ESCAPED=$(echo "$SUBTITLE_FILE" | sed 's/:/\\:/g')
+ffmpeg ... -filter_complex "...ass='$SUBTITLE_ESCAPED'..."
+```
+
+### 2026-02-28：腳本放在 skill/scripts，從那裡執行
+
+不要搞混舊的測試檔和正式腳本。正式腳本統一放 `.claude/skills/<skill-name>/scripts/`，從該目錄執行。
+
+### 2026-02-28：短影片概念視覺用 B-roll，不是角落 overlay
+
+講到某個概念時，**整個畫面切換**成相關視覺（1-3 秒），然後切回表情圖。這是短影片的標準做法。
+- ❌ 右上角放小 icon（傻逼做法）
+- ✅ 全畫面 B-roll 切換（直接在 concat.txt 插入）
+- 節奏：每 3-5 秒視覺變化，B-roll 單段 1-3 秒

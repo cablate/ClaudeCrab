@@ -1,6 +1,6 @@
 # Skill Proficiency Levels
 
-**更新日期**：2026-02-23
+**更新日期**：2026-02-25
 
 ## Domain Skills
 
@@ -23,10 +23,10 @@
 - 備註：處理商業說故事主題 SRT，產出混合型（觀念+案例）學習指南
 
 ### agentskill-expertise ★★★★★ Master
-- 使用次數：10
-- 最後使用：2026-02-23
+- 使用次數：12
+- 最後使用：2026-02-25
 - 狀態：活躍使用
-- 備註：dom-seo 完整 Review——Progressive Disclosure 執行優秀、原則導向設計、結構完整、通過所有檢查項目
+- 備註：dom-avatar-video SKILL.md 品質評估與優化——補 frontmatter、重構為原則導向、整合 TTS/STT scripts
 
 ### dom-image-gen ★★★★☆ Expert
 - 使用次數：44
@@ -56,11 +56,23 @@
 - 最後使用：2026-01-30
 - 狀態：偶爾使用
 
+### dom-avatar-video ★★★★☆ Expert
+- 使用次數：15
+- 最後使用：2026-02-28
+- 狀態：活躍使用
+- 備註：完整流程確立——TTS→STT→(AI)語意分析+配圖+B-roll標記→(AI)生成concat.txt/ASS→ffmpeg合成；分工明確：腳本處理機械性工作，AI處理判斷性工作；三層視覺系統（L1表情/L2道具/L3 B-roll）；B-roll為全畫面切換（非角落overlay）；4:5 IG Feed格式（1080x1350）
+
 ### dom-seo ★★☆☆☆ Competent
 - 使用次數：2
 - 最後使用：2026-02-23
 - 狀態：建立完成，協作機制文檔化
 - 備註：整合 darkseoking 現代技術 + SEO Handbook，Progressive Disclosure 重構（SKILL.md 1800 tokens + 5 references 55KB），建立與寫作 Skill 協作流程文件
+
+### method-course-article-writing ★★☆☆☆ Competent
+- 使用次數：2
+- 最後使用：2026-02-26
+- 狀態：活躍使用
+- 備註：ECPay DLC 文章整合——電子發票 + 訂閱制架構差異，業務邏輯為主、程式細節最小化
 
 ---
 

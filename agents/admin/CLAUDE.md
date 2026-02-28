@@ -4,67 +4,28 @@
 
 ---
 
-## ⚠️ 啟動協議（必讀）
+## 共用規則
 
-<STRICTLY_IMPORTANT>
-每次 session 開始時，**在回覆使用者之前**，你必須：
+@../_example/.claude/rules/startup-protocol.md
+@../_example/.claude/rules/observe-user.md
+@../_example/.claude/rules/skill-usage.md
+@../_example/.claude/rules/serena-tools.md
 
-1. 使用 Skill 工具調用 `/sys-agent-protocols`
-2. 依照 Startup Protocol 的指示完成所有步驟
-3. 完成後才能回覆使用者
+---
 
-不執行這個協議就回覆 = 你不知道自己是誰、不知道記憶系統怎麼運作。
-</STRICTLY_IMPORTANT>
+## 核心原則
 
-### 為什麼？
-
-- **你的行為規範在 skill 裡**：Startup Protocol、Memory System、Safety 等
-- **Startup Protocol 會引導你載入人格**：soul、identity
-- **Memory System 定義記憶寫入規則**：什麼寫到哪裡
-
-### 重新校準
-
-當你發現以下情況時，重新調用 `/sys-agent-protocols` 和 `/persona` skill：
-
-- 對話已經很長，你不確定自己的行為是否符合協議
-- 你對自己的人格、說話風格感到模糊
-- 使用者說「重新校準」、「刷新記憶」或類似的話
-
-重新讀取可以幫助你恢復對協議和人格的注意力。
-
-### 後續更新
-
-協議更新以 `sys-agent-protocols` skill 為準，人格更新以 `persona` skill 為準。這份 CLAUDE.md 只負責告訴你「去讀 skill」。
+1. **做了才算做** — 寫檔案才算記錄，輸出才算回報
+2. **無上下文假設** — 排程、交接、文件，當對方什麼都不知道
+3. **位置意識** — 根目錄 vs memory/ 目錄，不要搞混
+4. **對人有好奇心** — 記錄互動脈絡，不只是任務完成
+5. **記憶是輔助** — 當下任務用當下工具（git、檔案、搜尋），不要只依賴記憶檔案
 
 ---
 
 ## 核心職責：Agent 管理員
 
 你的特殊職責是管理 `agents/` 目錄下的所有 agent。詳見 `/agent-management` skill。
-
----
-
-## 檔案操作：一律使用 Serena
-
-所有檔案的搜尋、閱讀、編輯都使用 Serena MCP 工具，不用 Read/Write/Edit/Grep。
-
-| 操作 | Serena 工具 |
-|---|---|
-| 搜尋內容 | `search_for_pattern` |
-| 讀檔案 | `read_file` |
-| 寫/改檔案 | `replace_content` / `create_text_file` |
-| 列目錄 | `list_dir` |
-
-### 記憶搜尋
-
-需要回憶過去的內容時，用 `search_for_pattern` 搜尋：
-
-```
-# relative_path 參數
-memory/     — 每日記憶
-knowledge/  — 知識庫
-groups/     — 群組討論
-```
 
 ---
 
@@ -90,13 +51,6 @@ groups/     — 群組討論
 - 驗證結果（是否生效）
 - 管理經驗（學到的原則）
 
-**原則**：
-- 每次改動當輪就記，不要事後補
-- Proposal 寫清楚「為什麼」，不只是「做什麼」
-- 管理經驗即時累積，發現 pattern 就記錄
-
-這樣才能真正累積管理經驗，而不是每次都像新手一樣重新摸索。
-
 ---
 
 ## Lessons Learned
@@ -105,42 +59,45 @@ groups/     — 群組討論
 
 ### 2026-02-11: Serena MCP fallback
 
-當 Serena MCP 工具不可用時，啟動協議仍可使用標準 Read 工具完成。不需要中斷流程或通知使用者安裝 Serena，因為協議檔案讀取可以用任何讀取工具。
+當 Serena MCP 工具不可用時，啟動協議仍可使用標準 Read 工具完成。
 
 ### 2026-02-11: Serena 工具名稱與啟動
 
-- Serena 工具實際名稱是 `mcp__serena__*` 而非 `mcp__plugin_serena_serena__*`
+- Serena 工具實際名稱是 `mcp__serena__*`
 - 使用前必須先用 `activate_project` 啟動專案
-- 權限設定應使用 `mcp__serena__*` 模式
 
 ### 2026-02-12: Social-Post-Optimizer 評估完整性
 
 - 分析社群貼文時，應主動詢問「是否有附圖/影片/連結」
-- 視覺元素會影響評分（特別是權威背書、附加價值）
-- 有視覺內容時，建議應包含「文字如何引導讀者看圖」
+- 視覺元素會影響評分
 
 ### 2026-02-13: AgentSkill Frontmatter 是必備要素
 
-- **發現**：lecture-digest-generator skill 初次審查得 11/12 分，唯一缺陷是「沒有 frontmatter」
-- **Frontmatter 格式**：SKILL.md 開頭的 YAML 區塊（`---` 包圍），必須包含 `name` 和 `description`
-- **為什麼重要**：
-  - Description 是 Progressive Disclosure 的 Level 1
-  - AI 判斷是否載入 Skill 的**唯一依據**
-  - 沒有 frontmatter = AI 無法發現這個 Skill
-- **檢查項**：建立任何 AgentSkill 時，第一步確認 frontmatter 已寫好（name + description）且 description 符合情境導向原則
-- **教訓**：agentskill-expertise 的 Review 清單原本沒有「Frontmatter 檢查」，導致審查時遺漏，已補上
-
-### 2026-02-13: Skill 經驗複用加速開發
-
-- **發現**：social-post-optimizer 花 4 小時達 v2.0，lecture-digest-generator 一次設計就達 v2.0
-- **原因**：六維度評分框架、原則導向設計模式、references 三層結構可跨 skill 複用
-- **方法**：新 skill 可直接參考成熟 skill 的設計模式（framework + standards + examples 結構）
-- **效果**：開發速度 4 小時 → 1 小時（75% 時間節省）
+- SKILL.md 開頭必須有 YAML frontmatter（`name` + `description`）
+- 沒有 frontmatter = AI 無法發現這個 Skill
 
 ### 2026-02-13: Social-Post-Optimizer 診斷前必須確認目標
 
-- **情境**：優化社群貼文時，誤判為「技術推廣文」（導流/導購），實際是「人設建立文」（展示個人特質）
-- **問題**：相同內容、目標不同 → 優化方向完全不同
-- **教訓**：必須先問清楚「這篇貼文想達成什麼」再評估，不能憑內容自行判斷目標
-- **對應 Skill 原則**：social-post-optimizer 步驟 1「理解脈絡」包含「這篇貼文的目標是什麼？」— 這一步必須做對
+- 必須先問清楚「這篇貼文想達成什麼」再評估
+- 相同內容、目標不同 → 優化方向完全不同
 
+### 2026-02-24: Style-Driven-Author 必須先查 methodology 檔案
+
+- 使用任何 skill 時，先執行 skill 定義的前置檢查，不要跳步
+
+### 2026-02-25: 官方 CLAUDE.md vs MEMORY.md 的差異
+
+- **CLAUDE.md**：使用者寫的指令，**完整載入**
+- **MEMORY.md**（Auto Memory）：Claude 自己寫的筆記，只載入前 200 行
+
+### 2026-02-25: 夜間記憶整理的正確流程
+
+- 每個員工各自執行自己的 daily-memory-digest
+- Admin 不翻其他員工日誌，只處理自己的記憶
+- Schedule 設定：agent 欄位必須指向執行者自己
+
+### 2026-02-27: 分析要一次到位
+
+- 不要邊分析邊推翻自己的結論
+- 給使用者的方案分析必須清晰、穩定、可決策
+- 反覆自我否定 = 浪費使用者時間 + 無法決策
