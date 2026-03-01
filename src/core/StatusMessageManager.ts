@@ -74,6 +74,10 @@ export class StatusMessageManager {
    */
   async addToolEvent(event: ToolEventEntry): Promise<void> {
     this.toolEvents.push(event);
+    // Cap memory: keep only the most recent events (display uses slice(-maxEventsDisplay) anyway)
+    if (this.toolEvents.length > this.maxEventsDisplay * 10) {
+      this.toolEvents = this.toolEvents.slice(-this.maxEventsDisplay * 5);
+    }
     await this.updateDebounced();
   }
 

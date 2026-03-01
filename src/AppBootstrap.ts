@@ -10,6 +10,7 @@ import { MessageProcessor } from './core/MessageProcessor.js';
 import { SDKQueryManager } from './core/SDKQueryManager.js';
 import { PlatformOrchestrator } from './core/PlatformOrchestrator.js';
 import { getEventBus } from './core/EventBus.js';
+import { CRASH_MARKER_PATH } from './constants.js';
 import { ContextInjector, type GroupMemberInfo } from './core/ContextInjector.js';
 import { TelegramAdapter } from './adapters/TelegramAdapter.js';
 import { loadSecurityConfig } from './utils/security.js';
@@ -34,7 +35,7 @@ import { IdleMutterScheduler } from './core/IdleMutterScheduler.js';
 import { ReactionGenerator } from './core/ReactionGenerator.js';
 import { ActivityRepository } from './persistence/ActivityRepository.js';
 import { SSEBroadcaster } from './webui/services/SSEBroadcaster.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, unlinkSync } from 'node:fs';
 import * as path from 'node:path';
 import type { AppConfig } from './config.js';
 import { createSTTProvider, type STTProvider } from './core/stt/index.js';
@@ -155,6 +156,15 @@ export class AppBootstrap {
     }
 
     this.logStartupSummary(agentLoader);
+
+    // Signal PM2 that startup is complete (required by wait_ready: true)
+    if (typeof process.send === 'function') {
+      process.send('ready');
+      logger.info('PM2 ready signal sent');
+    }
+
+    // Crash recovery: notify owner if restarting after a crash
+    void this.notifyCrashRecovery(securityConfig.allowedUsers[0]);
   }
 
   /**
@@ -197,6 +207,9 @@ export class AppBootstrap {
         this.databaseManager.close();
         logger.info('Database connection closed');
       }
+
+      // Clean up all EventBus listeners to prevent orphans
+      getEventBus().removeAllListeners();
 
       logger.info('Cleanup complete, exiting');
     } catch (error) {
@@ -561,6 +574,40 @@ export class AppBootstrap {
       'ClaudeCab initialized successfully'
     );
     logger.info('Bot is now running. Press Ctrl+C to stop.');
+  }
+
+  /**
+   * Check for crash marker file and notify owner via Telegram if found.
+   * Best-effort: failures are logged but never block startup.
+   */
+  private async notifyCrashRecovery(ownerChatId: string | undefined): Promise<void> {
+    try {
+      let raw: string;
+      try {
+        raw = readFileSync(CRASH_MARKER_PATH, 'utf-8');
+      } catch {
+        return; // no marker — clean startup
+      }
+
+      const info = JSON.parse(raw) as { time: string; error: string };
+      unlinkSync(CRASH_MARKER_PATH);
+      logger.warn({ crashInfo: info }, 'Crash recovery: previous process crashed');
+
+      if (!ownerChatId) return;
+
+      // Use 'general' bot to send crash notification (consistent sender)
+      const adapter = this.orchestrator?.getRegistry().get('telegram', 'general');
+      if (!adapter) return;
+
+      const timeStr = new Date(info.time).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+      await adapter.sendMessage(ownerChatId, [
+        `🔄 服務已自動重啟`,
+        `上次崩潰時間：${timeStr}`,
+        `錯誤：${info.error}`,
+      ].join('\n'));
+    } catch (err) {
+      logger.error({ err }, 'Failed to send crash recovery notification');
+    }
   }
 
   // --- v2.0: Activity system helpers ---

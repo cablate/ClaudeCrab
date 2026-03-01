@@ -232,6 +232,7 @@ export class PlatformOrchestrator {
     logger.info('Stopping all platform adapters');
     await this.registry.stopAll();
     await this.registry.disposeAll();
+    this.groupBroadcaster.dispose();
     logger.info('All platform adapters stopped');
   }
 

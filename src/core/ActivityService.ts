@@ -49,6 +49,7 @@ export class ActivityService {
 
   /** Track current mood per agent */
   private readonly agentMood = new Map<string, ActivityMood>();
+  private readonly idleResetTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   /** Batch write queue for DB persistence */
   private writeQueue: ActivityEvent[] = [];
@@ -155,7 +156,12 @@ export class ActivityService {
 
     // Auto-reset to idle after terminal phases
     if (phase === 'completed' || phase === 'error') {
-      setTimeout(() => {
+      // Cancel previous idle-reset timer for this agent (prevents accumulation during rapid retries)
+      const prev = this.idleResetTimers.get(agentId);
+      if (prev !== undefined) clearTimeout(prev);
+
+      const timer = setTimeout(() => {
+        this.idleResetTimers.delete(agentId);
         // Only reset if phase hasn't been updated by a new task
         if (this.agentPhase.get(agentId) === phase) {
           this.agentPhase.set(agentId, 'idle');
@@ -163,6 +169,7 @@ export class ActivityService {
           this.pushAndEmit(idleEvent);
         }
       }, 5_000);
+      this.idleResetTimers.set(agentId, timer);
     }
   }
 
@@ -327,6 +334,10 @@ export class ActivityService {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
+    for (const timer of this.idleResetTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.idleResetTimers.clear();
     this.flushWriteQueue();
     log.info('ActivityService disposed');
   }

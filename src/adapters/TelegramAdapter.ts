@@ -227,12 +227,29 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         { botUsername: me.username, botId: me.id },
         'Bot authenticated'
       );
+
     } catch (error) {
       if (error instanceof GrammyError) {
         throw new Error(`Failed to authenticate bot: ${error.message}`);
       }
       throw error;
     }
+
+    // Set command menu for Telegram UI (fire-and-forget, non-fatal)
+    // Keep in sync with COMMAND_HANDLERS + adapter-internal commands (apistats)
+    void this.bot.api.setMyCommands([
+      { command: 'start', description: '開始使用' },
+      { command: 'help', description: '顯示幫助訊息' },
+      { command: 'reset', description: '清除對話記錄' },
+      { command: 'stop', description: '停止執行中的回應' },
+      { command: 'schedule', description: '管理排程任務' },
+      { command: 'status', description: '顯示 Bot 狀態' },
+      { command: 'members', description: '群組成員列表' },
+      { command: 'restart', description: '重啟 Bot' },
+      { command: 'apistats', description: '查看連線延遲統計' },
+    ]).catch((err) => {
+      this.log.warn({ err }, 'Failed to set bot commands (non-fatal)');
+    });
   }
 
   /**
@@ -328,21 +345,23 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       const retryStats = this.rateLimiter.getRetryStats();
       const healthInfo = this.connectionHealth.getHealthInfo();
 
-      const stateEmoji = healthInfo.state === 'healthy' ? '✅' : healthInfo.state === 'degraded' ? '⚠️' : '❌';
+      const stateLabel = healthInfo.state === 'healthy' ? '✅ 正常' : healthInfo.state === 'degraded' ? '⚠️ 緩慢' : '❌ 異常';
       const durationMin = Math.round(healthInfo.stateDurationMs / 60_000);
 
       const text = [
-        '📊 *Telegram Latency Stats*',
+        '📊 *Telegram 連線狀態*',
         '',
-        `🔗 連線健康: ${stateEmoji} ${healthInfo.state} (${durationMin}m)`,
-        `   連續失敗: ${healthInfo.consecutiveFailures} | Recent P95: ${healthInfo.recentP95Ms}ms`,
+        `🔗 *連線品質：* ${stateLabel}（已維持 ${durationMin} 分鐘）`,
+        ...(healthInfo.consecutiveFailures > 0
+          ? [`   連續失敗 ${healthInfo.consecutiveFailures} 次`]
+          : []),
         '',
-        `📤 *API Call* (N=${apiStats.count})`,
-        `   Avg: ${apiStats.avgMs}ms | P50: ${apiStats.p50Ms}ms | P95: ${apiStats.p95Ms}ms`,
-        `   Retries: ${retryStats.retries} | Failures: ${retryStats.failures} | Queue: ${this.rateLimiter.queueSize}`,
+        `📤 *發送延遲*（${apiStats.count} 次呼叫）`,
+        `   一般: ${apiStats.avgMs}ms｜多數: ${apiStats.p50Ms}ms｜最慢 5%: ${apiStats.p95Ms}ms`,
+        `   重試: ${retryStats.retries} 次｜失敗: ${retryStats.failures} 次｜排隊中: ${this.rateLimiter.queueSize}`,
         '',
-        `📥 *Message Arrival* (N=${msgStats.count})`,
-        `   Avg: ${msgStats.avgMs}ms | P50: ${msgStats.p50Ms}ms | P95: ${msgStats.p95Ms}ms`,
+        `📥 *收訊延遲*（${msgStats.count} 則訊息）`,
+        `   一般: ${msgStats.avgMs}ms｜多數: ${msgStats.p50Ms}ms｜最慢 5%: ${msgStats.p95Ms}ms`,
       ].join('\n');
       await ctx.reply(text, { parse_mode: 'Markdown' });
     });
@@ -362,12 +381,15 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     } else {
       // Polling mode
       this.log.info('Starting bot in polling mode');
-      void this.bot.start({
+      this.bot.start({
         allowed_updates: ['message', 'callback_query'],
         timeout: 30, // explicit long-poll timeout (grammY default is 30, but make it auditable)
         onStart: (botInfo) => {
           this.log.info({ username: botInfo.username }, 'Bot started polling');
         },
+      }).catch((err) => {
+        this.log.fatal({ err }, 'Polling loop crashed — exiting for PM2 restart');
+        process.exit(1);
       });
     }
   }
@@ -1371,10 +1393,11 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
       let alertText: string;
       if (next === 'healthy') {
-        alertText = `✅ Telegram 連線已恢復正常\nP95 延遲: ${info.recentP95Ms}ms`;
+        alertText = `✅ Telegram 連線已恢復正常（延遲 ${info.recentP95Ms}ms）`;
       } else {
         const icon = next === 'unhealthy' ? '❌' : '⚠️';
-        alertText = `${icon} Telegram 連線品質下降\nP95 延遲: ${info.recentP95Ms}ms | 連續失敗: ${info.consecutiveFailures}`;
+        const label = next === 'unhealthy' ? '連線異常' : '連線變慢';
+        alertText = `${icon} ${label}（延遲 ${info.recentP95Ms}ms，連續失敗 ${info.consecutiveFailures} 次）`;
       }
 
       // Fire-and-forget alert

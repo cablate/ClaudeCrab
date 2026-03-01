@@ -15,8 +15,9 @@ module.exports = {
       // Restart behavior
       autorestart: true,
       watch: false,
-      max_restarts: 10,
-      restart_delay: 1000,
+      max_restarts: 50,
+      min_uptime: 30000,               // 跑超過 30s 才算「穩定」，crash 才重置 restart 計數
+      exp_backoff_restart_delay: 1000,  // 指數退避：1s → 2s → 4s → ...（上限 15s）
       
       // Graceful shutdown
       kill_timeout: 5000,
