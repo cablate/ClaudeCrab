@@ -113,9 +113,20 @@ Bash 傳遞中文參數容易亂碼。解法：寫入 .txt 檔 → 腳本讀檔�
 
 ffmpeg `fade=t=out` + `fade=t=in` 串聯會導致畫面淡黑後無法恢復。轉場改用 black.png 圖片在 concat.txt 中實現。
 
-### 2026-02-28：concat 素材尺寸必須一致
+### 2026-03-01：concat 素材格式必須統一為真 PNG
 
-ffmpeg concat demuxer 要求所有圖片尺寸相同。black.png、endcard.png 必須與表情圖同尺寸（896x1200）。
+ffmpeg concat demuxer 要求所有圖片尺寸和編碼完全一致。**全部統一成真 PNG**（不是 JPEG 存成 .png）。
+- 表情圖原始是 JPEG-in-PNG → 轉成真 PNG
+- B-roll/black/endcard 生成時可能是 PNG 或 JPEG → 統一轉 PNG
+- 混合格式（JPEG+PNG）會導致 B-roll 畫面消失、frame=0
+```bash
+# 檢查：ffprobe -v error -show_entries stream=codec_name -of csv=p=0 image.png
+# 轉成真 PNG：ffmpeg -y -i input.png input.tmp.png && mv input.tmp.png input.png
+```
+
+### 2026-03-01：concat duration 必須包含靜音間隔
+
+每張圖的 duration = 下一張圖的開始時間 - 這張圖的開始時間。不能只用音訊段落長度，要包含段落之間的靜音 gap，否則圖片時間線會比音訊短，越來越不同步。
 
 ### 2026-02-28：概念圖示要 overlay 不是放字幕
 
@@ -128,12 +139,12 @@ L3 概念圖示（提到某詞時出現對應圖）要用 ffmpeg overlay 疊加�
 ffmpeg -y -i input.png -vf "scale=896:1200:force_original_aspect_ratio=decrease,pad=896:1200:(ow-iw)/2:(oh-ih)/2:white" output.png
 ```
 
-### 2026-02-28：ffmpeg ass filter 的 Windows 路徑要跳脫冒號
+### 2026-02-28：ffmpeg subtitles/ass filter 的 Windows 路徑要跳脫冒號
 
-Windows 路徑 `F:/...` 中的冒號會被 ffmpeg ass filter 誤解析。解法：
+Windows 路徑 `F:/...` 中的冒號會被 ffmpeg subtitles 和 ass filter 誤解析。兩個 filter 都需要跳脫。解法：
 ```bash
 SUBTITLE_ESCAPED=$(echo "$SUBTITLE_FILE" | sed 's/:/\\:/g')
-ffmpeg ... -filter_complex "...ass='$SUBTITLE_ESCAPED'..."
+ffmpeg ... -filter_complex "...subtitles='$SUBTITLE_ESCAPED'..."
 ```
 
 ### 2026-02-28：腳本放在 skill/scripts，從那裡執行
@@ -146,3 +157,7 @@ ffmpeg ... -filter_complex "...ass='$SUBTITLE_ESCAPED'..."
 - ❌ 右上角放小 icon（傻逼做法）
 - ✅ 全畫面 B-roll 切換（直接在 concat.txt 插入）
 - 節奏：每 3-5 秒視覺變化，B-roll 單段 1-3 秒
+
+### 2026-03-02：電子報歸檔是資料夾，不是單一檔案
+
+電子報路徑 `BrainPlanStorming/📚_Key_Resources/原創內容/電子報/` 每個 EP 都是資料夾（EP0/, EP1/, ...），不是單一 .md 檔。歸檔時要建立資料夾再放檔案進去。

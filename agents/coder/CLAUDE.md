@@ -109,3 +109,7 @@ Observations 是累積觀察，不是重大發現紀錄。使用者的思考模�
 ### 2026-02-28: 提供選項時主動使用 AskUserQuestion
 
 當回覆內容是「列出選項讓用戶選」時，**主動使用 AskUserQuestion 工具**，不要只是純文字列出。判斷標準：如果你在寫「你想要 A 還是 B？」這種句子，就該用工具。
+
+### 2026-03-01: 整理記憶時根目錄檔案要用 replace_content
+
+整理記憶時，USER.md 和 MEMORY.md 在 agent 根目錄（與 CLAUDE.md 同層），不在 memory/ 目錄。這些檔案已存在，要用 `replace_content` 更新內容，不是用 `create_text_file` 新建。

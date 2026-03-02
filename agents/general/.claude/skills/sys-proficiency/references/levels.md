@@ -1,6 +1,6 @@
 # Skill Proficiency Levels
 
-**更新日期**：2026-02-25
+**更新日期**：2026-03-02
 
 ## Domain Skills
 
@@ -35,10 +35,10 @@
 - 備註：Cab 視覺形象系統建立——參考圖工作流、semi-chibi 比例技術、三類圖包標準化（TypeA/B/C）、表情包批量生成（驚訝/開心/思考/難過/興奮/害羞）
 
 ### agent-browser ★★☆☆☆ Competent
-- 使用次數：7
-- 最後使用：2026-02-19
+- 使用次數：8
+- 最後使用：2026-03-01
 - 狀態：活躍使用
-- 備註：TXT 下載流程——snapshot -i 定位元素、get attr 取 href、curl 下載；本次用 Skill 工具調用（不是 Task agent）
+- 備註：kgaiwin.online 全站備份——snapshot 探索目錄結構、get attr 取 href、結合 Python 腳本遞迴下載 276MB/150 檔案
 
 ### knowledge-external ★☆☆☆☆ Novice
 - 使用次數：5
@@ -57,10 +57,16 @@
 - 狀態：偶爾使用
 
 ### dom-avatar-video ★★★★☆ Expert
-- 使用次數：16
-- 最後使用：2026-02-28
+- 使用次數：17
+- 最後使用：2026-03-01
 - 狀態：活躍使用
-- 備註：完整流程驗證——完成首支含B-roll的影片；流程：TTS→STT→(AI)語意分析+配圖+B-roll標記→(AI)生成concat.txt/ASS→ffmpeg合成；分工：腳本處理機械性工作，AI處理判斷性工作；三層視覺系統（L1表情/L2道具/L3 B-roll）；B-roll全畫面切換；4:5 IG Feed格式
+- 備註：工具鏈優化——validate-concat.ts 擴充（編碼/尺寸/duration 驗證）、compose-video.sh 自動預處理+subtitles filter+冒號跳脫、SKILL.md pre-flight checklist；確認 subtitles filter 也需要 Windows 冒號跳脫
+
+### style-driven-author ★★★☆☆ Proficient
+- 使用次數：3
+- 最後使用：2026-03-02
+- 狀態：活躍使用
+- 備註：電子報 EP15 完整流程——WebSearch 事實查證、original-data 整理、structure 設計、三層審查、5 版迭代、協作教訓析出並更新 newsletter-style.md（AI 稀釋問題、句號斷句、空行過多、收尾散掉、類比解釋）
 
 ### dom-seo ★★☆☆☆ Competent
 - 使用次數：2
@@ -73,6 +79,12 @@
 - 最後使用：2026-02-26
 - 狀態：活躍使用
 - 備註：ECPay DLC 文章整合——電子發票 + 訂閱制架構差異，業務邏輯為主、程式細節最小化
+
+### method-lecture-design ★★★☆☆ Proficient
+- 使用次數：3
+- 最後使用：2026-03-01
+- 狀態：活躍使用
+- 備註：VibeCoding Week 1 審視——新增「首堂課/系列開場設計」章節，含講師自介模板、破冰流程、作業互動設計、下週預告、課後社群啟動
 
 ---
 

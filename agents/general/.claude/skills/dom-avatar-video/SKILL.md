@@ -369,6 +369,9 @@ Dialogue: 0,0:00:06.84,0:00:13.04,Default,,0,0,0,,第二段正文（用 \N 換�
 # 取得音檔長度（這是主控時長）
 AUDIO_DURATION=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "audio.mp3")
 
+# Windows 路徑冒號跳脫（subtitles/ass filter 都需要）
+SUBTITLE_ESCAPED=$(echo "$SUBTITLE_FILE" | sed 's/:/\\:/g')
+
 # 合成指令
 ffmpeg -y \
   -f concat -safe 0 -i concat.txt \
@@ -378,7 +381,7 @@ ffmpeg -y \
     scale=-1:1100,
     pad=1080:1350:(1080-iw)/2:250:white,
     format=yuv420p[v];
-    [v]ass=subtitle.ass[vout]
+    [v]subtitles='$SUBTITLE_ESCAPED'[vout]
   " \
   -map "[vout]" -map 1:a \
   -c:v libx264 -preset medium -crf 23 \
@@ -391,6 +394,15 @@ ffmpeg -y \
 1. **音檔長度為主控**：用 `-t {音檔秒數}` 而非 `-shortest`（避免結尾被截斷）
 2. **白底背景**：`pad=...:white`（配合白底圖片）
 3. **圖片尺寸統一**：concat 裡所有圖片必須相同尺寸，否則會觸發 filter graph reconfigure
+4. **圖片編碼統一為真 PNG**：concat demuxer 不能混合 JPEG 和 PNG。全部統一成真 PNG：
+   ```bash
+   # 檢查編碼
+   ffprobe -v error -show_entries stream=codec_name -of csv=p=0 image.png
+   # 轉成真 PNG（不管原本是 JPEG 還是 PNG）
+   ffmpeg -y -i input.png input.tmp.png && mv input.tmp.png input.png
+   ```
+   ⚠️ 不要把 PNG 轉成 JPEG 存成 .png——那會讓 concat 完全跳過該圖片（frame=0）
+5. **duration 必須包含靜音間隔**：每張圖的 duration = 下一張圖的開始時間 - 這張圖的開始時間（包含段落間的靜音 gap），否則圖片和音訊會越來越不同步
 
 **轉場說明**：
 - ⚠️ **不要用 fade 濾鏡做淡入淡出**：ffmpeg fade 會把畫面淡成黑色後無法恢復
@@ -442,8 +454,8 @@ Style: Default,...,Fontsize=52,...,MarginV=40
 |------|------|
 | `scripts/tts.ts` | TTS 生成（Replicate MiniMax） |
 | `scripts/stt.ts` | STT 轉錄（Groq Whisper） |
-| `scripts/compose-video.sh` | **影片合成（標準模板）** |
-| `scripts/validate-concat.ts` | 驗證 concat 檔案中的圖片是否存在 |
+| `scripts/compose-video.sh` | **影片合成（自動標準化 + 合成）** |
+| `scripts/validate-concat.ts` | **合成前驗證**（編碼/尺寸/duration 一致性） |
 | `scripts/.env` | API keys（REPLICATE_API_TOKEN, GROQ_API_KEY） |
 
 **執行方式**：從 ClaudeCab 根目錄執行（因 node_modules 在那）
@@ -456,9 +468,19 @@ npx tsx agents/general/.claude/skills/dom-avatar-video/scripts/tts.ts <text> <ou
 # STT
 npx tsx agents/general/.claude/skills/dom-avatar-video/scripts/stt.ts <audio.mp3> <output.json>
 
-# 影片合成
+# 驗證（合成前必跑）
+npx tsx agents/general/.claude/skills/dom-avatar-video/scripts/validate-concat.ts \
+  agents/general/output/<project>_concat.txt \
+  agents/general/output/<project>.mp3
+
+# 影片合成（內建圖片標準化：自動統一編碼為 PNG + 尺寸為 896x1200）
 bash agents/general/.claude/skills/dom-avatar-video/scripts/compose-video.sh <project_name>
 ```
+
+**合成前 Pre-flight（AI 必須執行）**：
+1. 跑 `validate-concat.ts` → 確認編碼/尺寸/duration 都 pass
+2. 如果有 ❌ → 先修再合成
+3. 合成後抽查 3 個時間點的截圖確認 B-roll 有出現
 
 ## 範例產出
 

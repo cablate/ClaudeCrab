@@ -22,7 +22,8 @@
       "mcp__chrome-devtools__evaluate_script",
       "mcp__chrome-devtools__get_network_request",
       "mcp__chrome-devtools__wait_for",
-      "mcp__tts__speak"
+      "mcp__tts__speak",
+      "mcp__file-send__send_file"
     ],
     "deny": [
       "mcp__twse__*"
