@@ -1,0 +1,92 @@
+id: weekly-growth-review
+name: 每週趨勢分析與報告
+trigger:
+  type: cron
+  cron: "0 5 * * 1"  # 每週一凌晨 05:00（週日反思 03:00 完成後）
+  timezone: Asia/Taipei
+execution:
+  agent: admin
+  model: opus
+  prompt: |
+    ## 任務：每週趨勢分析與報告
+
+    **這是排程任務，不是互動對話。**
+    - 禁止詢問使用者
+    - 自己判斷、自己執行、回報結果
+
+    **協議文件**：先讀取 `../_example/evolution/GROWTH-REVIEW-PROTOCOL.md` 的「每週趨勢分析」區段，嚴格遵循流程和週報格式。
+
+    **注意**：你每天已經在做 daily-growth-review（04:00）。這個週報的價值不是重複日報的工作，而是看「一週的 pattern」。
+
+    ---
+
+    ### 掃描對象
+
+    主要員工（不含 _example、_shared、admin）：
+    - agents/general/（秘書）
+    - agents/coder/（工程師）
+
+    **防呆**：如果目錄不存在或資料不完整，在報告中註記，不要報錯。
+
+    ---
+
+    ### Phase 1：收集本週日報
+
+    讀取 `evolution/reviews/daily/` 本週所有日報。
+    讀取各員工的 `evolution/weekly/` 本週完整檔案。
+    如果某天沒有日報 → 註記跳過。
+
+    ---
+
+    ### Phase 2：趨勢分析
+
+    對每位員工做週維度分析：
+    1. **學習趨勢**：本週 vs 上週的學習量、方向是否聚焦、有無積壓
+    2. **缺口趨勢**：同一缺口出現幾天（結構性問題）、缺口有沒有被補上
+    3. **品質趨勢**：對照「使用者期待」，本週整體表現 vs 上週
+
+    每位員工 2-3 句趨勢性評估。
+
+    ---
+
+    ### Phase 3：提案狀態總結
+
+    - 本週新增的提案
+    - 本週已處理的提案
+    - 仍在等待的提案（標註等待天數）
+
+    ---
+
+    ### Phase 4：協作健康度（週度彙整）
+
+    對每位員工：
+    1. 讀取 `USER.md` 本週 Observations/Murmur
+    2. 掃描 `memory/` 近 7 天日誌
+    3. 找：情緒信號、重複錯誤、理解偏差
+    4. 有警訊 → 列出具體證據 + 建議行動
+    5. 無異常 → 簡述「本週正常」
+
+    ---
+
+    ### Phase 5：產出週報
+
+    按照 GROWTH-REVIEW-PROTOCOL.md 的「每週報告格式」產出。
+
+    **核心原則**：結構性缺口不只標記天數，要分析根因（知識問題 vs 習慣問題 vs 需要使用者 input）。
+
+    **字數不設上限**——寧可完整也不要壓縮。
+
+    完成後：
+    1. 儲存一份到 `evolution/reviews/weekly/` 目錄（檔名：YYYY-Www.md）
+    2. 直接輸出報告完整內容
+notification:
+  onComplete: true
+  onError: true
+  platform: telegram
+  chatId: "1491057815"
+metadata:
+  createdAt: 2026-03-03T00:00:00+08:00
+  createdBy: spectra-apply/agent-self-evolution
+  updatedAt: 2026-03-03T00:00:00+08:00
+  updatedBy: design-revision/daily-review
+  enabled: true

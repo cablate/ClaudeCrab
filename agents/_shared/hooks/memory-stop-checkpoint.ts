@@ -2,22 +2,12 @@
 /**
  * External Memory Stop Checkpoint Hook for Claude Code Stop event
  *
- * Reads hook input from stdin, checks stop_hook_active flag.
- * If agent already did memory check (stop_hook_active=true), allows stop.
- * Otherwise, blocks stop and injects memory checkpoint prompt.
+ * NOTE: This command hook is NOT used by ClaudeCab's managed sessions.
+ * The Stop hook is now injected programmatically in MessageProcessor
+ * for interactive sessions only. Scheduled sessions have no Stop hook.
  *
- * Usage in settings.local.json:
- * {
- *   "hooks": {
- *     "Stop": [{
- *       "matcher": "*",
- *       "hooks": [{
- *         "type": "command",
- *         "command": "npx tsx ../_shared/hooks/memory-stop-checkpoint.ts"
- *       }]
- *     }]
- *   }
- * }
+ * This file is kept as a reference for direct CLI usage:
+ * npx tsx ../_shared/hooks/memory-stop-checkpoint.ts
  */
 
 // --- Types ---

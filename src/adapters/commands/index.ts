@@ -7,6 +7,7 @@ export {
   isGroupCommandProcessed,
   DESTRUCTIVE_COMMANDS,
   isTargetAll,
+  applyModelChange,
   type CommandDependencies,
   type CommandHandler,
 } from './TelegramCommands.js';

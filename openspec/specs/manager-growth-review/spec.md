@@ -1,0 +1,1559 @@
+# manager-growth-review Specification
+
+## Purpose
+
+TBD - created by archiving change 'agent-self-evolution'. Update Purpose after archive.
+
+## Requirements
+
+### Requirement: Daily Growth Review Cycle
+
+The Admin (manager) Agent SHALL execute a daily growth review at 04:00 local time using the Opus model, after all managed Agents have completed their daily reflection (03:00). The daily review SHALL provide the same quality of assessment as the weekly review. The review SHALL consist of four phases: (1) collect today's reflection entries from managed Agents' evolution/weekly/ files, (2) evaluate today's performance per Agent against User Expectations, (3) review any pending Layer 3 proposals from evolution/proposals/ and forward immediately to user, (4) produce a daily report for the user.
+
+#### Scenario: Normal daily review execution
+
+- **WHEN** the daily-growth-review schedule triggers at 04:00
+- **THEN** the Admin Agent SHALL read today's reflection entries from each managed Agent, evaluate today's performance, review pending proposals, and produce a daily report
+
+#### Scenario: Agent with no reflection today
+
+- **WHEN** a managed Agent has no reflection entry for today in evolution/weekly/
+- **THEN** the Admin Agent SHALL note the absence in the daily report without treating it as an error
+
+#### Scenario: Layer 3 proposal immediate forwarding
+
+- **WHEN** a pending Layer 3 proposal exists in any Agent's evolution/proposals/
+- **THEN** the daily report SHALL include it with Admin's recommendation — proposals SHALL NOT wait for the weekly review
+
+#### Scenario: Proposal staleness escalation (daily cadence)
+
+- **WHEN** a proposal has appeared in daily reports for 3 or more consecutive days without user action
+- **THEN** the Admin Agent SHALL escalate it with a "Needs Attention" label
+
+
+<!-- @trace
+source: agent-self-evolution
+updated: 2026-03-03
+code:
+  - agents/general/output/kgaiwin_backup/L7/css/style.css
+  - agents/general/output/kgaiwin_backup/image/l4/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash-mobile.jpg
+  - openspec-migration-plan.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/gilles-lambert-S_LhjpfIdm4-unsplash.jpg
+  - agents/general/evolution/weekly/.gitkeep
+  - AGENTS.md
+  - agents/admin/schedules/daily-growth-review.yaml
+  - agents/general/output/kgaiwin_backup/css/style5.css
+  - agents/general/output/kgaiwin_backup/elements/images/team/rc-cf-FMh5o5m5N9E-unsplash.jpg
+  - agents/admin/schedules/weekly-collaboration-review.yaml
+  - agents/general/output/kgaiwin_backup/download_kgaiwin.py
+  - agents/general/output/kgaiwin_backup/image/l6/bg.webp
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.webm
+  - agents/admin/evolution/proposals/.gitkeep
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/general/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/Henric-ai.zip
+  - agents/admin/evolution/weekly/.gitkeep
+  - agents/general/output/frame_28s.png
+  - agents/general/output/kgaiwin_backup/image/l4/bg.webm
+  - doc-cleanup-charter.md
+  - agents/general/output/kgaiwin_backup/this3.html
+  - agents/general/output/kgaiwin_backup/elements/images/header/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/check_broll_test.png
+  - agents/general/output/kgaiwin_backup/elements/images/header/rod-long-I79Pgmhmy5M-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-D5c9ZciQy_I-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/1.html
+  - agents/general/output/kgaiwin_backup/image/l2/bg.webm
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/bootstrap.bundle.min.js
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jason-leung-O67LZfeyYBk-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/assets/load1.html
+  - agents/general/output/check_14_2s.png
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/4.html
+  - agents/general/output/ai.png
+  - agents/general/output/kgaiwin_backup/image/l3/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/Lindex.html
+  - agents/general/output/kgaiwin_backup/assets/load2.html
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/news/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/css/style2.css
+  - agents/general/output/kgaiwin_backup/assets/load4.html
+  - agents/_example/.claude/rules/self-evolution.md
+  - agents/general/output/kgaiwin_backup/L2.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-ZipYER3NLhY-unsplash.jpg
+  - agents/general/schedules/morning-summary.yaml
+  - agents/general/output/kgaiwin_backup/elements/css/tooplate-crispy-kitchen.css
+  - agents/general/output/final_14s.png
+  - agents/general/output/check_28s.png
+  - agents/general/output/final_32s.png
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff2
+  - agents/general/output/kgaiwin_backup/elements/images/news/ella-olsson-mmnKI8kMxpc-unsplash.jpg
+  - agents/admin/knowledge/self-evolution-management-guide.md
+  - agents/general/output/kgaiwin_backup/assets/load.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.avif
+  - agents/admin/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/L10.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-isHUj3N0194-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap-icons.css
+  - agents/general/output/kgaiwin_backup/V2.html
+  - agents/admin/knowledge/agent-changes-log.md
+  - agents/general/output/kgaiwin_backup/urls.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/h-wlc.zip
+  - agents/general/output/check_15s.png
+  - agents/general/output/kgaiwin_backup/L10/assets/load.html
+  - agents/general/output/kgaiwin_backup/L4.html
+  - agents/general/output/kgaiwin_backup/assets/load3.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l3/bg.mp4
+  - agents/_example/evolution/proposals/.gitkeep
+  - agents/_example/evolution/GROWTH-REVIEW-PROTOCOL.md
+  - agents/general/output/broll/ai.png
+  - agents/general/.claude/settings.local.json
+  - agents/general/output/kgaiwin_backup/image/lindex/tombol/btn.gif
+  - agents/general/output/check_16s.png
+  - agents/general/output/kgaiwin_backup/LV2.html
+  - agents/general/output/kgaiwin_backup/L7/image/bg.avif
+  - agents/general/output/frame_1s.png
+  - agents/general/output/kgaiwin_backup/elements/video/production_ID_3769033.mp4
+  - agents/general/output/kgaiwin_backup/image/l5/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/Goat.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/luisa-brimble-aFzg83dvnAI-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/Henric-ai (1).zip
+  - agents/general/output/kgaiwin_backup/elements/images/news/news-detail-header.jpg
+  - agents/general/output/kgaiwin_backup.zip
+  - agents/general/output/kgaiwin_backup/elements/images/daan-evers-tKN1WXrzQ3s-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/henric-----.zip
+  - agents/general/output/kgaiwin_backup/2129_crispy_kitchen.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/briana-tozour-V_Nkf1E-vYA-unsplash.jpg
+  - agents/general/output/check_14s.png
+  - agents/general/output/newsletter-ep15/original-data.md
+  - agents/general/output/traffic.png
+  - agents/general/output/broll/traffic.png
+  - agents/_example/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.avif
+  - agents/coder/CLAUDE.md
+  - agents/general/output/newsletter-ep15/final.md
+  - agents/_example/evolution/proposals/TEMPLATE.md
+  - agents/general/output/kgaiwin_backup/elements/images/team/matthew-hamilton-tNCH0sKSZbA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff
+  - agents/general/output/kgaiwin_backup/henric----- (1).zip
+  - agents/coder/.claude/hooks/project-whitelist.ts
+  - agents/general/output/kgaiwin_backup/css/style.css
+  - agents/general/output/kgaiwin_backup/R2.html
+  - agents/_example/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/css/style6.css
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - agents/general/output/kgaiwin_backup/image/l4/bg.mp4
+  - agents/general/knowledge/claude-code-prompts-analysis.md
+  - agents/general/output/kgaiwin_backup/L5.html
+  - agents/admin/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L8/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.webm
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/Findex.html
+  - agents/general/CLAUDE.md
+  - agents/general/knowledge/ganttai-fundraising-v2-review.md
+  - agents/general/output/kgaiwin_backup/L10/image/bg.avif
+  - agents/admin/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/L10/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/js/jquery.min.js
+  - agents/general/output/broll/template.png
+  - agents/general/output/kgaiwin_backup/this2.html
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/image/l6/bg.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.avif
+  - agents/coder/schedules/daily-memory-digest.yaml
+  - agents/general/output/check_32s.png
+  - agents/general/output/newsletter-ep15/review.md
+  - agents/general/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-cH5IPjaAYyo-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/bg.webp
+  - agents/general/output/kgaiwin_backup/assets/load5.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/lucas-swennen-1W_MyJSRLuQ-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/news/caroline-attwood-bpPTlXWTOvg-unsplash.jpg
+  - agents/general/output/newsletter-ep15/final-v5.md
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/R3.html
+  - agents/general/output/template_test_broll.mp4
+  - agents/general/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/image/l6/bg.avif
+  - agents/general/output/kgaiwin_backup/L8/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/images/author/shoeib-abolhassani-ojl7T2Ah93U-unsplash.jpg
+  - agents/coder/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/V1.html
+  - agents/general/output/kgaiwin_backup/L8/image/bg.webp
+  - agents/_example/evolution/REFLECTION-PROTOCOL.md
+  - agents/general/output/newsletter-ep15/final-v2.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jay-wennington-N_Y88TWmGwA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8.html
+  - agents/general/output/kgaiwin_backup/L10/image/bg.jpg
+  - CLAUDE.md
+  - agents/general/output/idea.png
+  - agents/coder/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L8/image/bg.avif
+  - agents/general/output/kgaiwin_backup/elements/images/alex-haney-CAhjZmVk5H4-unsplash.jpg
+  - agents/general/output/final_16s.png
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/general/output/kgaiwin_backup/image/l2/bg.mp4
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.avif
+  - agents/general/output/template_broll.png
+  - agents/general/output/newsletter-ep15/final-v4.md
+  - agents/general/output/kgaiwin_backup/L9/image/bg.avif
+  - agents/general/output/kgaiwin_backup/L6.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/keriliwi-c3mFafsFz2w-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/F2.html
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/team/nicolas-horn-MTZTGvDsHFY-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/R1.html
+  - agents/general/output/kgaiwin_backup/L3.html
+  - agents/general/output/kgaiwin_backup/L9/assets/load.html
+  - agents/general/output/kgaiwin_backup/L7.html
+  - agents/general/output/kgaiwin_backup/L9/image/bg.webp
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/louis-hansel-dphM2U1xq0U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/css/style.css
+  - agents/admin/knowledge/growth-reviews/daily/.gitkeep
+  - agents/general/output/kgaiwin_backup/L1.html
+  - agents/general/output/newsletter-ep15/final-v3.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/stefan-johnson-xIFbDeGcy44-unsplash.jpg
+  - agents/general/output/newsletter-ep15/structure.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/louis-hansel-GiIiRV0FjwU-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/brett-jordan-8xt8-HIFqc8-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/author/alexander-hipp-iEEBWgY_6lA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/style5.css
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.mp4
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-rheOvfxOlOA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8/assets/load.html
+  - agents/general/output/frame_14s.png
+  - claudecab.db
+  - agents/general/output/kgaiwin_backup/L7/assets/load.html
+  - agents/coder/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l2/tombol/btn.gif
+  - agents/general/output/newsletter-ep15/draft-v1.md
+  - agents/general/output/kgaiwin_backup/elements/images/charles-deluvio-FdDkfYFHqe4-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/custom.js
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style4.css
+  - agents/general/output/kgaiwin_backup/assets/load6.html
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-MGKqxm6u2bc-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.mp4
+  - agents/admin/schedules/weekly-growth-review.yaml
+  - agents/general/.claude/skills/sys-proficiency/references/levels.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/ivan-torres-MQUqbmszGGM-unsplash.jpg
+  - agents/admin/knowledge/growth-reviews/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l3/bg.webm
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style3.css
+  - agents/general/output/broll/idea.png
+  - agents/general/output/kgaiwin_backup/elements/images/news/pablo-merchan-montes-Orz90t6o0e4-unsplash.jpg
+  - agents/general/output/final_28s.png
+  - agents/general/output/kgaiwin_backup/css/style1.css
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap.min.css
+tests:
+  - agents/general/output/test_broll_check.mp4
+  - agents/general/output/test_broll_concat2.txt
+  - agents/general/output/test_broll_concat.txt
+  - agents/general/output/test_nobroll.mp4
+-->
+
+---
+### Requirement: Daily Report Format
+
+The daily report SHALL be a concise, structured document containing: (1) per-Agent status with today's learning, expectation comparison, and gap identification (2-3 sentences each), (2) pending Layer 3 proposals requiring user decision (if any), (3) manager notes on cross-Agent patterns or concerns (if any). The report SHALL have no character limit — completeness over brevity. The report SHALL include a copy-paste instruction block for each pending proposal, enabling the user to approve/reject directly in an Admin conversation. The report SHALL be saved to knowledge/growth-reviews/daily/YYYY-MM-DD.md.
+
+#### Scenario: Daily report delivery
+
+- **WHEN** the daily review cycle completes
+- **THEN** the Admin Agent SHALL send the report to the user via Telegram and save a copy to knowledge/growth-reviews/daily/
+
+#### Scenario: Daily report conciseness
+
+- **WHEN** the Admin Agent drafts the daily report
+- **THEN** the report SHALL prioritize completeness — no character limit applies. Each employee's search keywords, sources, key takeaways, and application plans SHALL be faithfully transcribed
+
+
+<!-- @trace
+source: agent-self-evolution
+updated: 2026-03-03
+code:
+  - agents/general/output/kgaiwin_backup/L7/css/style.css
+  - agents/general/output/kgaiwin_backup/image/l4/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash-mobile.jpg
+  - openspec-migration-plan.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/gilles-lambert-S_LhjpfIdm4-unsplash.jpg
+  - agents/general/evolution/weekly/.gitkeep
+  - AGENTS.md
+  - agents/admin/schedules/daily-growth-review.yaml
+  - agents/general/output/kgaiwin_backup/css/style5.css
+  - agents/general/output/kgaiwin_backup/elements/images/team/rc-cf-FMh5o5m5N9E-unsplash.jpg
+  - agents/admin/schedules/weekly-collaboration-review.yaml
+  - agents/general/output/kgaiwin_backup/download_kgaiwin.py
+  - agents/general/output/kgaiwin_backup/image/l6/bg.webp
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.webm
+  - agents/admin/evolution/proposals/.gitkeep
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/general/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/Henric-ai.zip
+  - agents/admin/evolution/weekly/.gitkeep
+  - agents/general/output/frame_28s.png
+  - agents/general/output/kgaiwin_backup/image/l4/bg.webm
+  - doc-cleanup-charter.md
+  - agents/general/output/kgaiwin_backup/this3.html
+  - agents/general/output/kgaiwin_backup/elements/images/header/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/check_broll_test.png
+  - agents/general/output/kgaiwin_backup/elements/images/header/rod-long-I79Pgmhmy5M-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-D5c9ZciQy_I-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/1.html
+  - agents/general/output/kgaiwin_backup/image/l2/bg.webm
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/bootstrap.bundle.min.js
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jason-leung-O67LZfeyYBk-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/assets/load1.html
+  - agents/general/output/check_14_2s.png
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/4.html
+  - agents/general/output/ai.png
+  - agents/general/output/kgaiwin_backup/image/l3/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/Lindex.html
+  - agents/general/output/kgaiwin_backup/assets/load2.html
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/news/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/css/style2.css
+  - agents/general/output/kgaiwin_backup/assets/load4.html
+  - agents/_example/.claude/rules/self-evolution.md
+  - agents/general/output/kgaiwin_backup/L2.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-ZipYER3NLhY-unsplash.jpg
+  - agents/general/schedules/morning-summary.yaml
+  - agents/general/output/kgaiwin_backup/elements/css/tooplate-crispy-kitchen.css
+  - agents/general/output/final_14s.png
+  - agents/general/output/check_28s.png
+  - agents/general/output/final_32s.png
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff2
+  - agents/general/output/kgaiwin_backup/elements/images/news/ella-olsson-mmnKI8kMxpc-unsplash.jpg
+  - agents/admin/knowledge/self-evolution-management-guide.md
+  - agents/general/output/kgaiwin_backup/assets/load.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.avif
+  - agents/admin/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/L10.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-isHUj3N0194-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap-icons.css
+  - agents/general/output/kgaiwin_backup/V2.html
+  - agents/admin/knowledge/agent-changes-log.md
+  - agents/general/output/kgaiwin_backup/urls.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/h-wlc.zip
+  - agents/general/output/check_15s.png
+  - agents/general/output/kgaiwin_backup/L10/assets/load.html
+  - agents/general/output/kgaiwin_backup/L4.html
+  - agents/general/output/kgaiwin_backup/assets/load3.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l3/bg.mp4
+  - agents/_example/evolution/proposals/.gitkeep
+  - agents/_example/evolution/GROWTH-REVIEW-PROTOCOL.md
+  - agents/general/output/broll/ai.png
+  - agents/general/.claude/settings.local.json
+  - agents/general/output/kgaiwin_backup/image/lindex/tombol/btn.gif
+  - agents/general/output/check_16s.png
+  - agents/general/output/kgaiwin_backup/LV2.html
+  - agents/general/output/kgaiwin_backup/L7/image/bg.avif
+  - agents/general/output/frame_1s.png
+  - agents/general/output/kgaiwin_backup/elements/video/production_ID_3769033.mp4
+  - agents/general/output/kgaiwin_backup/image/l5/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/Goat.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/luisa-brimble-aFzg83dvnAI-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/Henric-ai (1).zip
+  - agents/general/output/kgaiwin_backup/elements/images/news/news-detail-header.jpg
+  - agents/general/output/kgaiwin_backup.zip
+  - agents/general/output/kgaiwin_backup/elements/images/daan-evers-tKN1WXrzQ3s-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/henric-----.zip
+  - agents/general/output/kgaiwin_backup/2129_crispy_kitchen.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/briana-tozour-V_Nkf1E-vYA-unsplash.jpg
+  - agents/general/output/check_14s.png
+  - agents/general/output/newsletter-ep15/original-data.md
+  - agents/general/output/traffic.png
+  - agents/general/output/broll/traffic.png
+  - agents/_example/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.avif
+  - agents/coder/CLAUDE.md
+  - agents/general/output/newsletter-ep15/final.md
+  - agents/_example/evolution/proposals/TEMPLATE.md
+  - agents/general/output/kgaiwin_backup/elements/images/team/matthew-hamilton-tNCH0sKSZbA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff
+  - agents/general/output/kgaiwin_backup/henric----- (1).zip
+  - agents/coder/.claude/hooks/project-whitelist.ts
+  - agents/general/output/kgaiwin_backup/css/style.css
+  - agents/general/output/kgaiwin_backup/R2.html
+  - agents/_example/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/css/style6.css
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - agents/general/output/kgaiwin_backup/image/l4/bg.mp4
+  - agents/general/knowledge/claude-code-prompts-analysis.md
+  - agents/general/output/kgaiwin_backup/L5.html
+  - agents/admin/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L8/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.webm
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/Findex.html
+  - agents/general/CLAUDE.md
+  - agents/general/knowledge/ganttai-fundraising-v2-review.md
+  - agents/general/output/kgaiwin_backup/L10/image/bg.avif
+  - agents/admin/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/L10/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/js/jquery.min.js
+  - agents/general/output/broll/template.png
+  - agents/general/output/kgaiwin_backup/this2.html
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/image/l6/bg.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.avif
+  - agents/coder/schedules/daily-memory-digest.yaml
+  - agents/general/output/check_32s.png
+  - agents/general/output/newsletter-ep15/review.md
+  - agents/general/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-cH5IPjaAYyo-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/bg.webp
+  - agents/general/output/kgaiwin_backup/assets/load5.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/lucas-swennen-1W_MyJSRLuQ-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/news/caroline-attwood-bpPTlXWTOvg-unsplash.jpg
+  - agents/general/output/newsletter-ep15/final-v5.md
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/R3.html
+  - agents/general/output/template_test_broll.mp4
+  - agents/general/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/image/l6/bg.avif
+  - agents/general/output/kgaiwin_backup/L8/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/images/author/shoeib-abolhassani-ojl7T2Ah93U-unsplash.jpg
+  - agents/coder/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/V1.html
+  - agents/general/output/kgaiwin_backup/L8/image/bg.webp
+  - agents/_example/evolution/REFLECTION-PROTOCOL.md
+  - agents/general/output/newsletter-ep15/final-v2.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jay-wennington-N_Y88TWmGwA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8.html
+  - agents/general/output/kgaiwin_backup/L10/image/bg.jpg
+  - CLAUDE.md
+  - agents/general/output/idea.png
+  - agents/coder/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L8/image/bg.avif
+  - agents/general/output/kgaiwin_backup/elements/images/alex-haney-CAhjZmVk5H4-unsplash.jpg
+  - agents/general/output/final_16s.png
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/general/output/kgaiwin_backup/image/l2/bg.mp4
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.avif
+  - agents/general/output/template_broll.png
+  - agents/general/output/newsletter-ep15/final-v4.md
+  - agents/general/output/kgaiwin_backup/L9/image/bg.avif
+  - agents/general/output/kgaiwin_backup/L6.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/keriliwi-c3mFafsFz2w-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/F2.html
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/team/nicolas-horn-MTZTGvDsHFY-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/R1.html
+  - agents/general/output/kgaiwin_backup/L3.html
+  - agents/general/output/kgaiwin_backup/L9/assets/load.html
+  - agents/general/output/kgaiwin_backup/L7.html
+  - agents/general/output/kgaiwin_backup/L9/image/bg.webp
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/louis-hansel-dphM2U1xq0U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/css/style.css
+  - agents/admin/knowledge/growth-reviews/daily/.gitkeep
+  - agents/general/output/kgaiwin_backup/L1.html
+  - agents/general/output/newsletter-ep15/final-v3.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/stefan-johnson-xIFbDeGcy44-unsplash.jpg
+  - agents/general/output/newsletter-ep15/structure.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/louis-hansel-GiIiRV0FjwU-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/brett-jordan-8xt8-HIFqc8-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/author/alexander-hipp-iEEBWgY_6lA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/style5.css
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.mp4
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-rheOvfxOlOA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8/assets/load.html
+  - agents/general/output/frame_14s.png
+  - claudecab.db
+  - agents/general/output/kgaiwin_backup/L7/assets/load.html
+  - agents/coder/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l2/tombol/btn.gif
+  - agents/general/output/newsletter-ep15/draft-v1.md
+  - agents/general/output/kgaiwin_backup/elements/images/charles-deluvio-FdDkfYFHqe4-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/custom.js
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style4.css
+  - agents/general/output/kgaiwin_backup/assets/load6.html
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-MGKqxm6u2bc-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.mp4
+  - agents/admin/schedules/weekly-growth-review.yaml
+  - agents/general/.claude/skills/sys-proficiency/references/levels.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/ivan-torres-MQUqbmszGGM-unsplash.jpg
+  - agents/admin/knowledge/growth-reviews/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l3/bg.webm
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style3.css
+  - agents/general/output/broll/idea.png
+  - agents/general/output/kgaiwin_backup/elements/images/news/pablo-merchan-montes-Orz90t6o0e4-unsplash.jpg
+  - agents/general/output/final_28s.png
+  - agents/general/output/kgaiwin_backup/css/style1.css
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap.min.css
+tests:
+  - agents/general/output/test_broll_check.mp4
+  - agents/general/output/test_broll_concat2.txt
+  - agents/general/output/test_broll_concat.txt
+  - agents/general/output/test_nobroll.mp4
+-->
+
+---
+### Requirement: Weekly Trend Analysis Cycle
+
+The Admin (manager) Agent SHALL execute a weekly trend analysis at a scheduled time (default Monday 05:00 local time using the Opus model). This analysis SHALL be based on the week's daily growth reports and SHALL focus on patterns that daily reviews cannot reveal: learning volume trends (increasing/stable/declining), recurring gaps (structural issues), knowledge application rate, and cross-Agent collaboration health. This schedule SHALL replace and extend the existing weekly-collaboration-review schedule. The weekly report SHALL serve as a meta-analysis, not a repetition of daily reviews.
+
+#### Scenario: Normal weekly trend analysis
+
+- **WHEN** the weekly-growth-review schedule triggers on Monday 05:00
+- **THEN** the Admin Agent SHALL read all daily reports from knowledge/growth-reviews/daily/ for the current week, read evolution/weekly/ from each managed Agent, analyze trends, and produce a weekly trend report
+
+#### Scenario: Agent with no daily data
+
+- **WHEN** a managed Agent has no daily report data for the current week
+- **THEN** the Admin Agent SHALL note the absence in the weekly report without treating it as an error
+
+#### Scenario: Replaces weekly-collaboration-review
+
+- **WHEN** the weekly-growth-review schedule is active
+- **THEN** the previous weekly-collaboration-review.yaml SHALL be superseded, and its collaboration health assessment responsibilities SHALL be incorporated into the new review
+
+
+<!-- @trace
+source: agent-self-evolution
+updated: 2026-03-03
+code:
+  - agents/general/output/kgaiwin_backup/L7/css/style.css
+  - agents/general/output/kgaiwin_backup/image/l4/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash-mobile.jpg
+  - openspec-migration-plan.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/gilles-lambert-S_LhjpfIdm4-unsplash.jpg
+  - agents/general/evolution/weekly/.gitkeep
+  - AGENTS.md
+  - agents/admin/schedules/daily-growth-review.yaml
+  - agents/general/output/kgaiwin_backup/css/style5.css
+  - agents/general/output/kgaiwin_backup/elements/images/team/rc-cf-FMh5o5m5N9E-unsplash.jpg
+  - agents/admin/schedules/weekly-collaboration-review.yaml
+  - agents/general/output/kgaiwin_backup/download_kgaiwin.py
+  - agents/general/output/kgaiwin_backup/image/l6/bg.webp
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.webm
+  - agents/admin/evolution/proposals/.gitkeep
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/general/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/Henric-ai.zip
+  - agents/admin/evolution/weekly/.gitkeep
+  - agents/general/output/frame_28s.png
+  - agents/general/output/kgaiwin_backup/image/l4/bg.webm
+  - doc-cleanup-charter.md
+  - agents/general/output/kgaiwin_backup/this3.html
+  - agents/general/output/kgaiwin_backup/elements/images/header/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/check_broll_test.png
+  - agents/general/output/kgaiwin_backup/elements/images/header/rod-long-I79Pgmhmy5M-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-D5c9ZciQy_I-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/1.html
+  - agents/general/output/kgaiwin_backup/image/l2/bg.webm
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/bootstrap.bundle.min.js
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jason-leung-O67LZfeyYBk-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/assets/load1.html
+  - agents/general/output/check_14_2s.png
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/4.html
+  - agents/general/output/ai.png
+  - agents/general/output/kgaiwin_backup/image/l3/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/Lindex.html
+  - agents/general/output/kgaiwin_backup/assets/load2.html
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/news/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/css/style2.css
+  - agents/general/output/kgaiwin_backup/assets/load4.html
+  - agents/_example/.claude/rules/self-evolution.md
+  - agents/general/output/kgaiwin_backup/L2.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-ZipYER3NLhY-unsplash.jpg
+  - agents/general/schedules/morning-summary.yaml
+  - agents/general/output/kgaiwin_backup/elements/css/tooplate-crispy-kitchen.css
+  - agents/general/output/final_14s.png
+  - agents/general/output/check_28s.png
+  - agents/general/output/final_32s.png
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff2
+  - agents/general/output/kgaiwin_backup/elements/images/news/ella-olsson-mmnKI8kMxpc-unsplash.jpg
+  - agents/admin/knowledge/self-evolution-management-guide.md
+  - agents/general/output/kgaiwin_backup/assets/load.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.avif
+  - agents/admin/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/L10.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-isHUj3N0194-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap-icons.css
+  - agents/general/output/kgaiwin_backup/V2.html
+  - agents/admin/knowledge/agent-changes-log.md
+  - agents/general/output/kgaiwin_backup/urls.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/h-wlc.zip
+  - agents/general/output/check_15s.png
+  - agents/general/output/kgaiwin_backup/L10/assets/load.html
+  - agents/general/output/kgaiwin_backup/L4.html
+  - agents/general/output/kgaiwin_backup/assets/load3.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l3/bg.mp4
+  - agents/_example/evolution/proposals/.gitkeep
+  - agents/_example/evolution/GROWTH-REVIEW-PROTOCOL.md
+  - agents/general/output/broll/ai.png
+  - agents/general/.claude/settings.local.json
+  - agents/general/output/kgaiwin_backup/image/lindex/tombol/btn.gif
+  - agents/general/output/check_16s.png
+  - agents/general/output/kgaiwin_backup/LV2.html
+  - agents/general/output/kgaiwin_backup/L7/image/bg.avif
+  - agents/general/output/frame_1s.png
+  - agents/general/output/kgaiwin_backup/elements/video/production_ID_3769033.mp4
+  - agents/general/output/kgaiwin_backup/image/l5/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/Goat.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/luisa-brimble-aFzg83dvnAI-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/Henric-ai (1).zip
+  - agents/general/output/kgaiwin_backup/elements/images/news/news-detail-header.jpg
+  - agents/general/output/kgaiwin_backup.zip
+  - agents/general/output/kgaiwin_backup/elements/images/daan-evers-tKN1WXrzQ3s-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/henric-----.zip
+  - agents/general/output/kgaiwin_backup/2129_crispy_kitchen.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/briana-tozour-V_Nkf1E-vYA-unsplash.jpg
+  - agents/general/output/check_14s.png
+  - agents/general/output/newsletter-ep15/original-data.md
+  - agents/general/output/traffic.png
+  - agents/general/output/broll/traffic.png
+  - agents/_example/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.avif
+  - agents/coder/CLAUDE.md
+  - agents/general/output/newsletter-ep15/final.md
+  - agents/_example/evolution/proposals/TEMPLATE.md
+  - agents/general/output/kgaiwin_backup/elements/images/team/matthew-hamilton-tNCH0sKSZbA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff
+  - agents/general/output/kgaiwin_backup/henric----- (1).zip
+  - agents/coder/.claude/hooks/project-whitelist.ts
+  - agents/general/output/kgaiwin_backup/css/style.css
+  - agents/general/output/kgaiwin_backup/R2.html
+  - agents/_example/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/css/style6.css
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - agents/general/output/kgaiwin_backup/image/l4/bg.mp4
+  - agents/general/knowledge/claude-code-prompts-analysis.md
+  - agents/general/output/kgaiwin_backup/L5.html
+  - agents/admin/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L8/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.webm
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/Findex.html
+  - agents/general/CLAUDE.md
+  - agents/general/knowledge/ganttai-fundraising-v2-review.md
+  - agents/general/output/kgaiwin_backup/L10/image/bg.avif
+  - agents/admin/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/L10/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/js/jquery.min.js
+  - agents/general/output/broll/template.png
+  - agents/general/output/kgaiwin_backup/this2.html
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/image/l6/bg.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.avif
+  - agents/coder/schedules/daily-memory-digest.yaml
+  - agents/general/output/check_32s.png
+  - agents/general/output/newsletter-ep15/review.md
+  - agents/general/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-cH5IPjaAYyo-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/bg.webp
+  - agents/general/output/kgaiwin_backup/assets/load5.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/lucas-swennen-1W_MyJSRLuQ-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/news/caroline-attwood-bpPTlXWTOvg-unsplash.jpg
+  - agents/general/output/newsletter-ep15/final-v5.md
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/R3.html
+  - agents/general/output/template_test_broll.mp4
+  - agents/general/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/image/l6/bg.avif
+  - agents/general/output/kgaiwin_backup/L8/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/images/author/shoeib-abolhassani-ojl7T2Ah93U-unsplash.jpg
+  - agents/coder/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/V1.html
+  - agents/general/output/kgaiwin_backup/L8/image/bg.webp
+  - agents/_example/evolution/REFLECTION-PROTOCOL.md
+  - agents/general/output/newsletter-ep15/final-v2.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jay-wennington-N_Y88TWmGwA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8.html
+  - agents/general/output/kgaiwin_backup/L10/image/bg.jpg
+  - CLAUDE.md
+  - agents/general/output/idea.png
+  - agents/coder/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L8/image/bg.avif
+  - agents/general/output/kgaiwin_backup/elements/images/alex-haney-CAhjZmVk5H4-unsplash.jpg
+  - agents/general/output/final_16s.png
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/general/output/kgaiwin_backup/image/l2/bg.mp4
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.avif
+  - agents/general/output/template_broll.png
+  - agents/general/output/newsletter-ep15/final-v4.md
+  - agents/general/output/kgaiwin_backup/L9/image/bg.avif
+  - agents/general/output/kgaiwin_backup/L6.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/keriliwi-c3mFafsFz2w-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/F2.html
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/team/nicolas-horn-MTZTGvDsHFY-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/R1.html
+  - agents/general/output/kgaiwin_backup/L3.html
+  - agents/general/output/kgaiwin_backup/L9/assets/load.html
+  - agents/general/output/kgaiwin_backup/L7.html
+  - agents/general/output/kgaiwin_backup/L9/image/bg.webp
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/louis-hansel-dphM2U1xq0U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/css/style.css
+  - agents/admin/knowledge/growth-reviews/daily/.gitkeep
+  - agents/general/output/kgaiwin_backup/L1.html
+  - agents/general/output/newsletter-ep15/final-v3.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/stefan-johnson-xIFbDeGcy44-unsplash.jpg
+  - agents/general/output/newsletter-ep15/structure.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/louis-hansel-GiIiRV0FjwU-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/brett-jordan-8xt8-HIFqc8-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/author/alexander-hipp-iEEBWgY_6lA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/style5.css
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.mp4
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-rheOvfxOlOA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8/assets/load.html
+  - agents/general/output/frame_14s.png
+  - claudecab.db
+  - agents/general/output/kgaiwin_backup/L7/assets/load.html
+  - agents/coder/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l2/tombol/btn.gif
+  - agents/general/output/newsletter-ep15/draft-v1.md
+  - agents/general/output/kgaiwin_backup/elements/images/charles-deluvio-FdDkfYFHqe4-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/custom.js
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style4.css
+  - agents/general/output/kgaiwin_backup/assets/load6.html
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-MGKqxm6u2bc-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.mp4
+  - agents/admin/schedules/weekly-growth-review.yaml
+  - agents/general/.claude/skills/sys-proficiency/references/levels.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/ivan-torres-MQUqbmszGGM-unsplash.jpg
+  - agents/admin/knowledge/growth-reviews/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l3/bg.webm
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style3.css
+  - agents/general/output/broll/idea.png
+  - agents/general/output/kgaiwin_backup/elements/images/news/pablo-merchan-montes-Orz90t6o0e4-unsplash.jpg
+  - agents/general/output/final_28s.png
+  - agents/general/output/kgaiwin_backup/css/style1.css
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap.min.css
+tests:
+  - agents/general/output/test_broll_check.mp4
+  - agents/general/output/test_broll_concat2.txt
+  - agents/general/output/test_broll_concat.txt
+  - agents/general/output/test_nobroll.mp4
+-->
+
+---
+### Requirement: Weekly Trend Metrics
+
+The weekly trend analysis SHALL evaluate each Agent on four trend dimensions: learning volume trend (this week vs last week, direction focus vs scatter), gap trend (recurring gaps appearing across multiple daily reports indicating structural issues), quality trend (overall trajectory relative to User Expectations over the week), and knowledge application rate (whether internalized knowledge was applied in subsequent work). Evaluation SHALL be qualitative (narrative trend assessment), not daily-level detail.
+
+#### Scenario: Learning trend assessment
+
+- **WHEN** the Admin Agent evaluates an Agent's weekly learning trend
+- **THEN** it SHALL compare this week's learning volume and focus area against the previous week, noting increases, decreases, or direction changes
+
+#### Scenario: Recurring gap detection
+
+- **WHEN** the same gap appears in 3 or more daily reports within a week
+- **THEN** the Admin Agent SHALL flag it as a structural issue requiring targeted attention in the weekly report
+
+#### Scenario: Quality trend narrative
+
+- **WHEN** the Admin Agent assesses quality trend
+- **THEN** it SHALL produce a brief narrative summarizing the week's trajectory (improving/stable/declining) relative to the Agent's User Expectations
+
+
+<!-- @trace
+source: agent-self-evolution
+updated: 2026-03-03
+code:
+  - agents/general/output/kgaiwin_backup/L7/css/style.css
+  - agents/general/output/kgaiwin_backup/image/l4/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash-mobile.jpg
+  - openspec-migration-plan.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/gilles-lambert-S_LhjpfIdm4-unsplash.jpg
+  - agents/general/evolution/weekly/.gitkeep
+  - AGENTS.md
+  - agents/admin/schedules/daily-growth-review.yaml
+  - agents/general/output/kgaiwin_backup/css/style5.css
+  - agents/general/output/kgaiwin_backup/elements/images/team/rc-cf-FMh5o5m5N9E-unsplash.jpg
+  - agents/admin/schedules/weekly-collaboration-review.yaml
+  - agents/general/output/kgaiwin_backup/download_kgaiwin.py
+  - agents/general/output/kgaiwin_backup/image/l6/bg.webp
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.webm
+  - agents/admin/evolution/proposals/.gitkeep
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/general/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/Henric-ai.zip
+  - agents/admin/evolution/weekly/.gitkeep
+  - agents/general/output/frame_28s.png
+  - agents/general/output/kgaiwin_backup/image/l4/bg.webm
+  - doc-cleanup-charter.md
+  - agents/general/output/kgaiwin_backup/this3.html
+  - agents/general/output/kgaiwin_backup/elements/images/header/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/check_broll_test.png
+  - agents/general/output/kgaiwin_backup/elements/images/header/rod-long-I79Pgmhmy5M-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-D5c9ZciQy_I-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/1.html
+  - agents/general/output/kgaiwin_backup/image/l2/bg.webm
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/bootstrap.bundle.min.js
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jason-leung-O67LZfeyYBk-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/assets/load1.html
+  - agents/general/output/check_14_2s.png
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/4.html
+  - agents/general/output/ai.png
+  - agents/general/output/kgaiwin_backup/image/l3/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/Lindex.html
+  - agents/general/output/kgaiwin_backup/assets/load2.html
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/news/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/css/style2.css
+  - agents/general/output/kgaiwin_backup/assets/load4.html
+  - agents/_example/.claude/rules/self-evolution.md
+  - agents/general/output/kgaiwin_backup/L2.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-ZipYER3NLhY-unsplash.jpg
+  - agents/general/schedules/morning-summary.yaml
+  - agents/general/output/kgaiwin_backup/elements/css/tooplate-crispy-kitchen.css
+  - agents/general/output/final_14s.png
+  - agents/general/output/check_28s.png
+  - agents/general/output/final_32s.png
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff2
+  - agents/general/output/kgaiwin_backup/elements/images/news/ella-olsson-mmnKI8kMxpc-unsplash.jpg
+  - agents/admin/knowledge/self-evolution-management-guide.md
+  - agents/general/output/kgaiwin_backup/assets/load.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.avif
+  - agents/admin/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/L10.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-isHUj3N0194-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap-icons.css
+  - agents/general/output/kgaiwin_backup/V2.html
+  - agents/admin/knowledge/agent-changes-log.md
+  - agents/general/output/kgaiwin_backup/urls.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/h-wlc.zip
+  - agents/general/output/check_15s.png
+  - agents/general/output/kgaiwin_backup/L10/assets/load.html
+  - agents/general/output/kgaiwin_backup/L4.html
+  - agents/general/output/kgaiwin_backup/assets/load3.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l3/bg.mp4
+  - agents/_example/evolution/proposals/.gitkeep
+  - agents/_example/evolution/GROWTH-REVIEW-PROTOCOL.md
+  - agents/general/output/broll/ai.png
+  - agents/general/.claude/settings.local.json
+  - agents/general/output/kgaiwin_backup/image/lindex/tombol/btn.gif
+  - agents/general/output/check_16s.png
+  - agents/general/output/kgaiwin_backup/LV2.html
+  - agents/general/output/kgaiwin_backup/L7/image/bg.avif
+  - agents/general/output/frame_1s.png
+  - agents/general/output/kgaiwin_backup/elements/video/production_ID_3769033.mp4
+  - agents/general/output/kgaiwin_backup/image/l5/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/Goat.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/luisa-brimble-aFzg83dvnAI-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/Henric-ai (1).zip
+  - agents/general/output/kgaiwin_backup/elements/images/news/news-detail-header.jpg
+  - agents/general/output/kgaiwin_backup.zip
+  - agents/general/output/kgaiwin_backup/elements/images/daan-evers-tKN1WXrzQ3s-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/henric-----.zip
+  - agents/general/output/kgaiwin_backup/2129_crispy_kitchen.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/briana-tozour-V_Nkf1E-vYA-unsplash.jpg
+  - agents/general/output/check_14s.png
+  - agents/general/output/newsletter-ep15/original-data.md
+  - agents/general/output/traffic.png
+  - agents/general/output/broll/traffic.png
+  - agents/_example/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.avif
+  - agents/coder/CLAUDE.md
+  - agents/general/output/newsletter-ep15/final.md
+  - agents/_example/evolution/proposals/TEMPLATE.md
+  - agents/general/output/kgaiwin_backup/elements/images/team/matthew-hamilton-tNCH0sKSZbA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff
+  - agents/general/output/kgaiwin_backup/henric----- (1).zip
+  - agents/coder/.claude/hooks/project-whitelist.ts
+  - agents/general/output/kgaiwin_backup/css/style.css
+  - agents/general/output/kgaiwin_backup/R2.html
+  - agents/_example/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/css/style6.css
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - agents/general/output/kgaiwin_backup/image/l4/bg.mp4
+  - agents/general/knowledge/claude-code-prompts-analysis.md
+  - agents/general/output/kgaiwin_backup/L5.html
+  - agents/admin/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L8/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.webm
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/Findex.html
+  - agents/general/CLAUDE.md
+  - agents/general/knowledge/ganttai-fundraising-v2-review.md
+  - agents/general/output/kgaiwin_backup/L10/image/bg.avif
+  - agents/admin/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/L10/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/js/jquery.min.js
+  - agents/general/output/broll/template.png
+  - agents/general/output/kgaiwin_backup/this2.html
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/image/l6/bg.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.avif
+  - agents/coder/schedules/daily-memory-digest.yaml
+  - agents/general/output/check_32s.png
+  - agents/general/output/newsletter-ep15/review.md
+  - agents/general/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-cH5IPjaAYyo-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/bg.webp
+  - agents/general/output/kgaiwin_backup/assets/load5.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/lucas-swennen-1W_MyJSRLuQ-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/news/caroline-attwood-bpPTlXWTOvg-unsplash.jpg
+  - agents/general/output/newsletter-ep15/final-v5.md
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/R3.html
+  - agents/general/output/template_test_broll.mp4
+  - agents/general/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/image/l6/bg.avif
+  - agents/general/output/kgaiwin_backup/L8/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/images/author/shoeib-abolhassani-ojl7T2Ah93U-unsplash.jpg
+  - agents/coder/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/V1.html
+  - agents/general/output/kgaiwin_backup/L8/image/bg.webp
+  - agents/_example/evolution/REFLECTION-PROTOCOL.md
+  - agents/general/output/newsletter-ep15/final-v2.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jay-wennington-N_Y88TWmGwA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8.html
+  - agents/general/output/kgaiwin_backup/L10/image/bg.jpg
+  - CLAUDE.md
+  - agents/general/output/idea.png
+  - agents/coder/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L8/image/bg.avif
+  - agents/general/output/kgaiwin_backup/elements/images/alex-haney-CAhjZmVk5H4-unsplash.jpg
+  - agents/general/output/final_16s.png
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/general/output/kgaiwin_backup/image/l2/bg.mp4
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.avif
+  - agents/general/output/template_broll.png
+  - agents/general/output/newsletter-ep15/final-v4.md
+  - agents/general/output/kgaiwin_backup/L9/image/bg.avif
+  - agents/general/output/kgaiwin_backup/L6.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/keriliwi-c3mFafsFz2w-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/F2.html
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/team/nicolas-horn-MTZTGvDsHFY-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/R1.html
+  - agents/general/output/kgaiwin_backup/L3.html
+  - agents/general/output/kgaiwin_backup/L9/assets/load.html
+  - agents/general/output/kgaiwin_backup/L7.html
+  - agents/general/output/kgaiwin_backup/L9/image/bg.webp
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/louis-hansel-dphM2U1xq0U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/css/style.css
+  - agents/admin/knowledge/growth-reviews/daily/.gitkeep
+  - agents/general/output/kgaiwin_backup/L1.html
+  - agents/general/output/newsletter-ep15/final-v3.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/stefan-johnson-xIFbDeGcy44-unsplash.jpg
+  - agents/general/output/newsletter-ep15/structure.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/louis-hansel-GiIiRV0FjwU-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/brett-jordan-8xt8-HIFqc8-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/author/alexander-hipp-iEEBWgY_6lA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/style5.css
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.mp4
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-rheOvfxOlOA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8/assets/load.html
+  - agents/general/output/frame_14s.png
+  - claudecab.db
+  - agents/general/output/kgaiwin_backup/L7/assets/load.html
+  - agents/coder/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l2/tombol/btn.gif
+  - agents/general/output/newsletter-ep15/draft-v1.md
+  - agents/general/output/kgaiwin_backup/elements/images/charles-deluvio-FdDkfYFHqe4-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/custom.js
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style4.css
+  - agents/general/output/kgaiwin_backup/assets/load6.html
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-MGKqxm6u2bc-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.mp4
+  - agents/admin/schedules/weekly-growth-review.yaml
+  - agents/general/.claude/skills/sys-proficiency/references/levels.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/ivan-torres-MQUqbmszGGM-unsplash.jpg
+  - agents/admin/knowledge/growth-reviews/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l3/bg.webm
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style3.css
+  - agents/general/output/broll/idea.png
+  - agents/general/output/kgaiwin_backup/elements/images/news/pablo-merchan-montes-Orz90t6o0e4-unsplash.jpg
+  - agents/general/output/final_28s.png
+  - agents/general/output/kgaiwin_backup/css/style1.css
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap.min.css
+tests:
+  - agents/general/output/test_broll_check.mp4
+  - agents/general/output/test_broll_concat2.txt
+  - agents/general/output/test_broll_concat.txt
+  - agents/general/output/test_nobroll.mp4
+-->
+
+---
+### Requirement: Layer 3 Proposal Review
+
+The Admin Agent SHALL review all pending Layer 3 change proposals found in managed Agents' evolution/proposals/ directories during the weekly review. For each proposal, the Admin Agent SHALL assess feasibility and alignment with the Agent's role. The Admin Agent SHALL NOT approve proposals autonomously — all proposals SHALL be forwarded to the user in the weekly report with the Admin Agent's recommendation (approve/reject/defer with rationale).
+
+#### Scenario: Proposal forwarding to user
+
+- **WHEN** one or more pending proposals exist in any Agent's evolution/proposals/
+- **THEN** the weekly report SHALL include a dedicated section listing each proposal with: originating Agent, target file, proposed change summary, and Admin recommendation
+
+#### Scenario: No pending proposals
+
+- **WHEN** no pending proposals exist across all managed Agents
+- **THEN** the weekly report SHALL omit the proposals section entirely
+
+#### Scenario: Stale proposal tracking in weekly
+
+- **WHEN** a proposal has appeared in daily reports for an extended period during the week
+- **THEN** the weekly report SHALL include a proposal status summary with total days pending
+
+
+<!-- @trace
+source: agent-self-evolution
+updated: 2026-03-03
+code:
+  - agents/general/output/kgaiwin_backup/L7/css/style.css
+  - agents/general/output/kgaiwin_backup/image/l4/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash-mobile.jpg
+  - openspec-migration-plan.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/gilles-lambert-S_LhjpfIdm4-unsplash.jpg
+  - agents/general/evolution/weekly/.gitkeep
+  - AGENTS.md
+  - agents/admin/schedules/daily-growth-review.yaml
+  - agents/general/output/kgaiwin_backup/css/style5.css
+  - agents/general/output/kgaiwin_backup/elements/images/team/rc-cf-FMh5o5m5N9E-unsplash.jpg
+  - agents/admin/schedules/weekly-collaboration-review.yaml
+  - agents/general/output/kgaiwin_backup/download_kgaiwin.py
+  - agents/general/output/kgaiwin_backup/image/l6/bg.webp
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.webm
+  - agents/admin/evolution/proposals/.gitkeep
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/general/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/Henric-ai.zip
+  - agents/admin/evolution/weekly/.gitkeep
+  - agents/general/output/frame_28s.png
+  - agents/general/output/kgaiwin_backup/image/l4/bg.webm
+  - doc-cleanup-charter.md
+  - agents/general/output/kgaiwin_backup/this3.html
+  - agents/general/output/kgaiwin_backup/elements/images/header/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/check_broll_test.png
+  - agents/general/output/kgaiwin_backup/elements/images/header/rod-long-I79Pgmhmy5M-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-D5c9ZciQy_I-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/1.html
+  - agents/general/output/kgaiwin_backup/image/l2/bg.webm
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/bootstrap.bundle.min.js
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jason-leung-O67LZfeyYBk-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/assets/load1.html
+  - agents/general/output/check_14_2s.png
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/4.html
+  - agents/general/output/ai.png
+  - agents/general/output/kgaiwin_backup/image/l3/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/Lindex.html
+  - agents/general/output/kgaiwin_backup/assets/load2.html
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/news/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/css/style2.css
+  - agents/general/output/kgaiwin_backup/assets/load4.html
+  - agents/_example/.claude/rules/self-evolution.md
+  - agents/general/output/kgaiwin_backup/L2.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-ZipYER3NLhY-unsplash.jpg
+  - agents/general/schedules/morning-summary.yaml
+  - agents/general/output/kgaiwin_backup/elements/css/tooplate-crispy-kitchen.css
+  - agents/general/output/final_14s.png
+  - agents/general/output/check_28s.png
+  - agents/general/output/final_32s.png
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff2
+  - agents/general/output/kgaiwin_backup/elements/images/news/ella-olsson-mmnKI8kMxpc-unsplash.jpg
+  - agents/admin/knowledge/self-evolution-management-guide.md
+  - agents/general/output/kgaiwin_backup/assets/load.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.avif
+  - agents/admin/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/L10.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-isHUj3N0194-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap-icons.css
+  - agents/general/output/kgaiwin_backup/V2.html
+  - agents/admin/knowledge/agent-changes-log.md
+  - agents/general/output/kgaiwin_backup/urls.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/h-wlc.zip
+  - agents/general/output/check_15s.png
+  - agents/general/output/kgaiwin_backup/L10/assets/load.html
+  - agents/general/output/kgaiwin_backup/L4.html
+  - agents/general/output/kgaiwin_backup/assets/load3.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l3/bg.mp4
+  - agents/_example/evolution/proposals/.gitkeep
+  - agents/_example/evolution/GROWTH-REVIEW-PROTOCOL.md
+  - agents/general/output/broll/ai.png
+  - agents/general/.claude/settings.local.json
+  - agents/general/output/kgaiwin_backup/image/lindex/tombol/btn.gif
+  - agents/general/output/check_16s.png
+  - agents/general/output/kgaiwin_backup/LV2.html
+  - agents/general/output/kgaiwin_backup/L7/image/bg.avif
+  - agents/general/output/frame_1s.png
+  - agents/general/output/kgaiwin_backup/elements/video/production_ID_3769033.mp4
+  - agents/general/output/kgaiwin_backup/image/l5/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/Goat.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/luisa-brimble-aFzg83dvnAI-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/Henric-ai (1).zip
+  - agents/general/output/kgaiwin_backup/elements/images/news/news-detail-header.jpg
+  - agents/general/output/kgaiwin_backup.zip
+  - agents/general/output/kgaiwin_backup/elements/images/daan-evers-tKN1WXrzQ3s-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/henric-----.zip
+  - agents/general/output/kgaiwin_backup/2129_crispy_kitchen.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/briana-tozour-V_Nkf1E-vYA-unsplash.jpg
+  - agents/general/output/check_14s.png
+  - agents/general/output/newsletter-ep15/original-data.md
+  - agents/general/output/traffic.png
+  - agents/general/output/broll/traffic.png
+  - agents/_example/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.avif
+  - agents/coder/CLAUDE.md
+  - agents/general/output/newsletter-ep15/final.md
+  - agents/_example/evolution/proposals/TEMPLATE.md
+  - agents/general/output/kgaiwin_backup/elements/images/team/matthew-hamilton-tNCH0sKSZbA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff
+  - agents/general/output/kgaiwin_backup/henric----- (1).zip
+  - agents/coder/.claude/hooks/project-whitelist.ts
+  - agents/general/output/kgaiwin_backup/css/style.css
+  - agents/general/output/kgaiwin_backup/R2.html
+  - agents/_example/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/css/style6.css
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - agents/general/output/kgaiwin_backup/image/l4/bg.mp4
+  - agents/general/knowledge/claude-code-prompts-analysis.md
+  - agents/general/output/kgaiwin_backup/L5.html
+  - agents/admin/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L8/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.webm
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/Findex.html
+  - agents/general/CLAUDE.md
+  - agents/general/knowledge/ganttai-fundraising-v2-review.md
+  - agents/general/output/kgaiwin_backup/L10/image/bg.avif
+  - agents/admin/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/L10/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/js/jquery.min.js
+  - agents/general/output/broll/template.png
+  - agents/general/output/kgaiwin_backup/this2.html
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/image/l6/bg.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.avif
+  - agents/coder/schedules/daily-memory-digest.yaml
+  - agents/general/output/check_32s.png
+  - agents/general/output/newsletter-ep15/review.md
+  - agents/general/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-cH5IPjaAYyo-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/bg.webp
+  - agents/general/output/kgaiwin_backup/assets/load5.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/lucas-swennen-1W_MyJSRLuQ-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/news/caroline-attwood-bpPTlXWTOvg-unsplash.jpg
+  - agents/general/output/newsletter-ep15/final-v5.md
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/R3.html
+  - agents/general/output/template_test_broll.mp4
+  - agents/general/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/image/l6/bg.avif
+  - agents/general/output/kgaiwin_backup/L8/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/images/author/shoeib-abolhassani-ojl7T2Ah93U-unsplash.jpg
+  - agents/coder/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/V1.html
+  - agents/general/output/kgaiwin_backup/L8/image/bg.webp
+  - agents/_example/evolution/REFLECTION-PROTOCOL.md
+  - agents/general/output/newsletter-ep15/final-v2.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jay-wennington-N_Y88TWmGwA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8.html
+  - agents/general/output/kgaiwin_backup/L10/image/bg.jpg
+  - CLAUDE.md
+  - agents/general/output/idea.png
+  - agents/coder/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L8/image/bg.avif
+  - agents/general/output/kgaiwin_backup/elements/images/alex-haney-CAhjZmVk5H4-unsplash.jpg
+  - agents/general/output/final_16s.png
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/general/output/kgaiwin_backup/image/l2/bg.mp4
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.avif
+  - agents/general/output/template_broll.png
+  - agents/general/output/newsletter-ep15/final-v4.md
+  - agents/general/output/kgaiwin_backup/L9/image/bg.avif
+  - agents/general/output/kgaiwin_backup/L6.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/keriliwi-c3mFafsFz2w-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/F2.html
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/team/nicolas-horn-MTZTGvDsHFY-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/R1.html
+  - agents/general/output/kgaiwin_backup/L3.html
+  - agents/general/output/kgaiwin_backup/L9/assets/load.html
+  - agents/general/output/kgaiwin_backup/L7.html
+  - agents/general/output/kgaiwin_backup/L9/image/bg.webp
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/louis-hansel-dphM2U1xq0U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/css/style.css
+  - agents/admin/knowledge/growth-reviews/daily/.gitkeep
+  - agents/general/output/kgaiwin_backup/L1.html
+  - agents/general/output/newsletter-ep15/final-v3.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/stefan-johnson-xIFbDeGcy44-unsplash.jpg
+  - agents/general/output/newsletter-ep15/structure.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/louis-hansel-GiIiRV0FjwU-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/brett-jordan-8xt8-HIFqc8-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/author/alexander-hipp-iEEBWgY_6lA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/style5.css
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.mp4
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-rheOvfxOlOA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8/assets/load.html
+  - agents/general/output/frame_14s.png
+  - claudecab.db
+  - agents/general/output/kgaiwin_backup/L7/assets/load.html
+  - agents/coder/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l2/tombol/btn.gif
+  - agents/general/output/newsletter-ep15/draft-v1.md
+  - agents/general/output/kgaiwin_backup/elements/images/charles-deluvio-FdDkfYFHqe4-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/custom.js
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style4.css
+  - agents/general/output/kgaiwin_backup/assets/load6.html
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-MGKqxm6u2bc-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.mp4
+  - agents/admin/schedules/weekly-growth-review.yaml
+  - agents/general/.claude/skills/sys-proficiency/references/levels.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/ivan-torres-MQUqbmszGGM-unsplash.jpg
+  - agents/admin/knowledge/growth-reviews/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l3/bg.webm
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style3.css
+  - agents/general/output/broll/idea.png
+  - agents/general/output/kgaiwin_backup/elements/images/news/pablo-merchan-montes-Orz90t6o0e4-unsplash.jpg
+  - agents/general/output/final_28s.png
+  - agents/general/output/kgaiwin_backup/css/style1.css
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap.min.css
+tests:
+  - agents/general/output/test_broll_check.mp4
+  - agents/general/output/test_broll_concat2.txt
+  - agents/general/output/test_broll_concat.txt
+  - agents/general/output/test_nobroll.mp4
+-->
+
+---
+### Requirement: Weekly Trend Report Format
+
+The weekly trend report produced by the Admin Agent SHALL be a concise, structured document focusing on patterns and trends, not repeating daily details. The report SHALL contain: (1) per-Agent trend summary (learning trend, structural gaps, quality trajectory), (2) proposal status summary (new/resolved/pending with days count), (3) recommended learning directions for the next week, (4) collaboration health assessment. The report SHALL have no character limit — completeness over brevity. Structural gap root cause analysis SHALL classify gaps as knowledge-issue, habit-issue, or needs-user-input. The report SHALL be saved to knowledge/growth-reviews/weekly/YYYY-Www.md.
+
+#### Scenario: Weekly report delivery
+
+- **WHEN** the weekly trend analysis cycle completes
+- **THEN** the Admin Agent SHALL send the report to the user via Telegram and save a copy to knowledge/growth-reviews/weekly/
+
+#### Scenario: Weekly report conciseness
+
+- **WHEN** the Admin Agent drafts the weekly trend report
+- **THEN** the report SHALL prioritize completeness — no character limit applies. The report SHALL include root cause analysis for structural gaps
+
+#### Scenario: Weekly report does not duplicate daily
+
+- **WHEN** the Admin Agent produces the weekly trend report
+- **THEN** it SHALL focus on week-level patterns and trends, not repeat individual daily assessments
+
+<!-- @trace
+source: agent-self-evolution
+updated: 2026-03-03
+code:
+  - agents/general/output/kgaiwin_backup/L7/css/style.css
+  - agents/general/output/kgaiwin_backup/image/l4/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash-mobile.jpg
+  - openspec-migration-plan.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/gilles-lambert-S_LhjpfIdm4-unsplash.jpg
+  - agents/general/evolution/weekly/.gitkeep
+  - AGENTS.md
+  - agents/admin/schedules/daily-growth-review.yaml
+  - agents/general/output/kgaiwin_backup/css/style5.css
+  - agents/general/output/kgaiwin_backup/elements/images/team/rc-cf-FMh5o5m5N9E-unsplash.jpg
+  - agents/admin/schedules/weekly-collaboration-review.yaml
+  - agents/general/output/kgaiwin_backup/download_kgaiwin.py
+  - agents/general/output/kgaiwin_backup/image/l6/bg.webp
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.webm
+  - agents/admin/evolution/proposals/.gitkeep
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/general/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/Henric-ai.zip
+  - agents/admin/evolution/weekly/.gitkeep
+  - agents/general/output/frame_28s.png
+  - agents/general/output/kgaiwin_backup/image/l4/bg.webm
+  - doc-cleanup-charter.md
+  - agents/general/output/kgaiwin_backup/this3.html
+  - agents/general/output/kgaiwin_backup/elements/images/header/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/check_broll_test.png
+  - agents/general/output/kgaiwin_backup/elements/images/header/rod-long-I79Pgmhmy5M-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-D5c9ZciQy_I-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/1.html
+  - agents/general/output/kgaiwin_backup/image/l2/bg.webm
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/sincerely-media-HoEYgBL_Gcs-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/bootstrap.bundle.min.js
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jason-leung-O67LZfeyYBk-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/assets/load1.html
+  - agents/general/output/check_14_2s.png
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/4.html
+  - agents/general/output/ai.png
+  - agents/general/output/kgaiwin_backup/image/l3/tombol/btn.gif
+  - agents/general/output/kgaiwin_backup/Lindex.html
+  - agents/general/output/kgaiwin_backup/assets/load2.html
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/news/priscilla-du-preez-W3SEyZODn8U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/css/style2.css
+  - agents/general/output/kgaiwin_backup/assets/load4.html
+  - agents/_example/.claude/rules/self-evolution.md
+  - agents/general/output/kgaiwin_backup/L2.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-ZipYER3NLhY-unsplash.jpg
+  - agents/general/schedules/morning-summary.yaml
+  - agents/general/output/kgaiwin_backup/elements/css/tooplate-crispy-kitchen.css
+  - agents/general/output/final_14s.png
+  - agents/general/output/check_28s.png
+  - agents/general/output/final_32s.png
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff2
+  - agents/general/output/kgaiwin_backup/elements/images/news/ella-olsson-mmnKI8kMxpc-unsplash.jpg
+  - agents/admin/knowledge/self-evolution-management-guide.md
+  - agents/general/output/kgaiwin_backup/assets/load.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.avif
+  - agents/admin/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/L10.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/farhad-ibrahimzade-isHUj3N0194-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap-icons.css
+  - agents/general/output/kgaiwin_backup/V2.html
+  - agents/admin/knowledge/agent-changes-log.md
+  - agents/general/output/kgaiwin_backup/urls.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/h-wlc.zip
+  - agents/general/output/check_15s.png
+  - agents/general/output/kgaiwin_backup/L10/assets/load.html
+  - agents/general/output/kgaiwin_backup/L4.html
+  - agents/general/output/kgaiwin_backup/assets/load3.html
+  - agents/general/output/kgaiwin_backup/image/l5/bg.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l3/bg.mp4
+  - agents/_example/evolution/proposals/.gitkeep
+  - agents/_example/evolution/GROWTH-REVIEW-PROTOCOL.md
+  - agents/general/output/broll/ai.png
+  - agents/general/.claude/settings.local.json
+  - agents/general/output/kgaiwin_backup/image/lindex/tombol/btn.gif
+  - agents/general/output/check_16s.png
+  - agents/general/output/kgaiwin_backup/LV2.html
+  - agents/general/output/kgaiwin_backup/L7/image/bg.avif
+  - agents/general/output/frame_1s.png
+  - agents/general/output/kgaiwin_backup/elements/video/production_ID_3769033.mp4
+  - agents/general/output/kgaiwin_backup/image/l5/bg.webp
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/Goat.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/luisa-brimble-aFzg83dvnAI-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/Henric-ai (1).zip
+  - agents/general/output/kgaiwin_backup/elements/images/news/news-detail-header.jpg
+  - agents/general/output/kgaiwin_backup.zip
+  - agents/general/output/kgaiwin_backup/elements/images/daan-evers-tKN1WXrzQ3s-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/henric-----.zip
+  - agents/general/output/kgaiwin_backup/2129_crispy_kitchen.zip
+  - agents/general/output/kgaiwin_backup/elements/images/header/briana-tozour-V_Nkf1E-vYA-unsplash.jpg
+  - agents/general/output/check_14s.png
+  - agents/general/output/newsletter-ep15/original-data.md
+  - agents/general/output/traffic.png
+  - agents/general/output/broll/traffic.png
+  - agents/_example/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.avif
+  - agents/coder/CLAUDE.md
+  - agents/general/output/newsletter-ep15/final.md
+  - agents/_example/evolution/proposals/TEMPLATE.md
+  - agents/general/output/kgaiwin_backup/elements/images/team/matthew-hamilton-tNCH0sKSZbA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/elements/fonts/bootstrap-icons.woff
+  - agents/general/output/kgaiwin_backup/henric----- (1).zip
+  - agents/coder/.claude/hooks/project-whitelist.ts
+  - agents/general/output/kgaiwin_backup/css/style.css
+  - agents/general/output/kgaiwin_backup/R2.html
+  - agents/_example/CLAUDE.md
+  - agents/general/output/kgaiwin_backup/css/style6.css
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - agents/general/output/kgaiwin_backup/image/l4/bg.mp4
+  - agents/general/knowledge/claude-code-prompts-analysis.md
+  - agents/general/output/kgaiwin_backup/L5.html
+  - agents/admin/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L8/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.webm
+  - agents/general/output/kgaiwin_backup/L9/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/Findex.html
+  - agents/general/CLAUDE.md
+  - agents/general/knowledge/ganttai-fundraising-v2-review.md
+  - agents/general/output/kgaiwin_backup/L10/image/bg.avif
+  - agents/admin/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/L10/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/js/jquery.min.js
+  - agents/general/output/broll/template.png
+  - agents/general/output/kgaiwin_backup/this2.html
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/image/l6/bg.jpg
+  - agents/general/output/kgaiwin_backup/L9/image/bg.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/tombol/btn.avif
+  - agents/coder/schedules/daily-memory-digest.yaml
+  - agents/general/output/check_32s.png
+  - agents/general/output/newsletter-ep15/review.md
+  - agents/general/schedules/daily-memory-digest.yaml
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-cH5IPjaAYyo-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L10/image/bg.webp
+  - agents/general/output/kgaiwin_backup/assets/load5.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/lucas-swennen-1W_MyJSRLuQ-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/news/caroline-attwood-bpPTlXWTOvg-unsplash.jpg
+  - agents/general/output/newsletter-ep15/final-v5.md
+  - agents/general/output/kgaiwin_backup/image/l6/tombol/btn.avif
+  - agents/general/output/kgaiwin_backup/R3.html
+  - agents/general/output/template_test_broll.mp4
+  - agents/general/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/image/l6/bg.avif
+  - agents/general/output/kgaiwin_backup/L8/css/style.css
+  - agents/general/output/kgaiwin_backup/elements/images/author/shoeib-abolhassani-ojl7T2Ah93U-unsplash.jpg
+  - agents/coder/schedules/daily-reflection.yaml
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/V1.html
+  - agents/general/output/kgaiwin_backup/L8/image/bg.webp
+  - agents/_example/evolution/REFLECTION-PROTOCOL.md
+  - agents/general/output/newsletter-ep15/final-v2.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/jay-wennington-N_Y88TWmGwA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8.html
+  - agents/general/output/kgaiwin_backup/L10/image/bg.jpg
+  - CLAUDE.md
+  - agents/general/output/idea.png
+  - agents/coder/evolution/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/L8/image/bg.avif
+  - agents/general/output/kgaiwin_backup/elements/images/alex-haney-CAhjZmVk5H4-unsplash.jpg
+  - agents/general/output/final_16s.png
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/general/output/kgaiwin_backup/image/l2/bg.mp4
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.avif
+  - agents/general/output/template_broll.png
+  - agents/general/output/newsletter-ep15/final-v4.md
+  - agents/general/output/kgaiwin_backup/L9/image/bg.avif
+  - agents/general/output/kgaiwin_backup/L6.html
+  - agents/general/output/kgaiwin_backup/elements/images/dinner/keriliwi-c3mFafsFz2w-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/F2.html
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/elements/images/team/nicolas-horn-MTZTGvDsHFY-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/R1.html
+  - agents/general/output/kgaiwin_backup/L3.html
+  - agents/general/output/kgaiwin_backup/L9/assets/load.html
+  - agents/general/output/kgaiwin_backup/L7.html
+  - agents/general/output/kgaiwin_backup/L9/image/bg.webp
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/louis-hansel-dphM2U1xq0U-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9/css/style.css
+  - agents/admin/knowledge/growth-reviews/daily/.gitkeep
+  - agents/general/output/kgaiwin_backup/L1.html
+  - agents/general/output/newsletter-ep15/final-v3.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/stefan-johnson-xIFbDeGcy44-unsplash.jpg
+  - agents/general/output/newsletter-ep15/structure.md
+  - agents/general/output/kgaiwin_backup/elements/images/news/louis-hansel-GiIiRV0FjwU-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L9.html
+  - agents/general/output/kgaiwin_backup/elements/images/breakfast/brett-jordan-8xt8-HIFqc8-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/images/author/alexander-hipp-iEEBWgY_6lA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L7/image/tombol/btn.webp
+  - agents/general/output/kgaiwin_backup/style5.css
+  - agents/general/output/kgaiwin_backup/image/lindex/bg.mp4
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/louis-hansel-rheOvfxOlOA-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/L8/assets/load.html
+  - agents/general/output/frame_14s.png
+  - claudecab.db
+  - agents/general/output/kgaiwin_backup/L7/assets/load.html
+  - agents/coder/evolution/proposals/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l2/tombol/btn.gif
+  - agents/general/output/newsletter-ep15/draft-v1.md
+  - agents/general/output/kgaiwin_backup/elements/images/charles-deluvio-FdDkfYFHqe4-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/elements/js/custom.js
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/general/output/kgaiwin_backup/image/l5/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style4.css
+  - agents/general/output/kgaiwin_backup/assets/load6.html
+  - agents/general/output/kgaiwin_backup/elements/images/lunch/farhad-ibrahimzade-MGKqxm6u2bc-unsplash.jpg
+  - agents/general/output/kgaiwin_backup/image/l1/bg.mp4
+  - agents/admin/schedules/weekly-growth-review.yaml
+  - agents/general/.claude/skills/sys-proficiency/references/levels.md
+  - agents/general/output/kgaiwin_backup/elements/images/slide/ivan-torres-MQUqbmszGGM-unsplash.jpg
+  - agents/admin/knowledge/growth-reviews/weekly/.gitkeep
+  - agents/general/output/kgaiwin_backup/image/l3/bg.webm
+  - agents/general/output/kgaiwin_backup/L8/image/tombol/btn.jpg
+  - agents/general/output/kgaiwin_backup/css/style3.css
+  - agents/general/output/broll/idea.png
+  - agents/general/output/kgaiwin_backup/elements/images/news/pablo-merchan-montes-Orz90t6o0e4-unsplash.jpg
+  - agents/general/output/final_28s.png
+  - agents/general/output/kgaiwin_backup/css/style1.css
+  - agents/general/output/kgaiwin_backup/elements/css/bootstrap.min.css
+tests:
+  - agents/general/output/test_broll_check.mp4
+  - agents/general/output/test_broll_concat2.txt
+  - agents/general/output/test_broll_concat.txt
+  - agents/general/output/test_nobroll.mp4
+-->

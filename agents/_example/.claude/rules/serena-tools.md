@@ -16,6 +16,8 @@
 ```
 # relative_path 參數
 memory/     — 每日記憶
-knowledge/  — 知識庫
+knowledge/  — 知識暫存區
+output/     — 交付產出
+plans/      — 任務規劃
 groups/     — 群組討論
 ```

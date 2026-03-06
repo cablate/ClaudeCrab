@@ -1,0 +1,113 @@
+id: daily-reflection
+name: 每日反思與自主學習
+trigger:
+  type: cron
+  cron: "0 3 * * *"  # 每日凌晨 03:00
+  timezone: Asia/Taipei
+execution:
+  agent: general
+  model: sonnet
+  prompt: |
+    ## 任務：每日反思與自主學習
+
+    **這是排程任務，不是互動對話。**
+    - 禁止詢問使用者
+    - 自己判斷、自己執行、回報結果
+
+    **協議文件**：先讀取 `../_example/evolution/REFLECTION-PROTOCOL.md`，嚴格遵循流程。
+
+    **日期定義**：
+    - 「昨天」= 觸發日的前一天（03:00 on 3/3 → 反思對象 = 3/2）
+    - 以下「昨天」均指反思對象日期
+
+    ---
+
+    ### Phase 0：Memory Cleanup（記憶整理）
+
+    **每次反思的第一步，不可跳過。**
+    詳見 REFLECTION-PROTOCOL.md Phase 0。
+
+    1. 找到 memory/ 中昨天（及近 3 天內未整理的）日誌
+    2. 檢查 `<!-- 已整理 -->` 標記，跳過已整理的
+    3. 對每筆未整理日誌：提取觀察 → USER.md、pattern → MEMORY.md、流水帳 → 結構化日誌
+    4. 標記 `<!-- 已整理 -->`
+
+    ---
+
+    ### Step 0：判斷工作日 or 主動學習日
+
+    根據 Phase 0 處理的日誌內容，判斷昨天有沒有使用者互動。
+    - 有 → 工作日模式
+    - 沒有 → 主動學習日模式（見 REFLECTION-PROTOCOL.md）
+
+    ---
+
+    ### 工作日 Phase 1：回顧昨日記錄
+
+    1. 讀取 `memory/` 中昨天的日誌（Phase 0 已整理成結構化格式）
+    2. 掃描 CLAUDE.md Lessons Learned 中今天新增的條目
+    3. 掃描 `knowledge/` 中今天修改的檔案
+    4. 產出「今天已學清單」
+
+    ---
+
+    ### 工作日 Phase 2：對照使用者期待 + 追蹤前日缺口
+
+    1. 讀取 CLAUDE.md 的「使用者期待」區段
+    2. 逐條比對今天的工作表現
+    3. **追蹤前日缺口**：讀昨天的反思，逐條標記 [已解決]/[進行中]/[無機會驗證]
+    4. **缺口升級規則**：Day 2 要有進度、Day 3 要換策略、Day 3+ 無差異自行標記「需要協助」
+    5. 讀取 `evolution/weekly/` 本週已有記錄，找跨日 meta-pattern
+    6. 產出「缺口清單」（含前日追蹤結果）
+
+    ---
+
+    ### 工作日 Phase 3：主動上網搜尋學習
+
+    **這是核心步驟，不能跳過。**
+
+    針對 Phase 2 的每個缺口：
+    1. 上網搜尋相關高品質素材（技巧、範例、最佳實踐）
+    2. 搜尋方向：全球成功案例與理論 + 具體技巧 + 使用者個人素材庫（學習使用者的風格和用詞）
+    3. **記錄搜尋關鍵字、找到什麼、關鍵收穫、明天應用計畫**
+
+    即使沒有明顯缺口，也要做一次確認性掃描。
+
+    ---
+
+    ### 工作日 Phase 4：內化知識
+
+    1. 搜尋到的知識 → 寫入 `knowledge/` 對應檔案（附來源 URL + 日期）
+    2. 操作性經驗 → Append 到 CLAUDE.md Lessons Learned
+    3. 發現需要改 SOP → 寫提案到 `evolution/proposals/`（用 TEMPLATE.md 格式）
+
+    ---
+
+    ### Phase 5：記錄反思摘要
+
+    在 `evolution/weekly/` 的本週檔案（格式：2026-W09.md）中追加今天的反思。
+    **嚴格遵循 REFLECTION-PROTOCOL.md 的格式**——包含前日追蹤、搜尋關鍵字、來源、收穫、應用計畫。
+
+    如果本週檔案不存在，新建一個。
+
+    ---
+
+    ### 回報結果
+
+    完成後輸出：
+    - Memory 整理：整理了 N 筆日誌，更新了 USER.md/MEMORY.md（或「全部已整理」）
+    - 工作日 or 主動學習日
+    - 前日缺口追蹤結果（幾個解決、幾個進行中）
+    - 新缺口數量
+    - 搜尋了什麼（關鍵字 + 來源 + 收穫摘要）
+    - 寫入了哪些檔案
+    - 是否有 Layer 3 提案
+notification:
+  onComplete: true
+  onError: true
+  platform: telegram
+  chatId: "1491057815"
+metadata:
+  createdAt: 2026-03-03T00:00:00+08:00
+  createdBy: spectra-apply/agent-self-evolution
+  enabled: true

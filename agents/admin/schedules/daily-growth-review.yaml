@@ -1,0 +1,110 @@
+id: daily-growth-review
+name: 每日員工成長審查
+trigger:
+  type: cron
+  cron: "0 4 * * *"  # 每日凌晨 04:00（員工 03:00 反思完畢後）
+  timezone: Asia/Taipei
+execution:
+  agent: admin
+  model: opus
+  prompt: |
+    ## 任務：每日員工成長審查
+
+    **這是排程任務，不是互動對話。**
+    - 禁止詢問使用者
+    - 自己判斷、自己執行、回報結果
+
+    **協議文件**：先讀取 `../_example/evolution/GROWTH-REVIEW-PROTOCOL.md` 的「每日審查」區段，嚴格遵循流程和報告格式。
+
+    ---
+
+    ### 掃描對象
+
+    主要員工（不含 _example、_shared、admin）：
+    - agents/general/（秘書）
+    - agents/coder/（工程師）
+
+    **防呆**：如果員工的目錄不存在或 evolution/ 為空，在報告中註記「資料不完整」，不要報錯。
+
+    ---
+
+    ### Phase 1：收集今日反思
+
+    讀取各員工的 `evolution/weekly/` 本週檔案，找到今天日期的反思條目。
+    如果今天沒有反思 → 註記「今日無反思紀錄」。
+
+    ---
+
+    ### Phase 2：今日表現評估
+
+    對每位員工，基於反思記錄判斷：
+    1. **反思品質**：有具體搜尋記錄嗎？關鍵字、來源、收穫、應用計畫都有嗎？還是敷衍帶過？
+    2. **前日缺口追蹤**：昨天的缺口有進展嗎？如果是 Day 2+ 的缺口，有換策略嗎？
+    3. **期待對照**：CLAUDE.md 使用者期待 vs 今天工作表現
+    4. **管理者補充**：你觀察到但員工沒發現的問題
+
+    **缺口升級規則**（必須執行）：
+    - Day 2 無進度描述 → 標記「缺乏進度」
+    - Day 3 未改變策略 → 標記「敷衍反思」
+    - Day 3+ 無差異 → 升級通報使用者
+
+    ---
+
+    ### Phase 3：審核 Layer 3 提案
+
+    掃描所有員工的 `evolution/proposals/` 目錄。
+    - 有 pending 提案 → 評估可行性和一致性 → 給明確建議（approve/reject/defer + 理由）
+    - 有 approved 但尚未執行的提案 → **立即執行變更**，在提案「執行紀錄」區段記錄
+    - 沒有提案 → 跳過此區段
+
+    **重要**：你不能自己批准提案。所有 pending 提案轉呈使用者。
+
+    ---
+
+    ### Phase 4：協作健康度快檢
+
+    對每位員工：
+    1. 讀取 `USER.md` 最近的 Observations/Murmur
+    2. 掃描 `memory/` 今天的日誌
+    3. 找：情緒信號、重複錯誤、理解偏差
+    4. 有警訊 → 列出具體證據 + 建議行動
+    5. 無異常 → 簡述「今日正常」
+
+    ---
+
+    ### Phase 5：產出日報
+
+    按照 GROWTH-REVIEW-PROTOCOL.md 的「每日報告格式」產出。
+    **核心原則**：員工搜尋了什麼、找到什麼、怎麼用，如實轉述，不能只寫「學了 X」。
+
+    **字數不設上限**——寧可完整也不要壓縮。使用者要看到的是全貌，不是摘要。
+
+    **待審提案操作指令**：
+    如果日報中有待審提案，在每個提案後面附上一段「快速操作指令」，讓使用者可以複製貼到新的 Admin 對話中直接處理：
+
+    ```
+    📋 快速操作（複製以下內容到 Admin 對話）：
+    ---
+    請處理以下提案：
+    - 提案：[提案名]
+    - 來自：[員工名]
+    - 提案路徑：[員工名]/evolution/proposals/[提案名].md
+    - 我的決定：[approve / reject]
+    - 備註：（可選）
+
+    如果 approve，請立即執行該提案的變更。
+    ---
+    ```
+
+    完成後：
+    1. 儲存一份到 `evolution/reviews/daily/` 目錄（檔名：YYYY-MM-DD.md）
+    2. 直接輸出報告完整內容
+notification:
+  onComplete: true
+  onError: true
+  platform: telegram
+  chatId: "1491057815"
+metadata:
+  createdAt: 2026-03-03T00:00:00+08:00
+  createdBy: spectra-apply/agent-self-evolution
+  enabled: true

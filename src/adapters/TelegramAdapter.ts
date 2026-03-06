@@ -24,6 +24,7 @@ import {
   isGroupCommandProcessed,
   DESTRUCTIVE_COMMANDS,
   isTargetAll,
+  applyModelChange,
   type CommandDependencies,
 } from './commands/index.js';
 import {
@@ -214,6 +215,16 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       log: this.log,
     });
     this.bot.on('callback_query:data', (ctx) => {
+      const data = ctx.callbackQuery?.data;
+
+      // Model selection callback — handle here since it needs agentLoader
+      if (data?.startsWith('model_set:') && this.commandDeps) {
+        void this.handleModelCallback(ctx, data).catch((error) => {
+          this.log.error({ error }, 'Unhandled error in model callback');
+        });
+        return;
+      }
+
       void this.callbackHandler!.handle(ctx).catch((error) => {
         this.log.error({ error }, 'Unhandled error in callback handler');
       });
@@ -242,6 +253,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       { command: 'help', description: '顯示幫助訊息' },
       { command: 'reset', description: '清除對話記錄' },
       { command: 'stop', description: '停止執行中的回應' },
+      { command: 'model', description: '切換 AI 模型' },
       { command: 'schedule', description: '管理排程任務' },
       { command: 'status', description: '顯示 Bot 狀態' },
       { command: 'members', description: '群組成員列表' },
@@ -416,6 +428,54 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     this.callbackHandler?.dispose();
     this.callbackHandler = null;
     this.bot = null;
+  }
+
+  /**
+   * Handle model selection callback from inline keyboard
+   */
+  private async handleModelCallback(ctx: Context, data: string): Promise<void> {
+    const MODEL_LABELS: Record<string, string> = {
+      opus: '🟣 Opus',
+      sonnet: '🔵 Sonnet',
+      haiku: '🟢 Haiku',
+    };
+
+    const parts = data.split(':');
+    const agentId = parts[1];
+    const model = parts[2];
+
+    if (agentId === undefined || model === undefined || !['opus', 'sonnet', 'haiku'].includes(model)) {
+      await ctx.answerCallbackQuery({ text: '❌ 無效的選擇' });
+      return;
+    }
+
+    try {
+      const result = await applyModelChange(agentId, model, this.commandDeps!.agentLoader);
+      if (!result.success) {
+        await ctx.answerCallbackQuery({ text: `❌ ${result.error}` });
+        return;
+      }
+
+      // Update the message to show the new selection
+      const keyboard = new InlineKeyboard();
+      for (const m of ['opus', 'sonnet', 'haiku']) {
+        const label = m === model
+          ? `${MODEL_LABELS[m]} ✓`
+          : MODEL_LABELS[m]!;
+        keyboard.text(label, `model_set:${agentId}:${m}`);
+      }
+
+      await ctx.editMessageText(
+        `🤖 目前模型：**${MODEL_LABELS[model]}**\n\n選擇要切換的模型：`,
+        { parse_mode: 'Markdown', reply_markup: keyboard }
+      );
+      await ctx.answerCallbackQuery({ text: `✅ 已切換至 ${MODEL_LABELS[model]}` });
+
+      this.log.info({ agentId, model }, 'Model changed via Telegram command');
+    } catch (error) {
+      this.log.error({ error, agentId, model }, 'Failed to change model');
+      await ctx.answerCallbackQuery({ text: '❌ 切換失敗' });
+    }
   }
 
   /**

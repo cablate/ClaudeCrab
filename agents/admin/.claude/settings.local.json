@@ -9,24 +9,12 @@
       "WebFetch",
       "WebSearch",
       "Bash",
-      "mcp__serena__*"
+      "mcp__serena__*",
+      "mcp__file-send__send_file"
     ],
     "deny": [
       "mcp__twse__*"
     ]
   },
-  "model": "opus",
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx tsx ../_shared/hooks/memory-stop-checkpoint.ts"
-          }
-        ]
-      }
-    ]
-  }
+  "model": "opus"
 }

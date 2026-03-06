@@ -1,4 +1,6 @@
-import type { Context } from 'grammy';
+import { type Context, InlineKeyboard } from 'grammy';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import type { AgentLoader } from '../../core/AgentLoader.js';
 import type { SessionManager } from '../../core/SessionManager.js';
 import type { MessageProcessor } from '../../core/MessageProcessor.js';
@@ -255,6 +257,7 @@ export async function handleHelp(
 /help - 顯示此幫助訊息
 /reset - 清除對話記錄，重新開始
 /stop - 強制停止 Claude 執行
+/model - 切換 AI 模型（Opus/Sonnet/Haiku）
 /schedule - 管理排程任務
 /status - 顯示 Bot 狀態
 
@@ -577,6 +580,89 @@ async function handleRestart(
   }, 1000);
 }
 
+// ── /model command ──────────────────────────────────────────────
+
+const MODEL_LABELS: Record<string, string> = {
+  opus: '🟣 Opus',
+  sonnet: '🔵 Sonnet',
+  haiku: '🟢 Haiku',
+};
+
+/**
+ * Handle /model command
+ * Shows inline keyboard to select model (opus/sonnet/haiku)
+ */
+export async function handleModel(
+  ctx: Context,
+  deps: CommandDependencies
+): Promise<void> {
+  const agent = deps.agentLoader.get(deps.agentId);
+  if (agent === undefined) {
+    await ctx.reply('❌ 無法載入 Agent 設定');
+    return;
+  }
+
+  // Read current model from settings.local.json (source of truth)
+  const settingsPath = path.join(agent.path, '.claude', 'settings.local.json');
+  let currentModel = 'sonnet';
+  try {
+    const content = await fs.readFile(settingsPath, 'utf-8');
+    const settings = JSON.parse(content) as Record<string, unknown>;
+    if (typeof settings.model === 'string') {
+      currentModel = settings.model;
+    }
+  } catch {
+    // Fallback to agent config
+    currentModel = agent.config.model ?? 'sonnet';
+  }
+
+  const keyboard = new InlineKeyboard();
+  for (const model of ['opus', 'sonnet', 'haiku']) {
+    const label = model === currentModel
+      ? `${MODEL_LABELS[model]} ✓`
+      : MODEL_LABELS[model]!;
+    keyboard.text(label, `model_set:${deps.agentId}:${model}`);
+  }
+
+  await ctx.reply(
+    `🤖 目前模型：**${MODEL_LABELS[currentModel] ?? currentModel}**\n\n選擇要切換的模型：`,
+    { parse_mode: 'Markdown', reply_markup: keyboard }
+  );
+}
+
+/**
+ * Apply model change to settings.local.json and reload agent.
+ * Called from TelegramAdapter callback handler.
+ */
+export async function applyModelChange(
+  agentId: string,
+  model: string,
+  agentLoader: AgentLoader
+): Promise<{ success: boolean; error?: string }> {
+  const agent = agentLoader.get(agentId);
+  if (agent === undefined) {
+    return { success: false, error: 'Agent not found' };
+  }
+
+  const settingsPath = path.join(agent.path, '.claude', 'settings.local.json');
+  let settings: Record<string, unknown> = {};
+  try {
+    const content = await fs.readFile(settingsPath, 'utf-8');
+    settings = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    // File doesn't exist, create new
+  }
+
+  settings.model = model;
+  await fs.mkdir(path.join(agent.path, '.claude'), { recursive: true });
+  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+
+  // Reload agent config
+  await agentLoader.loadAgent(agentId);
+
+  return { success: true };
+}
+
 export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   start: handleStart,
   help: handleHelp,
@@ -586,4 +672,5 @@ export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   members: handleMembers,
   status: handleStatus,
   restart: handleRestart,
+  model: handleModel,
 };

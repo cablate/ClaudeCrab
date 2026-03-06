@@ -6,7 +6,7 @@ import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager, type QueryResult } from './SDKQueryManager.js';
 import { InteractionHandler } from './InteractionHandler.js';
 import { EventBus } from './EventBus.js';
-import { buildPromptContext } from './constants.js';
+import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
@@ -666,6 +666,23 @@ export class MessageProcessor {
                               ),
                             },
                           }),
+                        ],
+                      },
+                    ],
+                    // Memory stop checkpoint — only for interactive sessions
+                    // Schedules don't have this hook, so they stop cleanly
+                    Stop: [
+                      {
+                        hooks: [
+                          async (input) => {
+                            if ('stop_hook_active' in input && input.stop_hook_active) {
+                              return {};
+                            }
+                            return {
+                              decision: 'block' as const,
+                              reason: MEMORY_STOP_CHECKPOINT,
+                            };
+                          },
                         ],
                       },
                     ],

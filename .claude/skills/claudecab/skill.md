@@ -33,31 +33,31 @@ ClaudeCab 是**輕量級多代理框架**，讓 Claude Code 成為可被遠端�
 
 ## 導航索引
 
-> 完整導讀：[references/_index.md](references/_index.md)
+> **規格文件與決策紀錄已遷移至 `openspec/`**
 
-| 類別 | 參考文件 |
-|------|----------|
-| **產品** | |
-| 產品定位、核心概念、路線圖 | [product/vision.md](references/product/vision.md) |
-| 功能開發原則、設計原則 | [product/principle.md](references/product/principle.md) |
-| **系統** | |
-| 詳細架構設計、模組說明、資料流 | [system/overview.md](references/system/overview.md) |
-| 共享知識區架構（跨 bot 知識共享） | [system/shared-knowledge.md](references/system/shared-knowledge.md) |
-| 觸發機制全覽（事件流、cascade 分析） | [system/trigger-mechanism-map.md](references/system/trigger-mechanism-map.md) |
-| Skill-Based Character System 設計 | [system/skill-based-character-system.md](references/system/skill-based-character-system.md) |
-| **決策** | |
-| 決策追蹤（ADR-001 ~ ADR-034 + 功能故事） | [decisions/_index.md](references/decisions/_index.md) |
-| **操作** | |
+| 類別 | 來源 |
+|------|------|
+| **規格（openspec/specs/）** | |
+| 產品定位、核心概念 | `openspec/specs/product-vision/spec.md` |
+| 功能開發原則、設計原則 | `openspec/specs/product-principles/spec.md` |
+| 系統架構、模組說明、資料流 | `openspec/specs/system-architecture/spec.md` |
+| 模組地圖、耦合分析 | `openspec/specs/module-map/spec.md` |
+| 共享知識區架構 | `openspec/specs/shared-knowledge/spec.md` |
+| 觸發機制全覽 | `openspec/specs/trigger-mechanisms/spec.md` |
+| Skill-Based Character System | `openspec/specs/skill-character-system/spec.md` |
+| MMORPG Skill 管理設計 | `openspec/specs/mmorpg-skill-system/spec.md` |
+| **決策紀錄（openspec/changes/）** | |
+| 已完成 ADR（34 個） | `openspec/changes/archive/adr-*` |
+| 進行中的變更 | `openspec/changes/story-*` |
+| **操作（references/）** | |
 | 「做 X 功能看哪些檔案」對照表 | [operations/quick-nav.md](references/operations/quick-nav.md) |
-| 已知問題、踩過的坑、解決方案 | [operations/troubleshooting.md](references/operations/troubleshooting.md) |
+| 已知問題、解決方案 | [operations/troubleshooting.md](references/operations/troubleshooting.md) |
 | 版本歷史（v1.25+） | [operations/changelog.md](references/operations/changelog.md) |
-| **研究** | |
-| Agent Skill 設計原則、核心洞察 | [research/agent-skill/design.md](references/research/agent-skill/design.md) |
+| **研究（references/）** | |
+| Agent Skill 設計原則 | [research/agent-skill/design.md](references/research/agent-skill/design.md) |
 | Agent Skill 實踐指南 | [research/agent-skill/guide.md](references/research/agent-skill/guide.md) |
-| **歸檔** | |
-| 歷史文件策展歸檔（portfolio 材料） | [_archive/_index.md](references/_archive/_index.md) |
 
-> **開發新功能前，請先閱讀 [product/vision.md](references/product/vision.md) 確認符合產品定位。**
+> **開發新功能前，先用 `spectra search` 查詢相關規格。**
 
 ## 文件治理規則
 

@@ -76,10 +76,14 @@ sys-self-evolution：要記錄嗎？記到哪？
    └── 是 → 繼續
 
 2. 有沒有既有的 Skill 適合放這個知識？
-   └── 有 → 更新那個 Skill
-   └── 沒有 → 建立新的獨立 Skill
+   └── 有 → 更新那個 Skill 的 references/
+   └── 沒有 → 繼續
 
-3. 記錄到 changelog 或通知管理者
+3. 知識點足夠建立新 Skill 嗎？（至少 2-3 個相關知識點）
+   └── 是 → 提案建立新 Skill
+   └── 否 → 先暫存到 knowledge/，等累積足夠再歸納
+
+4. 記錄到 changelog 或通知管理者
 ```
 
 ---
@@ -100,10 +104,23 @@ sys-self-evolution：要記錄嗎？記到哪？
 
 | 類型 | 去處 | 命名慣例 | 例子 |
 |------|------|----------|------|
+| 反思/研究學到的知識（尚未歸納） | knowledge/（暫存區） | `{領域}-{主題}-{具體面向}.md` | `writing-style-強觀點表達與中立平衡.md` |
 | 業務知識（某領域是什麼） | Knowledge Skill | `knowledge-{domain}` | `knowledge-ecpay-invoice` |
 | 方法論（如何做某類事） | Method Skill | `method-{topic}` | `method-api-integration` |
 | 專案決策（專案特定的知識） | Project Skill | `proj-{project}-{topic}` | `proj-cablate-architecture` |
+| 使用者交辦的成果物/分析報告 | output/（交付目錄） | `output/{任務或專案名}/` | `output/ganttai-analysis/` |
 | 當日操作記錄 | Memory | `memory/YYYY-MM-DD.md` | 今天做了什麼 |
+
+### knowledge/ 暫存區規則
+
+**可以放**：反思學到的技巧/方法論、主動研究的筆記、工具評估心得、案例分析拆解
+
+**不能放**：使用者交辦的分析報告（→ output/）、管理操作紀錄（→ evolution/）、考核結果（→ evolution/reviews/）
+
+**生命週期**：
+1. 反思/研究產出 → 寫入 knowledge/
+2. 累積 2-3 個相關知識點 → 評估是否提案建立 Skill
+3. 歸納進 Skill 後 → 原檔加標記 `<!-- consolidated into {skill-name} -->`
 
 ### 判斷原則
 

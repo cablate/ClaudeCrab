@@ -94,3 +94,5 @@ agents/*/knowledge/cases/
 
 # Mangled path artifacts
 _ProgramOwnProjectClaudeCab*/
+.spectra/
+openspec/.vector-search.db*

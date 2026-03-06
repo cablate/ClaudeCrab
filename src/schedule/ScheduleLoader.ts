@@ -14,6 +14,10 @@ import { logger } from '../utils/logger.js';
 export class ScheduleLoader {
   constructor(private agentsDir: string) {}
 
+  getAgentsDir(): string {
+    return this.agentsDir;
+  }
+
   /**
    * Load all schedules from all agents
    */

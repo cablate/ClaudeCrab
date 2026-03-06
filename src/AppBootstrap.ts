@@ -147,8 +147,9 @@ export class AppBootstrap {
       messageProcessor
     );
 
-    // v2.0: Start idle mutter scheduler (cost-optimized: 5min interval, 30% chance, 3/hr cap, viewers-only)
-    this.initializeIdleMutterScheduler(activityService, agentLoader);
+    // v2.0: Idle mutter scheduler disabled by default — Haiku mutter generation
+    // consumes API credits with limited value. Enable by uncommenting below.
+    // this.initializeIdleMutterScheduler(activityService, agentLoader);
 
     // v2.0: Track all agents for activity (so idle detection works from startup)
     for (const agentId of agentLoader.list()) {
@@ -636,7 +637,9 @@ export class AppBootstrap {
 
     return new ActivityService({
       getAgentName,
-      reactionGenerator,
+      // ReactionGenerator disabled by default — Haiku reactions/mood generation
+      // consume API credits with limited value. Enable by uncommenting below.
+      // reactionGenerator,
       activityRepository,
       bufferSize: ACTIVITY_BUFFER_SIZE,
     });

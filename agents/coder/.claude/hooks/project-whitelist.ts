@@ -36,9 +36,16 @@ function normalizePath(p: string): string {
 }
 
 function resolvePath(inputPath: string, workspacePath: string): string {
-  const resolved = path.isAbsolute(inputPath)
-    ? inputPath
-    : path.resolve(workspacePath, inputPath);
+  // Handle Unix-style paths on Windows (e.g., /f/... → F:\...)
+  let normalizedInput = inputPath;
+  if (process.platform === 'win32' && /^\/[a-zA-Z]\//.test(inputPath)) {
+    const driveLetter = inputPath[1].toUpperCase();
+    normalizedInput = `${driveLetter}:${inputPath.slice(2).replace(/\//g, '\\')}`;
+  }
+
+  const resolved = path.isAbsolute(normalizedInput)
+    ? normalizedInput
+    : path.resolve(workspacePath, normalizedInput);
 
   try {
     return fs.realpathSync(resolved);

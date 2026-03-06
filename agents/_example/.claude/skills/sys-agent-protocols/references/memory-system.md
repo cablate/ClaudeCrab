@@ -31,6 +31,9 @@
 | **MEMORY.md** | 根目錄（與 CLAUDE.md 同層） | 持久事實、pattern |
 | **USER.md** | 根目錄（與 CLAUDE.md 同層） | 使用者資訊 + Observations |
 | **CLAUDE.md** | 根目錄 | Lessons Learned |
+| **knowledge/** | 根目錄 | 知識暫存區（反思/研究學到的知識素材，尚未歸納進 Skill） |
+| **output/** | 根目錄 | 交付產出（使用者交辦的成果物，按任務/專案分子目錄） |
+| **plans/** | 根目錄 | 任務規劃（plan mode 產出的規劃文件） |
 
 **判斷**：下次聊到這件事會想回顧嗎？會 → 記。
 

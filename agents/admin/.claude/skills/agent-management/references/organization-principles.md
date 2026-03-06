@@ -183,4 +183,4 @@
 - 有新的原則需要加入
 - 原則之間的優先級需要調整
 
-應該更新這份文件，並記錄到 `agent-changes-log.md`。
+應該更新這份文件，並記錄到 `.claude/skills/agent-management/references/agent-changes-log.md`。

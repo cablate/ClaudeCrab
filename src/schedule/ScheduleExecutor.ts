@@ -14,19 +14,19 @@ import type { IQueryMetricsRepository } from '../persistence/types.js';
 import type { AgentLoader } from '../core/AgentLoader.js';
 import type { SDKQueryManager, QueryResult } from '../core/SDKQueryManager.js';
 import { buildPromptContext } from '../core/constants.js';
-import { retryAsync, shouldRetryError } from '../utils/retry.js';
+import { retryAsync } from '../utils/retry.js';
 import type { RetryOptions } from '../utils/retry.js';
 import { logger } from '../utils/logger.js';
 
 /** Schedule-specific retry options: more conservative than chat */
 const SCHEDULE_RETRY_OPTIONS: RetryOptions = {
-  maxAttempts: 3,
+  maxAttempts: 5,
   initialDelayMs: 5000,    // 5s (schedules are not time-sensitive)
   maxDelayMs: 60000,       // 60s cap
-  backoffMultiplier: 3,    // 5s → 15s → 45s
+  backoffMultiplier: 3,    // 5s → 15s → 45s → 60s → 60s
   jitterFactor: 0.2,
-  isRetryable: shouldRetryError,
-};
+  isRetryable: () => true, // Schedules retry on ANY error — they run once/day, worth retrying
+};;
 
 export class ScheduleExecutor {
   constructor(
@@ -89,6 +89,7 @@ export class ScheduleExecutor {
                   : {}),
                 additionalOptions: {
                   abortController,
+                  persistSession: false, // Schedules are ephemeral — no session persistence
                   // Pass model override if specified in schedule config
                   ...(spec.execution.model ? { model: spec.execution.model } : {}),
                   hooks: {
@@ -108,6 +109,7 @@ export class ScheduleExecutor {
                         ],
                       },
                     ],
+
                   },
                 },
                 onIntermediateMessage: async (text: string) => {

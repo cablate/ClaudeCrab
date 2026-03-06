@@ -1,6 +1,6 @@
 # Skill Proficiency Levels
 
-**更新日期**：2026-03-02
+**更新日期**：2026-03-04
 
 ## Domain Skills
 
@@ -9,6 +9,12 @@
 - 最後使用：2026-02-19
 - 狀態：活躍使用
 - 備註：完整流程穩定；六層分析框架（大綱+核心主張+邏輯+邊界+框架+舉例+連結）已整合進 SKILL.md step 6
+
+### content-analyzer ★★★★★ Master
+- 使用次數：42（198 篇完整批次）
+- 最後使用：2026-03-04
+- 狀態：完整流程驗證
+- 備註：198 篇貼文全量分析完成——四維度結構化分析、creator-profile.md 持續累積機制、workspace 客製化架構
 
 ### social-post-optimizer ★☆☆☆☆ Novice
 - 使用次數：1
@@ -62,11 +68,11 @@
 - 狀態：活躍使用
 - 備註：工具鏈優化——validate-concat.ts 擴充（編碼/尺寸/duration 驗證）、compose-video.sh 自動預處理+subtitles filter+冒號跳脫、SKILL.md pre-flight checklist；確認 subtitles filter 也需要 Windows 冒號跳脫
 
-### style-driven-author ★★★☆☆ Proficient
-- 使用次數：3
-- 最後使用：2026-03-02
+### style-driven-author ★★★★☆ Expert
+- 使用次數：6
+- 最後使用：2026-03-04
 - 狀態：活躍使用
-- 備註：電子報 EP15 完整流程——WebSearch 事實查證、original-data 整理、structure 設計、三層審查、5 版迭代、協作教訓析出並更新 newsletter-style.md（AI 稀釋問題、句號斷句、空行過多、收尾散掉、類比解釋）
+- 備註：電子報風格建檔——讀 EP2/5/10/13/14 整理出結構/語氣/內容/節奏特徵，建立 newsletter-style.md；EP15 完整流程（WebSearch 事實查證、original-data 整理、structure 設計、三層審查、5 版迭代）；協作教訓：載體文件只放該載體特有規則，通用流程不重複；新增 workspace/ 客製化架構——creator-profile.md 存放位置與更新機制已文件化進 SKILL.md
 
 ### dom-seo ★★☆☆☆ Competent
 - 使用次數：2

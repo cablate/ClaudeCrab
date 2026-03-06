@@ -5,6 +5,8 @@
  * Coordinates between ScheduleLoader, CronScheduler, ScheduleRepository.
  */
 
+import path from 'node:path';
+import type { FSWatcher } from 'chokidar';
 import type { ScheduleSpec } from './schemas.js';
 import type { ScheduleInfo, ScheduleExecution, CreateScheduleOptions } from './types.js';
 import type { ScheduleLoader } from './ScheduleLoader.js';
@@ -12,7 +14,12 @@ import type { CronScheduler } from './CronScheduler.js';
 import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import { logger } from '../utils/logger.js';
 
+const FILE_WATCHER_DEBOUNCE_MS = 300;
+
 export class ScheduleManager {
+  private watcher: FSWatcher | null = null;
+  private debounceTimers = new Map<string, NodeJS.Timeout>();
+
   constructor(
     private loader: ScheduleLoader,
     private scheduler: CronScheduler,
@@ -40,6 +47,9 @@ export class ScheduleManager {
     }
 
     logger.info(`[ScheduleManager] Loaded and registered ${count} schedules`);
+
+    // Start watching YAML files for changes
+    this.startFileWatcher();
   }
 
   /**
@@ -339,6 +349,7 @@ export class ScheduleManager {
    * Dispose and clean up
    */
   dispose(): void {
+    this.stopFileWatcher();
     this.scheduler.dispose();
     logger.info('[ScheduleManager] Disposed');
   }
@@ -346,6 +357,76 @@ export class ScheduleManager {
   /**
    * Generate a slug ID from a name
    */
+  /**
+   * Start watching schedule YAML files for changes.
+   * Automatically triggers syncSchedulesForAgent when files are added, changed, or deleted.
+   */
+  private startFileWatcher(): void {
+    const agentsDir = this.loader.getAgentsDir();
+
+    try {
+      // Dynamic import to avoid blocking if chokidar is not available
+      import('chokidar').then(({ watch }) => {
+        // chokidar v5 removed glob support — watch the agents directory
+        // and filter to only schedules/*.yaml via `ignored`
+        this.watcher = watch(agentsDir, {
+          ignoreInitial: true,
+          depth: 2, // agents/{id}/schedules/ = depth 2
+          ignored: (filePath: string, stats) => {
+            // Allow directories to be traversed
+            if (!stats?.isFile()) return false;
+            // Only watch .yaml files inside a schedules/ directory
+            const normalized = filePath.replace(/\\/g, '/');
+            return !(/\/schedules\/[^/]+\.yaml$/.test(normalized));
+          },
+          awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
+        });
+
+        this.watcher.on('all', (event: string, filePath: string) => {
+          if (event !== 'add' && event !== 'change' && event !== 'unlink') return;
+
+          // Extract agentId from path: .../agents/{agentId}/schedules/xxx.yaml
+          const normalizedPath = filePath.replace(/\\/g, '/');
+          const normalizedAgentsDir = agentsDir.replace(/\\/g, '/');
+          const relativePath = normalizedPath.replace(normalizedAgentsDir + '/', '');
+          const agentId = relativePath.split('/')[0];
+
+          if (!agentId) return;
+
+          // Per-agent debounce
+          const existing = this.debounceTimers.get(agentId);
+          if (existing) clearTimeout(existing);
+
+          this.debounceTimers.set(agentId, setTimeout(() => {
+            this.debounceTimers.delete(agentId);
+            logger.info(`[ScheduleManager] File ${event} detected for agent: ${agentId}, syncing schedules`);
+            void this.syncSchedulesForAgent(agentId);
+          }, FILE_WATCHER_DEBOUNCE_MS));
+        });
+
+        logger.info(`[ScheduleManager] File watcher started on: ${agentsDir}`);
+      }).catch((err: unknown) => {
+        logger.warn({ error: err }, '[ScheduleManager] Failed to start file watcher (chokidar not available), falling back to message:sent sync');
+      });
+    } catch (err) {
+      logger.warn({ error: err }, '[ScheduleManager] Failed to start file watcher, falling back to message:sent sync');
+    }
+  }
+
+  /**
+   * Stop the file watcher and clean up debounce timers.
+   */
+  private stopFileWatcher(): void {
+    if (this.watcher) {
+      void this.watcher.close();
+      this.watcher = null;
+    }
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+  }
+
   private generateId(name: string): string {
     return name
       .toLowerCase()
