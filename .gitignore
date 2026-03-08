@@ -88,9 +88,12 @@ agents/leader/
 # Playwright MCP screenshots
 .playwright-mcp/
 
-# Agent runtime data (group conversations, knowledge cases)
+# Agent runtime data (group conversations, knowledge, output, plans, evolution)
 agents/*/groups/
-agents/*/knowledge/cases/
+agents/*/knowledge/
+agents/*/output/
+agents/*/plans/
+agents/*/evolution/
 
 # Mangled path artifacts
 _ProgramOwnProjectClaudeCab*/
