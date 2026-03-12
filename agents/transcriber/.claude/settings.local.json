@@ -1,5 +1,4 @@
 {
-  "model": "sonnet",
   "permissions": {
     "allow": [
       "Read",
@@ -12,10 +11,12 @@
       "WebSearch",
       "Skill",
       "mcp__serena__*",
-      "mcp__chrome-devtools__*"
+      "mcp__chrome-devtools__*",
+      "mcp__file-send__send_file"
     ],
     "deny": []
   },
+  "model": "sonnet",
   "hooks": {
     "PreToolUse": [
       {

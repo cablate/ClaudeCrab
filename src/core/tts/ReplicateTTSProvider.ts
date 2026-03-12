@@ -1,7 +1,7 @@
 /**
  * Replicate MiniMax Speech 2.8 Turbo TTS provider.
  *
- * Uses Replicate API to run minimax/speech-2.8-turbo model.
+ * Uses Replicate API to run minimax/speech-2.6-hd model.
  * Returns MP3 audio buffer.
  */
 
@@ -10,7 +10,7 @@ import { retryAsync, API_RETRY_OPTIONS, isRateLimitError, isTransientError } fro
 import { TTSError } from '../../types/errors.js';
 import type { TTSProvider, SynthesizeOptions, SynthesizeResult } from './types.js';
 
-const DEFAULT_MODEL = 'minimax/speech-2.8-turbo';
+const DEFAULT_MODEL = 'minimax/speech-2.6-hd';
 
 export class ReplicateTTSProvider implements TTSProvider {
   private readonly replicate: Replicate;

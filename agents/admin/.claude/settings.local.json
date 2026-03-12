@@ -10,7 +10,8 @@
       "WebSearch",
       "Bash",
       "mcp__serena__*",
-      "mcp__file-send__send_file"
+      "mcp__file-send__send_file",
+      "mcp__tts__speak"
     ],
     "deny": [
       "mcp__twse__*"

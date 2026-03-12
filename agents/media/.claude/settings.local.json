@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash",
+      "Skill",
+      "mcp__mcp-image__generate_image",
+      "mcp__file-send__send_file",
+      "mcp__agent-call__call_agent"
+    ]
+  }
+}

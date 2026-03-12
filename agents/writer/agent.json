@@ -1,0 +1,24 @@
+{
+  "name": "寫手",
+  "display": {
+    "avatar": "✍️",
+    "color": "#8B5CF6"
+  },
+  "description": "專業寫手，產出讀起來像 Cab 本人寫的文字內容",
+  "version": "1.0.0",
+  "model": "opus",
+  "telegramBotToken": "8609012574:AAGO-qPbSy4qaiQzJMMgA3DKZgVdJM5ZOGk",
+  "settings": {
+    "permissionMode": "default",
+    "delegation": {
+      "inbound": true,
+      "outbound": false
+    },
+    "initiative": {
+      "enabled": false
+    },
+    "social": {
+      "enabled": false
+    }
+  }
+}

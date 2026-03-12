@@ -32,6 +32,7 @@ cases 檔案路徑：`knowledge/cases/`
 | 標題 | 核心主張 | 檔案 |
 |------|---------|------|
 | OpenClaw 21個瘋狂用例 | AI 助理的價值在於自主整合資料源、自動執行決策流程；多層 AI 委員會思維 | knowledge/cases/OpenClaw_21_cases.md |
+| 解剖小龍蝦：AI Agent 運作原理 | AI Agent 不是更聰明的 AI，是文字把戲：System Prompt + 工具調用 + 記憶系統 + Context 壓縮讓無狀態語言模型看起來有個性有記憶 | knowledge/cases/openclaw_agent_anatomy.md |
 
 ---
 

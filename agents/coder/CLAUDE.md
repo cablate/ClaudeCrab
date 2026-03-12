@@ -151,6 +151,7 @@ Spectra 是全域安裝的獨立工具（位於 `/c/Users/User/AppData/Local/Spe
 |------|------|------|
 | memory/ | 每日工作記憶 | 🟢 自由讀寫 |
 | knowledge/ | 知識暫存區（反思/研究學到的知識素材，尚未歸納進 Skill） | 🟢 自由讀寫 |
+| playbooks/ | 已驗證方法論（通過實戰驗證、可交接給其他 AI/人獨立執行的方法論。knowledge/ 的畢業生，.claude/skills/ 的候選人） | 🟢 自由讀寫 |
 | output/ | 交付產出（使用者交辦的成果物，按任務/專案分子目錄） | 🟢 自由讀寫 |
 | plans/ | 任務規劃（plan mode 產出的規劃文件） | 🟢 自由讀寫 |
 | evolution/weekly/ | 每週反思彙整 | 🟢 自由寫入 |

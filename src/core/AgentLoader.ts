@@ -23,7 +23,6 @@ const AGENT_CONFIG_FILE = 'agent.json';
  * Default system prompt file name
  * Uses CLAUDE.md to align with Claude Code conventions
  */
-const DEFAULT_SYSTEM_PROMPT_FILE = 'CLAUDE.md';
 
 /**
  * Default hooks file name
@@ -290,40 +289,17 @@ export class AgentLoader implements IAgentRepository {
    * Load system prompt from file or config
    */
   private async loadSystemPrompt(
-    agentPath: string,
-    config: AgentConfig
+    _agentPath: string,
+    _config: AgentConfig
   ): Promise<string> {
-    let prompt = '';
-
-    // Priority 1: systemPrompt directly in config
-    if (config.systemPrompt !== undefined) {
-      prompt = config.systemPrompt;
-    }
-    // Priority 2: systemPromptFile specified in config
-    else if (config.systemPromptFile !== undefined) {
-      const promptPath = path.isAbsolute(config.systemPromptFile)
-        ? config.systemPromptFile
-        : path.join(agentPath, config.systemPromptFile);
-      prompt = await this.readSystemPromptFile(promptPath);
-    }
-    // Priority 3: Default system-prompt.md file
-    else {
-      const defaultPath = path.join(agentPath, DEFAULT_SYSTEM_PROMPT_FILE);
-      try {
-        prompt = await this.readSystemPromptFile(defaultPath);
-      } catch {
-        // No system prompt file, continue with empty string
-        logger.debug({ agentPath }, 'No system prompt found, using empty string');
-      }
-    }
-
-    // Append global static rules (engine-level conventions that apply to all agents)
-    const globalRules = this.getGlobalStaticRules();
-    if (globalRules.length > 0) {
-      prompt = prompt.length > 0 ? `${prompt}\n\n${globalRules}` : globalRules;
-    }
-
-    return prompt;
+    // CLAUDE.md is NOT read here — SDK's WL8 memory loader handles it
+    // automatically via settingSources: ['project']. Manual reading would
+    // duplicate the content AND add the file to readFileState, triggering
+    // diff injection in system-reminder on every turn.
+    //
+    // We only return engine-level global rules (Custom Tools descriptions)
+    // that aren't part of any CLAUDE.md file.
+    return this.getGlobalStaticRules();
   }
 
 
@@ -335,26 +311,11 @@ export class AgentLoader implements IAgentRepository {
     return `
 【Custom Tools】
 • 檔案傳送 (mcp__file-send__send_file)：傳送檔案給使用者。參數：path（檔案完整路徑）、caption（可選說明）。自動偵測檔案類型（圖片/音檔/文件）並以最適合的方式傳送。
-• TTS 語音播放 (mcp__tts__speak)：對話結束前，使用此工具生成簡短語音摘要並播放。參數：text（建議50字內）、language（Chinese/English/Japanese/Korean）。
 • 跨 Agent 呼叫 (mcp__agent-call__call_agent)：需要其他 Agent 協助時使用（fire-and-forget）。參數：targetAgent（admin/coder/general）、message、priority（low/normal/high）。
-
-當輸出最終的回應給使用者時，請使用 TTS 工具生成一個簡短的語音摘要。
 `.trim();
   }
 
-  /**
-   * Read system prompt file content
-   */
-  private async readSystemPromptFile(filePath: string): Promise<string> {
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      return content.trim();
-    } catch (error) {
-      throw new Error(
-        `Failed to read system prompt file: ${filePath} - ${(error as Error).message}`
-      );
-    }
-  }
+
 
   /**
    * Load hooks from hooks.ts or hooks.js

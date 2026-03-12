@@ -1,0 +1,21 @@
+{
+  "name": "SEO/GEO 策略師",
+  "description": "Cab 內容體系的搜尋能見度策略師",
+  "version": "1.0.0",
+  "model": "sonnet",
+  "telegramBotToken": "8714344619:AAEdMQOp_fujFgy5wenW6jf_BvfIu0iScbQ",
+  "display": {
+    "avatar": "🔍",
+    "color": "#10B981"
+  },
+  "settings": {
+    "permissionMode": "default",
+    "delegation": {
+      "inbound": true,
+      "outbound": false
+    },
+    "initiative": {
+      "enabled": false
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "model": "opus",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Bash",
+      "Skill",
+      "mcp__serena__*"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash|Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx ./.claude/hooks/project-whitelist.ts"
+          }
+        ]
+      }
+    ]
+  }
+}

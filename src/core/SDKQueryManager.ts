@@ -2,6 +2,7 @@ import { query, type Query, type Options, type McpSdkServerConfigWithInstance } 
 import type { LoadedAgent } from '../types/agent.js';
 import type { ToolEvent } from '../adapters/types.js';
 import { logger } from '../utils/logger.js';
+import { sanitizeBeforeResume } from './JsonlSanitizer.js';
 
 /**
  * Token usage breakdown from SDK result (ADR-020 Phase 2)
@@ -164,9 +165,11 @@ export class SDKQueryManager {
       // Only set maxTurns if explicitly provided, otherwise let SDK use its default
       ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
       abortController,
-      // Don't override tools - let SDK read from agent's .claude/settings.json
-      // Use Claude Code preset without manual append - SDK auto-loads CLAUDE.md via settingSources
-      systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const },
+      // Use Claude Code preset; append agent's systemPrompt if provided
+      // (settingSources loads CLAUDE.md from cwd, but append ensures fresh-read via getSystemPrompt works)
+      systemPrompt: options.systemPrompt
+        ? { type: 'preset' as const, preset: 'claude_code' as const, append: options.systemPrompt }
+        : { type: 'preset' as const, preset: 'claude_code' as const },
       // Resume from previous session if provided
       ...(options.resume ? { resume: options.resume } : {}),
       // Merge additional options
@@ -229,6 +232,11 @@ export class SDKQueryManager {
         parent_tool_use_id: null,
         session_id: options.resume ?? '',
       };
+    }
+
+    // Sanitize JSONL before resume to prevent C26 readFileState diff injection
+    if (options.resume) {
+      sanitizeBeforeResume(options.cwd, options.resume);
     }
 
     const q = query({

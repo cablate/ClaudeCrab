@@ -61,7 +61,7 @@
 ⚠️ 這裡只放「操作規則」：工具怎麼用、路徑在哪、環境限制。
 方法論/業務知識不該放這裡，應該建立獨立 Skill（method-* / knowledge-*）。
 判斷方法：「換一個專案還能用嗎？」能 → 獨立 Skill，不能 → 這裡。
-詳見 sys-self-evolution。
+詳見 sys-growth。
 -->
 
 ### TurboScribe 腳本路徑

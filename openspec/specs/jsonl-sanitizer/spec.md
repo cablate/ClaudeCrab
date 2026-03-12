@@ -1,0 +1,1060 @@
+# jsonl-sanitizer Specification
+
+## Purpose
+
+TBD - created by archiving change 'system-reminder-mitigation'. Update Purpose after archive.
+
+## Requirements
+
+### Requirement: JSONL sanitization before resume
+
+The system SHALL sanitize the JSONL conversation file before every SDK resume operation. Sanitization SHALL modify tool_use blocks to break C26's collection conditions:
+- Read tool_use blocks without an `offset` field SHALL have `offset: 1` added.
+- Write tool_use blocks with a `content` field SHALL have `content` removed.
+- Edit tool_use blocks SHALL NOT be modified (C26 does not process them).
+
+The sanitizer SHALL only write the file back if at least one modification was made.
+
+#### Scenario: Read tool_use patching
+
+- **WHEN** a JSONL file contains a Read tool_use block with `offset` equal to `undefined` or absent
+- **THEN** the sanitizer SHALL set `input.offset` to `1` so that C26's condition (`offset === undefined`) fails
+
+#### Scenario: Write tool_use patching
+
+- **WHEN** a JSONL file contains a Write tool_use block with a `content` field in `input`
+- **THEN** the sanitizer SHALL delete `input.content` so that C26's condition (`file_path && content`) fails
+
+#### Scenario: Edit tool_use blocks are untouched
+
+- **WHEN** a JSONL file contains an Edit tool_use block
+- **THEN** the sanitizer SHALL NOT modify it
+
+#### Scenario: No-op on clean file
+
+- **WHEN** the JSONL file contains no patchable Read or Write tool_use blocks
+- **THEN** the sanitizer SHALL NOT rewrite the file
+
+
+<!-- @trace
+source: system-reminder-mitigation
+updated: 2026-03-11
+code:
+  - agents/coder/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/coder/CLAUDE.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/_example/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/general/.claude/skills/sys-growth/SKILL.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/seo/.claude/skills/sys-growth/SKILL.md
+  - agents/transcriber/.claude/settings.local.json
+  - agents/_shared/playbooks/user-profiling-spec.md
+  - agents/writer/agent.json
+  - agents/seo/.claude/settings.local.json
+  - agents/media/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/seo/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/transcriber/.claude/skills/sys-growth/SKILL.md
+  - agents/_shared/skills/content-analyzer/scripts/post_analysis.py
+  - agents/general/.claude/skills/agentskill-expertise/SKILL.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/coder/growth-profile.md
+  - agents/seo/agent.json
+  - agents/writer/.claude/settings.local.json
+  - src/core/JsonlSanitizer.ts
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/openclaw_agent_anatomy.txt
+  - agents/general/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/carrier-template.md
+  - agents/_shared/skills/content-analyzer/scripts/analyze.py
+  - agents/general/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/general/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/SKILL.md
+  - src/core/AgentLoader.ts
+  - agents/general/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/media/.claude/skills/sys-growth/SKILL.md
+  - agents/general/growth-profile.md
+  - agents/general/.claude/skills/style-driven-author/workspace/creator-profile.md
+  - agents/general/.claude/skills/dom-image-gen/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/tools.md
+  - package.json
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/general/.claude/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/transcriber/.claude/skills/sys-self-evolution/SKILL.md
+  - public/images/generated/portrait-transcriber.png
+  - agents/seo/CLAUDE.md
+  - agents/writer/.claude/skills/sys-growth/SKILL.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/general/.claude/skills/content-analyzer/references/api-spec.md
+  - memory/2026-02-20.md
+  - agents/general/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/seo/.claude/hooks/project-whitelist.ts
+  - src/services/AgentCallService.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/post-launch-playbook.md
+  - agents/general/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/general/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/writer/.claude/skills/user-profiling/SKILL.md
+  - agents/media/agent.json
+  - agents/seo/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/algorithm-mechanics.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/general/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/admin/.claude/skills/agent-management/references/organization-principles.md
+  - agents/seo/.claude/skills/threads-optimizer/references/growth-strategy.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-newsletter.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/media/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/skill-template.md
+  - agents/writer/.claude/skills/writing-production/workspace/creator-profile.md
+  - agents/coder/.claude/skills/sys-growth/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/general/.claude/skills/dom-seo/references/technical-seo.md
+  - agents/writer/growth-profile.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/writer/CLAUDE.md
+  - agents/seo/.claude/skills/threads-optimizer/references/checklist-details.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/transcriber/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/writer/.claude/skills/user-profiling/workspace/cab.md
+  - agents/_example/CLAUDE.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/writer/.claude/skills/writing-production/author-style-methodology.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-profile-template.md
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - systemreminder-diff注入問題.txt
+  - agents/general/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/content-analyzer/scripts/post_analysis.py
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-voice-template.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-profile.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-voice.md
+  - src/core/ConfigTransformer.ts
+  - agents/media/.mcp.json
+  - agents/seo/growth-profile.md
+  - src/AppBootstrap.ts
+  - agents/transcriber/.claude/skills/knowledge-external/references/index.md
+  - agents/general/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/_example/.claude/skills/sys-growth/SKILL.md
+  - agents/coder/.claude/settings.local.json
+  - agents/general/.claude/skills/dom-seo/references/tools.md
+  - agents/media/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/admin/.claude/skills/agent-management/references/operations.md
+  - agents/writer/.claude/skills/writing-production/references/newsletter-style.md
+  - agents/writer/.claude/hooks/project-whitelist.ts
+  - src/core/SDKQueryManager.ts
+  - agents/media/growth-profile.md
+  - agents/coder/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/user-profiling/references/dimension-spec.md
+  - agents/admin/.claude/skills/agent-management/references/agent-changes-log.md
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/admin/.claude/settings.local.json
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/transcriber/growth-profile.md
+  - agents/general/CLAUDE.md
+  - agents/admin/CLAUDE.md
+  - agents/media/CLAUDE.md
+  - agents/seo/.claude/skills/dom-seo/SKILL.md
+  - agents/writer/.claude/skills/author-writing-protocol/SKILL.md
+  - claudecab.db
+  - knowledge/turboscribe-api-workflow.md
+  - public/images/generated/portrait-seo.png
+  - agents/writer/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/_shared/skills/content-analyzer/references/topic-examples.md
+  - src/core/tts/ReplicateTTSProvider.ts
+  - src/tools/notifyAgentTool.ts
+  - system-reminder-工程筆記.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-social.md
+  - agents/media/.claude/skills/dom-image-gen/SKILL.md
+  - agents/general/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/_example/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/general/.claude/skills/dom-seo/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/seo/.claude/skills/threads-optimizer/references/penalty-mechanisms.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/threads-optimizer/SKILL.md
+  - openspec-migration-plan.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/_shared/playbooks/methodology-extraction-framework.md
+  - agents/writer/.claude/skills/user-profiling/references/quality-rubric.md
+  - public/images/generated/portrait-media.png
+  - agents/_example/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/media/.claude/settings.local.json
+  - agents/seo/.claude/skills/dom-seo/references/technical-seo.md
+  - memory/2026-02-21.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/turboscribe_jobs.csv
+  - system-reminder-調查報告.md
+  - agents/general/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/registry.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - public/images/generated/portrait-writer.png
+  - agents/coder/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/agentskill-expertise/references/ecosystem.md
+  - agents/general/.claude/skills/content-analyzer/references/topic-examples.md
+  - agents/seo/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/writer/.mcp.json
+  - agents/general/.claude/skills/agentskill-expertise/references/evidence.md
+  - agents/general/.claude/skills/content-analyzer/scripts/analyze.py
+  - agents/media/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/transcriber/CLAUDE.md
+  - src/core/MessageProcessor.ts
+  - agents/_shared/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/content-analyzer/references/api-spec.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/writer/.claude/skills/writing-production/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/_shared/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/transcriber/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-blog.md
+-->
+
+---
+### Requirement: Backup before modification
+
+The sanitizer SHALL create a backup copy of the JSONL file before writing modifications. The backup SHALL be stored at `{jsonlPath}.pre-sanitize`. The backup SHALL overwrite any previous `.pre-sanitize` file for the same session (single backup per session, not cumulative).
+
+#### Scenario: Backup creation on first sanitization
+
+- **WHEN** the sanitizer modifies a JSONL file for the first time in a session
+- **THEN** it SHALL copy the original file to `{jsonlPath}.pre-sanitize` before writing changes
+
+#### Scenario: Backup overwrite on subsequent sanitization
+
+- **WHEN** the sanitizer modifies the same JSONL file again in a later resume
+- **THEN** the existing `.pre-sanitize` file SHALL be overwritten with the current pre-modification content
+
+
+<!-- @trace
+source: system-reminder-mitigation
+updated: 2026-03-11
+code:
+  - agents/coder/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/coder/CLAUDE.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/_example/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/general/.claude/skills/sys-growth/SKILL.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/seo/.claude/skills/sys-growth/SKILL.md
+  - agents/transcriber/.claude/settings.local.json
+  - agents/_shared/playbooks/user-profiling-spec.md
+  - agents/writer/agent.json
+  - agents/seo/.claude/settings.local.json
+  - agents/media/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/seo/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/transcriber/.claude/skills/sys-growth/SKILL.md
+  - agents/_shared/skills/content-analyzer/scripts/post_analysis.py
+  - agents/general/.claude/skills/agentskill-expertise/SKILL.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/coder/growth-profile.md
+  - agents/seo/agent.json
+  - agents/writer/.claude/settings.local.json
+  - src/core/JsonlSanitizer.ts
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/openclaw_agent_anatomy.txt
+  - agents/general/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/carrier-template.md
+  - agents/_shared/skills/content-analyzer/scripts/analyze.py
+  - agents/general/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/general/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/SKILL.md
+  - src/core/AgentLoader.ts
+  - agents/general/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/media/.claude/skills/sys-growth/SKILL.md
+  - agents/general/growth-profile.md
+  - agents/general/.claude/skills/style-driven-author/workspace/creator-profile.md
+  - agents/general/.claude/skills/dom-image-gen/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/tools.md
+  - package.json
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/general/.claude/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/transcriber/.claude/skills/sys-self-evolution/SKILL.md
+  - public/images/generated/portrait-transcriber.png
+  - agents/seo/CLAUDE.md
+  - agents/writer/.claude/skills/sys-growth/SKILL.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/general/.claude/skills/content-analyzer/references/api-spec.md
+  - memory/2026-02-20.md
+  - agents/general/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/seo/.claude/hooks/project-whitelist.ts
+  - src/services/AgentCallService.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/post-launch-playbook.md
+  - agents/general/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/general/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/writer/.claude/skills/user-profiling/SKILL.md
+  - agents/media/agent.json
+  - agents/seo/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/algorithm-mechanics.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/general/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/admin/.claude/skills/agent-management/references/organization-principles.md
+  - agents/seo/.claude/skills/threads-optimizer/references/growth-strategy.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-newsletter.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/media/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/skill-template.md
+  - agents/writer/.claude/skills/writing-production/workspace/creator-profile.md
+  - agents/coder/.claude/skills/sys-growth/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/general/.claude/skills/dom-seo/references/technical-seo.md
+  - agents/writer/growth-profile.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/writer/CLAUDE.md
+  - agents/seo/.claude/skills/threads-optimizer/references/checklist-details.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/transcriber/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/writer/.claude/skills/user-profiling/workspace/cab.md
+  - agents/_example/CLAUDE.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/writer/.claude/skills/writing-production/author-style-methodology.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-profile-template.md
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - systemreminder-diff注入問題.txt
+  - agents/general/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/content-analyzer/scripts/post_analysis.py
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-voice-template.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-profile.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-voice.md
+  - src/core/ConfigTransformer.ts
+  - agents/media/.mcp.json
+  - agents/seo/growth-profile.md
+  - src/AppBootstrap.ts
+  - agents/transcriber/.claude/skills/knowledge-external/references/index.md
+  - agents/general/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/_example/.claude/skills/sys-growth/SKILL.md
+  - agents/coder/.claude/settings.local.json
+  - agents/general/.claude/skills/dom-seo/references/tools.md
+  - agents/media/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/admin/.claude/skills/agent-management/references/operations.md
+  - agents/writer/.claude/skills/writing-production/references/newsletter-style.md
+  - agents/writer/.claude/hooks/project-whitelist.ts
+  - src/core/SDKQueryManager.ts
+  - agents/media/growth-profile.md
+  - agents/coder/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/user-profiling/references/dimension-spec.md
+  - agents/admin/.claude/skills/agent-management/references/agent-changes-log.md
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/admin/.claude/settings.local.json
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/transcriber/growth-profile.md
+  - agents/general/CLAUDE.md
+  - agents/admin/CLAUDE.md
+  - agents/media/CLAUDE.md
+  - agents/seo/.claude/skills/dom-seo/SKILL.md
+  - agents/writer/.claude/skills/author-writing-protocol/SKILL.md
+  - claudecab.db
+  - knowledge/turboscribe-api-workflow.md
+  - public/images/generated/portrait-seo.png
+  - agents/writer/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/_shared/skills/content-analyzer/references/topic-examples.md
+  - src/core/tts/ReplicateTTSProvider.ts
+  - src/tools/notifyAgentTool.ts
+  - system-reminder-工程筆記.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-social.md
+  - agents/media/.claude/skills/dom-image-gen/SKILL.md
+  - agents/general/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/_example/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/general/.claude/skills/dom-seo/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/seo/.claude/skills/threads-optimizer/references/penalty-mechanisms.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/threads-optimizer/SKILL.md
+  - openspec-migration-plan.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/_shared/playbooks/methodology-extraction-framework.md
+  - agents/writer/.claude/skills/user-profiling/references/quality-rubric.md
+  - public/images/generated/portrait-media.png
+  - agents/_example/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/media/.claude/settings.local.json
+  - agents/seo/.claude/skills/dom-seo/references/technical-seo.md
+  - memory/2026-02-21.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/turboscribe_jobs.csv
+  - system-reminder-調查報告.md
+  - agents/general/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/registry.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - public/images/generated/portrait-writer.png
+  - agents/coder/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/agentskill-expertise/references/ecosystem.md
+  - agents/general/.claude/skills/content-analyzer/references/topic-examples.md
+  - agents/seo/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/writer/.mcp.json
+  - agents/general/.claude/skills/agentskill-expertise/references/evidence.md
+  - agents/general/.claude/skills/content-analyzer/scripts/analyze.py
+  - agents/media/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/transcriber/CLAUDE.md
+  - src/core/MessageProcessor.ts
+  - agents/_shared/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/content-analyzer/references/api-spec.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/writer/.claude/skills/writing-production/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/_shared/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/transcriber/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-blog.md
+-->
+
+---
+### Requirement: Performance observability
+
+The sanitizer SHALL record and return performance metrics for every sanitization attempt: `readsPatched`, `writesPatched`, `totalLines`, `fileSizeBytes`, and `durationMs`. When patches are applied, the sanitizer SHALL log these metrics at `info` level. When the file is already clean and has content, the sanitizer SHALL log metrics at `info` level.
+
+#### Scenario: Metrics logging on patch
+
+- **WHEN** the sanitizer patches one or more tool_use blocks
+- **THEN** it SHALL log at `info` level with `readsPatched`, `writesPatched`, `totalLines`, `fileSizeKB`, and `durationMs`
+
+#### Scenario: Metrics logging on clean file
+
+- **WHEN** the sanitizer processes a file with content but finds nothing to patch
+- **THEN** it SHALL log at `info` level with `totalLines`, `fileSizeKB`, and `durationMs`
+
+
+<!-- @trace
+source: system-reminder-mitigation
+updated: 2026-03-11
+code:
+  - agents/coder/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/coder/CLAUDE.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/_example/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/general/.claude/skills/sys-growth/SKILL.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/seo/.claude/skills/sys-growth/SKILL.md
+  - agents/transcriber/.claude/settings.local.json
+  - agents/_shared/playbooks/user-profiling-spec.md
+  - agents/writer/agent.json
+  - agents/seo/.claude/settings.local.json
+  - agents/media/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/seo/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/transcriber/.claude/skills/sys-growth/SKILL.md
+  - agents/_shared/skills/content-analyzer/scripts/post_analysis.py
+  - agents/general/.claude/skills/agentskill-expertise/SKILL.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/coder/growth-profile.md
+  - agents/seo/agent.json
+  - agents/writer/.claude/settings.local.json
+  - src/core/JsonlSanitizer.ts
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/openclaw_agent_anatomy.txt
+  - agents/general/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/carrier-template.md
+  - agents/_shared/skills/content-analyzer/scripts/analyze.py
+  - agents/general/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/general/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/SKILL.md
+  - src/core/AgentLoader.ts
+  - agents/general/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/media/.claude/skills/sys-growth/SKILL.md
+  - agents/general/growth-profile.md
+  - agents/general/.claude/skills/style-driven-author/workspace/creator-profile.md
+  - agents/general/.claude/skills/dom-image-gen/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/tools.md
+  - package.json
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/general/.claude/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/transcriber/.claude/skills/sys-self-evolution/SKILL.md
+  - public/images/generated/portrait-transcriber.png
+  - agents/seo/CLAUDE.md
+  - agents/writer/.claude/skills/sys-growth/SKILL.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/general/.claude/skills/content-analyzer/references/api-spec.md
+  - memory/2026-02-20.md
+  - agents/general/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/seo/.claude/hooks/project-whitelist.ts
+  - src/services/AgentCallService.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/post-launch-playbook.md
+  - agents/general/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/general/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/writer/.claude/skills/user-profiling/SKILL.md
+  - agents/media/agent.json
+  - agents/seo/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/algorithm-mechanics.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/general/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/admin/.claude/skills/agent-management/references/organization-principles.md
+  - agents/seo/.claude/skills/threads-optimizer/references/growth-strategy.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-newsletter.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/media/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/skill-template.md
+  - agents/writer/.claude/skills/writing-production/workspace/creator-profile.md
+  - agents/coder/.claude/skills/sys-growth/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/general/.claude/skills/dom-seo/references/technical-seo.md
+  - agents/writer/growth-profile.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/writer/CLAUDE.md
+  - agents/seo/.claude/skills/threads-optimizer/references/checklist-details.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/transcriber/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/writer/.claude/skills/user-profiling/workspace/cab.md
+  - agents/_example/CLAUDE.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/writer/.claude/skills/writing-production/author-style-methodology.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-profile-template.md
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - systemreminder-diff注入問題.txt
+  - agents/general/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/content-analyzer/scripts/post_analysis.py
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-voice-template.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-profile.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-voice.md
+  - src/core/ConfigTransformer.ts
+  - agents/media/.mcp.json
+  - agents/seo/growth-profile.md
+  - src/AppBootstrap.ts
+  - agents/transcriber/.claude/skills/knowledge-external/references/index.md
+  - agents/general/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/_example/.claude/skills/sys-growth/SKILL.md
+  - agents/coder/.claude/settings.local.json
+  - agents/general/.claude/skills/dom-seo/references/tools.md
+  - agents/media/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/admin/.claude/skills/agent-management/references/operations.md
+  - agents/writer/.claude/skills/writing-production/references/newsletter-style.md
+  - agents/writer/.claude/hooks/project-whitelist.ts
+  - src/core/SDKQueryManager.ts
+  - agents/media/growth-profile.md
+  - agents/coder/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/user-profiling/references/dimension-spec.md
+  - agents/admin/.claude/skills/agent-management/references/agent-changes-log.md
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/admin/.claude/settings.local.json
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/transcriber/growth-profile.md
+  - agents/general/CLAUDE.md
+  - agents/admin/CLAUDE.md
+  - agents/media/CLAUDE.md
+  - agents/seo/.claude/skills/dom-seo/SKILL.md
+  - agents/writer/.claude/skills/author-writing-protocol/SKILL.md
+  - claudecab.db
+  - knowledge/turboscribe-api-workflow.md
+  - public/images/generated/portrait-seo.png
+  - agents/writer/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/_shared/skills/content-analyzer/references/topic-examples.md
+  - src/core/tts/ReplicateTTSProvider.ts
+  - src/tools/notifyAgentTool.ts
+  - system-reminder-工程筆記.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-social.md
+  - agents/media/.claude/skills/dom-image-gen/SKILL.md
+  - agents/general/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/_example/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/general/.claude/skills/dom-seo/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/seo/.claude/skills/threads-optimizer/references/penalty-mechanisms.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/threads-optimizer/SKILL.md
+  - openspec-migration-plan.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/_shared/playbooks/methodology-extraction-framework.md
+  - agents/writer/.claude/skills/user-profiling/references/quality-rubric.md
+  - public/images/generated/portrait-media.png
+  - agents/_example/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/media/.claude/settings.local.json
+  - agents/seo/.claude/skills/dom-seo/references/technical-seo.md
+  - memory/2026-02-21.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/turboscribe_jobs.csv
+  - system-reminder-調查報告.md
+  - agents/general/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/registry.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - public/images/generated/portrait-writer.png
+  - agents/coder/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/agentskill-expertise/references/ecosystem.md
+  - agents/general/.claude/skills/content-analyzer/references/topic-examples.md
+  - agents/seo/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/writer/.mcp.json
+  - agents/general/.claude/skills/agentskill-expertise/references/evidence.md
+  - agents/general/.claude/skills/content-analyzer/scripts/analyze.py
+  - agents/media/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/transcriber/CLAUDE.md
+  - src/core/MessageProcessor.ts
+  - agents/_shared/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/content-analyzer/references/api-spec.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/writer/.claude/skills/writing-production/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/_shared/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/transcriber/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-blog.md
+-->
+
+---
+### Requirement: Non-blocking error handling
+
+The sanitizer SHALL never block or fail the resume operation. If any error occurs during sanitization (file read, parse, write), the sanitizer SHALL catch the error, log a warning, and return `false` to indicate sanitization was skipped.
+
+#### Scenario: File read failure
+
+- **WHEN** the JSONL file cannot be read (permissions, corruption)
+- **THEN** the sanitizer SHALL log a warning and return without blocking the resume
+
+#### Scenario: Malformed JSONL line
+
+- **WHEN** a line in the JSONL file cannot be parsed as JSON
+- **THEN** the sanitizer SHALL keep the line as-is and continue processing remaining lines
+
+
+<!-- @trace
+source: system-reminder-mitigation
+updated: 2026-03-11
+code:
+  - agents/coder/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/coder/CLAUDE.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/_example/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/general/.claude/skills/sys-growth/SKILL.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/seo/.claude/skills/sys-growth/SKILL.md
+  - agents/transcriber/.claude/settings.local.json
+  - agents/_shared/playbooks/user-profiling-spec.md
+  - agents/writer/agent.json
+  - agents/seo/.claude/settings.local.json
+  - agents/media/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/seo/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/transcriber/.claude/skills/sys-growth/SKILL.md
+  - agents/_shared/skills/content-analyzer/scripts/post_analysis.py
+  - agents/general/.claude/skills/agentskill-expertise/SKILL.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/coder/growth-profile.md
+  - agents/seo/agent.json
+  - agents/writer/.claude/settings.local.json
+  - src/core/JsonlSanitizer.ts
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/openclaw_agent_anatomy.txt
+  - agents/general/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/carrier-template.md
+  - agents/_shared/skills/content-analyzer/scripts/analyze.py
+  - agents/general/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/general/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/SKILL.md
+  - src/core/AgentLoader.ts
+  - agents/general/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/media/.claude/skills/sys-growth/SKILL.md
+  - agents/general/growth-profile.md
+  - agents/general/.claude/skills/style-driven-author/workspace/creator-profile.md
+  - agents/general/.claude/skills/dom-image-gen/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/tools.md
+  - package.json
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/general/.claude/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/transcriber/.claude/skills/sys-self-evolution/SKILL.md
+  - public/images/generated/portrait-transcriber.png
+  - agents/seo/CLAUDE.md
+  - agents/writer/.claude/skills/sys-growth/SKILL.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/general/.claude/skills/content-analyzer/references/api-spec.md
+  - memory/2026-02-20.md
+  - agents/general/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/seo/.claude/hooks/project-whitelist.ts
+  - src/services/AgentCallService.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/post-launch-playbook.md
+  - agents/general/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/general/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/writer/.claude/skills/user-profiling/SKILL.md
+  - agents/media/agent.json
+  - agents/seo/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/algorithm-mechanics.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/general/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/admin/.claude/skills/agent-management/references/organization-principles.md
+  - agents/seo/.claude/skills/threads-optimizer/references/growth-strategy.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-newsletter.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/media/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/skill-template.md
+  - agents/writer/.claude/skills/writing-production/workspace/creator-profile.md
+  - agents/coder/.claude/skills/sys-growth/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/general/.claude/skills/dom-seo/references/technical-seo.md
+  - agents/writer/growth-profile.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/writer/CLAUDE.md
+  - agents/seo/.claude/skills/threads-optimizer/references/checklist-details.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/transcriber/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/writer/.claude/skills/user-profiling/workspace/cab.md
+  - agents/_example/CLAUDE.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/writer/.claude/skills/writing-production/author-style-methodology.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-profile-template.md
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - systemreminder-diff注入問題.txt
+  - agents/general/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/content-analyzer/scripts/post_analysis.py
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-voice-template.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-profile.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-voice.md
+  - src/core/ConfigTransformer.ts
+  - agents/media/.mcp.json
+  - agents/seo/growth-profile.md
+  - src/AppBootstrap.ts
+  - agents/transcriber/.claude/skills/knowledge-external/references/index.md
+  - agents/general/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/_example/.claude/skills/sys-growth/SKILL.md
+  - agents/coder/.claude/settings.local.json
+  - agents/general/.claude/skills/dom-seo/references/tools.md
+  - agents/media/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/admin/.claude/skills/agent-management/references/operations.md
+  - agents/writer/.claude/skills/writing-production/references/newsletter-style.md
+  - agents/writer/.claude/hooks/project-whitelist.ts
+  - src/core/SDKQueryManager.ts
+  - agents/media/growth-profile.md
+  - agents/coder/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/user-profiling/references/dimension-spec.md
+  - agents/admin/.claude/skills/agent-management/references/agent-changes-log.md
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/admin/.claude/settings.local.json
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/transcriber/growth-profile.md
+  - agents/general/CLAUDE.md
+  - agents/admin/CLAUDE.md
+  - agents/media/CLAUDE.md
+  - agents/seo/.claude/skills/dom-seo/SKILL.md
+  - agents/writer/.claude/skills/author-writing-protocol/SKILL.md
+  - claudecab.db
+  - knowledge/turboscribe-api-workflow.md
+  - public/images/generated/portrait-seo.png
+  - agents/writer/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/_shared/skills/content-analyzer/references/topic-examples.md
+  - src/core/tts/ReplicateTTSProvider.ts
+  - src/tools/notifyAgentTool.ts
+  - system-reminder-工程筆記.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-social.md
+  - agents/media/.claude/skills/dom-image-gen/SKILL.md
+  - agents/general/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/_example/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/general/.claude/skills/dom-seo/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/seo/.claude/skills/threads-optimizer/references/penalty-mechanisms.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/threads-optimizer/SKILL.md
+  - openspec-migration-plan.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/_shared/playbooks/methodology-extraction-framework.md
+  - agents/writer/.claude/skills/user-profiling/references/quality-rubric.md
+  - public/images/generated/portrait-media.png
+  - agents/_example/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/media/.claude/settings.local.json
+  - agents/seo/.claude/skills/dom-seo/references/technical-seo.md
+  - memory/2026-02-21.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/turboscribe_jobs.csv
+  - system-reminder-調查報告.md
+  - agents/general/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/registry.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - public/images/generated/portrait-writer.png
+  - agents/coder/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/agentskill-expertise/references/ecosystem.md
+  - agents/general/.claude/skills/content-analyzer/references/topic-examples.md
+  - agents/seo/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/writer/.mcp.json
+  - agents/general/.claude/skills/agentskill-expertise/references/evidence.md
+  - agents/general/.claude/skills/content-analyzer/scripts/analyze.py
+  - agents/media/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/transcriber/CLAUDE.md
+  - src/core/MessageProcessor.ts
+  - agents/_shared/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/content-analyzer/references/api-spec.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/writer/.claude/skills/writing-production/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/_shared/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/transcriber/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-blog.md
+-->
+
+---
+### Requirement: Project hash computation
+
+The sanitizer SHALL compute the Claude Code project-hash directory name using the same algorithm as the SDK (reverse-engineered from `ID()` + `bmK()`). Non-alphanumeric characters SHALL be replaced with `-`. If the result exceeds 200 characters, it SHALL be truncated to 200 characters with a bmK hash suffix (charCode loop to base36).
+
+#### Scenario: Standard path hashing
+
+- **WHEN** given a working directory path
+- **THEN** the sanitizer SHALL produce a hash matching `cwd.replace(/[^a-zA-Z0-9]/g, '-')` truncated to 200 chars with hash suffix if needed
+
+#### Scenario: JSONL file path resolution
+
+- **WHEN** given a `cwd` and `sessionId`
+- **THEN** the sanitizer SHALL resolve the JSONL path as `~/.claude/projects/{projectHash(cwd)}/{sessionId}.jsonl`
+
+<!-- @trace
+source: system-reminder-mitigation
+updated: 2026-03-11
+code:
+  - agents/coder/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/coder/CLAUDE.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/_example/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/general/.claude/skills/sys-growth/SKILL.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/seo/.claude/skills/sys-growth/SKILL.md
+  - agents/transcriber/.claude/settings.local.json
+  - agents/_shared/playbooks/user-profiling-spec.md
+  - agents/writer/agent.json
+  - agents/seo/.claude/settings.local.json
+  - agents/media/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/seo/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/transcriber/.claude/skills/sys-growth/SKILL.md
+  - agents/_shared/skills/content-analyzer/scripts/post_analysis.py
+  - agents/general/.claude/skills/agentskill-expertise/SKILL.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/coder/growth-profile.md
+  - agents/seo/agent.json
+  - agents/writer/.claude/settings.local.json
+  - src/core/JsonlSanitizer.ts
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/openclaw_agent_anatomy.txt
+  - agents/general/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/carrier-template.md
+  - agents/_shared/skills/content-analyzer/scripts/analyze.py
+  - agents/general/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/general/.claude/skills/dom-seo/references/eeat-standards.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/SKILL.md
+  - src/core/AgentLoader.ts
+  - agents/general/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/knowledge_plan_webinar.txt
+  - agents/media/.claude/skills/sys-growth/SKILL.md
+  - agents/general/growth-profile.md
+  - agents/general/.claude/skills/style-driven-author/workspace/creator-profile.md
+  - agents/general/.claude/skills/dom-image-gen/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/tools.md
+  - package.json
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/general/.claude/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/transcriber/.claude/skills/sys-self-evolution/SKILL.md
+  - public/images/generated/portrait-transcriber.png
+  - agents/seo/CLAUDE.md
+  - agents/writer/.claude/skills/sys-growth/SKILL.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/general/.claude/skills/content-analyzer/references/api-spec.md
+  - memory/2026-02-20.md
+  - agents/general/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/seo/.claude/hooks/project-whitelist.ts
+  - src/services/AgentCallService.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/post-launch-playbook.md
+  - agents/general/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/general/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/writer/.claude/skills/user-profiling/SKILL.md
+  - agents/media/agent.json
+  - agents/seo/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/tts.ts
+  - agents/seo/.claude/skills/threads-optimizer/references/algorithm-mechanics.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/general/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/admin/.claude/skills/agent-management/references/organization-principles.md
+  - agents/seo/.claude/skills/threads-optimizer/references/growth-strategy.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-newsletter.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/media/.claude/skills/dom-avatar-video/SKILL.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/skill-template.md
+  - agents/writer/.claude/skills/writing-production/workspace/creator-profile.md
+  - agents/coder/.claude/skills/sys-growth/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/SKILL.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/design-presets.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-system.md
+  - agents/general/.claude/skills/dom-seo/references/technical-seo.md
+  - agents/writer/growth-profile.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/memory-advanced.md
+  - agents/writer/CLAUDE.md
+  - agents/seo/.claude/skills/threads-optimizer/references/checklist-details.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/compose-video.sh
+  - agents/transcriber/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/writer/.claude/skills/user-profiling/workspace/cab.md
+  - agents/_example/CLAUDE.md
+  - agents/general/.claude/skills/dom-avatar-video/scripts/stt.ts
+  - agents/writer/.claude/skills/writing-production/author-style-methodology.md
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-profile-template.md
+  - agents/general/.claude/skills/style-driven-author/SKILL.md
+  - systemreminder-diff注入問題.txt
+  - agents/general/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/content-analyzer/scripts/post_analysis.py
+  - agents/writer/.claude/skills/author-writing-protocol/_example/author-voice-template.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-profile.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/author-voice.md
+  - src/core/ConfigTransformer.ts
+  - agents/media/.mcp.json
+  - agents/seo/growth-profile.md
+  - src/AppBootstrap.ts
+  - agents/transcriber/.claude/skills/knowledge-external/references/index.md
+  - agents/general/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/_example/.claude/skills/sys-growth/SKILL.md
+  - agents/coder/.claude/settings.local.json
+  - agents/general/.claude/skills/dom-seo/references/tools.md
+  - agents/media/.claude/skills/sys-agent-protocols/SKILL.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/admin/.claude/skills/agent-management/references/operations.md
+  - agents/writer/.claude/skills/writing-production/references/newsletter-style.md
+  - agents/writer/.claude/hooks/project-whitelist.ts
+  - src/core/SDKQueryManager.ts
+  - agents/media/growth-profile.md
+  - agents/coder/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/user-profiling/references/dimension-spec.md
+  - agents/admin/.claude/skills/agent-management/references/agent-changes-log.md
+  - agents/general/.claude/skills/style-driven-author/author-style-methodology.md
+  - agents/admin/.claude/settings.local.json
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/output-formats.md
+  - agents/transcriber/growth-profile.md
+  - agents/general/CLAUDE.md
+  - agents/admin/CLAUDE.md
+  - agents/media/CLAUDE.md
+  - agents/seo/.claude/skills/dom-seo/SKILL.md
+  - agents/writer/.claude/skills/author-writing-protocol/SKILL.md
+  - claudecab.db
+  - knowledge/turboscribe-api-workflow.md
+  - public/images/generated/portrait-seo.png
+  - agents/writer/.claude/skills/social-post-optimizer/references/examples.md
+  - agents/_shared/skills/content-analyzer/references/topic-examples.md
+  - src/core/tts/ReplicateTTSProvider.ts
+  - src/tools/notifyAgentTool.ts
+  - system-reminder-工程筆記.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/behavior.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-social.md
+  - agents/media/.claude/skills/dom-image-gen/SKILL.md
+  - agents/general/.claude/skills/social-post-optimizer/references/anti-patterns.md
+  - agents/_example/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/style-driven-author/references/newsletter-style.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/best-practices.md
+  - agents/general/.claude/skills/dom-seo/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/collaboration-workflow.md
+  - agents/seo/.claude/skills/threads-optimizer/references/penalty-mechanisms.md
+  - agents/writer/.claude/skills/social-post-optimizer/references/framework.md
+  - agents/seo/.claude/skills/threads-optimizer/SKILL.md
+  - openspec-migration-plan.md
+  - agents/media/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/agentskill-expertise/references/design-patterns.md
+  - agents/_shared/playbooks/methodology-extraction-framework.md
+  - agents/writer/.claude/skills/user-profiling/references/quality-rubric.md
+  - public/images/generated/portrait-media.png
+  - agents/_example/.claude/skills/sys-self-evolution/SKILL.md
+  - agents/media/.claude/settings.local.json
+  - agents/seo/.claude/skills/dom-seo/references/technical-seo.md
+  - memory/2026-02-21.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/references/visual-spec-format.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/scheduling.md
+  - agents/seo/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/transcriber/.claude/skills/dom-turboscribe/output/turboscribe_jobs.csv
+  - system-reminder-調查報告.md
+  - agents/general/.claude/skills/dom-seo/skill.json
+  - agents/general/.claude/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/registry.md
+  - agents/media/.claude/skills/method-lecture-slides-creator/references/iteration-workflow.md
+  - public/images/generated/portrait-writer.png
+  - agents/coder/.claude/skills/sys-role-boundary/SKILL.md
+  - agents/general/.claude/skills/agentskill-expertise/references/ecosystem.md
+  - agents/general/.claude/skills/content-analyzer/references/topic-examples.md
+  - agents/seo/.claude/skills/dom-seo/references/writing-workflow.md
+  - agents/writer/.mcp.json
+  - agents/general/.claude/skills/agentskill-expertise/references/evidence.md
+  - agents/general/.claude/skills/content-analyzer/scripts/analyze.py
+  - agents/media/.claude/skills/dom-image-gen/references/best-practices.md
+  - agents/transcriber/CLAUDE.md
+  - src/core/MessageProcessor.ts
+  - agents/_shared/skills/content-analyzer/references/field-spec.md
+  - agents/_shared/skills/content-analyzer/references/api-spec.md
+  - agents/media/.claude/skills/dom-avatar-video/scripts/validate-concat.ts
+  - agents/writer/.claude/skills/writing-production/SKILL.md
+  - agents/seo/.claude/skills/dom-seo/references/modern-techniques.md
+  - agents/_shared/skills/content-analyzer/SKILL.md
+  - agents/general/.claude/skills/method-lecture-slides-creator/SKILL.md
+  - agents/transcriber/.claude/skills/sys-agent-protocols/references/startup-protocol.md
+  - agents/writer/.claude/skills/author-writing-protocol/references/carrier-blog.md
+-->

@@ -11,8 +11,7 @@
 1. 調用 `/persona` skill — 知道自己是誰、怎麼說話
 2. 讀取 `references/behavior.md` — 行為規範（安全、回覆準則、輸出格式）
 3. 讀取 `references/memory-system.md` — 記憶寫入規則
-4. 讀取 `sys-role-boundary/SKILL.md` — 知道職責邊界（什麼該做、什麼不該做）
-5. 讀取 `sys-self-evolution/SKILL.md` — 知道知識累積原則（學到東西記到哪）
+4. 讀取 `sys-growth/SKILL.md` — 知道成長流程（職責判斷、學習記錄、回饋迴路）
 
 ## Step 2: 載入關係狀態
 

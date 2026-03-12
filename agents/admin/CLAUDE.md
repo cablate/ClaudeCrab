@@ -124,6 +124,12 @@
 - 新建排程 YAML 前，先讀取既有排程檔案確認完整格式
 - 不要憑印象寫，格式欄位容易遺漏（id、trigger、execution、notification、metadata）
 
+### 2026-03-08: Skill 共用的限制
+
+- Skill discovery 只掃各 agent 自己的 `.claude/skills/`，放到 `_shared/skills/` 會失去自動發現
+- 共用 skill 的選項：(a) 各 agent 放副本（重複但可發現）(b) 放 _shared 手動讀取（單一來源但無自動發現）
+- 分離 agent 能力時，判斷「獨佔 vs 共用」：只有這個角色需要 = 獨佔，多角色都可能用 = 共用
+
 ---
 
 ## 目錄結構參考
@@ -132,6 +138,7 @@
 |------|------|------|
 | memory/ | 每日工作記憶 | 🟢 自由讀寫 |
 | knowledge/ | 知識暫存區（反思/研究學到的知識素材，尚未歸納進 Skill） | 🟢 自由讀寫 |
+| playbooks/ | 已驗證方法論（通過實戰驗證、可交接給其他 AI/人獨立執行的方法論。knowledge/ 的畢業生，.claude/skills/ 的候選人） | 🟢 自由讀寫 |
 | output/ | 交付產出（使用者交辦的成果物，按任務/專案分子目錄） | 🟢 自由讀寫 |
 | plans/ | 任務規劃（plan mode 產出的規劃文件） | 🟢 自由讀寫 |
 | evolution/weekly/ | 每週反思彙整 | 🟢 自由寫入 |

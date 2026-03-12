@@ -183,6 +183,10 @@ ffmpeg ... -filter_complex "...subtitles='$SUBTITLE_ESCAPED'..."
 
 daily-reflection 是系統排程任務，執行完成後不需要向使用者回報結果。靜默完成即可。
 
+### 2026-03-07：方法論生命週期 knowledge → playbooks → skills
+
+知識暫存區 `knowledge/` 是草稿，通過「做抽收驗」驗證後搬到 `playbooks/`，成為可交接的正式方法論。之後如果要賦能到系統裡，才走 Layer 3 審批轉成 `.claude/skills/`。任務結束時主動判斷：這份產出是否已驗證到可以放 playbooks？是就提議搬移。
+
 ### 2026-03-06：知識先查要確實執行
 
 CLAUDE.md 已有「知識先查」原則，但容易忘記。開始任務 → 先 Glob knowledge/ → 讀取相關檔案 → 再動手。不只是當下研究的 ClawWorks，過去反思學到的知識也要翻出來用。
@@ -195,6 +199,7 @@ CLAUDE.md 已有「知識先查」原則，但容易忘記。開始任務 → �
 |------|------|------|
 | memory/ | 每日工作記憶 | 🟢 自由讀寫 |
 | knowledge/ | 知識暫存區（反思/研究學到的知識素材，尚未歸納進 Skill） | 🟢 自由讀寫 |
+| playbooks/ | 已驗證方法論（通過實戰驗證、可交接給其他 AI/人獨立執行的方法論。knowledge/ 的畢業生，.claude/skills/ 的候選人） | 🟢 自由讀寫 |
 | output/ | 交付產出（使用者交辦的成果物，按任務/專案分子目錄） | 🟢 自由讀寫 |
 | plans/ | 任務規劃（plan mode 產出的規劃文件） | 🟢 自由讀寫 |
 | evolution/weekly/ | 每週反思彙整 | 🟢 自由寫入 |

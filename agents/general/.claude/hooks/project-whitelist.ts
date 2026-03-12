@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 // Full access (read + write)
 const ALLOWED_PROJECTS = [
   'F:\\_Program\\OwnProject\\BrainPlanStorming',
+  'F:\\_Program\\OwnProject\\CabLate',
 ];
 
 // Read-only access (Read, Glob, Grep only)

@@ -62,6 +62,50 @@ export function createMessagesApiRouter(
     res.json({ success: true });
   });
 
+  /**
+   * POST /chat — Synchronous: await AI response and return message directly.
+   * Body: { agentId: string, text: string }
+   * Response: { message: string }
+   */
+  router.post('/chat', async (req: Request, res: Response) => {
+    const { agentId, text } = req.body;
+
+    if (!agentId || !text) {
+      res.status(400).json({ error: 'Missing required fields: agentId, text' });
+      return;
+    }
+
+    if (!ownerUserId) {
+      res.status(500).json({ error: 'ALLOWED_USERS not configured' });
+      return;
+    }
+
+    const agent = agentLoader.get(agentId);
+    if (!agent) {
+      res.status(404).json({ error: `Agent '${agentId}' not found` });
+      return;
+    }
+
+    const message: UnifiedMessage = {
+      id: `api-${Date.now()}`,
+      platform: 'telegram',
+      userId: ownerUserId,
+      chatId: ownerUserId,
+      text,
+      timestamp: new Date(),
+    };
+
+    try {
+      const result = await messageProcessor.processMessage(message, agentId);
+      const response = typeof result === 'string' ? result : (result.response ?? '');
+      res.json({ message: response });
+    } catch (error) {
+      logger.error({ error, agentId }, 'Failed to process chat message');
+      const msg = error instanceof Error ? error.message : 'Internal error';
+      res.status(500).json({ error: msg });
+    }
+  });
+
   // --- Resolve interactive hooks from Web UI ---
 
   router.post('/resolve-permission', (req: Request, res: Response) => {

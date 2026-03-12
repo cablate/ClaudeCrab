@@ -6,9 +6,9 @@ import { logger } from '../utils/logger.js';
  * Maps our model names to SDK model identifiers
  */
 const MODEL_MAP: Record<Model, string> = {
-  sonnet: 'claude-sonnet-4-20250514',
-  opus: 'claude-opus-4-20250514',
-  haiku: 'claude-haiku-3-5-20241022',
+  sonnet: 'claude-sonnet-4-6',
+  opus: 'claude-opus-4-6',
+  haiku: 'claude-haiku-4-5-20251001',
 };
 
 /**

@@ -5,7 +5,7 @@
 | 目錄 | 用途 |
 |------|------|
 | `_example/` | 新員工範本，包含所有員工預設應具備的 Skill |
-| `_example/.claude/skills/` | 通用 Skill（如 sys-role-boundary、sys-self-evolution） |
+| `_example/.claude/skills/` | 通用 Skill（如 sys-growth、sys-agent-protocols） |
 | `{agent-id}/` | 各員工的獨立目錄 |
 | `{agent-id}/.claude/skills/` | 該員工專屬或被賦予的 Skill |
 
@@ -226,8 +226,8 @@ Wisdom 容器把太多東西混在一起：
 
 取消「Wisdom 容器」概念，改為：
 
-1. **通用的自我演化原則 Skill**（`sys-self-evolution`）
-   - 教會員工：什麼時候該記錄、記錄到哪裡
+1. **通用的成長流程 Skill**（`sys-growth`，原 sys-role-boundary + sys-self-evolution 合併）
+   - 教會員工：職責判斷、知識記錄、回饋迴路
    - 所有員工都載入這個 Skill
 
 2. **知識就地歸屬**

@@ -9,6 +9,159 @@
 
 ---
 
+## 2026-03-10
+
+### [新建] Media Agent 建置
+
+**Proposal**：Cab 決策。將秘書的視覺/多媒體製作能力獨立出來，成為專職 agent。
+
+**改動內容**：
+1. 建立 `agents/media/` 完整目錄結構
+2. 從 general 搬移 3 個 skills：dom-avatar-video（含 scripts + .env）、dom-image-gen、method-lecture-slides-creator
+3. 搬移素材庫：output/avatar-expressions/
+4. 從 _example 安裝 sys-agent-protocols + sys-growth
+5. 建立 growth-profile.md（從 employee profile v0.2 提取）
+6. Media 設定：model=sonnet、無 persona
+
+**技術紅線繼承**：7 條秘書實戰經驗直接寫入 CLAUDE.md Lessons Learned
+
+**影響範圍**：General（3 skills + 素材庫搬出）+ Media（新建）
+
+**待完成**：telegramBotToken 為空、MCP 工具依賴確認
+
+**管理經驗**：從現有 agent 繼承的技術紅線要直接寫入新 agent 的 Lessons Learned，不能等他自己踩一遍
+
+---
+
+### [新建] SEO/GEO Agent 建置
+
+**Proposal**：Cab 決策。開設專職 SEO/GEO agent，從秘書抽離 dom-seo skill，讓搜尋能見度成為獨立專業。
+
+**改動內容**：
+1. 建立 `agents/seo/` 完整目錄結構（CLAUDE.md、agent.json、MEMORY.md、USER.md、growth-profile.md）
+2. 從 general 搬移 `dom-seo` skill（含 6 份 references）到 seo agent
+3. 從 _example 安裝 sys-agent-protocols + sys-growth
+4. SEO 設定：model=sonnet、delegation.inbound=true、outbound=false、無 persona
+
+**影響範圍**：General（dom-seo 搬出）+ SEO（新建）
+
+**待完成**：telegramBotToken 為空，需 Cab 提供
+
+**管理經驗**：第三個新 agent 建置，流程已穩定。純功能型 agent 的標準配置：無 persona、inbound delegation only、共用 sys-* skills 從 _example 複製
+
+---
+
+## 2026-03-09
+
+### [全局] 合併 sys-role-boundary + sys-self-evolution → sys-growth
+
+**Proposal**：General 提案（Layer 3），Cab 已口頭確認方向。兩個 skill 邏輯上是一條流程卻拆成兩檔互相引用，且缺少回饋迴路機制。
+
+**改動內容**：
+1. 建立 `sys-growth` skill（五步流程：職責判斷 → 學習篩選 → 知識歸位 → 回饋迴路 → 反思節奏）
+2. 刪除 `sys-role-boundary` 和 `sys-self-evolution`（從 _example、general、coder、transcriber）
+3. 複製 sys-growth 到 _example、general、coder、transcriber、writer
+4. 更新 startup-protocol.md（_example → 同步到 general、coder、transcriber）
+5. 更新 transcriber/CLAUDE.md 硬引用
+6. 更新 admin 的 operations.md 和 organization-principles.md
+7. 建立 growth-profile.md：writer（從 employee profile 完整提取）、general/coder/transcriber（stub 版）
+
+**影響範圍**：全局（_example + 4 agents + admin 管理文件）
+
+**驗證結果**：
+- sys-growth 部署到 5 agents
+- 舊 skill 從 4 agents 刪除
+- 引用更新完成（startup-protocol、CLAUDE.md、operations、org-principles）
+- 4 份 growth-profile.md 建立
+
+**管理經驗**：
+- 合併 skill 時需要同時更新所有引用點（startup-protocol、CLAUDE.md、管理文件），容易漏
+- Growth profile 區分「完整版」（有 employee profile 可提取）和「stub 版」（先建框架等待填充）
+- 機制/參數分離讓新 agent 接入成長體系的成本很低——只需寫 profile
+
+### [全局] 刪除根目錄 style-driven-author skill
+
+**Proposal**：Writer agent 回報 `style-driven-author` 出現兩個衝突的 description。Writer 已更新自己的版本為「通用風格萃取方法論」，但舊版 description 仍被所有 agent 載入。
+
+**根因分析**：Writer 猜測來源是 `_example` 目錄，但實際來源是**專案根目錄** `.claude/skills/style-driven-author/`。根目錄的 skill 會被所有 agent 繼承，造成每個 agent 都看到舊版 description。
+
+**改動內容**：刪除 `F:\_Program\OwnProject\ClaudeCab\.claude\skills\style-driven-author\` 整個目錄（含 SKILL.md、author-style-methodology.md、assets/、references/、scripts/）。
+
+**決策理由**：
+- `style-driven-author` 是 Writer 獨佔能力，不應放在全局 skill 目錄
+- Writer 自己的 `.claude/skills/style-driven-author/` 已有正確更新版本
+- 更新 description 只治標，刪除才治本（消除 skill 污染）
+
+**影響範圍**：全局（所有 agent 不再載入根目錄的舊版 style-driven-author）
+
+**驗證結果**：根目錄 `.claude/skills/` 已不含 style-driven-author
+
+**管理經驗**：
+- 根目錄 `.claude/skills/` 是全局 skill，會被所有 agent 繼承——agent-specific 的 skill 不應放在這裡
+- 當 skill 出現重複 description 時，問題可能不在預期位置——要用 Glob 全 repo 搜尋確認真正來源
+
+---
+
+## 2026-03-08
+
+### [新建] Writer Agent 建置
+
+**Proposal**：Cab 決策。內容產出需要專業分工，寫作能力應由專人持有和進化，避免能力重疊導致研究和知識同步成本。2026-03-07 驗證成功（Cab 評「跟我快要一模一樣」），確認寫作能力可分離。
+
+**改動內容**：
+1. 建立 `agents/writer/` 完整目錄結構（CLAUDE.md、agent.json、MEMORY.md、USER.md）
+2. 從 general 搬移獨佔資源到 writer：
+   - `.claude/skills/style-driven-author/` — 完整寫作方法論
+   - `.claude/skills/social-post-optimizer/` — 社群貼文優化
+   - `playbooks/writing-success-protocol.md` — 寫作五步驟
+   - `knowledge/writing-style-強觀點表達與中立平衡.md` — 觀點強度研究
+   - `output/newsletter-ep15/` — 品質參考範例（9 個檔案）
+3. 從 general 搬移共用資源到 `_shared/`：
+   - `knowledge/cab-全方位解析.md` → `_shared/knowledge/`
+   - `playbooks/user-profiling-spec.md` → `_shared/playbooks/`
+   - `playbooks/methodology-extraction-framework.md` → `_shared/playbooks/`
+   - `.claude/skills/content-analyzer/` → `_shared/skills/`
+4. 更新 general 的 MEMORY.md 路徑引用（標記已移交/移至共用區）
+5. Writer 設定：model=opus、delegation.inbound=true、outbound=false、無 persona
+
+**Writer 特殊設計**：
+- 純功能型，無 persona/soul.md（工作是消失在 Cab 的聲音裡）
+- 語氣紅線寫入 CLAUDE.md（不要 AI 味、不要教練模式、要有明確立場）
+- 啟動時跳過 `/persona` skill
+
+**影響範圍**：General（資源搬出）+ Writer（新建）+ _shared（新增共用資源）
+
+**待完成**：
+- Writer 的 telegramBotToken 需要 Cab 提供
+- content-analyzer 移至 _shared/skills/ 後，general 和 writer 都無法自動發現（skill discovery 只掃 .claude/skills/），需要手動讀取或建立引用機制
+
+**管理經驗**：
+- 分離 agent 能力時，「獨佔 vs 共用」的判斷原則：「只有這個角色需要」= 獨佔，「多角色都可能用」= 共用
+- Skill 的共用機制有限制：skill discovery 只掃各 agent 自己的 .claude/skills/，放到 _shared/skills/ 等於失去自動發現，需要額外機制
+- 純功能型 agent 不需要 persona，反而應避免有自己的個性（干擾目標聲音）
+
+---
+
+## 2026-03-07
+
+### [全局] 新增 playbooks/ 目錄到所有 agent
+
+**Proposal**：Cab 決策。knowledge/（暫存）和 .claude/skills/（正式賦能，Layer 3）之間缺少中間層，經過實戰驗證的方法論沒有適當的存放位置。
+
+**改動**：
+- 在所有 agent 的 CLAUDE.md 目錄結構表中加入 `playbooks/` 行
+- 定位：已驗證方法論（knowledge/ 畢業生，.claude/skills/ 候選人）
+- 權限：Layer 1（自由讀寫）
+- 更新範圍：_example、admin、coder、leader、nitterbot（general 已自行更新，transcriber 無目錄結構表）
+
+**影響範圍**：全局
+
+**驗證結果**：6 個 CLAUDE.md 已更新
+
+**管理經驗**：方法論有明確的生命週期（knowledge → playbooks → skills），中間層避免了「暫存」和「正式」之間的灰色地帶。跨 Agent 規則同步時，模板（_example）必須一起更新。
+
+---
+
 ## 2026-02-26
 
 ### [Coder] 新增 Threads2 專案白名單

@@ -1,19 +1,20 @@
 ---
 name: agentskill-expertise
-description: Agent Skill 的完整認知體系與設計知識庫。載入後具備 Agent Skill 的全維度理解——底層機制、設計哲學、架構模式、常見誤區。使用時機：設計新 Skill 時作為設計依據；調整現有 Skill 時判斷改動方向是否正確；Review Skill 設計品質時作為評估標準；討論 Skill 相關議題時確保認知準確；需要判斷某個做法應該用 Skill 還是其他方式實現時。主動更新時機：發現新的設計模式或反模式時更新 references/design-patterns.md；技術機制有新發現時更新第三章；實際設計 Skill 過程中產生新洞察時更新對應章節。
+description: Agent Skill 的完整認知體系與設計知識庫。載入後具備 Agent Skill 的全維度理解——底層機制、設計哲學、架構模式、常見誤區。使用時機：設計新 Skill 時作為設計依據；調整現有 Skill 時判斷改動方向是否正確；Review Skill 設計品質時作為評估標準；討論 Skill 相關議題時確保認知準確；需要判斷某個做法應該用 Skill 還是其他方式實現時。主動更新時機：發現新的設計模式或反模式時更新 references/design-patterns.md；技術機制有新發現時更新「底層機制」章節；實際設計 Skill 過程中產生新洞察時更新對應章節。
+version: 202603
 ---
 
 # AgentSkill Expertise - Agent Skill 知識體系
 
 ## 概述
 
-這是關於 Agent Skill 的完整知識體系——不是操作手冊（那是官方文件的工作），而是理解 Skill **為什麼這樣設計**、**怎樣才算設計得好**、**常見的坑在哪裡**的認知基底。
+Agent Skill 的完整知識體系。不教操作（那是官方文件的事），聚焦三件事：Skill **為什麼這樣設計**、**怎樣才算設計得好**、**常見的坑在哪裡**。
 
 任何涉及 Skill 的工作（新建、調整、Review、拆分、合併）都應該以此為判斷依據。
 
 ---
 
-## 一、本質理解：Skill 到底是什麼
+## 本質理解：Skill 到底是什麼
 
 ### 三層理解深度
 
@@ -32,7 +33,7 @@ description: Agent Skill 的完整認知體系與設計知識庫。載入後具�
 
 ---
 
-## 二、底層機制
+## 底層機制
 
 ### Progressive Disclosure（漸進式揭露）
 
@@ -53,7 +54,7 @@ Level 3+：references/, scripts/, assets/
 | | 傳統做法 | Skill 架構 |
 |--|---------|-----------|
 | 對話開始時 | AI 腦袋是空的 | AI 已載入所有 Skill 的 metadata |
-| 你需要做的 | 每次複製貼上 / 寫「記得讀 X」 / 全塞進 CLAUDE.md | 什麼都不用做 |
+| 使用者需要做的 | 每次複製貼上 / 寫「記得讀 X」 / 全塞進 CLAUDE.md | 什麼都不用做 |
 | 原則 | 不說 = 不知道 | 對話開始前，AI 就已經準備好了 |
 
 **這是根本差異**——不是對話中做什麼不同，而是對話開始前就已經不同了。
@@ -64,25 +65,33 @@ Level 3+：references/, scripts/, assets/
 - Description 是 Level 1 唯一被讀的內容
 - 系統對 `<available_skills>` 區塊強制 **15,000 字元**預算（所有 Skill 共用）
 
+**已知偏差**：AI 寧可不觸發，也不會過度觸發。Description 寫太保守 = Skill 形同不存在。
+
+> **Anthropic skill-creator**:
+> "Currently Claude has a tendency to 'undertrigger' skills — to not use them when they'd be useful. To combat this, please make the skill descriptions a little bit 'pushy'."
+
 **寫法原則**：
-- ❌ 功能導向：「這是一個寫作 Skill」→ 太模糊，不知何時觸發
+- ❌ 功能導向：「這是一個寫作 Skill」→ 太模糊，AI 會跳過
 - ✅ 情境導向：「當需要結論先行、可掃描、專業語氣的技術寫作時觸發」→ 觸發時機明確
+- ✅ 主動列舉觸發場景：「even if they don't explicitly ask for X」→ 降低漏觸發率
 - ✅ 包含更新時機：「主動更新時機：XXX 時更新 YYY」→ 讓 AI 知道何時該迭代
 
 ### 少即是多
 
-**Anthropic 官方**：
 > "Find the smallest set of high-signal tokens that maximize likelihood of desired outcome."
-
-**Manus 團隊實戰**：
+> — Anthropic 官方
+>
 > "The biggest performance gains didn't come from adding complex RAG pipelines. The gains came from removing things."
-> 100+ 工具會導致 Context Confusion——AI 幻覺參數或調用錯誤工具。
+> — Manus 團隊（100+ 工具會導致 Context Confusion——AI 幻覺參數或調用錯誤工具）
+>
+> "Keep the prompt lean. Remove things that aren't pulling their weight."
+> — Anthropic skill-creator
 
-**結論**：Skill 的設計原則是精簡、分批、按需載入。
+**結論**：Skill 的設計原則是精簡、分批、按需載入。每條指令都應該 pull its weight——拿不出存在理由的就刪。
 
 ---
 
-## 三、設計原則
+## 設計原則
 
 ### 原則 1：給原則，不是給規則
 
@@ -92,14 +101,16 @@ Level 3+：references/, scripts/, assets/
 | 原則 | 「不希望文章散發焦慮感」 | AI 理解了為什麼，自動避開所有焦慮型寫法 |
 | 更深一層 | 「實事求是」（底層價值觀） | 一個價值觀涵蓋一大片規則 |
 
+> **Anthropic skill-creator**:
+> "Try hard to explain the **why** behind everything you're asking the model to do. Today's LLMs are *smart*. They have good theory of mind and when given a good harness can go beyond rote instructions and really make things happen... If you find yourself writing ALWAYS or NEVER in all caps, that's a yellow flag — reframe and explain the reasoning."
+
+**即時診斷**：正在寫 ALWAYS / NEVER 大寫？停。退一步問「我想要什麼結果？為什麼？」，把 why 寫進去取代強制指令。
+
 **判斷方法**：如果你的 SKILL.md 裡有 50+ 條具體規則，多半可以提煉出幾條原則來取代。
 
 ### 原則 2：被動載入 > 主動引導
 
-| 做法 | 問題 |
-|------|------|
-| CLAUDE.md 裡寫「記得讀 X」「記得讀 Y」 | 忘記寫就不會被讀；CLAUDE.md 越來越肥 |
-| 做成 Skill，讓 metadata 自然預載 | AI 自動判斷何時需要，按需載入 |
+在 CLAUDE.md 裡寫一大串「記得讀 X」「記得讀 Y」，忘記寫就不會被讀，CLAUDE.md 也越來越肥。更好的做法：做成 Skill，讓 metadata 自然預載——AI 自動判斷何時需要，按需載入。
 
 **應用**：任何「記得讀 X」的需求，都應該考慮轉為 Skill 的 references。
 
@@ -135,7 +146,7 @@ CLAUDE.md（精簡，只放入口）
 
 ---
 
-## 四、設計流程：五階段
+## 設計流程：五階段
 
 | 階段 | 核心問題 | 正確做法 | 常見錯誤 |
 |------|---------|---------|---------|
@@ -161,9 +172,40 @@ CLAUDE.md（精簡，只放入口）
 
 三個都「是」→ 成功。有任何「否」→ 迭代。
 
+### 對照測試法
+
+測試三問告訴你「問什麼」，對照測試法告訴你「怎麼測」：
+
+**做法**：同一個任務，跑兩次——有 Skill vs 沒 Skill，比較差異。
+
+| 比較維度 | 觀察什麼 |
+|---------|---------|
+| **行為差異** | 有 Skill 時 AI 的做法跟沒有時差多少？差異越大，Skill 影響力越高 |
+| **品質差異** | 有 Skill 的產出是否真的更好？還是只是不同？ |
+| **觸發可靠度** | 跑 2-3 次，Skill 每次都有被載入嗎？ |
+
+**什麼時候用**：
+- 新 Skill 寫完第一版時 — 確認它真的有效果
+- 改完 description 後 — 確認觸發率沒變差
+- 系統中某條連線不穩時 — 定位是哪個 Skill 斷了
+
+### 迭代調試：看過程，不只看結果
+
+測試三問和對照測試法都在看**產出**。但 Skill 的問題常常藏在 AI 的**工作過程**裡。
+
+> **Anthropic skill-creator**:
+> "Make sure to read the transcripts, not just the final outputs — if it looks like the skill is making the model waste a bunch of time doing things that are unproductive, you can try getting rid of the parts of the skill that are making it do that."
+
+**怎麼看**：觀察 AI 的 thinking process 或工作步驟——
+- AI 在做 Skill 要求但其實無用的動作？→ 刪掉那條指令
+- AI 反覆猶豫某個決策？→ 原則寫得不夠清楚
+- AI 繞了一大圈才到達結果？→ 流程可以簡化
+
+**核心判斷**：產出正確但過程臃腫 = Skill 有瘦身空間。
+
 ---
 
-## 五、應用判斷：什麼該做成 Skill
+## 應用判斷：什麼該做成 Skill
 
 ### 判斷標準
 
@@ -191,7 +233,7 @@ CLAUDE.md（精簡，只放入口）
 
 ---
 
-## 六、Skill 演化模式
+## Skill 演化模式
 
 每個 Skill 通常經歷類似的演化：
 
@@ -220,7 +262,7 @@ v3+：持續迭代
 
 ---
 
-## 七、常見誤區
+## 常見誤區
 
 | 誤區 | 錯誤理解 | 正確理解 |
 |------|---------|---------|
@@ -234,7 +276,7 @@ v3+：持續迭代
 
 ---
 
-## 八、Review Skill 的檢查清單
+## Review Skill 的檢查清單
 
 設計新 Skill 或調整現有 Skill 時，用這份清單驗證：
 
@@ -267,18 +309,17 @@ v3+：持續迭代
 
 ---
 
-## 九、何時更新這份 Skill
+## 何時更新這份 Skill
 
 > **AI 主動更新規則**：以下情境發生時，AI 應主動提議更新。
 
 | 情境 | 更新什麼 |
 |------|----------|
 | 設計 Skill 過程中發現新模式或踩坑 | `references/design-patterns.md` |
-| 發現新的常見誤區 | 第七章 |
-| 技術機制有新發現（官方更新、新研究） | 第二章 + `references/evidence.md` |
-| Review 檢查清單需要新增項目 | 第八章 |
-| Skill 演化模式有新案例 | 第六章 |
-| Agent Skill 生態有新發展 | `references/ecosystem.md` |
+| 發現新的常見誤區 | 「常見誤區」章節 |
+| 技術機制有新發現（官方更新、新研究） | 「底層機制」章節 |
+| Review 檢查清單需要新增項目 | 「Review Skill 的檢查清單」章節 |
+| Skill 演化模式有新案例 | 「Skill 演化模式」章節 |
 
 ### 更新原則
 
@@ -290,7 +331,7 @@ v3+：持續迭代
 
 ## 參考資源
 
-- **設計模式與反模式**：`references/design-patterns.md`
-- **官方引用與證據**：`references/evidence.md`
-- **生態系統追蹤**：`references/ecosystem.md`
-- **Skill 設計模板**：`references/skill-template.md`
+| 檔案 | 內容 | 何時讀取 |
+|------|------|---------|
+| `references/design-patterns.md` | 設計模式（P1-P6）與反模式（A1-A6）速查表 | 設計新 Skill 或 Review 時比對 |
+| `references/skill-template.md` | 基於本 Skill 原則的建立模板 | 從零建立新 Skill 時複製使用 |
