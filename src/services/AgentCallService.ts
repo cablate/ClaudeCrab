@@ -1,14 +1,19 @@
 /**
  * AgentCallService - 跨 Agent 呼叫服務
  *
- * 提供 fire-and-forget 模式觸發其他 Agent 執行 query。
- * 呼叫者不需要等待回覆，只需確認觸發成功。
+ * 支援兩種模式：
+ * - fire-and-forget（預設）：觸發後立即返回，不等待回覆
+ * - await：等待目標 agent 回覆，返回回覆內容
+ *
+ * Session Resume：同一對 agent 間的重複呼叫會自動延續對話 context，
+ * 除非明確指定 startNewConversation=true。
  */
 
 import { AgentLoader } from '../core/AgentLoader.js';
 import { logger } from '../utils/logger.js';
 import { randomUUID } from 'node:crypto';
 import type { MessageProcessor } from '../core/MessageProcessor.js';
+import type { SessionManager } from '../core/SessionManager.js';
 import type { UnifiedMessage } from '../adapters/types.js';
 
 export interface AgentCallOptions {
@@ -18,6 +23,10 @@ export interface AgentCallOptions {
   metadata?: Record<string, unknown>;
   /** 原始聊天室 ID（用於讓目標 agent 回覆到這個聊天室） */
   chatId?: string;
+  /** 等待回覆結果（預設 false = fire-and-forget） */
+  awaitResult?: boolean;
+  /** 強制建立新對話（清除先前的 session context） */
+  startNewConversation?: boolean;
 }
 
 export interface AgentCallResult {
@@ -26,27 +35,30 @@ export interface AgentCallResult {
   callId: string;
   /** 錯誤訊息（如果失敗） */
   error?: string;
+  /** 目標 agent 的回覆內容（僅在 awaitResult=true 時有值） */
+  response?: string;
 }
 
 export class AgentCallService {
   constructor(
     private readonly agentLoader: AgentLoader,
-    private readonly getMessageProcessor: () => MessageProcessor | undefined
+    private readonly getMessageProcessor: () => MessageProcessor | undefined,
+    private readonly getSessionManager?: () => SessionManager | undefined
   ) {}
 
   /**
-   * Fire-and-forget 觸發另一個 Agent 執行 query
-   * 
+   * 觸發另一個 Agent 執行 query
+   *
    * 透過 MessageProcessor.processMessage() 執行，確保完整流程：
    * - typing 狀態推送
-   * - session 管理
+   * - session 管理（自動延續先前對話 context）
    * - 回覆格式化（帶【agent 回覆】前綴）
-   * 
+   *
    * @param fromAgent - 發起呼叫的 Agent ID
    * @param toAgent - 目標 Agent ID
    * @param message - 要傳送的訊息/指令
-   * @param options - 額外選項（包含 chatId 用於回覆）
-   * @returns 呼叫結果（成功只表示已觸發，不保證執行完成）
+   * @param options - 額外選項
+   * @returns 呼叫結果（awaitResult=true 時包含回覆內容）
    */
   async callAgent(
     fromAgent: string,
@@ -57,7 +69,15 @@ export class AgentCallService {
     const callId = randomUUID();
 
     logger.info(
-      { callId, from: fromAgent, to: toAgent, priority: options?.priority, hasChatId: !!options?.chatId },
+      {
+        callId,
+        from: fromAgent,
+        to: toAgent,
+        priority: options?.priority,
+        hasChatId: !!options?.chatId,
+        awaitResult: options?.awaitResult ?? false,
+        startNewConversation: options?.startNewConversation ?? false,
+      },
       '[AgentCallService] Triggering cross-agent call'
     );
 
@@ -92,10 +112,19 @@ export class AgentCallService {
       };
     }
 
+    // 強制新對話：清除先前的 sdkSessionId
+    if (options.startNewConversation) {
+      this.clearAgentCallSession(fromAgent, toAgent);
+    }
+
     // 建構帶有來源資訊的 prompt
+    const callModeNote = options.awaitResult
+      ? '模式: await（對方正在等待你的回覆）\n⚠️ 直接回覆即可，不要使用 call_agent。你的回覆會自動傳達給對方。'
+      : '模式: fire-and-forget（對方不等待回覆）\n📝 直接回覆即可，回覆會顯示在聊天室。僅在必要時才使用 call_agent 聯繫對方。';
     const enrichedMessage = `【跨 Agent 呼叫】
 來自: ${fromAgent}
 優先級: ${options?.priority ?? 'normal'}
+${callModeNote}
 ---
 ${message}`;
 
@@ -113,6 +142,11 @@ ${message}`;
       },
     };
 
+    // awaitResult 模式：等待回覆
+    if (options.awaitResult) {
+      return this.executeAndAwait(messageProcessor, unifiedMessage, toAgent, callId, fromAgent);
+    }
+
     // Fire-and-forget: 不 await 完成，只確保觸發
     this.executeInBackground(messageProcessor, unifiedMessage, toAgent, callId, fromAgent);
 
@@ -125,6 +159,54 @@ ${message}`;
       success: true,
       callId,
     };
+  }
+
+  /**
+   * 等待目標 agent 回覆並返回結果
+   */
+  private async executeAndAwait(
+    messageProcessor: MessageProcessor,
+    message: UnifiedMessage,
+    toAgent: string,
+    callId: string,
+    fromAgent: string
+  ): Promise<AgentCallResult> {
+    try {
+      const result = await messageProcessor.processMessage(message, toAgent);
+
+      if (result.success) {
+        logger.info(
+          { callId, from: fromAgent, to: toAgent, responseLength: result.response?.length ?? 0 },
+          '[AgentCallService] Await call completed successfully'
+        );
+        return {
+          success: true,
+          callId,
+          response: result.response ?? '',
+        };
+      } else {
+        logger.warn(
+          { callId, from: fromAgent, to: toAgent, error: result.error },
+          '[AgentCallService] Await call failed'
+        );
+        return {
+          success: false,
+          callId,
+          error: result.error ?? 'Unknown error',
+        };
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error(
+        { callId, from: fromAgent, to: toAgent, error: errorMsg },
+        '[AgentCallService] Await call error'
+      );
+      return {
+        success: false,
+        callId,
+        error: errorMsg,
+      };
+    }
   }
 
   /**
@@ -158,6 +240,24 @@ ${message}`;
         '[AgentCallService] Background execution error'
       );
     }
+  }
+
+  /**
+   * 清除特定 agent 間的 session（用於 startNewConversation）
+   */
+  private clearAgentCallSession(fromAgent: string, toAgent: string): void {
+    const sessionManager = this.getSessionManager?.();
+    if (!sessionManager) {
+      logger.debug('[AgentCallService] SessionManager not available, skip clearing session');
+      return;
+    }
+
+    const userId = `agent:${fromAgent}`;
+    sessionManager.setSdkSessionId('telegram', toAgent, userId, undefined);
+    logger.info(
+      { from: fromAgent, to: toAgent },
+      '[AgentCallService] Cleared agent call session for new conversation'
+    );
   }
 
   /**

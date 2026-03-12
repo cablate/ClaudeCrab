@@ -34,7 +34,7 @@ export function createAgentCallMcpServer(
     tools: [
       tool(
         'call_agent',
-        '呼叫其他 Agent 執行任務（fire-and-forget）。使用時機：需要其他 Agent 協助處理任務、通知其他 Agent 有新工作、請求審閱或回饋。呼叫後立即返回，不等待對方完成。',
+        '呼叫其他 Agent 執行任務。支援兩種模式：(1) fire-and-forget（預設）：觸發後立即返回；(2) await：等待回覆並返回內容。同一對 agent 間的重複呼叫會自動延續對話 context（session resume），除非指定 startNewConversation。',
         {
           targetAgent: z.string().describe('目標 Agent 的 ID（例如: admin, coder, general）'),
           message: z.string().describe('要傳送的訊息或指令，清楚說明需要對方做什麼'),
@@ -42,10 +42,24 @@ export function createAgentCallMcpServer(
             .enum(['low', 'normal', 'high'])
             .optional()
             .describe('優先級：low=不急、normal=一般、high=緊急'),
+          awaitResult: z
+            .boolean()
+            .optional()
+            .describe('是否等待目標 agent 回覆（預設 false = fire-and-forget）。設為 true 時會阻塞直到對方完成'),
+          startNewConversation: z
+            .boolean()
+            .optional()
+            .describe('強制建立新對話，不延續先前的對話 context（預設 false = 自動 resume）'),
         },
         async (args) => {
           logger.info(
-            { from: context.agentId, to: args.targetAgent, priority: args.priority },
+            {
+              from: context.agentId,
+              to: args.targetAgent,
+              priority: args.priority,
+              awaitResult: args.awaitResult,
+              startNewConversation: args.startNewConversation,
+            },
             'Agent call tool invoked'
           );
 
@@ -73,7 +87,7 @@ export function createAgentCallMcpServer(
             };
           }
 
-          // 觸發跨 agent 呼叫，傳入 chatId 讓目標 agent 可以回覆到原聊天室
+          // 觸發跨 agent 呼叫
           const result = await agentCallService.callAgent(
             context.agentId,
             args.targetAgent,
@@ -81,10 +95,25 @@ export function createAgentCallMcpServer(
             {
               ...(args.priority !== undefined ? { priority: args.priority } : {}),
               chatId: context.chatId,
+              ...(args.awaitResult !== undefined ? { awaitResult: args.awaitResult } : {}),
+              ...(args.startNewConversation !== undefined ? { startNewConversation: args.startNewConversation } : {}),
             }
           );
 
           if (result.success) {
+            // await 模式：回傳 agent 回覆內容
+            if (args.awaitResult && result.response !== undefined) {
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: `✅ ${args.targetAgent} 已回覆（Call ID: ${result.callId}）：\n\n${result.response}`,
+                  },
+                ],
+              };
+            }
+
+            // fire-and-forget 模式
             return {
               content: [
                 {

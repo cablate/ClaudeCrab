@@ -347,7 +347,8 @@ export class AppBootstrap {
     let messageProcessorRef: MessageProcessor | undefined;
     const agentCallService = new AgentCallService(
       agentLoader,
-      () => messageProcessorRef
+      () => messageProcessorRef,
+      () => sessionManager
     );
 
     // Create TTS service if provider is available

@@ -304,7 +304,12 @@ export class MessageProcessor {
               isInitiative?: boolean;
               isSynthesis?: boolean;
               isSocial?: boolean;
+              agentCallFrom?: string;
             } = {};
+            // Agent call tag: pass the calling agent's ID so responses get tagged
+            if (message.metadata?.isAgentCall === true && typeof message.metadata.fromAgent === 'string') {
+              queryOptions.agentCallFrom = message.metadata.fromAgent;
+            }
             if (options?.isGroupChat === true) {
               queryOptions.isGroupChat = true;
             }
@@ -439,6 +444,8 @@ export class MessageProcessor {
       isInitiative?: boolean;
       isSynthesis?: boolean;
       isSocial?: boolean;
+      /** If set, this response is from an agent call — tag the first message with the caller's ID */
+      agentCallFrom?: string;
     }
   ): Promise<string> {
     // Get internal session for agent info
@@ -498,6 +505,8 @@ export class MessageProcessor {
       let lastSentMessageId: string | undefined;
       // v2.0: Only emit one tool_use reaction per query to avoid noise
       let toolUseReacted = false;
+      // Agent call: track whether the response prefix has been applied
+      let agentCallPrefixApplied = false;
 
       // Context injection for multi-bot group chats (ADR-019)
       // Get messages since last query to inject as context
@@ -584,8 +593,16 @@ export class MessageProcessor {
                     intermediateMessages.push(text);
                     return;
                   }
+
+                  // Prepend agent call tag to the first visible message
+                  let textToSend = text;
+                  if (options?.agentCallFrom && !agentCallPrefixApplied) {
+                    textToSend = `🔗 _回覆 ${options.agentCallFrom} 的協作請求_\n\n${text}`;
+                    agentCallPrefixApplied = true;
+                  }
+
                   const sendResult = await sendWithMarkdownFallback(
-                    adapter, chatId, text, sendOpts
+                    adapter, chatId, textToSend, sendOpts
                   );
 
                   if (!sendResult.success) {
@@ -651,42 +668,42 @@ export class MessageProcessor {
                 },
                 additionalOptions: {
                   canUseTool,
-                  hooks: {
-                    UserPromptSubmit: [
-                      {
-                        hooks: [
-                          async () => ({
-                            continue: true,
-                            hookSpecificOutput: {
-                              hookEventName: 'UserPromptSubmit' as const,
-                              additionalContext: buildPromptContext(
-                                chatId,
-                                isNewSession,
-                                groupChatIdForContext
-                              ),
-                            },
-                          }),
-                        ],
-                      },
-                    ],
-                    // Memory stop checkpoint — only for interactive sessions
-                    // Schedules don't have this hook, so they stop cleanly
-                    Stop: [
-                      {
-                        hooks: [
-                          async (input) => {
-                            if ('stop_hook_active' in input && input.stop_hook_active) {
-                              return {};
-                            }
-                            return {
-                              decision: 'block' as const,
-                              reason: MEMORY_STOP_CHECKPOINT,
-                            };
-                          },
-                        ],
-                      },
-                    ],
-                  },
+                  // [DISABLED]                   hooks: {
+                  // [DISABLED]                     UserPromptSubmit: [
+                  // [DISABLED]                       {
+                  // [DISABLED]                         hooks: [
+                  // [DISABLED]                           async () => ({
+                  // [DISABLED]                             continue: true,
+                  // [DISABLED]                             hookSpecificOutput: {
+                  // [DISABLED]                               hookEventName: 'UserPromptSubmit' as const,
+                  // [DISABLED]                               additionalContext: buildPromptContext(
+                  // [DISABLED]                                 chatId,
+                  // [DISABLED]                                 isNewSession,
+                  // [DISABLED]                                 groupChatIdForContext
+                  // [DISABLED]                               ),
+                  // [DISABLED]                             },
+                  // [DISABLED]                           }),
+                  // [DISABLED]                         ],
+                  // [DISABLED]                       },
+                  // [DISABLED]                     ],
+                  // [DISABLED]                     // Memory stop checkpoint — only for interactive sessions
+                  // [DISABLED]                     // Schedules don't have this hook, so they stop cleanly
+                  // [DISABLED]                     Stop: [
+                  // [DISABLED]                       {
+                  // [DISABLED]                         hooks: [
+                  // [DISABLED]                           async (input) => {
+                  // [DISABLED]                             if ('stop_hook_active' in input && input.stop_hook_active) {
+                  // [DISABLED]                               return {};
+                  // [DISABLED]                             }
+                  // [DISABLED]                             return {
+                  // [DISABLED]                               decision: 'block' as const,
+                  // [DISABLED]                               reason: MEMORY_STOP_CHECKPOINT,
+                  // [DISABLED]                             };
+                  // [DISABLED]                           },
+                  // [DISABLED]                         ],
+                  // [DISABLED]                       },
+                  // [DISABLED]                     ],
+                  // [DISABLED]                   },
                 },
               }
             );
@@ -764,8 +781,12 @@ export class MessageProcessor {
       const fullResponse = allResponses.join('\n\n');
 
       // Send final response and track message ID
+      // Prepend agent call tag if no intermediate messages carried it
+      const finalResponseText = (options?.agentCallFrom && !agentCallPrefixApplied && result.response.length > 0)
+        ? `🔗 _回覆 ${options.agentCallFrom} 的協作請求_\n\n${result.response}`
+        : result.response;
       const finalMessageId = await sendFinalResponse(
-        result.response, adapter, chatId, agentId, options
+        finalResponseText, adapter, chatId, agentId, options
       );
       if (finalMessageId !== undefined) {
         lastSentMessageId = finalMessageId;
