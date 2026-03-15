@@ -35,12 +35,13 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     durationMs: number;
   }): void {
     const now = dateToString(new Date());
+    const costCents = Math.round(params.totalCostUsd * 100);
     const stmt = this.db.prepare(`
       INSERT INTO query_metrics (
         agent_id, platform, chat_id, user_id,
         input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
-        total_cost_usd, num_turns, duration_ms, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        total_cost_usd, total_cost_cents, num_turns, duration_ms, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       params.agentId,
@@ -52,6 +53,7 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
       params.cacheReadTokens,
       params.cacheCreationTokens,
       params.totalCostUsd,
+      costCents,
       params.numTurns,
       params.durationMs,
       now

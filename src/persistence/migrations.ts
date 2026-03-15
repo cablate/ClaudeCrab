@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS query_metrics (
     cache_read_tokens INTEGER NOT NULL DEFAULT 0,
     cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
     total_cost_usd REAL NOT NULL DEFAULT 0,
+    total_cost_cents INTEGER NOT NULL DEFAULT 0,
     num_turns INTEGER NOT NULL DEFAULT 0,
     duration_ms INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
@@ -232,7 +233,7 @@ CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, c
 CREATE INDEX IF NOT EXISTS idx_exec_task ON execution_records(task_id);
 `;
 
-export const SCHEMA_VERSION = '9';
+export const SCHEMA_VERSION = '10';
 
 /**
  * Migration SQL from v1 to v2:
@@ -496,6 +497,14 @@ CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, c
 CREATE INDEX IF NOT EXISTS idx_exec_task ON execution_records(task_id);
 `;
 
+const MIGRATION_V9_TO_V10 = `
+-- Add integer cents column to query_metrics (coexists with total_cost_usd for backward compat)
+ALTER TABLE query_metrics ADD COLUMN total_cost_cents INTEGER NOT NULL DEFAULT 0;
+
+-- Backfill from existing USD data
+UPDATE query_metrics SET total_cost_cents = ROUND(total_cost_usd * 100) WHERE total_cost_cents = 0 AND total_cost_usd > 0;
+`;
+
 /**
  * Run database migrations from currentVersion to SCHEMA_VERSION
  */
@@ -556,6 +565,12 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   if (currentVersion === '8') {
     db.exec(MIGRATION_V8_TO_V9);
     logger.info('Migration v8 → v9 completed');
+    currentVersion = '9';
+  }
+
+  if (currentVersion === '9') {
+    db.exec(MIGRATION_V9_TO_V10);
+    logger.info('Migration v9 → v10 completed');
   }
 
   // Update schema version
