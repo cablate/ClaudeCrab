@@ -264,6 +264,13 @@ export class MessageProcessor {
       return { success: true, skipped: true };
     }
 
+    // Activity event: chat received
+    void this.activityEventService?.log({
+      type: 'chat.received',
+      agentId,
+      message: `收到${platform === 'discord' ? ' Discord' : ''} 訊息「${text.slice(0, 50)}${text.length > 50 ? '...' : ''}」`,
+    });
+
     // Budget pre-check: block query if agent exceeded budget
     if (this.budgetService !== undefined && !this.budgetService.canQuery(agentId)) {
       logger.warn({ agentId }, 'Agent paused due to budget — rejecting message');
@@ -952,6 +959,13 @@ export class MessageProcessor {
       if (finalMessageId !== undefined) {
         lastSentMessageId = finalMessageId;
       }
+
+      // Activity event: chat responded
+      void this.activityEventService?.log({
+        type: 'chat.responded',
+        agentId,
+        message: `回覆完成（${result.usage?.outputTokens ?? 0} tokens, $${((result.totalCostUsd ?? 0)).toFixed(3)}）`,
+      });
 
       // v2.0: Workflow log (factual, sync)
       this.activityService?.emitWorkflow(agentId, 'completed', '回覆完成');

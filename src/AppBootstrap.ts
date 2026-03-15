@@ -88,6 +88,7 @@ export class AppBootstrap {
   private taskService: TaskService | null = null;
   private costReportTimer: ReturnType<typeof setInterval> | null = null;
   private discordSystemAdapter: DiscordAdapter | null = null;
+  private scheduleExecutor: ScheduleExecutor | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -189,8 +190,8 @@ export class AppBootstrap {
     // Discord services initialization (Dashboard, CostReport, InteractionHandler, ActivityEvent, TaskService)
     await this.initializeDiscordServices(agentLoader, persistence);
 
-    // Post-Discord: wire TaskService + ActivityEventService into MessageProcessor
-    // (These are created during initializeDiscordServices, which runs after MessageProcessor)
+    // Post-Discord: wire services created during initializeDiscordServices
+    // into MessageProcessor and ScheduleExecutor (which were created earlier)
     if (this.taskService !== null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (messageProcessor as any).taskService = this.taskService;
@@ -198,6 +199,11 @@ export class AppBootstrap {
     if (this.activityEventService !== null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (messageProcessor as any).activityEventService = this.activityEventService;
+      // Also wire into ScheduleExecutor
+      if (this.scheduleExecutor !== null) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (this.scheduleExecutor as any).activityEventService = this.activityEventService;
+      }
     }
 
     this.logStartupSummary(agentLoader);
@@ -539,6 +545,7 @@ export class AppBootstrap {
       executionRecordRepository,
       budgetService,
     );
+    this.scheduleExecutor = scheduleExecutor;
     const cronScheduler = new CronScheduler(
       scheduleExecutor,
       async (scheduleId, agentId, spec, failureCount) => {

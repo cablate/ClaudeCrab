@@ -13,6 +13,7 @@ import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import type { IQueryMetricsRepository } from '../persistence/types.js';
 import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
 import type { BudgetService } from '../services/BudgetService.js';
+import type { ActivityEventService } from '../services/ActivityEventService.js';
 import type { AgentLoader } from '../core/AgentLoader.js';
 import type { SDKQueryManager, QueryResult } from '../core/SDKQueryManager.js';
 import { buildPromptContext } from '../core/constants.js';
@@ -38,7 +39,8 @@ export class ScheduleExecutor {
     private repository?: ScheduleRepository,
     private queryMetricsRepository?: IQueryMetricsRepository,
     private executionRecordRepository?: ExecutionRecordRepository,
-    private budgetService?: BudgetService
+    private budgetService?: BudgetService,
+    private activityEventService?: ActivityEventService
   ) {}
 
   /**
@@ -56,6 +58,13 @@ export class ScheduleExecutor {
 
     const executionId = randomUUID();
     const startTime = Date.now();
+
+    // Activity event: schedule started
+    void this.activityEventService?.log({
+      type: 'schedule.started',
+      agentId,
+      message: `排程「${spec.name ?? spec.id}」開始執行`,
+    });
 
     logger.info(
       { scheduleId: spec.id, executionId, agentId, scheduleName: spec.name },
@@ -222,6 +231,13 @@ export class ScheduleExecutor {
           await this.notifier.notifyComplete(spec, notificationResult);
         }
 
+        // Activity event: schedule completed
+        void this.activityEventService?.log({
+          type: 'schedule.completed',
+          agentId,
+          message: `排程「${spec.name ?? spec.id}」完成（${Math.round(duration / 1000)}s, $${((result.totalCostUsd ?? 0)).toFixed(3)}）`,
+        });
+
         logger.info(
           { scheduleId: spec.id, executionId, duration, success: true },
           '[ScheduleExecutor] Execution completed'
@@ -250,6 +266,15 @@ export class ScheduleExecutor {
       if (spec.notification?.onError) {
         await this.notifier.notifyError(spec, error);
       }
+
+      // Activity event: schedule failed
+      void this.activityEventService?.log({
+        type: 'schedule.failed',
+        agentId,
+        message: `排程「${spec.name ?? spec.id}」失敗`,
+        details: errorMessage.slice(0, 200),
+        level: 'error',
+      });
 
       logger.error(
         { scheduleId: spec.id, executionId, duration, error: errorMessage },
