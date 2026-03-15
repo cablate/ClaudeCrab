@@ -519,7 +519,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     options: PermissionPromptOptions
   ): Promise<PermissionPromptResult> {
     try {
-      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      const channel = await this.resolveTextOrThread(chatId) ?? this.channel;
       if (channel === null) {
         return { success: false, error: 'No channel available' };
       }
@@ -576,7 +576,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     text: string
   ): Promise<void> {
     try {
-      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      const channel = await this.resolveTextOrThread(chatId) ?? this.channel;
       if (channel === null) return;
 
       const message = await channel.messages.fetch(messageId);
@@ -595,7 +595,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     options: QuestionPromptOptions
   ): Promise<QuestionPromptResult> {
     try {
-      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      const channel = await this.resolveTextOrThread(chatId) ?? this.channel;
       if (channel === null) {
         return { success: false, error: 'No channel available' };
       }
@@ -643,7 +643,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     text: string
   ): Promise<void> {
     try {
-      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      const channel = await this.resolveTextOrThread(chatId) ?? this.channel;
       if (channel === null) return;
 
       const message = await channel.messages.fetch(messageId);
@@ -662,7 +662,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     options: ExitPlanModePromptOptions
   ): Promise<ExitPlanModePromptResult> {
     try {
-      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      const channel = await this.resolveTextOrThread(chatId) ?? this.channel;
       if (channel === null) {
         return { success: false, error: 'No channel available' };
       }
@@ -705,7 +705,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     text: string
   ): Promise<void> {
     try {
-      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      const channel = await this.resolveTextOrThread(chatId) ?? this.channel;
       if (channel === null) return;
 
       const message = await channel.messages.fetch(messageId);
@@ -765,34 +765,37 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   // ============================================================
 
   override async sendPhoto(
-    _chatId: string,
+    chatId: string,
     filePath: string,
     caption?: string,
   ): Promise<SendResult> {
-    return this.sendFileAttachment(filePath, caption);
+    return this.sendFileAttachment(chatId, filePath, caption);
   }
 
   override async sendDocument(
-    _chatId: string,
+    chatId: string,
     filePath: string,
     caption?: string,
   ): Promise<SendResult> {
-    return this.sendFileAttachment(filePath, caption);
+    return this.sendFileAttachment(chatId, filePath, caption);
   }
 
   override async sendAudio(
-    _chatId: string,
+    chatId: string,
     audio: Buffer,
     options?: { duration?: number; caption?: string; filename?: string },
   ): Promise<SendResult> {
-    if (this.channel === null) {
-      return { success: false, error: 'Channel not initialized' };
-    }
     try {
+      const target = chatId !== this.channelId
+        ? await this.resolveTextOrThread(chatId)
+        : this.channel;
+      if (target === null) {
+        return { success: false, error: 'Channel not found' };
+      }
       const attachment = new AttachmentBuilder(audio, { name: options?.filename ?? 'audio.mp3' });
       const payload: { files: AttachmentBuilder[]; content?: string } = { files: [attachment] };
       if (options?.caption !== undefined) payload.content = options.caption;
-      const msg = await this.channel.send(payload);
+      const msg = await target.send(payload);
       return { success: true, messageId: msg.id };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -802,28 +805,31 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   }
 
   override async sendVideo(
-    _chatId: string,
+    chatId: string,
     filePath: string,
     caption?: string,
   ): Promise<SendResult> {
-    return this.sendFileAttachment(filePath, caption);
+    return this.sendFileAttachment(chatId, filePath, caption);
   }
 
   /**
-   * Send a file as a Discord attachment.
+   * Send a file as a Discord attachment (thread-aware).
    */
-  private async sendFileAttachment(filePath: string, caption?: string): Promise<SendResult> {
-    if (this.channel === null) {
-      return { success: false, error: 'Channel not initialized' };
-    }
+  private async sendFileAttachment(chatId: string, filePath: string, caption?: string): Promise<SendResult> {
     try {
+      const target = chatId !== this.channelId
+        ? await this.resolveTextOrThread(chatId)
+        : this.channel;
+      if (target === null) {
+        return { success: false, error: 'Channel not found' };
+      }
       if (!fs.existsSync(filePath)) {
         return { success: false, error: `File not found: ${filePath}` };
       }
       const attachment = new AttachmentBuilder(filePath, { name: path.basename(filePath) });
       const payload: { files: AttachmentBuilder[]; content?: string } = { files: [attachment] };
       if (caption !== undefined) payload.content = caption;
-      const msg = await this.channel.send(payload);
+      const msg = await target.send(payload);
       return { success: true, messageId: msg.id };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -905,7 +911,18 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       const ch = await this.client.channels.fetch(channelId);
       if (ch === null) return null;
       if (ch.type === ChannelType.GuildText) return ch as TextChannel;
-      if (ch.isThread()) return ch as ThreadChannel;
+      if (ch.isThread()) {
+        const thread = ch as ThreadChannel;
+        // Auto-unarchive if needed (so agent can continue responding)
+        if (thread.archived) {
+          try {
+            await thread.setArchived(false);
+          } catch {
+            // If bot lacks permission, let send() fail naturally
+          }
+        }
+        return thread;
+      }
       return null;
     } catch {
       return null;

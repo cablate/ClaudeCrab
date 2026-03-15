@@ -165,14 +165,16 @@ export class AgentCallService {
       };
     }
 
+    // Determine platform for correct adapter routing (Discord threads vs Telegram)
+    const effectivePlatform = options?.platform ?? 'telegram';
+
     // 使用真實使用者 session（降低割裂感，讓使用者能在 Telegram 看到並介入）
-    // 舊做法（獨立通道）：userId = `agent:${fromAgent}`，建立 agent 間的獨立 session
     const effectiveUserId = options?.userId ?? `agent:${fromAgent}`;
     const useUserSession = !!options?.userId;
 
     // 強制新對話：僅在獨立通道模式下清除 session（不應影響使用者的現有 session）
     if (options.startNewConversation && !useUserSession) {
-      this.clearAgentCallSession(fromAgent, toAgent);
+      this.clearAgentCallSession(fromAgent, toAgent, effectivePlatform);
     }
 
     // 建構帶有來源資訊的 prompt
@@ -186,10 +188,10 @@ ${callModeNote}
 ---
 ${message}`;
 
-    // 構造 UnifiedMessage
+    // 構造 UnifiedMessage — use original platform for correct adapter routing
     const unifiedMessage: UnifiedMessage = {
       id: callId,
-      platform: 'telegram',
+      platform: effectivePlatform,
       userId: effectiveUserId,
       chatId: options.chatId,
       text: enrichedMessage,
@@ -307,7 +309,7 @@ ${message}`;
   /**
    * 清除特定 agent 間的 session（用於 startNewConversation）
    */
-  private clearAgentCallSession(fromAgent: string, toAgent: string): void {
+  private clearAgentCallSession(fromAgent: string, toAgent: string, platform = 'telegram'): void {
     const sessionManager = this.getSessionManager?.();
     if (!sessionManager) {
       logger.debug('[AgentCallService] SessionManager not available, skip clearing session');
@@ -315,7 +317,7 @@ ${message}`;
     }
 
     const userId = `agent:${fromAgent}`;
-    sessionManager.setSdkSessionId('telegram', toAgent, userId, undefined);
+    sessionManager.setSdkSessionId(platform, toAgent, userId, undefined);
     logger.info(
       { from: fromAgent, to: toAgent },
       '[AgentCallService] Cleared agent call session for new conversation'
@@ -344,11 +346,16 @@ ${message}`;
     const targetAdapter = this.getAdapter('discord', toAgent);
     if (targetAdapter === undefined) return;
 
+    // Get target agent's main channel ID for the summary
+    const targetAgent = this.agentLoader.get(toAgent);
+    const targetChannelId = targetAgent?.config.discordChannelId;
+    if (targetChannelId === undefined) return;
+
     const fromName = this.agentLoader.get(fromAgent)?.config.name ?? fromAgent;
 
     // Post summary in target agent's main channel (not the thread)
     void targetAdapter.sendMessage(
-      '', // empty chatId → uses adapter's default channel
+      targetChannelId,
       `📎 正在協助 **${fromName}** 處理任務（來自 <#${options.threadId}>）`
     ).catch(() => {
       // Best effort — don't block
