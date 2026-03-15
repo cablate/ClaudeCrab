@@ -106,27 +106,21 @@ export class DiscordInteractionHandler {
       }
     }
 
+    // Always deferUpdate first (must respond within 3 seconds)
+    try {
+      await interaction.deferUpdate();
+    } catch {
+      // Already acknowledged
+    }
+
     if (handled) {
-      // Acknowledge the interaction — update the message to show it was handled
+      // Remove buttons after successful handling
       try {
-        await interaction.update({
-          components: [], // Remove buttons after click
-        });
+        await interaction.editReply({ components: [] });
       } catch {
-        // If update fails (e.g., already deferred), try deferUpdate
-        try {
-          await interaction.deferUpdate();
-        } catch {
-          // Interaction may have already been acknowledged
-        }
+        // Best effort — interaction may have expired
       }
     } else {
-      // Unknown button — acknowledge silently
-      try {
-        await interaction.deferUpdate();
-      } catch {
-        // Already acknowledged
-      }
       log.warn({ customId }, 'No handler found for button interaction');
     }
   }
