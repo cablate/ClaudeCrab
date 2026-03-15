@@ -87,6 +87,7 @@ export class AppBootstrap {
   private activityEventService: ActivityEventService | null = null;
   private taskService: TaskService | null = null;
   private costReportTimer: ReturnType<typeof setInterval> | null = null;
+  private discordSystemAdapter: DiscordAdapter | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -234,6 +235,12 @@ export class AppBootstrap {
       if (this.dashboardService !== null) {
         this.dashboardService.stop();
         logger.info('Dashboard service stopped');
+      }
+
+      if (this.discordSystemAdapter !== null) {
+        await this.discordSystemAdapter.dispose();
+        this.discordSystemAdapter = null;
+        logger.info('Discord system bot disposed');
       }
 
       if (this.idleMutterScheduler !== null) {
@@ -633,44 +640,61 @@ export class AppBootstrap {
 
   /**
    * Initialize Discord-specific services (Dashboard, CostReport, InteractionHandler).
-   * Only runs if DISCORD_ENABLED=true and a main bot adapter exists.
+   * Uses DISCORD_MAIN_BOT_TOKEN to create a system-level Bot Client.
+   * This bot handles Dashboard, Alerts, Cost Report, System Log — independent of agent bots.
    */
   private async initializeDiscordServices(
     agentLoader: AgentLoader,
     persistence: PersistenceLayer | null,
   ): Promise<void> {
-    if (!this.config.discord.enabled || this.orchestrator === null) {
+    if (!this.config.discord.enabled) {
       return;
     }
 
-    const { channels, dashboardUpdateMinutes } = this.config.discord;
+    const { mainBotToken, channels, dashboardUpdateMinutes } = this.config.discord;
 
-    // Find any running Discord adapter to use for system channel operations
-    let discordAdapter: DiscordAdapter | undefined;
-    for (const adapter of this.orchestrator.getRegistry().getAll()) {
-      if (adapter instanceof DiscordAdapter) {
-        discordAdapter = adapter;
-        break;
-      }
+    if (!mainBotToken) {
+      logger.info('DISCORD_MAIN_BOT_TOKEN not set — skipping Discord services');
+      return;
     }
 
-    if (discordAdapter === undefined) {
-      logger.info('No Discord adapters running — skipping Discord services');
+    // Create a dedicated system adapter using the main bot token
+    // This is NOT an agent adapter — it's for system-level operations only
+    logger.info('Creating Discord system bot...');
+    const systemAdapterConfig = {
+      platform: 'discord' as const,
+      agentId: '_system',
+      token: mainBotToken,
+      channelId: channels.systemLog || channels.dashboard || '',
+    };
+
+    const discordAdapter = new DiscordAdapter(systemAdapterConfig);
+    try {
+      await discordAdapter.initialize();
+      this.discordSystemAdapter = discordAdapter;
+      logger.info('Discord system bot authenticated');
+    } catch (error) {
+      logger.error({ error }, 'Failed to initialize Discord system bot — skipping Discord services');
       return;
     }
 
     logger.info('Initializing Discord services...');
 
-    // Register InteractionHandler for button routing
-    const interactionHandler = new DiscordInteractionHandler({
-      client: discordAdapter.getClient()!,
-      adapters: new Map(),
-    });
+    // Register InteractionHandler on the system bot for button routing
+    const systemClient = discordAdapter.getClient();
+    if (systemClient !== null) {
+      const interactionHandler = new DiscordInteractionHandler({
+        client: systemClient,
+        adapters: new Map(),
+      });
 
-    // Register all Discord adapters for button routing
-    for (const adapter of this.orchestrator.getRegistry().getAll()) {
-      if (adapter instanceof DiscordAdapter) {
-        interactionHandler.registerAdapter(adapter.agentId, adapter);
+      // Register agent Discord adapters for button routing (if any)
+      if (this.orchestrator !== null) {
+        for (const adapter of this.orchestrator.getRegistry().getAll()) {
+          if (adapter instanceof DiscordAdapter) {
+            interactionHandler.registerAdapter(adapter.agentId, adapter);
+          }
+        }
       }
     }
 
