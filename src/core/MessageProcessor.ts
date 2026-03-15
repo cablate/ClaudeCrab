@@ -243,8 +243,14 @@ export class MessageProcessor {
     const isGroupChat = message.metadata?.isGroupChat === true;
 
     // For group chats, use chatId-based session key to share history among all members
+    // For Discord threads, use chatId (threadId) to isolate session per thread
     // For private chats, use userId-based session key
-    const effectiveUserId = isGroupChat ? buildGroupUserId(chatId) : userId;
+    const isDiscordThread = platform === 'discord' && message.metadata?.isThread === true;
+    const effectiveUserId = isGroupChat
+      ? buildGroupUserId(chatId)
+      : isDiscordThread
+        ? `${userId}::thread::${chatId}`
+        : userId;
 
     logger.debug(
       { platform, userId, agentId, messageId, isGroupChat, effectiveUserId },

@@ -180,8 +180,6 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     const userId = message.author.id;
-    // Thread messages use threadId as chatId → creates independent session
-    const chatId = isChildThread ? message.channelId : this.channelId;
     const text = message.content;
 
     // Skip empty messages (attachments only, etc.)
@@ -189,20 +187,15 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       return;
     }
 
-    // Security validation
+    // Security validation (use main channelId for consistent logging)
     const validation = validateMessage(text, userId, this.securityConfig);
 
     if (!validation.valid) {
       if (validation.error === 'unauthorized') {
-        auditLogger.logUnauthorizedAccess('discord', userId, chatId);
-        this.log.warn({ userId, chatId }, 'Unauthorized access attempt');
+        auditLogger.logUnauthorizedAccess('discord', userId, this.channelId);
+        this.log.warn({ userId }, 'Unauthorized access attempt');
       } else if (validation.error === 'message_too_long') {
-        auditLogger.logValidationFailed(
-          'discord',
-          userId,
-          'message_too_long',
-          chatId
-        );
+        auditLogger.logValidationFailed('discord', userId, 'message_too_long', this.channelId);
       }
 
       const errorMessage = getSecurityErrorMessage(validation.error!);
@@ -213,16 +206,41 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     // Check for prompt injection (warning only)
     if (validation.warnings?.includes('potential_prompt_injection')) {
       const patterns = detectPromptInjection(text, this.securityConfig);
-      auditLogger.logInjectionDetected('discord', userId, patterns, chatId);
-      this.log.warn(
-        { userId, chatId, patternCount: patterns.length },
-        'Potential prompt injection detected'
-      );
+      auditLogger.logInjectionDetected('discord', userId, patterns, this.channelId);
+      this.log.warn({ userId, patternCount: patterns.length }, 'Potential prompt injection detected');
+    }
+
+    // --- Thread routing ---
+    // Main channel messages: auto-create a thread → conversation goes there
+    // Thread messages: use existing thread
+    let chatId: string;
+    let threadId: string | undefined;
+
+    if (isChildThread) {
+      // Already in a thread — use it
+      chatId = message.channelId;
+      threadId = message.channelId;
+    } else {
+      // Main channel — auto-create a thread from this message
+      try {
+        const threadTitle = text.length > 50 ? text.slice(0, 47) + '...' : text;
+        const thread = await message.startThread({
+          name: threadTitle,
+          autoArchiveDuration: 1440, // 24 hours
+        });
+        chatId = thread.id;
+        threadId = thread.id;
+        this.log.info({ threadId: thread.id, title: threadTitle }, 'Auto-created thread for new conversation');
+      } catch (err) {
+        // Fallback to main channel if thread creation fails
+        this.log.warn({ err }, 'Failed to auto-create thread, using main channel');
+        chatId = this.channelId;
+        threadId = undefined;
+      }
     }
 
     // Build UnifiedMessage
-    const displayName =
-      message.member?.displayName ?? message.author.displayName;
+    const displayName = message.member?.displayName ?? message.author.displayName;
 
     const unifiedMessage: UnifiedMessage = {
       id: `discord:${message.id}:${chatId}`,
@@ -236,10 +254,9 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
         displayName,
         username: message.author.username,
         isGroupChat: false,
-        // Thread metadata for session isolation + agent-call routing
-        isThread: isChildThread,
-        threadId: isChildThread ? message.channelId : undefined,
-        parentChannelId: isChildThread ? this.channelId : undefined,
+        isThread: threadId !== undefined,
+        threadId,
+        parentChannelId: threadId !== undefined ? this.channelId : undefined,
       },
     };
 
