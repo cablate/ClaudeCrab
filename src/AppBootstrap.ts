@@ -661,6 +661,7 @@ export class AppBootstrap {
       return;
     }
 
+    const self = this; // for closures/getters below
     const { mainBotToken, channels, dashboardUpdateMinutes } = this.config.discord;
 
     if (!mainBotToken) {
@@ -708,9 +709,11 @@ export class AppBootstrap {
           sessionManager,
           messageProcessor,
           ...(this.budgetService !== null ? { budgetService: this.budgetService } : {}),
+          // taskService is created later in this method — use getter
+          get taskService() { return self.taskService ?? undefined; },
           ...(this.orchestrator !== null ? {
             getBotStatus: (agentId: string, platform?: 'telegram' | 'discord') =>
-              this.orchestrator!.getBotStatusForAgent(agentId, platform),
+              self.orchestrator!.getBotStatusForAgent(agentId, platform),
           } : {}),
         },
       });
@@ -767,7 +770,8 @@ export class AppBootstrap {
         taskRecordRepository: persistence.taskRecordRepository,
         ...(channels.taskBoard ? { discordAdapter: discordAdapter, forumChannelId: channels.taskBoard } : {}),
       });
-      logger.info('TaskService started');
+      this.taskService.startForumListener();
+      logger.info('TaskService started (Forum listener active)');
     }
 
     // CostReportService — daily cron (send at 23:55 local time)

@@ -6,6 +6,7 @@
  * and kept in sync with SQLite records.
  */
 
+import { ChannelType, type Client, type ThreadChannel } from 'discord.js';
 import type { DiscordAdapter } from '../adapters/DiscordAdapter.js';
 import {
   TaskRecordRepository,
@@ -36,6 +37,92 @@ export class TaskService {
     this.repo = options.taskRecordRepository;
     this.adapter = options.discordAdapter;
     this.forumChannelId = options.forumChannelId;
+  }
+
+  /**
+   * Start listening for Forum post creation by humans.
+   * When a user creates a post directly in #任務看板, sync it to SQLite.
+   */
+  startForumListener(): void {
+    if (this.adapter === undefined || this.forumChannelId === undefined) return;
+
+    const client = this.adapter.getClient();
+    if (client === null) return;
+
+    const forumId = this.forumChannelId;
+
+    client.on('threadCreate', (thread) => {
+      // Only care about threads in our task board forum
+      if (thread.parentId !== forumId) return;
+      // Skip if already tracked (created by our code)
+      const existing = this.repo.listByStatus(undefined, 1000);
+      if (existing.some(t => t.discord_thread_id === thread.id)) return;
+
+      // Parse priority from Forum tags
+      const priority = this.parsePriorityFromThread(thread as ThreadChannel);
+      const assignee = this.parseAssigneeFromThread(thread as ThreadChannel);
+
+      const taskId = this.repo.insert({
+        title: thread.name,
+        priority,
+        discordThreadId: thread.id,
+        createdByUserId: thread.ownerId ?? 'unknown',
+        ...(assignee !== undefined ? { assigneeAgentId: assignee } : {}),
+      });
+
+      log.info(
+        { taskId, threadId: thread.id, title: thread.name },
+        'Forum post synced to SQLite (user-created)'
+      );
+    });
+
+    log.info({ forumId }, 'Forum listener started — user posts will sync to SQLite');
+  }
+
+  /**
+   * Parse priority from Forum thread applied tags.
+   */
+  private parsePriorityFromThread(thread: ThreadChannel): TaskPriority {
+    const tagNames = this.getAppliedTagNames(thread);
+    if (tagNames.some(t => t.includes('urgent') || t.includes('🔴'))) return 'urgent';
+    if (tagNames.some(t => t.includes('low') || t.includes('🟢'))) return 'low';
+    return 'medium';
+  }
+
+  /**
+   * Parse assignee agent from Forum thread applied tags.
+   */
+  private parseAssigneeFromThread(thread: ThreadChannel): string | undefined {
+    const tagNames = this.getAppliedTagNames(thread);
+    const agentTags: Record<string, string> = {
+      'coder': 'coder', '工程師': 'coder',
+      'writer': 'writer', '寫手': 'writer',
+      'admin': 'admin', '管理員': 'admin',
+      'seo': 'seo',
+      'transcriber': 'transcriber', '轉寫員': 'transcriber',
+      'media': 'media', '媒體製作': 'media',
+      'oss-coder': 'oss-coder', '開源工程師': 'oss-coder',
+    };
+
+    for (const tagName of tagNames) {
+      const lower = tagName.toLowerCase().replace(/[🤖📝🔧🌐🎙🎨💻\s]/g, '');
+      for (const [key, agentId] of Object.entries(agentTags)) {
+        if (lower.includes(key)) return agentId;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Get applied tag names from a Forum thread.
+   */
+  private getAppliedTagNames(thread: ThreadChannel): string[] {
+    if (thread.parent === null || thread.parent.type !== ChannelType.GuildForum) return [];
+    const forum = thread.parent;
+    const appliedIds = thread.appliedTags;
+    return forum.availableTags
+      .filter(t => appliedIds.includes(t.id))
+      .map(t => t.name);
   }
 
   /**

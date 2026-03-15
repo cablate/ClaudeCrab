@@ -15,6 +15,7 @@ import type { AgentLoader } from '../../core/AgentLoader.js';
 import type { SessionManager } from '../../core/SessionManager.js';
 import type { MessageProcessor } from '../../core/MessageProcessor.js';
 import type { BudgetService } from '../../services/BudgetService.js';
+import type { TaskService } from '../../services/TaskService.js';
 import { logger } from '../../utils/logger.js';
 
 const log = logger.child({ module: 'DiscordSlashCommands' });
@@ -24,6 +25,7 @@ export interface SlashCommandDependencies {
   sessionManager: SessionManager;
   messageProcessor: MessageProcessor;
   budgetService?: BudgetService;
+  taskService?: TaskService | undefined;
   getBotStatus?: (agentId: string, platform?: 'telegram' | 'discord') => 'running' | 'stopped' | 'error' | 'no-token';
 }
 
@@ -70,6 +72,35 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
       .setDescription('停止指定 Agent 的執行')
       .addStringOption(opt =>
         opt.setName('agent').setDescription('Agent ID').setRequired(false)
+      ) as SlashCommandBuilder,
+
+    new SlashCommandBuilder()
+      .setName('task')
+      .setDescription('任務管理')
+      .addSubcommand(sub =>
+        sub.setName('create').setDescription('建立新任務')
+          .addStringOption(opt => opt.setName('title').setDescription('任務標題').setRequired(true))
+          .addStringOption(opt => opt.setName('priority').setDescription('優先級')
+            .addChoices(
+              { name: '🔴 緊急', value: 'urgent' },
+              { name: '🟡 一般', value: 'medium' },
+              { name: '🟢 低', value: 'low' },
+            ).setRequired(false))
+          .addStringOption(opt => opt.setName('assignee').setDescription('指派 Agent ID').setRequired(false))
+          .addStringOption(opt => opt.setName('description').setDescription('任務描述').setRequired(false))
+      )
+      .addSubcommand(sub =>
+        sub.setName('list').setDescription('列出任務')
+          .addStringOption(opt => opt.setName('status').setDescription('篩選狀態')
+            .addChoices(
+              { name: '📋 待辦', value: 'backlog' },
+              { name: '🔄 進行中', value: 'in_progress' },
+              { name: '✅ 完成', value: 'done' },
+            ).setRequired(false))
+      )
+      .addSubcommand(sub =>
+        sub.setName('complete').setDescription('完成任務')
+          .addStringOption(opt => opt.setName('id').setDescription('任務 ID（前 8 碼）').setRequired(true))
       ) as SlashCommandBuilder,
   ];
 }
@@ -121,6 +152,9 @@ export async function handleSlashCommand(
         break;
       case 'stop':
         await handleStop(interaction, deps);
+        break;
+      case 'task':
+        await handleTask(interaction, deps);
         break;
       default:
         await interaction.reply({ content: `未知指令：/${commandName}`, ephemeral: true });
@@ -301,10 +335,96 @@ async function handleStop(
   interaction: ChatInputCommandInteraction,
   deps: SlashCommandDependencies,
 ): Promise<void> {
-  // SDK doesn't expose a clean abort for running queries from Discord
-  // This is a placeholder — Telegram's /stop works via grammy context
   await interaction.reply({
     content: '⚠️ Discord 端的停止功能開發中。目前請透過 Telegram 使用 /stop。',
     ephemeral: true,
   });
+}
+
+async function handleTask(
+  interaction: ChatInputCommandInteraction,
+  deps: SlashCommandDependencies,
+): Promise<void> {
+  if (deps.taskService === undefined) {
+    await interaction.reply({ content: '❌ TaskService 未啟用', ephemeral: true });
+    return;
+  }
+
+  const sub = interaction.options.getSubcommand();
+
+  switch (sub) {
+    case 'create': {
+      await interaction.deferReply();
+      const title = interaction.options.getString('title', true);
+      const priority = (interaction.options.getString('priority') ?? 'medium') as 'urgent' | 'medium' | 'low';
+      const assignee = interaction.options.getString('assignee');
+      const description = interaction.options.getString('description');
+
+      const taskId = await deps.taskService.createTask({
+        title,
+        priority,
+        ...(assignee !== null ? { assigneeAgentId: assignee } : {}),
+        ...(description !== null ? { description } : {}),
+        createdByUserId: interaction.user.id,
+      });
+
+      const emoji = priority === 'urgent' ? '🔴' : priority === 'low' ? '🟢' : '🟡';
+      await interaction.editReply(
+        `✅ 任務已建立\n${emoji} **${title}**\nID: \`${taskId.slice(0, 8)}\`${assignee !== null ? `\n指派: ${assignee}` : ''}`
+      );
+      break;
+    }
+
+    case 'list': {
+      const status = interaction.options.getString('status') as 'backlog' | 'in_progress' | 'done' | undefined;
+      const tasks = deps.taskService.list(status ?? undefined, 15);
+
+      if (tasks.length === 0) {
+        await interaction.reply({ content: '目前沒有任務', ephemeral: true });
+        return;
+      }
+
+      const statusEmoji: Record<string, string> = {
+        backlog: '📋', in_progress: '🔄', in_review: '👀', done: '✅', cancelled: '❌',
+      };
+      const priorityEmoji: Record<string, string> = { urgent: '🔴', medium: '🟡', low: '🟢' };
+
+      const lines = tasks.map(t => {
+        const s = statusEmoji[t.status] ?? '?';
+        const p = priorityEmoji[t.priority] ?? '⚪';
+        const assignee = t.assignee_agent_id ? ` → ${t.assignee_agent_id}` : '';
+        return `${s}${p} **${t.title}**${assignee} \`${t.id.slice(0, 8)}\``;
+      });
+
+      const embed = new EmbedBuilder()
+        .setTitle('📋 任務清單')
+        .setDescription(lines.join('\n'))
+        .setColor(0x5865F2)
+        .setFooter({ text: `共 ${tasks.length} 筆` });
+
+      await interaction.reply({ embeds: [embed] });
+      break;
+    }
+
+    case 'complete': {
+      await interaction.deferReply({ ephemeral: true });
+      const taskId = interaction.options.getString('id', true);
+
+      // Find task by prefix match
+      const allTasks = deps.taskService.list(undefined, 500);
+      const match = allTasks.find(t => t.id.startsWith(taskId));
+
+      if (match === undefined) {
+        await interaction.editReply(`❌ 找不到 ID 開頭為 \`${taskId}\` 的任務`);
+        return;
+      }
+
+      await deps.taskService.completeTask(match.id);
+      await interaction.editReply(`✅ 任務「${match.title}」已完成`);
+      break;
+    }
+
+    default:
+      await interaction.reply({ content: `未知子指令：${sub}`, ephemeral: true });
+  }
 }
