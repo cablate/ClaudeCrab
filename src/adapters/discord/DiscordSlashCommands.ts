@@ -75,6 +75,10 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
       ) as SlashCommandBuilder,
 
     new SlashCommandBuilder()
+      .setName('restart')
+      .setDescription('重啟 ClaudeCab（先跑 tsc 檢查，通過才重啟）'),
+
+    new SlashCommandBuilder()
       .setName('task')
       .setDescription('任務管理')
       .addSubcommand(sub =>
@@ -152,6 +156,9 @@ export async function handleSlashCommand(
         break;
       case 'stop':
         await handleStop(interaction, deps);
+        break;
+      case 'restart':
+        await handleRestart(interaction);
         break;
       case 'task':
         await handleTask(interaction, deps);
@@ -339,6 +346,39 @@ async function handleStop(
     content: '⚠️ Discord 端的停止功能開發中。目前請透過 Telegram 使用 /stop。',
     ephemeral: true,
   });
+}
+
+async function handleRestart(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  await interaction.deferReply();
+
+  log.info({ userId: interaction.user.id }, 'Discord /restart command received');
+  await interaction.editReply('🔍 正在檢查程式碼（`npm run build`）...');
+
+  // Pre-flight: npm run build (includes tsc)
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+
+  try {
+    await execAsync('npm run build', { cwd: process.cwd(), timeout: 120000 });
+  } catch (error) {
+    const err = error as { stderr?: string; stdout?: string };
+    const errorOutput = (err.stderr ?? err.stdout ?? 'Unknown error').slice(0, 1500);
+    log.error({ error: errorOutput }, 'Build failed, aborting restart');
+    await interaction.editReply(`❌ Build 失敗，取消重啟：\n\`\`\`\n${errorOutput}\n\`\`\``);
+    return;
+  }
+
+  log.info({ userId: interaction.user.id }, 'Build passed, initiating restart');
+  await interaction.editReply('✅ Build 通過！🔄 正在重啟 ClaudeCab...\n\n稍後會重新上線！');
+
+  // Graceful shutdown — PM2 auto-restart
+  setTimeout(() => {
+    log.info('Graceful shutdown initiated via Discord /restart');
+    process.exit(0);
+  }, 1000);
 }
 
 async function handleTask(
