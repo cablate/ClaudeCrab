@@ -124,26 +124,58 @@ export class DashboardService {
   }
 
   /**
-   * Build all dashboard embeds.
+   * Build dashboard as a single well-designed Embed.
    */
   private buildEmbeds(): EmbedBuilder[] {
-    const embeds: EmbedBuilder[] = [];
+    const now = new Date();
+    const timeStr = now.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
 
-    // Embed 1: Agent Status
-    embeds.push(this.buildAgentStatusEmbed());
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: 'ClaudeCab HQ' })
+      .setTitle('戰情室')
+      .setColor(0x5865F2)
+      .setTimestamp()
+      .setFooter({ text: `每 ${Math.round(this.updateIntervalMs / 60000)} 分鐘自動更新 · ${timeStr}` });
 
-    // Embed 2: Cost Summary
-    embeds.push(this.buildCostEmbed());
+    // ── Agent 狀態 ──
+    const agentLines = this.buildAgentStatusLines();
+    embed.addFields({
+      name: '──── 🤖 團隊狀態 ────',
+      value: agentLines || '尚無 Agent',
+    });
 
-    // Embed 3: Task Summary (if task repo available)
-    if (this.taskRepo !== undefined) {
-      embeds.push(this.buildTaskEmbed());
+    // ── 成本 ──
+    const costBlock = this.buildCostBlock(now);
+    if (costBlock !== null) {
+      embed.addFields({ name: '\u200b', value: '\u200b' }); // spacer
+      embed.addFields({
+        name: '──── 💰 成本 ────',
+        value: costBlock.text,
+      });
+
+      // Color based on spending
+      if (costBlock.totalMonthUsd > 50) {
+        embed.setColor(0xED4245); // red
+      } else if (costBlock.totalMonthUsd > 20) {
+        embed.setColor(0xFEE75C); // yellow
+      }
     }
 
-    return embeds;
+    // ── 任務 ──
+    if (this.taskRepo !== undefined) {
+      const taskBlock = this.buildTaskBlock();
+      embed.addFields({ name: '\u200b', value: '\u200b' }); // spacer
+      embed.addFields(
+        { name: '📋 待辦', value: `**${taskBlock.backlog}**`, inline: true },
+        { name: '🔄 進行中', value: `**${taskBlock.inProgress}**`, inline: true },
+        { name: '✅ 完成', value: `**${taskBlock.done}**`, inline: true },
+      );
+    }
+
+    return [embed];
   }
 
-  private buildAgentStatusEmbed(): EmbedBuilder {
+  private buildAgentStatusLines(): string {
     const agents = this.agentLoader.list();
     const lines: string[] = [];
 
@@ -152,103 +184,85 @@ export class DashboardService {
       if (agent === undefined) continue;
 
       const isPaused = this.budgetService?.isAgentPaused(agentId) ?? false;
-      const status = isPaused ? '⏸ paused' : '🟢 idle';
       const name = agent.config.name || agentId;
-      lines.push(`\`${name.padEnd(14)}\` ${status}`);
+      const emoji = agent.config.display?.avatar ?? '🤖';
+
+      let statusIcon: string;
+      let statusText: string;
+      if (isPaused) {
+        statusIcon = '⏸️';
+        statusText = '預算暫停';
+      } else {
+        statusIcon = '🟢';
+        statusText = '待命';
+      }
+
+      lines.push(`${emoji} **${name}** ${statusIcon} ${statusText}`);
     }
 
-    return new EmbedBuilder()
-      .setTitle('🏢 ClaudeCab HQ — 戰情室')
-      .addFields({
-        name: '🤖 Agent 狀態',
-        value: lines.length > 0 ? lines.join('\n') : '（無 Agent）',
-      })
-      .setColor(0x5865F2)
-      .setTimestamp()
-      .setFooter({ text: `每 ${Math.round(this.updateIntervalMs / 60000)} 分鐘更新` });
+    return lines.join('\n');
   }
 
-  private buildCostEmbed(): EmbedBuilder {
-    const now = new Date();
+  private buildCostBlock(now: Date): { text: string; totalMonthUsd: number } | null {
+    if (this.queryMetrics === undefined) return null;
+
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    const embed = new EmbedBuilder()
-      .setTitle('💰 Cost Summary')
-      .setColor(0x00FF00)
-      .setTimestamp();
-
-    if (this.queryMetrics === undefined) {
-      embed.setDescription('（成本追蹤未啟用）');
-      return embed;
-    }
-
-    // Per-agent cost
     const todayStats = this.queryMetrics.getAllAgentStatsSince(todayStart);
     const monthStats = this.queryMetrics.getAllAgentStatsSince(monthStart);
 
-    const monthMap = new Map(monthStats.map(s => [s.agentId, s]));
     const todayMap = new Map(todayStats.map(s => [s.agentId, s]));
+    const monthMap = new Map(monthStats.map(s => [s.agentId, s]));
 
     let totalTodayUsd = 0;
     let totalMonthUsd = 0;
-    const lines: string[] = [];
+    const rows: string[] = [];
 
     for (const agentId of this.agentLoader.list()) {
       const agent = this.agentLoader.get(agentId);
       if (agent === undefined) continue;
-      const name = (agent.config.name || agentId).slice(0, 10);
 
       const todayCost = todayMap.get(agentId)?.totalCostUsd ?? 0;
       const monthCost = monthMap.get(agentId)?.totalCostUsd ?? 0;
+      if (todayCost === 0 && monthCost === 0) continue; // skip agents with no cost
+
       totalTodayUsd += todayCost;
       totalMonthUsd += monthCost;
 
-      const budgetStatus = this.budgetService?.checkBudget(agentId);
-      const monthLimitUsd = budgetStatus !== null && budgetStatus !== undefined && budgetStatus.monthlyLimitCents > 0
-        ? budgetStatus.monthlyLimitCents / 100
-        : 0;
+      const name = (agent.config.name || agentId).slice(0, 8);
+      const todayQueries = todayMap.get(agentId)?.totalQueries ?? 0;
 
+      // Budget bar
+      const budgetStatus = this.budgetService?.checkBudget(agentId);
       let bar = '';
-      if (monthLimitUsd > 0) {
-        const pct = Math.min(Math.round((monthCost / monthLimitUsd) * 100), 100);
+      if (budgetStatus !== null && budgetStatus !== undefined && budgetStatus.monthlyLimitCents > 0) {
+        const limitUsd = budgetStatus.monthlyLimitCents / 100;
+        const pct = Math.min(Math.round((monthCost / limitUsd) * 100), 100);
         const filled = Math.round(pct / 10);
-        bar = '█'.repeat(filled) + '░'.repeat(10 - filled) + ` ${pct}%`;
+        const barChar = pct >= 80 ? '🟥' : pct >= 50 ? '🟨' : '🟩';
+        bar = ` ${barChar.repeat(filled)}${'⬜'.repeat(10 - filled)} ${pct}%`;
       }
 
-      const todayStr = `$${todayCost.toFixed(2)}`;
-      const monthStr = `$${monthCost.toFixed(2)}`;
-      lines.push(`\`${name.padEnd(10)}\` today ${todayStr} | month ${monthStr} ${bar}`);
+      rows.push(`**${name}**　$${todayCost.toFixed(2)} 今日（${todayQueries}次）· $${monthCost.toFixed(2)} 月${bar}`);
     }
 
-    lines.push('─'.repeat(40));
-    lines.push(`\`${'合計'.padEnd(10)}\` today $${totalTodayUsd.toFixed(2)} | month $${totalMonthUsd.toFixed(2)}`);
-
-    embed.setDescription(lines.join('\n'));
-
-    if (totalMonthUsd > 50) {
-      embed.setColor(0xFF0000); // Red if high
-    } else if (totalMonthUsd > 20) {
-      embed.setColor(0xFFA500); // Orange
+    if (rows.length === 0) {
+      return { text: '本月尚無花費紀錄', totalMonthUsd: 0 };
     }
 
-    return embed;
+    rows.push('');
+    rows.push(`**合計**　$${totalTodayUsd.toFixed(2)} 今日 · $${totalMonthUsd.toFixed(2)} 月`);
+
+    return { text: rows.join('\n'), totalMonthUsd };
   }
 
-  private buildTaskEmbed(): EmbedBuilder {
+  private buildTaskBlock(): { backlog: number; inProgress: number; done: number } {
     const summary = this.taskRepo!.getSummary();
-    const totalActive = summary.backlog + summary.in_progress + summary.in_review;
-    const totalDone = summary.done;
-
-    return new EmbedBuilder()
-      .setTitle('📋 Tasks')
-      .addFields(
-        { name: 'Backlog', value: `${summary.backlog}`, inline: true },
-        { name: 'In Progress', value: `${summary.in_progress}`, inline: true },
-        { name: 'In Review', value: `${summary.in_review}`, inline: true },
-        { name: 'Done', value: `${totalDone}`, inline: true },
-        { name: 'Active Total', value: `${totalActive}`, inline: true },
-      )
-      .setColor(0x2B2D31);
+    return {
+      backlog: summary.backlog,
+      inProgress: summary.in_progress + summary.in_review,
+      done: summary.done,
+    };
   }
 }
