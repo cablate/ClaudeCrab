@@ -133,6 +133,16 @@ export const AgentConfigSchema = z.object({
   discordBotToken: z.string().optional(),
   discordChannelId: z.string().optional(),
 
+  // Discord organization settings
+  discord: z.object({
+    /** Discord role names for this agent */
+    roles: z.array(z.string()).optional(),
+    /** Category this agent belongs to (e.g., ENGINEERING) */
+    category: z.string().optional(),
+    /** Superior agent ID for call directionality */
+    reportsTo: z.string().optional(),
+  }).optional(),
+
   // Display configuration (live page visuals)
   display: DisplaySchema.optional(),
 

@@ -43,6 +43,14 @@ import { createTTSProvider, type TTSProvider } from './core/tts/index.js';
 import { TTSService } from './services/TTSService.js';
 import type { IQueryMetricsRepository } from './persistence/types.js';
 import { AgentCallService } from './services/AgentCallService.js';
+import { ExecutionRecordRepository } from './persistence/ExecutionRecordRepository.js';
+import { TaskRecordRepository } from './persistence/TaskRecordRepository.js';
+import { BudgetService } from './services/BudgetService.js';
+import { DashboardService } from './services/DashboardService.js';
+import { CostReportService } from './services/CostReportService.js';
+import { TaskService } from './services/TaskService.js';
+import { DiscordAdapter } from './adapters/DiscordAdapter.js';
+import { DiscordInteractionHandler } from './adapters/discord/DiscordInteractionHandler.js';
 
 /** Interval for sending typing indicators to Telegram (ms) */
 const TYPING_INDICATOR_INTERVAL_MS = 5000;
@@ -73,6 +81,8 @@ export class AppBootstrap {
   private _reactionGenerator: ReactionGenerator | null = null;
   private activityService: ActivityService | null = null;
   private sseBroadcaster: SSEBroadcaster | null = null;
+  private dashboardService: DashboardService | null = null;
+  private budgetService: BudgetService | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -110,6 +120,17 @@ export class AppBootstrap {
       ? createTTSProvider(this.config.tts)
       : undefined;
 
+    // Create BudgetService (uses agentLoader + repos for cost checking)
+    this.budgetService = new BudgetService({
+      agentLoader,
+      ...(persistence?.executionRecordRepository !== undefined
+        ? { executionRecordRepository: persistence.executionRecordRepository }
+        : {}),
+      ...(persistence?.queryMetricsRepository !== undefined
+        ? { queryMetricsRepository: persistence.queryMetricsRepository }
+        : {}),
+    });
+
     const messageProcessor = this.createMessageProcessor(
       sessionManager,
       agentLoader,
@@ -117,7 +138,9 @@ export class AppBootstrap {
       persistence?.contextInjector,
       persistence?.queryMetricsRepository,
       activityService,
-      ttsProvider
+      ttsProvider,
+      this.budgetService,
+      persistence?.executionRecordRepository,
     );
 
     this.orchestrator = this.createOrchestrator(
@@ -136,7 +159,9 @@ export class AppBootstrap {
     await this.initializeScheduleSystem(
       agentLoader,
       persistence?.databaseManager ?? null,
-      persistence?.queryMetricsRepository
+      persistence?.queryMetricsRepository,
+      persistence?.executionRecordRepository,
+      this.budgetService ?? undefined,
     );
 
     await this.initializeWebUI(
@@ -155,6 +180,9 @@ export class AppBootstrap {
     for (const agentId of agentLoader.list()) {
       activityService.trackActivity(agentId);
     }
+
+    // Discord services initialization (Dashboard, CostReport, InteractionHandler)
+    await this.initializeDiscordServices(agentLoader, persistence);
 
     this.logStartupSummary(agentLoader);
 
@@ -177,6 +205,11 @@ export class AppBootstrap {
     try {
       if (this.webUIServer !== null) {
         await this.webUIServer.stop();
+      }
+
+      if (this.dashboardService !== null) {
+        this.dashboardService.stop();
+        logger.info('Dashboard service stopped');
       }
 
       if (this.idleMutterScheduler !== null) {
@@ -267,6 +300,8 @@ export class AppBootstrap {
     const injectionStateRepository = new InjectionStateRepository(db);
     const groupMemberRepository = new GroupMemberRepository(db);
     const queryMetricsRepository = new QueryMetricsRepository(db);
+    const executionRecordRepository = new ExecutionRecordRepository(db);
+    const taskRecordRepository = new TaskRecordRepository(db);
 
     // ADR-020: Build group member info callback for ContextInjector
     // Uses lazy reference to this.orchestrator (populated after persistence init)
@@ -310,6 +345,8 @@ export class AppBootstrap {
       groupMemberRepository,
       queryMetricsRepository,
       contextInjector,
+      executionRecordRepository,
+      taskRecordRepository,
     };
   }
 
@@ -340,6 +377,8 @@ export class AppBootstrap {
     queryMetricsRepository: QueryMetricsRepository | undefined,
     activityService?: ActivityService,
     ttsProvider?: TTSProvider,
+    budgetService?: BudgetService,
+    executionRecordRepository?: ExecutionRecordRepository,
   ): MessageProcessor {
     // Create agent call service for cross-agent communication
     // Uses MessageProcessor.processMessage() to ensure full processing flow (typing, formatting, etc.)
@@ -388,6 +427,8 @@ export class AppBootstrap {
       ...(activityService !== undefined ? { activityService } : {}),
       agentCallService,
       ...(ttsService !== undefined ? { ttsService } : {}),
+      ...(budgetService !== undefined ? { budgetService } : {}),
+      ...(executionRecordRepository !== undefined ? { executionRecordRepository } : {}),
     });
 
     // Complete the circular reference: AgentCallService needs MessageProcessor
@@ -440,7 +481,9 @@ export class AppBootstrap {
   private async initializeScheduleSystem(
     agentLoader: AgentLoader,
     databaseManager: DatabaseManager | null,
-    queryMetricsRepository?: IQueryMetricsRepository
+    queryMetricsRepository?: IQueryMetricsRepository,
+    executionRecordRepository?: ExecutionRecordRepository,
+    budgetService?: BudgetService,
   ): Promise<void> {
     if (!this.config.schedule.enabled || this.orchestrator === null) {
       return;
@@ -461,7 +504,9 @@ export class AppBootstrap {
       sdkManager,
       scheduleNotifier,
       scheduleRepository,
-      queryMetricsRepository
+      queryMetricsRepository,
+      executionRecordRepository,
+      budgetService,
     );
     const cronScheduler = new CronScheduler(
       scheduleExecutor,
@@ -560,6 +605,76 @@ export class AppBootstrap {
 
     await this.webUIServer.start();
     logger.info({ port, url: `http://localhost:${port}` }, 'WebUI started');
+  }
+
+  /**
+   * Initialize Discord-specific services (Dashboard, CostReport, InteractionHandler).
+   * Only runs if DISCORD_ENABLED=true and a main bot adapter exists.
+   */
+  private async initializeDiscordServices(
+    agentLoader: AgentLoader,
+    persistence: PersistenceLayer | null,
+  ): Promise<void> {
+    if (!this.config.discord.enabled || this.orchestrator === null) {
+      return;
+    }
+
+    const { channels, dashboardUpdateMinutes } = this.config.discord;
+
+    // Find any running Discord adapter to use for system channel operations
+    let discordAdapter: DiscordAdapter | undefined;
+    for (const adapter of this.orchestrator.getRegistry().getAll()) {
+      if (adapter instanceof DiscordAdapter) {
+        discordAdapter = adapter;
+        break;
+      }
+    }
+
+    if (discordAdapter === undefined) {
+      logger.info('No Discord adapters running — skipping Discord services');
+      return;
+    }
+
+    logger.info('Initializing Discord services...');
+
+    // Register InteractionHandler for button routing
+    const interactionHandler = new DiscordInteractionHandler({
+      client: discordAdapter.getClient()!,
+      adapters: new Map(),
+    });
+
+    // Register all Discord adapters for button routing
+    for (const adapter of this.orchestrator.getRegistry().getAll()) {
+      if (adapter instanceof DiscordAdapter) {
+        interactionHandler.registerAdapter(adapter.agentId, adapter);
+      }
+    }
+
+    // Dashboard Service
+    if (channels.dashboard) {
+      this.dashboardService = new DashboardService({
+        adapter: discordAdapter,
+        channelId: channels.dashboard,
+        agentLoader,
+        ...(persistence?.queryMetricsRepository !== undefined
+          ? { queryMetricsRepository: persistence.queryMetricsRepository }
+          : {}),
+        ...(persistence?.taskRecordRepository !== undefined
+          ? { taskRecordRepository: persistence.taskRecordRepository }
+          : {}),
+        ...(persistence?.executionRecordRepository !== undefined
+          ? { executionRecordRepository: persistence.executionRecordRepository }
+          : {}),
+        ...(this.budgetService !== null
+          ? { budgetService: this.budgetService }
+          : {}),
+        updateIntervalMinutes: dashboardUpdateMinutes,
+      });
+      await this.dashboardService.start();
+      logger.info({ channelId: channels.dashboard }, 'Dashboard service started');
+    }
+
+    logger.info('Discord services initialized');
   }
 
   private logStartupSummary(agentLoader: AgentLoader): void {
@@ -724,4 +839,6 @@ interface PersistenceLayer {
   groupMemberRepository: GroupMemberRepository;
   queryMetricsRepository: QueryMetricsRepository;
   contextInjector: ContextInjector;
+  executionRecordRepository: ExecutionRecordRepository;
+  taskRecordRepository: TaskRecordRepository;
 }
