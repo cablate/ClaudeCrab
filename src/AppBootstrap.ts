@@ -472,6 +472,12 @@ export class AppBootstrap {
     // Complete the circular reference: AgentCallService needs MessageProcessor
     messageProcessorRef = messageProcessor;
 
+    // Wire adapter getter for cross-channel summary posting (set after orchestrator is ready)
+    // Uses lazy getter since orchestrator isn't created yet
+    agentCallService.setAdapterGetter((platform, agentId) =>
+      this.orchestrator?.getRegistry().get(platform, agentId)
+    );
+
     return messageProcessor;
   }
 

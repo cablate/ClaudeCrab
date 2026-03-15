@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import type { MessageProcessor } from '../core/MessageProcessor.js';
 import type { SessionManager } from '../core/SessionManager.js';
 import type { UnifiedMessage } from '../adapters/types.js';
+import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 
 /** Maximum nested agent-call depth to prevent infinite loops (A→B→C→A) */
 const MAX_CALL_DEPTH = 5;
@@ -34,6 +35,12 @@ export interface AgentCallOptions {
   startNewConversation?: boolean;
   /** Current call depth (incremented automatically on nested calls) */
   depth?: number;
+  /** Platform of the original message (for thread routing) */
+  platform?: string;
+  /** Thread metadata (Discord only) — for posting summary to target agent's channel */
+  threadId?: string;
+  /** Parent channel ID of the thread (Discord only) */
+  parentChannelId?: string;
 }
 
 export interface AgentCallResult {
@@ -47,11 +54,19 @@ export interface AgentCallResult {
 }
 
 export class AgentCallService {
+  /** Optional: get adapter for cross-channel summary posting */
+  private getAdapter?: (platform: string, agentId: string) => BaseAdapter | undefined;
+
   constructor(
     private readonly agentLoader: AgentLoader,
     private readonly getMessageProcessor: () => MessageProcessor | undefined,
     private readonly getSessionManager?: () => SessionManager | undefined
   ) {}
+
+  /** Set adapter getter (called after PlatformOrchestrator is ready) */
+  setAdapterGetter(fn: (platform: string, agentId: string) => BaseAdapter | undefined): void {
+    this.getAdapter = fn;
+  }
 
   /**
    * 觸發另一個 Agent 執行 query
@@ -191,7 +206,7 @@ ${message}`;
     }
 
     // Fire-and-forget: 不 await 完成，只確保觸發
-    this.executeInBackground(messageProcessor, unifiedMessage, toAgent, callId, fromAgent);
+    this.executeInBackground(messageProcessor, unifiedMessage, toAgent, callId, fromAgent, options);
 
     logger.info(
       { callId, from: fromAgent, to: toAgent },
@@ -261,7 +276,8 @@ ${message}`;
     message: UnifiedMessage,
     toAgent: string,
     callId: string,
-    fromAgent: string
+    fromAgent: string,
+    options?: AgentCallOptions
   ): Promise<void> {
     try {
       const result = await messageProcessor.processMessage(message, toAgent);
@@ -271,6 +287,9 @@ ${message}`;
           { callId, from: fromAgent, to: toAgent },
           '[AgentCallService] Background execution completed via MessageProcessor'
         );
+
+        // Discord thread: post summary link in target agent's own channel
+        this.postCrossChannelSummary(fromAgent, toAgent, options);
       } else {
         logger.warn(
           { callId, from: fromAgent, to: toAgent, error: result.error },
@@ -308,5 +327,31 @@ ${message}`;
    */
   agentExists(agentId: string): boolean {
     return this.agentLoader.has(agentId);
+  }
+
+  /**
+   * Post a summary message in the target agent's own Discord channel
+   * when an agent-call happens from a Discord thread.
+   */
+  private postCrossChannelSummary(
+    fromAgent: string,
+    toAgent: string,
+    options?: AgentCallOptions
+  ): void {
+    if (options?.platform !== 'discord' || !options?.threadId) return;
+    if (this.getAdapter === undefined) return;
+
+    const targetAdapter = this.getAdapter('discord', toAgent);
+    if (targetAdapter === undefined) return;
+
+    const fromName = this.agentLoader.get(fromAgent)?.config.name ?? fromAgent;
+
+    // Post summary in target agent's main channel (not the thread)
+    void targetAdapter.sendMessage(
+      '', // empty chatId → uses adapter's default channel
+      `📎 正在協助 **${fromName}** 處理任務（來自 <#${options.threadId}>）`
+    ).catch(() => {
+      // Best effort — don't block
+    });
   }
 }

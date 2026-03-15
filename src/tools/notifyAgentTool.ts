@@ -21,6 +21,12 @@ export interface AgentCallMcpContext {
   chatId: string;
   /** 原始使用者 ID（用於共用使用者 session，降低割裂感） */
   userId: string;
+  /** Platform (for thread routing) */
+  platform?: string;
+  /** Discord thread ID (if message originated from a thread) */
+  threadId?: string;
+  /** Parent channel ID of the thread */
+  parentChannelId?: string;
 }
 
 /**
@@ -100,6 +106,10 @@ export function createAgentCallMcpServer(
               userId: context.userId,
               ...(args.awaitResult !== undefined ? { awaitResult: args.awaitResult } : {}),
               ...(args.startNewConversation !== undefined ? { startNewConversation: args.startNewConversation } : {}),
+              // Pass Discord thread metadata for cross-channel routing
+              ...(context.platform !== undefined ? { platform: context.platform } : {}),
+              ...(context.threadId !== undefined ? { threadId: context.threadId } : {}),
+              ...(context.parentChannelId !== undefined ? { parentChannelId: context.parentChannelId } : {}),
             }
           );
 

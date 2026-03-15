@@ -163,11 +163,14 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   }
 
   /**
-   * Handle incoming Discord message
+   * Handle incoming Discord message (main channel + child threads)
    */
   private async handleMessage(message: DiscordMessage): Promise<void> {
-    // Only process messages in our channel
-    if (message.channelId !== this.channelId) {
+    // Accept messages in our channel OR in threads whose parent is our channel
+    const isMainChannel = message.channelId === this.channelId;
+    const isChildThread = message.channel.isThread() && message.channel.parentId === this.channelId;
+
+    if (!isMainChannel && !isChildThread) {
       return;
     }
 
@@ -177,7 +180,8 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     const userId = message.author.id;
-    const chatId = message.channelId;
+    // Thread messages use threadId as chatId → creates independent session
+    const chatId = isChildThread ? message.channelId : this.channelId;
     const text = message.content;
 
     // Skip empty messages (attachments only, etc.)
@@ -231,7 +235,11 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
         originalMessageId: message.id,
         displayName,
         username: message.author.username,
-        isGroupChat: false, // Phase 1: treat all Discord channels as 1:1
+        isGroupChat: false,
+        // Thread metadata for session isolation + agent-call routing
+        isThread: isChildThread,
+        threadId: isChildThread ? message.channelId : undefined,
+        parentChannelId: isChildThread ? this.channelId : undefined,
       },
     };
 
@@ -254,11 +262,20 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     try {
+      // If chatId is a thread (different from main channelId), send to the thread
+      const targetChannel = chatId !== this.channelId
+        ? await this.resolveTextOrThread(chatId)
+        : this.channel;
+
+      if (targetChannel === null) {
+        return { success: false, error: `Channel/thread ${chatId} not found` };
+      }
+
       const chunks = this.splitMessage(text);
       let lastMessageId = '';
 
       for (const chunk of chunks) {
-        const sent = await this.channel.send(chunk);
+        const sent = await targetChannel.send(chunk);
         lastMessageId = sent.id;
       }
 
@@ -273,13 +290,19 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
   }
 
-  async sendTypingIndicator(_chatId: string): Promise<void> {
-    if (this.channel === null) {
-      return;
-    }
-
+  async sendTypingIndicator(chatId: string): Promise<void> {
     try {
-      await this.channel.sendTyping();
+      // Send typing to thread if chatId is a thread, otherwise main channel
+      if (chatId !== this.channelId) {
+        const thread = await this.resolveTextOrThread(chatId);
+        if (thread !== null) {
+          await thread.sendTyping();
+          return;
+        }
+      }
+      if (this.channel !== null) {
+        await this.channel.sendTyping();
+      }
     } catch (error) {
       this.log.warn({ error }, 'Failed to send typing indicator');
     }
@@ -871,6 +894,23 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   // ============================================================
   // Internal helpers
   // ============================================================
+
+  /**
+   * Resolve a channelId that may be a TextChannel or a Thread.
+   * Used by sendMessage to route replies to threads.
+   */
+  private async resolveTextOrThread(channelId: string): Promise<TextChannel | ThreadChannel | null> {
+    if (this.client === null) return null;
+    try {
+      const ch = await this.client.channels.fetch(channelId);
+      if (ch === null) return null;
+      if (ch.type === ChannelType.GuildText) return ch as TextChannel;
+      if (ch.isThread()) return ch as ThreadChannel;
+      return null;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Resolve a channel ID to a TextChannel. Returns null if not found or wrong type.

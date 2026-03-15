@@ -598,11 +598,24 @@ export class MessageProcessor {
       );
 
       // Build MCP servers and allowed tools from available services
+      // Pass thread metadata for agent-call cross-channel routing (Discord only)
+      const mcpCtx: import('./McpToolSetup.js').McpSetupContext = {
+        agentId, chatId, userId, platform,
+      };
+      // If this is a Discord thread, chatId IS the threadId
+      if (platform === 'discord' && options?.isGroupChat !== true) {
+        // chatId differs from the agent's configured channel → it's a thread
+        const agentConfig = this.sessionManager.getInternalSession(platform, agentId, userId)?.agent;
+        if (agentConfig !== undefined && agentConfig.config.discordChannelId !== undefined && chatId !== agentConfig.config.discordChannelId) {
+          mcpCtx.threadId = chatId;
+          mcpCtx.parentChannelId = agentConfig.config.discordChannelId;
+        }
+      }
       const { mcpServers, allowedTools } = buildMcpSetup(
         this.agentCallService,
         this.ttsService,
         adapter,
-        { agentId, chatId, userId },
+        mcpCtx,
         this.taskService,
       );
 

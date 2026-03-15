@@ -30,6 +30,10 @@ export interface McpSetupContext {
   agentId: string;
   chatId: string;
   userId: string;
+  platform?: string;
+  /** Discord thread metadata (for agent-call cross-channel routing) */
+  threadId?: string;
+  parentChannelId?: string;
 }
 
 export interface McpSetupResult {
