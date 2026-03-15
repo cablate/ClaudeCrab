@@ -8,6 +8,52 @@
 
 ## 版本歷史
 
+### v1.47 - SDK V2 Persistent Session（Token 消耗優化）
+
+**發布日期**：2026-03-15
+
+**背景**：
+- Agent SDK V1 `query()` 每次 spawn 新 cli.js process → prompt cache 只有 25% 效率
+- 每次訊息消耗 5hr 額度的 1-3%，累積成本過高
+- 逆向研究發現：cli.js 的 runtime system-reminder 注入每次內容略有不同 → cache prefix 不匹配
+
+**核心解法**：使用 SDK V2 `unstable_v2_createSession` 保持 cli.js process 存活，cache 跨訊息累積。
+
+**新增/修改檔案**：
+
+1. **`scripts/patch-sdk-v2.cjs`**（新建）
+   - postinstall script，自動 patch `node_modules/.../sdk.mjs`
+   - 5 個 patch 點：settingSources, cwd, thinkingConfig, extraArgs, h9-initConfig+MCP
+   - 用穩定字串錨點定位（不依賴 minified 函數名）
+   - 冪等（已 patch 則跳過），升級失敗會 exit(1) 報錯
+
+2. **`src/core/SDKSessionManager.ts`**（新建）
+   - V2 persistent session wrapper
+   - `executeQuery()` 介面相容 `SDKQueryManager`
+   - 管理 session 生命週期（create/reuse/destroy）
+   - MCP routing 透過 h9 sdkMcpMap（in-process）
+   - cache efficiency logging（`cacheEfficiencyPct`）
+
+3. **`src/core/MessageProcessor.ts`**（修改）
+   - resume 時優先走 V2 `SDKSessionManager`
+   - V2 失敗自動降級 V1 `SDKQueryManager`
+   - 新 session（無 resume）仍走 V1
+
+4. **`src/core/SDKQueryManager.ts`**（修改）
+   - 加入 `CLAUDE_CODE_REMOTE=1` env var
+   - 加入 `cacheEfficiencyPct` monitoring
+
+5. **`package.json`**（修改）
+   - 加入 `"postinstall": "node scripts/patch-sdk-v2.cjs"`
+
+**實測結果**：cache efficiency 從 V1 的 25% 提升到 V2 的 84-90%（4-7 訊息後穩定）。
+
+**研究文件**：`_special-research/sdk-reverse-engineering-v76.md`、`_special-research/sdk-anchor-index-v76.md`
+
+**升級注意**：SDK 版本升級後 `npm install` 會自動跑 patch，若 patch 失敗需參考 `sdk-anchor-index-v76.md` 更新錨點。
+
+---
+
 ### v1.46 - TTS Custom Tool + 語音通知
 
 **發布日期**：2026-02-24

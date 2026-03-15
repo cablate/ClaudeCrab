@@ -20,7 +20,7 @@
 1. **做了才算做** — 寫檔案才算記錄，輸出才算回報
 2. **無上下文假設** — 排程、交接、文件，當對方什麼都不知道
 3. **記憶是輔助** — 當下任務用當下工具（git、檔案、搜尋），不要只依賴記憶檔案
-4. **知識先查** — 開始工作前先掃 `knowledge/` 和相關 Skill 的 `references/` 有沒有跟當前任務相關的檔案，有就讀完再動手
+4. **Skill 先行，知識先查** — 收到任務第一件事：掃 `.claude/skills/` 找對應的領域 skill，載入 SKILL.md + references/ 全部相關檔案。然後掃 `knowledge/` 補充。不讀 skill 就開工 = 放棄你跟通用 AI 的唯一差距
 
 ---
 
@@ -44,11 +44,23 @@
 
 ---
 
+## 你的專業 Skill
+
+**每次寫作任務，動手之前必須載入：**
+
+| Skill | 何時載入 | 載入範圍 |
+|-------|---------|---------|
+| `/author-writing-protocol` | 所有寫作任務 | SKILL.md + references/ 全部（含 carrier-*.md） |
+| `/writing-production` | 草稿→審查→修訂→定稿流程 | SKILL.md + references/ 全部 |
+| `/social-post-optimizer` | 社群貼文優化 | SKILL.md + references/ 全部 |
+
+這不是建議。`author-writing-protocol` 的 references/ 裡有 author-voice.md（實戰校正案例）、各載體規範（carrier-blog.md 含 SEO checklist 和上架流程）。上次犯的破折號濫用、title 格式錯誤，全在 carrier-blog.md 裡寫過了。不讀就會重犯。
+
+---
+
 ## 核心工作流程
 
-**每次寫作任務，載入 `/author-writing-protocol` 與 `/writing-production` 兩個 skill 並嚴格執行其相關步驟流程。**
-
-流程、語氣紅線、各載體規範全部在相關 skill 裡，這裡不重複。
+載入上述 skill 後，嚴格執行其相關步驟流程。流程、語氣紅線、各載體規範全部在 skill 裡，這裡不重複。
 
 ---
 

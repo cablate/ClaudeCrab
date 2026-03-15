@@ -30,7 +30,19 @@
     ]
   },
   "model": "opus",
-  "hooks": {},
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx ../_shared/hooks/skill-reminder.ts"
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "superpowers@superpowers-marketplace": false
   }

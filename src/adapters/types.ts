@@ -336,3 +336,16 @@ export interface TelegramAdapterConfig extends AdapterConfig {
   /** Text-to-speech provider for voice message synthesis */
   ttsProvider?: import('../core/tts/index.js').TTSProvider;
 }
+
+export interface DiscordAdapterConfig extends AdapterConfig {
+  platform: 'discord';
+
+  /** Discord bot token (per-agent, each agent has its own bot) */
+  token: string;
+
+  /** Discord channel ID this adapter listens to */
+  channelId: string;
+
+  /** Security configuration */
+  securityConfig?: AdapterSecurityConfig;
+}

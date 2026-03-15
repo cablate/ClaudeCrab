@@ -108,6 +108,7 @@ function checkPermission(
   normalizedPath: string,
   normalizedWorkspace: string,
   normalizedShared: string,
+  normalizedExample: string,
   normalizedOwnNamespace: string,
   agentsRoot: string,
   agentId: string,
@@ -120,7 +121,7 @@ function checkPermission(
     return { allowed: true };
   }
 
-  // 2. Shared area
+  // 2. Shared area (_shared/)
   if (normalizedPath.startsWith(normalizedShared)) {
     if (isReadOnly) {
       return { allowed: true };
@@ -140,7 +141,18 @@ function checkPermission(
     };
   }
 
-  // 3. Other agent workspaces — denied
+  // 3. Example/template area (_example/) — read-only
+  if (normalizedPath.startsWith(normalizedExample)) {
+    if (isReadOnly) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `_example/ is read-only. Cannot write to template area.`,
+    };
+  }
+
+  // 4. Other agent workspaces — denied
   if (normalizedPath.startsWith(agentsRoot)) {
     return {
       allowed: false,
@@ -148,7 +160,7 @@ function checkPermission(
     };
   }
 
-  // 4. Paths outside agents/ — denied
+  // 5. Paths outside agents/ — denied
   return {
     allowed: false,
     reason: `Path outside workspace denied. Allowed: own workspace or _shared/`,
@@ -159,12 +171,16 @@ function checkBashPathPermission(
   normalizedPath: string,
   normalizedWorkspace: string,
   normalizedShared: string,
+  normalizedExample: string,
   agentsRoot: string,
 ): ValidationResult {
   if (normalizedPath.startsWith(normalizedWorkspace)) {
     return { allowed: true };
   }
   if (normalizedPath.startsWith(normalizedShared)) {
+    return { allowed: true };
+  }
+  if (normalizedPath.startsWith(normalizedExample)) {
     return { allowed: true };
   }
   if (normalizedPath.startsWith(agentsRoot)) {
@@ -188,6 +204,7 @@ function validate(
 ): ValidationResult {
   const normalizedWorkspace = normalizePath(workspacePath);
   const normalizedShared = normalizePath(sharedPath);
+  const normalizedExample = normalizePath(path.resolve(workspacePath, '..', '_example'));
   const normalizedOwnNamespace = normalizePath(
     path.join(sharedPath, 'knowledge', agentId),
   );
@@ -207,6 +224,7 @@ function validate(
         normalized,
         normalizedWorkspace,
         normalizedShared,
+        normalizedExample,
         agentsRoot,
       );
       if (!result.allowed) return result;
@@ -228,6 +246,7 @@ function validate(
     normalized,
     normalizedWorkspace,
     normalizedShared,
+    normalizedExample,
     normalizedOwnNamespace,
     agentsRoot,
     agentId,

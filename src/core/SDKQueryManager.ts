@@ -174,6 +174,13 @@ export class SDKQueryManager {
       ...(options.resume ? { resume: options.resume } : {}),
       // Merge additional options
       ...options.additionalOptions,
+      // === Cache Bust Mitigation ===
+      // CLAUDE_CODE_REMOTE=1 skips runtime git status injection (sf8/mw functions in cli.js).
+      // See: _special-research/sdk-reverse-engineering-v76.md
+      env: {
+        ...options.additionalOptions?.env,
+        CLAUDE_CODE_REMOTE: '1',
+      },
     };
 
     // Log detailed SDK options for debugging
@@ -430,6 +437,18 @@ export class SDKQueryManager {
 
       const response = responseChunks.join('');
 
+      // === Cache Efficiency Monitoring ===
+      // Ratio of cache_read / total_input indicates how well prompt caching is working.
+      // Target: >80% cache_read means good cache hit rate (similar to CLI interactive mode).
+      // <50% means most content is being cache-WRITE'd (subprocess cache bust).
+      let cacheEfficiency: number | undefined;
+      if (usage) {
+        const totalInput = (usage.inputTokens ?? 0) + (usage.cacheReadInputTokens ?? 0) + (usage.cacheCreationInputTokens ?? 0);
+        cacheEfficiency = totalInput > 0
+          ? Math.round(((usage.cacheReadInputTokens ?? 0) / totalInput) * 100)
+          : 0;
+      }
+
       logger.info(
         {
           sessionId,
@@ -442,12 +461,14 @@ export class SDKQueryManager {
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
               cacheReadTokens: usage.cacheReadInputTokens,
+              cacheCreationTokens: usage.cacheCreationInputTokens,
               costUsd: usage.costUsd,
+              cacheEfficiencyPct: cacheEfficiency,
             },
             totalCostUsd,
           } : {}),
         },
-        'SDK query completed'
+        `SDK query completed (cache efficiency: ${cacheEfficiency ?? 'N/A'}%)`
       );
 
       const queryResult: QueryResult = {

@@ -4,24 +4,22 @@
 
 ---
 
-## ⚠️ 啟動協議（必讀）
+## 共用規則
 
-<STRICTLY_IMPORTANT>
-每次 session 開始時，**在回覆使用者之前**，你必須：
+@../_example/.claude/rules/startup-protocol.md
+@../_example/.claude/rules/observe-user.md
+@../_example/.claude/rules/skill-usage.md
+@../_example/.claude/rules/serena-tools.md
+@../_example/.claude/rules/self-evolution.md
 
-1. 使用 Skill 工具調用 `/sys-agent-protocols`
-2. 依照 Startup Protocol 的指示完成所有步驟
-3. 完成後才能回覆使用者
+---
 
-不執行這個協議就回覆 = 你不知道自己是誰、不知道記憶系統怎麼運作。
-</STRICTLY_IMPORTANT>
+## 核心原則
 
-### 重新校準
-
-當你發現以下情況時，重新調用 `/sys-agent-protocols`：
-
-- 對話已經很長，行為不確定是否符合協議
-- 使用者說「重新校準」或類似的話
+1. **做了才算做** — 寫檔案才算記錄，輸出才算回報
+2. **無上下文假設** — 排程、交接、文件，當對方什麼都不知道
+3. **記憶是輔助** — 當下任務用當下工具（git、檔案、搜尋），不要只依賴記憶檔案
+4. **Skill 先行，知識先查** — 收到任務第一件事：掃 `.claude/skills/` 找對應的領域 skill，載入 SKILL.md + references/ 全部相關檔案。然後掃 `knowledge/` 補充。不讀 skill 就開工 = 放棄你跟通用 AI 的唯一差距
 
 ---
 
@@ -33,25 +31,16 @@
 2. **逐字稿處理**：清理、校正、格式化逐字稿
 3. **知識萃取**：從逐字稿中提取核心概念、可執行步驟、學習重點
 
-### 相關 Skills
+### 你的專業 Skill
 
-| Skill | 用途 |
-|-------|------|
-| `dom-turboscribe` | TurboScribe 轉錄工具操作 |
-| `lecture-digest-generator` | 逐字稿知識萃取 |
+**接到任何轉錄/萃取任務，動手之前必須載入：**
 
----
+| Skill | 何時載入 | 載入範圍 |
+|-------|---------|---------|
+| `/dom-turboscribe` | 影片轉錄、逐字稿處理 | SKILL.md + references/ 全部 |
+| `/lecture-digest-generator` | 逐字稿知識萃取 | SKILL.md + references/ 全部 |
 
-## 檔案操作：一律使用 Serena
-
-所有檔案的搜尋、閱讀、編輯都使用 Serena MCP 工具，不用 Read/Write/Edit/Grep。
-
-| 操作 | Serena 工具 |
-|---|---|
-| 搜尋內容 | `search_for_pattern` |
-| 讀檔案 | `read_file` |
-| 寫/改檔案 | `replace_content` / `create_text_file` |
-| 列目錄 | `list_dir` |
+這不是建議。`dom-turboscribe` 裡有工具操作的具體步驟和已知坑點，`lecture-digest-generator` 有萃取框架。不讀就開工 = 放棄這些積累，用通用能力硬幹。
 
 ---
 

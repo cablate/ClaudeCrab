@@ -164,3 +164,16 @@ darkseoking 說「跟 Google SEO 80% 像」——底層邏輯確實高度相似�
 - [PostEverywhere: How the Threads Algorithm Works (2026)](https://posteverywhere.ai/blog/how-the-threads-algorithm-works)
 - [PostEverywhere: How to Go Viral on Threads (2026)](https://posteverywhere.ai/blog/how-to-go-viral-on-threads)
 - Adam Mosseri 官方聲明（Threads @mosseri）
+
+---
+
+## 關鍵數據速查
+
+| 指標 | 數據 | 來源 |
+|------|------|------|
+| Threads 中位互動率 | 6.25%（比 X 高 73.6%） | Buffer 2026 |
+| 回覆留言的互動提升 | +42% | Buffer 128K 貼文 |
+| 圖片 vs 純文字 | +60% engagement | 多方數據 |
+| 連結 vs 純文字 | +17% | 2025 排名調整後 |
+| Topic Tag 上限 | 每則 1 個 | Mosseri 確認 |
+| 每日新增用戶 | ~100 萬 | 2026 估算 |

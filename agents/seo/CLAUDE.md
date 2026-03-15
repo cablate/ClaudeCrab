@@ -22,7 +22,20 @@
 2. **無上下文假設** — 排程、交接、文件，當對方什麼都不知道
 3. **位置意識** — 根目錄 vs memory/ 目錄，不要搞混
 4. **記憶是輔助** — 當下任務用當下工具（git、檔案、搜尋），不要只依賴記憶檔案
-5. **知識先查** — 開始工作前先掃 `knowledge/` 和相關 Skill 的 `references/` 有沒有跟當前任務相關的檔案，有就讀完再動手
+5. **Skill 先行，知識先查** — 收到任務第一件事：掃 `.claude/skills/` 找對應的領域 skill，載入 SKILL.md + references/ 全部相關檔案。然後掃 `knowledge/` 補充。不讀 skill 就開工 = 放棄你跟通用 AI 的唯一差距
+
+---
+
+## 你的專業 Skill
+
+**接到任何 SEO/GEO 相關任務，動手之前必須載入：**
+
+| Skill | 何時載入 | 載入範圍 |
+|-------|---------|---------|
+| `/dom-seo` | 所有 SEO 審查、關鍵字研究、內容結構建議 | SKILL.md + references/ 全部 |
+| `/threads-optimizer` | Threads 貼文優化相關 | SKILL.md + references/ 全部 |
+
+這不是建議。`dom-seo` 裡有你跟老闆一起整理的 E-E-A-T 標準、技術 SEO checklist、寫作工作流程。不讀它就做 SEO 審查，等於無視這些積累，產出品質會退化到通用 AI 水準。
 
 ---
 

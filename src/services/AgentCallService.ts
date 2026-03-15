@@ -23,6 +23,8 @@ export interface AgentCallOptions {
   metadata?: Record<string, unknown>;
   /** 原始聊天室 ID（用於讓目標 agent 回覆到這個聊天室） */
   chatId?: string;
+  /** 真實使用者 ID（共用使用者與目標 Agent 的現有 session，降低割裂感） */
+  userId?: string;
   /** 等待回覆結果（預設 false = fire-and-forget） */
   awaitResult?: boolean;
   /** 強制建立新對話（清除先前的 session context） */
@@ -75,6 +77,7 @@ export class AgentCallService {
         to: toAgent,
         priority: options?.priority,
         hasChatId: !!options?.chatId,
+        hasUserId: !!options?.userId,
         awaitResult: options?.awaitResult ?? false,
         startNewConversation: options?.startNewConversation ?? false,
       },
@@ -112,8 +115,13 @@ export class AgentCallService {
       };
     }
 
-    // 強制新對話：清除先前的 sdkSessionId
-    if (options.startNewConversation) {
+    // 使用真實使用者 session（降低割裂感，讓使用者能在 Telegram 看到並介入）
+    // 舊做法（獨立通道）：userId = `agent:${fromAgent}`，建立 agent 間的獨立 session
+    const effectiveUserId = options?.userId ?? `agent:${fromAgent}`;
+    const useUserSession = !!options?.userId;
+
+    // 強制新對話：僅在獨立通道模式下清除 session（不應影響使用者的現有 session）
+    if (options.startNewConversation && !useUserSession) {
       this.clearAgentCallSession(fromAgent, toAgent);
     }
 
@@ -132,7 +140,7 @@ ${message}`;
     const unifiedMessage: UnifiedMessage = {
       id: callId,
       platform: 'telegram',
-      userId: `agent:${fromAgent}`, // 標記為來自另一個 agent
+      userId: effectiveUserId,
       chatId: options.chatId,
       text: enrichedMessage,
       timestamp: new Date(),

@@ -26,6 +26,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx ../_shared/hooks/skill-reminder.ts"
+          }
+        ]
+      }
     ]
   }
 }

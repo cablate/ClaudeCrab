@@ -312,6 +312,9 @@ export class AgentLoader implements IAgentRepository {
 【Custom Tools】
 • 檔案傳送 (mcp__file-send__send_file)：傳送檔案給使用者。參數：path（檔案完整路徑）、caption（可選說明）。自動偵測檔案類型（圖片/音檔/文件）並以最適合的方式傳送。
 • 跨 Agent 呼叫 (mcp__agent-call__call_agent)：需要其他 Agent 協助時使用（fire-and-forget）。參數：targetAgent（admin/coder/general）、message、priority（low/normal/high）。
+
+【Skill 載入】
+你的 .claude/skills/ 裡有老闆為你打造的專業知識。任務前掃 skills 目錄，載入對應 skill（含 references/），再動手。不讀 skill 的你跟通用 AI 沒有差別。
 `.trim();
   }
 
@@ -613,20 +616,28 @@ export class AgentLoader implements IAgentRepository {
     agentId: string;
     agent: LoadedAgent;
     telegramBotToken?: string;
+    discordBotToken?: string;
+    discordChannelId?: string;
   }> {
     const results: Array<{
       agentId: string;
       agent: LoadedAgent;
       telegramBotToken?: string;
+      discordBotToken?: string;
+      discordChannelId?: string;
     }> = [];
 
     const seenTelegramTokens = new Map<string, string>(); // token → agentId
+    const seenDiscordTokens = new Map<string, string>(); // token → agentId
+    const seenDiscordChannels = new Map<string, string>(); // channelId → agentId
 
     for (const [agentId, agent] of this.cache) {
       const telegramBotToken = agent.config.telegramBotToken;
+      const discordBotToken = agent.config.discordBotToken;
+      const discordChannelId = agent.config.discordChannelId;
 
       // Skip agents without any platform tokens
-      if (telegramBotToken === undefined) {
+      if (telegramBotToken === undefined && discordBotToken === undefined) {
         continue;
       }
 
@@ -641,7 +652,41 @@ export class AgentLoader implements IAgentRepository {
         seenTelegramTokens.set(telegramBotToken, agentId);
       }
 
-      results.push({ agentId, agent, telegramBotToken });
+      // Validate Discord config
+      if (discordBotToken !== undefined) {
+        // Duplicate token check
+        const existingAgent = seenDiscordTokens.get(discordBotToken);
+        if (existingAgent !== undefined) {
+          throw new AgentConfigError(agentId, [
+            `Duplicate Discord bot token: already used by agent "${existingAgent}"`,
+          ]);
+        }
+        seenDiscordTokens.set(discordBotToken, agentId);
+
+        // channelId is required when discordBotToken is set
+        if (discordChannelId === undefined) {
+          throw new AgentConfigError(agentId, [
+            'discordChannelId is required when discordBotToken is configured',
+          ]);
+        }
+
+        // Duplicate channel check
+        const existingChannelAgent = seenDiscordChannels.get(discordChannelId);
+        if (existingChannelAgent !== undefined) {
+          throw new AgentConfigError(agentId, [
+            `Duplicate Discord channel ID: already used by agent "${existingChannelAgent}"`,
+          ]);
+        }
+        seenDiscordChannels.set(discordChannelId, agentId);
+      }
+
+      results.push({
+        agentId,
+        agent,
+        ...(telegramBotToken !== undefined ? { telegramBotToken } : {}),
+        ...(discordBotToken !== undefined ? { discordBotToken } : {}),
+        ...(discordChannelId !== undefined ? { discordChannelId } : {}),
+      });
     }
 
     return results;

@@ -8,6 +8,10 @@
 
 不執行這個協議就回覆 = 你不知道自己是誰、不知道記憶系統怎麼運作。
 
+## 領域 Skill 載入
+
+啟動協議完成後，處理任務之前：掃 `.claude/skills/`，載入對應 skill（含 references/），再動手。
+
 ## 重新校準
 
 當你發現以下情況時，重新調用 `/sys-agent-protocols` 和 `/persona` skill：

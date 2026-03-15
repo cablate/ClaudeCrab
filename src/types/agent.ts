@@ -130,6 +130,8 @@ export const AgentConfigSchema = z.object({
 
   // Platform bot tokens
   telegramBotToken: z.string().optional(),
+  discordBotToken: z.string().optional(),
+  discordChannelId: z.string().optional(),
 
   // Display configuration (live page visuals)
   display: DisplaySchema.optional(),

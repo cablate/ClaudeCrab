@@ -37,6 +37,9 @@ export interface AppConfig {
     model: string;
     defaultVoiceId: string;
   };
+  discord: {
+    enabled: boolean;
+  };
 }
 
 /**
@@ -74,6 +77,9 @@ export function loadAppConfig(): AppConfig {
       apiToken: process.env.REPLICATE_API_TOKEN ?? '',
       model: process.env.TTS_MODEL ?? 'minimax/speech-2.8-turbo',
       defaultVoiceId: process.env.TTS_DEFAULT_VOICE_ID ?? '',
+    },
+    discord: {
+      enabled: process.env.DISCORD_ENABLED === 'true',
     },
   };
 }

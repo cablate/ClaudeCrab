@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash",
+      "Skill",
+      "WebFetch",
+      "WebSearch",
+      "mcp__serena__*",
+      "mcp__agent-call__call_agent",
+      "mcp__file-send__send_file"
+    ],
+    "deny": []
+  },
+  "model": "opus",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash|Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx ./.claude/hooks/project-whitelist.ts"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx ../_shared/hooks/skill-reminder.ts"
+          }
+        ]
+      }
+    ]
+  }
+}

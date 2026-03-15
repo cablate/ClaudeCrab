@@ -103,6 +103,7 @@ function checkStandardPermission(
   normalizedPath: string,
   normalizedWorkspace: string,
   normalizedShared: string,
+  normalizedExample: string,
   normalizedOwnNamespace: string,
   agentsRoot: string,
   agentId: string,
@@ -135,6 +136,28 @@ function checkStandardPermission(
     };
   }
 
+  // Example/template area (_example/) — read-only
+  if (normalizedPath.startsWith(normalizedExample)) {
+    if (isReadOnly) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `_example/ is read-only. Cannot write to template area.`,
+    };
+  }
+
+  // Example/template area (_example/) — read-only
+  if (normalizedPath.startsWith(normalizedExample)) {
+    if (isReadOnly) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `_example/ is read-only. Cannot write to template area.`,
+    };
+  }
+
   // Other agent workspaces — denied
   if (normalizedPath.startsWith(agentsRoot)) {
     return {
@@ -154,12 +177,16 @@ function checkBashStandardPermission(
   normalizedPath: string,
   normalizedWorkspace: string,
   normalizedShared: string,
+  normalizedExample: string,
   agentsRoot: string,
 ): { allowed: boolean; reason?: string } {
   if (normalizedPath.startsWith(normalizedWorkspace)) {
     return { allowed: true };
   }
   if (normalizedPath.startsWith(normalizedShared)) {
+    return { allowed: true };
+  }
+  if (normalizedPath.startsWith(normalizedExample)) {
     return { allowed: true };
   }
   if (normalizedPath.startsWith(agentsRoot)) {
@@ -210,6 +237,7 @@ async function main(): Promise<void> {
 
   const normalizedWorkspace = normalizePath(workspacePath);
   const normalizedShared = normalizePath(path.resolve(workspacePath, '..', '_shared'));
+  const normalizedExample = normalizePath(path.resolve(workspacePath, '..', '_example'));
   const agentId = path.basename(workspacePath);
   const normalizedOwnNamespace = normalizePath(
     path.join(normalizedShared, 'knowledge', agentId),
@@ -234,6 +262,7 @@ async function main(): Promise<void> {
         normalized,
         normalizedWorkspace,
         normalizedShared,
+        normalizedExample,
         agentsRoot,
       );
       if (!result.allowed) {
@@ -257,6 +286,7 @@ async function main(): Promise<void> {
       normalized,
       normalizedWorkspace,
       normalizedShared,
+      normalizedExample,
       normalizedOwnNamespace,
       agentsRoot,
       agentId,

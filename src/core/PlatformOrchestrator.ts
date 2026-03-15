@@ -7,8 +7,10 @@
  */
 
 import { TelegramAdapter } from '../adapters/TelegramAdapter.js';
+import { DiscordAdapter } from '../adapters/DiscordAdapter.js';
 import type {
   TelegramAdapterConfig,
+  DiscordAdapterConfig,
   AdapterSecurityConfig,
 } from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
@@ -87,7 +89,6 @@ export class PlatformOrchestrator {
   private readonly groupBroadcaster: GroupBroadcaster;
   private readonly sttProvider: import('./stt/index.js').STTProvider | undefined;
   private readonly ttsProvider: import('./tts/index.js').TTSProvider | undefined;
-
   constructor(options: PlatformOrchestratorOptions) {
     this.agentLoader = options.agentLoader;
     this.sessionManager = options.sessionManager;
@@ -197,12 +198,18 @@ export class PlatformOrchestrator {
     );
 
     const results = await Promise.allSettled(
-      agentsWithTokens.map(async ({ agentId, agent, telegramBotToken }) => {
-        if (telegramBotToken !== undefined) {
-          await this.startTelegramAdapter(agentId, telegramBotToken);
+      agentsWithTokens.flatMap(
+        ({ agentId, telegramBotToken, discordBotToken, discordChannelId }) => {
+          const tasks: Promise<void>[] = [];
+          if (telegramBotToken !== undefined) {
+            tasks.push(this.startTelegramAdapter(agentId, telegramBotToken));
+          }
+          if (discordBotToken !== undefined && discordChannelId !== undefined) {
+            tasks.push(this.startDiscordAdapter(agentId, discordBotToken, discordChannelId));
+          }
+          return tasks;
         }
-        // Future: if (slackBotToken) await this.startSlackAdapter(...)
-      })
+      )
     );
 
     const failed = results.filter((r) => r.status === 'rejected');
@@ -213,7 +220,7 @@ export class PlatformOrchestrator {
         }
       }
       logger.warn(
-        { failedCount: failed.length, totalCount: agentsWithTokens.length },
+        { failedCount: failed.length, totalCount: results.length },
         'Some adapters failed to start'
       );
     }
@@ -523,5 +530,42 @@ export class PlatformOrchestrator {
     this.registry.register(adapter);
 
     logger.info({ agentId }, 'Telegram adapter started');
+  }
+
+  /**
+   * Start a Discord adapter for a specific agent (each agent has its own bot)
+   */
+  private async startDiscordAdapter(
+    agentId: string,
+    token: string,
+    channelId: string
+  ): Promise<void> {
+    logger.info({ agentId, channelId }, 'Starting Discord adapter');
+
+    const config: DiscordAdapterConfig = {
+      platform: 'discord',
+      agentId,
+      token,
+      channelId,
+      ...(this.securityConfig !== undefined
+        ? { securityConfig: this.securityConfig }
+        : {}),
+    };
+
+    const adapter = new DiscordAdapter(config);
+
+    // Register message handler — passes agentId to MessageProcessor
+    adapter.onMessage(async (message) => {
+      await this.messageProcessor.processMessage(message, agentId);
+    });
+
+    // Initialize and start
+    await adapter.initialize();
+    await adapter.start();
+
+    // Register in adapter registry
+    this.registry.register(adapter);
+
+    logger.info({ agentId, channelId }, 'Discord adapter started');
   }
 }

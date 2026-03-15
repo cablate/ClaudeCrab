@@ -19,6 +19,8 @@ export interface AgentCallMcpContext {
   agentId: string;
   /** 原始聊天室 ID（用於讓目標 agent 回覆） */
   chatId: string;
+  /** 原始使用者 ID（用於共用使用者 session，降低割裂感） */
+  userId: string;
 }
 
 /**
@@ -34,7 +36,7 @@ export function createAgentCallMcpServer(
     tools: [
       tool(
         'call_agent',
-        '呼叫其他 Agent 執行任務。支援兩種模式：(1) fire-and-forget（預設）：觸發後立即返回；(2) await：等待回覆並返回內容。同一對 agent 間的重複呼叫會自動延續對話 context（session resume），除非指定 startNewConversation。',
+        '呼叫其他 Agent 協作。訊息會直接進入使用者與目標 Agent 的現有對話，使用者可即時看到並介入。支援 fire-and-forget（預設）和 await 兩種模式。',
         {
           targetAgent: z.string().describe('目標 Agent 的 ID（例如: admin, coder, general）'),
           message: z.string().describe('要傳送的訊息或指令，清楚說明需要對方做什麼'),
@@ -87,7 +89,7 @@ export function createAgentCallMcpServer(
             };
           }
 
-          // 觸發跨 agent 呼叫
+          // 觸發跨 agent 呼叫（使用真實 userId，共用使用者 session）
           const result = await agentCallService.callAgent(
             context.agentId,
             args.targetAgent,
@@ -95,6 +97,7 @@ export function createAgentCallMcpServer(
             {
               ...(args.priority !== undefined ? { priority: args.priority } : {}),
               chatId: context.chatId,
+              userId: context.userId,
               ...(args.awaitResult !== undefined ? { awaitResult: args.awaitResult } : {}),
               ...(args.startNewConversation !== undefined ? { startNewConversation: args.startNewConversation } : {}),
             }

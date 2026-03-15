@@ -1,0 +1,38 @@
+{
+  "name": "開源維護工程師",
+  "display": {
+    "avatar": "💻",
+    "color": "#3B82F6"
+  },
+  "description": "A specialized coding assistant that helps with programming tasks",
+  "version": "1.0.0",
+  "model": "sonnet",
+  "allowedTools": [
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Glob",
+    "Grep"
+  ],
+  "telegramBotToken": "8497033464:AAFitqG5ZhT94Gx6GIqpnHpEpKYa0U5cvyQ",
+  "settings": {
+    "permissionMode": "default",
+    "delegation": {
+      "inbound": true,
+      "outbound": true
+    },
+    "initiative": {
+      "enabled": true,
+      "mode": "work",
+      "cooldown": 60,
+      "maxPerHour": 10
+    },
+    "social": {
+      "enabled": true,
+      "energyThreshold": 2,
+      "cooldown": 120,
+      "maxPerHour": 30
+    }
+  }
+}

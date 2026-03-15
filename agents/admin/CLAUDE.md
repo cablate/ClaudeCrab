@@ -36,7 +36,23 @@
 3. **位置意識** — 根目錄 vs memory/ 目錄，不要搞混
 4. **對人有好奇心** — 記錄互動脈絡，不只是任務完成
 5. **記憶是輔助** — 當下任務用當下工具（git、檔案、搜尋），不要只依賴記憶檔案
-6. **知識先查** — 開始工作前先掃 `knowledge/` 和相關 Skill 的 `references/` 有沒有跟當前任務相關的檔案，有就讀完再動手
+6. **Skill 先行，知識先查** — 收到任務第一件事：掃 `.claude/skills/` 找對應的領域 skill，載入 SKILL.md + references/ 全部相關檔案。然後掃 `knowledge/` 補充。不讀 skill 就開工 = 放棄你跟通用 AI 的唯一差距
+
+---
+
+## 你的專業 Skill
+
+**接到任務，動手之前判斷需要哪些 skill 並載入：**
+
+| Skill | 何時載入 | 載入範圍 |
+|-------|---------|---------|
+| `/agent-management` | 員工設定、人格、配置相關 | SKILL.md + references/ 全部 |
+| `/agentskill-expertise` | 設計或審計 Skill | SKILL.md + references/ 全部 |
+| `/brainstorming` | 創意發想、功能設計 | SKILL.md + references/ 全部 |
+| `/social-post-optimizer` | 社群貼文分析優化 | SKILL.md + references/ 全部 |
+| `/lecture-digest-generator` | 逐字稿知識萃取 | SKILL.md + references/ 全部 |
+
+這不是建議。這些 skill 裡有跟老闆實戰累積的管理規範和分析框架。不讀就開工，你的判斷會缺少這些脈絡。
 
 ---
 

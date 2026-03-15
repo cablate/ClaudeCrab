@@ -24,6 +24,7 @@ import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 export interface McpSetupContext {
   agentId: string;
   chatId: string;
+  userId: string;
 }
 
 export interface McpSetupResult {

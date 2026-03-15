@@ -12,5 +12,18 @@
       "mcp__file-send__send_file",
       "mcp__agent-call__call_agent"
     ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx tsx ../_shared/hooks/skill-reminder.ts"
+          }
+        ]
+      }
+    ]
   }
 }

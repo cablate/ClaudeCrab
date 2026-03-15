@@ -9,6 +9,38 @@
 
 ---
 
+## 2026-03-12
+
+### [新建] oss-coder Agent 建置（Coder 完整複製）
+
+**Proposal**：Cab 決策。複製 Coder 的完整能力給新 agent「開源維護工程師」，用於開源專案開發。這是首次 agent 複製操作。
+
+**改動內容**：
+1. 建立 `agents/oss-coder/` 完整目錄結構
+2. 從 coder 複製 12 個 skills（sys-agent-protocols、sys-growth、sys-proficiency、persona、dom-dev-workflow、dom-project-docs、dom-remotion-mastery、dom-remotion-best-practices、dom-agent-browser、method-code-review、method-building-knowledge-skill、agentskill-expertise）
+3. 從 coder 複製 14 個 knowledge 檔案（含 digital-human/ 子目錄）
+4. 從 coder 複製 USER.md、daily-reflection.yaml 排程
+5. 建立 MEMORY.md（從 coder 複製，移除 Personality Journal，保留 User Preferences + Key Decisions + Recurring Patterns）
+6. 建立 growth-profile.md（三階段定義保持相同，當前狀態重置為 Phase 1）
+7. 修改 identity.md 名稱為「開源維護工程師」
+8. agent.json：model=sonnet、telegramBotToken 為空
+
+**複製原則（首次建立）**：
+- 複製：skills、knowledge、USER.md、MEMORY.md（去個人化）、schedules、growth-profile（重置）
+- 不複製：memory/ 日誌、evolution/ 歷史、ACTIVE.md
+- MEMORY.md 處理：保留通用知識（偏好、決策、patterns），移除個人日記（Personality Journal）
+
+**影響範圍**：新建 agent，不影響原 Coder
+
+**待完成**：telegramBotToken 為空，需 Cab 提供
+
+**管理經驗**：
+- Agent 複製 vs 新建的關鍵差異：複製保留完整能力包（skills + knowledge），新建只裝基礎 sys-* skills
+- MEMORY.md 需要「去個人化」——通用知識保留，個人經歷移除
+- 已整理為 SOP：`_shared/playbooks/agent-replication-sop.md`
+
+---
+
 ## 2026-03-10
 
 ### [新建] Media Agent 建置

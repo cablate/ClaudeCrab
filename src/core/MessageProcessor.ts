@@ -4,6 +4,7 @@ import type { SendOptions, SendResult } from '../adapters/types.js';
 import type { IConversationRepository, IQueryMetricsRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager, type QueryResult } from './SDKQueryManager.js';
+import { SDKSessionManager } from './SDKSessionManager.js';
 import { InteractionHandler } from './InteractionHandler.js';
 import { EventBus } from './EventBus.js';
 import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
@@ -143,6 +144,7 @@ export class MessageProcessor {
   private readonly sendTypingIndicators: boolean;
   private readonly typingIndicatorIntervalMs: number;
   private readonly sdkQueryManager: SDKQueryManager;
+  private readonly sdkSessionManager: SDKSessionManager;
   private readonly conversationRepository: IConversationRepository | undefined;
   private readonly getSystemPrompt:
     | ((agentId: string) => Promise<string>)
@@ -163,6 +165,7 @@ export class MessageProcessor {
     this.sendTypingIndicators = options.sendTypingIndicators ?? true;
     this.typingIndicatorIntervalMs = options.typingIndicatorIntervalMs ?? 5000;
     this.sdkQueryManager = new SDKQueryManager();
+    this.sdkSessionManager = new SDKSessionManager();
     this.conversationRepository = options.conversationRepository;
     this.getSystemPrompt = options.getSystemPrompt;
     this.getBotInfo = options.getBotInfo;
@@ -546,13 +549,94 @@ export class MessageProcessor {
         this.agentCallService,
         this.ttsService,
         adapter,
-        { agentId, chatId },
+        { agentId, chatId, userId },
       );
 
       // Helper: execute SDK query with retry for rate limit / transient errors
+      // V2 persistent session: if resuming, try SDKSessionManager first (keeps cli.js process alive
+      // → prompt cache persists → ~95% cache efficiency vs V1's ~25%).
+      // Falls back to V1 SDKQueryManager if V2 fails.
       const executeWithRetry = async (resumeId: string | undefined) => {
         return await retryAsync(
           async () => {
+            // V2 persistent session: keeps cli.js process alive → cache persists → ~84%+ efficiency.
+            // MCP servers routed via h9 sdkMcpMap (in-process), not CLI --mcp-config args.
+            // See: _special-research/sdk-reverse-engineering-v76.md §十一
+            if (resumeId && this.sdkSessionManager) {
+              try {
+                return await this.sdkSessionManager.executeQuery(
+                  sessionId,
+                  finalPrompt,
+                  agent,
+                  {
+                    cwd: agent.path,
+                    systemPrompt,
+                    ...(agent.config.settings?.maxTurns !== undefined
+                      ? { maxTurns: agent.config.settings.maxTurns }
+                      : {}),
+                    ...(Object.keys(mcpServers).length > 0
+                      ? { mcpServers, allowedTools }
+                      : {}),
+                    resume: resumeId,
+                    onIntermediateMessage: async (text: string): Promise<void> => {
+                      if (isNoiseResponse(text)) return;
+                      await statusManager?.finalizeCurrentBatch();
+                      await adapter.sendTypingIndicator(chatId);
+                      const sendOpts: SendOptions = {};
+                      if (options?.isGroupChat && options?.replyToMessageId) {
+                        sendOpts.replyToMessageId = options.replyToMessageId;
+                      }
+                      let textToSend = text;
+                      if (options?.agentCallFrom && !agentCallPrefixApplied) {
+                        textToSend = `🔗 _回覆 ${options.agentCallFrom} 的協作請求_\n\n${text}`;
+                        agentCallPrefixApplied = true;
+                      }
+                      const sendResult = await sendWithMarkdownFallback(adapter, chatId, textToSend, sendOpts);
+                      if (sendResult.success && sendResult.messageId) {
+                        lastSentMessageId = sendResult.messageId;
+                      }
+                      intermediateMessages.push(text);
+                      this.activityService?.emitReply(agentId, text);
+                      statusManager?.markNeedNewMessage();
+                    },
+                    onToolEvent: async (event) => {
+                      if (event.type === 'tool_use' && !toolUseReacted) {
+                        toolUseReacted = true;
+                        this.activityService?.emitStatusChange(agentId, 'tool_use', 'focused');
+                      }
+                      if (statusManager === null) return;
+                      let statusLine: string;
+                      let detail: string | undefined;
+                      if (event.type === 'tool_use') {
+                        statusLine = `🔧 ${event.toolName}`;
+                        if (event.summary) detail = event.summary.substring(0, 80);
+                      } else if (event.type === 'tool_result') {
+                        statusLine = `✓ ${event.toolName} 完成`;
+                        if (event.summary) detail = event.summary.replace(/\n/g, ' ').substring(0, 60);
+                      } else if (event.type === 'tool_progress') {
+                        statusLine = `⏳ ${event.toolName}`;
+                        if (event.elapsedSeconds !== undefined) statusLine += ` (${Math.round(event.elapsedSeconds)}s)`;
+                      } else {
+                        statusLine = `• ${event.toolName}`;
+                      }
+                      const toolEvent: ToolEventEntry = { toolName: event.toolName, status: statusLine };
+                      if (detail !== undefined) toolEvent.detail = detail;
+                      await statusManager.addToolEvent(toolEvent);
+                    },
+                    additionalOptions: { canUseTool },
+                  }
+                );
+              } catch (v2Error) {
+                // V2 failed — destroy session and fall through to V1
+                logger.warn(
+                  { sessionId, error: (v2Error as Error).message },
+                  'V2 persistent session failed, falling back to V1 query()'
+                );
+                this.sdkSessionManager.destroySession(sessionId);
+              }
+            }
+
+            // V1 fallback (or new session without resume)
             return await this.sdkQueryManager.executeQuery(
               sessionId,
               finalPrompt,
@@ -1119,5 +1203,6 @@ export class MessageProcessor {
    */
   dispose(): void {
     this.sdkQueryManager.dispose();
+    void this.sdkSessionManager.dispose();
   }
 }
