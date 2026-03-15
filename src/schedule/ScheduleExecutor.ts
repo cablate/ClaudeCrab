@@ -11,6 +11,8 @@ import type { ExecutionResult } from './types.js';
 import type { ScheduleNotifier } from './ScheduleNotifier.js';
 import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import type { IQueryMetricsRepository } from '../persistence/types.js';
+import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
+import type { BudgetService } from '../services/BudgetService.js';
 import type { AgentLoader } from '../core/AgentLoader.js';
 import type { SDKQueryManager, QueryResult } from '../core/SDKQueryManager.js';
 import { buildPromptContext } from '../core/constants.js';
@@ -34,13 +36,24 @@ export class ScheduleExecutor {
     private sdkManager: SDKQueryManager,
     private notifier: ScheduleNotifier,
     private repository?: ScheduleRepository,
-    private queryMetricsRepository?: IQueryMetricsRepository
+    private queryMetricsRepository?: IQueryMetricsRepository,
+    private executionRecordRepository?: ExecutionRecordRepository,
+    private budgetService?: BudgetService
   ) {}
 
   /**
    * Execute a scheduled task
    */
   async execute(agentId: string, spec: ScheduleSpec): Promise<ExecutionResult> {
+    // Budget pre-check: skip execution if agent exceeded budget
+    if (this.budgetService !== undefined && !this.budgetService.canQuery(agentId)) {
+      logger.warn(
+        { agentId, scheduleId: spec.id },
+        '[ScheduleExecutor] Agent paused due to budget — skipping scheduled execution'
+      );
+      return { success: false, duration: 0, error: 'Agent paused: budget exceeded' };
+    }
+
     const executionId = randomUUID();
     const startTime = Date.now();
 
@@ -173,6 +186,31 @@ export class ScheduleExecutor {
             numTurns: result.numTurns ?? 0,
             durationMs: result.durationMs ?? duration,
           });
+        }
+
+        // Execution audit log
+        if (this.executionRecordRepository && result.usage) {
+          try {
+            const costUsd = result.totalCostUsd ?? result.usage.costUsd ?? 0;
+            this.executionRecordRepository.insert({
+              agentId,
+              triggerType: 'schedule',
+              triggerSource: spec.id,
+              responseSummary: finalResponse.slice(0, 200),
+              inputTokens: result.usage.inputTokens,
+              outputTokens: result.usage.outputTokens,
+              costCents: Math.round(costUsd * 100),
+              durationMs: result.durationMs ?? duration,
+              status: 'success',
+            });
+          } catch (err) {
+            logger.warn({ err, agentId }, '[ScheduleExecutor] Failed to record execution audit');
+          }
+        }
+
+        // Budget post-check
+        if (this.budgetService !== undefined) {
+          this.budgetService.postQueryCheck(agentId);
         }
 
         // Send success notification with only the last message

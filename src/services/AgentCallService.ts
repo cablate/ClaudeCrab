@@ -16,6 +16,9 @@ import type { MessageProcessor } from '../core/MessageProcessor.js';
 import type { SessionManager } from '../core/SessionManager.js';
 import type { UnifiedMessage } from '../adapters/types.js';
 
+/** Maximum nested agent-call depth to prevent infinite loops (A→B→C→A) */
+const MAX_CALL_DEPTH = 5;
+
 export interface AgentCallOptions {
   /** 優先級（僅供 log 參考，不影響執行順序） */
   priority?: 'low' | 'normal' | 'high';
@@ -29,6 +32,8 @@ export interface AgentCallOptions {
   awaitResult?: boolean;
   /** 強制建立新對話（清除先前的 session context） */
   startNewConversation?: boolean;
+  /** Current call depth (incremented automatically on nested calls) */
+  depth?: number;
 }
 
 export interface AgentCallResult {
@@ -69,12 +74,14 @@ export class AgentCallService {
     options?: AgentCallOptions
   ): Promise<AgentCallResult> {
     const callId = randomUUID();
+    const depth = options?.depth ?? 0;
 
     logger.info(
       {
         callId,
         from: fromAgent,
         to: toAgent,
+        depth,
         priority: options?.priority,
         hasChatId: !!options?.chatId,
         hasUserId: !!options?.userId,
@@ -83,6 +90,19 @@ export class AgentCallService {
       },
       '[AgentCallService] Triggering cross-agent call'
     );
+
+    // Depth check: prevent infinite loops (A→B→C→A)
+    if (depth >= MAX_CALL_DEPTH) {
+      logger.warn(
+        { callId, from: fromAgent, to: toAgent, depth, maxDepth: MAX_CALL_DEPTH },
+        '[AgentCallService] Call depth limit exceeded — rejecting call'
+      );
+      return {
+        success: false,
+        callId,
+        error: `Agent call depth limit exceeded (max: ${MAX_CALL_DEPTH}). This prevents infinite call loops.`,
+      };
+    }
 
     // 檢查目標 agent 是否存在
     if (!this.agentLoader.has(toAgent)) {

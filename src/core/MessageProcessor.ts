@@ -32,6 +32,8 @@ import {
 } from './StatusMessageManager.js';
 import type { ActivityService } from './ActivityService.js';
 import type { AgentCallService } from '../services/AgentCallService.js';
+import type { BudgetService } from '../services/BudgetService.js';
+import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
 
 import type { TTSService } from '../services/TTSService.js';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
@@ -105,6 +107,18 @@ export interface MessageProcessorOptions {
    * When provided, agents can generate and play voice messages via Custom Tools.
    */
   ttsService?: TTSService;
+
+  /**
+   * Budget service for per-agent cost control.
+   * When provided, queries are blocked if agent exceeds budget.
+   */
+  budgetService?: BudgetService;
+
+  /**
+   * Execution record repository for audit trail.
+   * When provided, every SDK query is logged with trigger info, cost, status.
+   */
+  executionRecordRepository?: ExecutionRecordRepository;
 }
 
 /**
@@ -158,6 +172,8 @@ export class MessageProcessor {
   private readonly activityService: ActivityService | undefined;
   private readonly agentCallService: AgentCallService | undefined;
   private readonly ttsService: TTSService | undefined;
+  private readonly budgetService: BudgetService | undefined;
+  private readonly executionRecordRepository: ExecutionRecordRepository | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -175,6 +191,8 @@ export class MessageProcessor {
     this.activityService = options.activityService;
     this.agentCallService = options.agentCallService;
     this.ttsService = options.ttsService;
+    this.budgetService = options.budgetService;
+    this.executionRecordRepository = options.executionRecordRepository;
 
     logger.info('MessageProcessor initialized');
   }
@@ -226,6 +244,16 @@ export class MessageProcessor {
     ) {
       logger.debug({ messageId }, 'Skipping duplicate message');
       return { success: true, skipped: true };
+    }
+
+    // Budget pre-check: block query if agent exceeded budget
+    if (this.budgetService !== undefined && !this.budgetService.canQuery(agentId)) {
+      logger.warn({ agentId }, 'Agent paused due to budget — rejecting message');
+      const adapter = this.getAdapter(platform, agentId);
+      if (adapter !== undefined) {
+        await adapter.sendMessage(chatId, '⚠️ 預算已超限，此 Agent 已暫停。請調整預算後再試。');
+      }
+      return { success: false, error: 'Agent paused: budget exceeded' };
     }
 
     // v2.0: Workflow log (factual, sync)
@@ -854,6 +882,21 @@ export class MessageProcessor {
       // --- Post-query handling ---
       this.saveSDKSessionId(result, internalSession, platform, agentId, userId, sessionId);
       this.recordQueryMetrics(result, agentId, platform, chatId, userId);
+
+      // Execution audit log: record this query
+      this.recordExecutionAudit(result, agentId, 'chat', userId, chatId);
+
+      // Budget post-check: may pause agent for next query
+      if (this.budgetService !== undefined) {
+        const budgetStatus = this.budgetService.postQueryCheck(agentId);
+        if (budgetStatus !== null && budgetStatus.exceeded) {
+          logger.warn(
+            { agentId, reason: budgetStatus.exceededReason, monthCents: budgetStatus.monthCents },
+            'Agent budget exceeded after query — will be paused for next query'
+          );
+        }
+      }
+
       this.updateInjectionCursor(injectionContext, userId, chatId, agentId, platform);
       this.persistConversation(sessionId, prompt, intermediateMessages, result.response, agentId, options);
 
@@ -967,6 +1010,37 @@ export class MessageProcessor {
         { error, agentId },
         'Failed to record query metrics'
       );
+    }
+  }
+
+  /**
+   * Record execution audit entry for every SDK query.
+   */
+  private recordExecutionAudit(
+    result: QueryResult,
+    agentId: string,
+    triggerType: 'chat' | 'schedule' | 'agent_call',
+    triggerSource: string,
+    _chatId?: string
+  ): void {
+    if (this.executionRecordRepository === undefined || result.usage === undefined) return;
+
+    try {
+      const costUsd = result.totalCostUsd ?? result.usage.costUsd ?? 0;
+      this.executionRecordRepository.insert({
+        agentId,
+        triggerType,
+        triggerSource,
+        // promptSummary omitted — optional field
+        responseSummary: result.response?.slice(0, 200),
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        costCents: Math.round(costUsd * 100),
+        durationMs: result.durationMs ?? 0,
+        status: 'success',
+      });
+    } catch (error) {
+      logger.warn({ error, agentId }, 'Failed to record execution audit');
     }
   }
 
