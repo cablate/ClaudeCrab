@@ -39,6 +39,23 @@ export interface AppConfig {
   };
   discord: {
     enabled: boolean;
+    /** Main Bot token (handles slash commands, system embeds, interactions) */
+    mainBotToken: string;
+    /** Main Bot client ID (for slash command registration) */
+    mainBotClientId: string;
+    /** Discord Guild (server) ID */
+    guildId: string;
+    /** System channel IDs */
+    channels: {
+      dashboard: string;
+      approvals: string;
+      costReport: string;
+      alerts: string;
+      taskBoard: string;
+      systemLog: string;
+    };
+    /** Dashboard update interval in minutes */
+    dashboardUpdateMinutes: number;
   };
 }
 
@@ -80,6 +97,18 @@ export function loadAppConfig(): AppConfig {
     },
     discord: {
       enabled: process.env.DISCORD_ENABLED === 'true',
+      mainBotToken: process.env.DISCORD_MAIN_BOT_TOKEN ?? '',
+      mainBotClientId: process.env.DISCORD_MAIN_BOT_CLIENT_ID ?? '',
+      guildId: process.env.DISCORD_GUILD_ID ?? '',
+      channels: {
+        dashboard: process.env.DISCORD_CHANNEL_DASHBOARD ?? '',
+        approvals: process.env.DISCORD_CHANNEL_APPROVALS ?? '',
+        costReport: process.env.DISCORD_CHANNEL_COST_REPORT ?? '',
+        alerts: process.env.DISCORD_CHANNEL_ALERTS ?? '',
+        taskBoard: process.env.DISCORD_CHANNEL_TASK_BOARD ?? '',
+        systemLog: process.env.DISCORD_CHANNEL_SYSTEM_LOG ?? '',
+      },
+      dashboardUpdateMinutes: parseInt(process.env.DISCORD_DASHBOARD_UPDATE_MINUTES ?? '15', 10),
     },
   };
 }

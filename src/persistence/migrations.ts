@@ -183,9 +183,56 @@ CREATE TABLE IF NOT EXISTS activity_events (
 CREATE INDEX IF NOT EXISTS idx_activity_events_agent ON activity_events(agent_id);
 CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
 CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
+
+-- Task records table (Discord Forum + SQLite dual-layer)
+CREATE TABLE IF NOT EXISTS task_records (
+    id TEXT PRIMARY KEY,
+    discord_thread_id TEXT UNIQUE,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'backlog'
+        CHECK (status IN ('backlog', 'in_progress', 'in_review', 'done', 'cancelled')),
+    priority TEXT NOT NULL DEFAULT 'medium'
+        CHECK (priority IN ('urgent', 'medium', 'low')),
+    assignee_agent_id TEXT,
+    created_by_agent_id TEXT,
+    created_by_user_id TEXT,
+    parent_task_id TEXT REFERENCES task_records(id),
+    cost_cents INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_status ON task_records(status);
+CREATE INDEX IF NOT EXISTS idx_task_assignee ON task_records(assignee_agent_id, status);
+
+-- Execution records table (per SDK query audit trail)
+CREATE TABLE IF NOT EXISTS execution_records (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    trigger_type TEXT NOT NULL
+        CHECK (trigger_type IN ('chat', 'schedule', 'agent_call')),
+    trigger_source TEXT,
+    task_id TEXT REFERENCES task_records(id),
+    prompt_summary TEXT,
+    response_summary TEXT,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_cents INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL
+        CHECK (status IN ('success', 'error', 'timeout', 'budget_exceeded')),
+    error_message TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_exec_agent ON execution_records(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_exec_task ON execution_records(task_id);
 `;
 
-export const SCHEMA_VERSION = '8';
+export const SCHEMA_VERSION = '9';
 
 /**
  * Migration SQL from v1 to v2:
@@ -400,6 +447,55 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
 CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
 `;
 
+const MIGRATION_V8_TO_V9 = `
+-- Task records table (Discord Forum + SQLite dual-layer)
+CREATE TABLE IF NOT EXISTS task_records (
+    id TEXT PRIMARY KEY,
+    discord_thread_id TEXT UNIQUE,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'backlog'
+        CHECK (status IN ('backlog', 'in_progress', 'in_review', 'done', 'cancelled')),
+    priority TEXT NOT NULL DEFAULT 'medium'
+        CHECK (priority IN ('urgent', 'medium', 'low')),
+    assignee_agent_id TEXT,
+    created_by_agent_id TEXT,
+    created_by_user_id TEXT,
+    parent_task_id TEXT REFERENCES task_records(id),
+    cost_cents INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_status ON task_records(status);
+CREATE INDEX IF NOT EXISTS idx_task_assignee ON task_records(assignee_agent_id, status);
+
+-- Execution records table (per SDK query audit trail)
+CREATE TABLE IF NOT EXISTS execution_records (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    trigger_type TEXT NOT NULL
+        CHECK (trigger_type IN ('chat', 'schedule', 'agent_call')),
+    trigger_source TEXT,
+    task_id TEXT REFERENCES task_records(id),
+    prompt_summary TEXT,
+    response_summary TEXT,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_cents INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL
+        CHECK (status IN ('success', 'error', 'timeout', 'budget_exceeded')),
+    error_message TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_exec_agent ON execution_records(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_exec_task ON execution_records(task_id);
+`;
+
 /**
  * Run database migrations from currentVersion to SCHEMA_VERSION
  */
@@ -454,6 +550,12 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   if (currentVersion === '7') {
     db.exec(MIGRATION_V7_TO_V8);
     logger.info('Migration v7 → v8 completed');
+    currentVersion = '8';
+  }
+
+  if (currentVersion === '8') {
+    db.exec(MIGRATION_V8_TO_V9);
+    logger.info('Migration v8 → v9 completed');
   }
 
   // Update schema version

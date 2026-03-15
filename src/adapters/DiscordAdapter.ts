@@ -9,8 +9,15 @@
 import {
   Client,
   GatewayIntentBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
   type TextChannel,
+  type ForumChannel,
+  type ThreadChannel,
   type Message as DiscordMessage,
+  type MessageEditOptions,
+  type APIEmbed,
   ChannelType,
 } from 'discord.js';
 import { BaseAdapter } from './BaseAdapter.js';
@@ -19,6 +26,15 @@ import type {
   UnifiedMessage,
   SendOptions,
   SendResult,
+  PermissionPromptOptions,
+  PermissionPromptResult,
+  PermissionResolver,
+  QuestionPromptOptions,
+  QuestionPromptResult,
+  QuestionResolver,
+  ExitPlanModePromptOptions,
+  ExitPlanModePromptResult,
+  ExitPlanModeResolver,
 } from './types.js';
 import {
   validateMessage,
@@ -48,6 +64,11 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   private readonly securityConfig: SecurityConfig;
   private boundMessageHandler: ((message: DiscordMessage) => void) | null =
     null;
+
+  // Interactive prompt resolvers (mirrors TelegramAdapter pattern)
+  private permissionResolver: PermissionResolver | null = null;
+  private questionResolver: QuestionResolver | null = null;
+  private exitPlanModeResolver: ExitPlanModeResolver | null = null;
 
   constructor(config: DiscordAdapterConfig) {
     super(config);
@@ -258,6 +279,499 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       await this.channel.sendTyping();
     } catch (error) {
       this.log.warn({ error }, 'Failed to send typing indicator');
+    }
+  }
+
+  // ============================================================
+  // Rich Messaging: Embed + Button
+  // ============================================================
+
+  /**
+   * Send one or more embeds to a channel, optionally with button components.
+   * Can target any channel the bot has access to (not just this.channel).
+   */
+  async sendEmbed(
+    channelId: string,
+    embeds: EmbedBuilder[],
+    components?: ActionRowBuilder<ButtonBuilder>[]
+  ): Promise<SendResult> {
+    try {
+      const channel = await this.resolveTextChannel(channelId);
+      if (channel === null) {
+        return { success: false, error: `Channel ${channelId} not found or not text` };
+      }
+
+      const payload: { embeds: EmbedBuilder[]; components?: ActionRowBuilder<ButtonBuilder>[] } = { embeds };
+      if (components !== undefined) {
+        payload.components = components;
+      }
+      const msg = await channel.send(payload);
+
+      return { success: true, messageId: msg.id };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error, channelId }, 'Failed to send embed');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Edit an existing embed message (for Dashboard-style non-spamming updates).
+   */
+  async editEmbed(
+    channelId: string,
+    messageId: string,
+    embeds: EmbedBuilder[],
+    components?: ActionRowBuilder<ButtonBuilder>[]
+  ): Promise<SendResult> {
+    try {
+      const channel = await this.resolveTextChannel(channelId);
+      if (channel === null) {
+        return { success: false, error: `Channel ${channelId} not found` };
+      }
+
+      const message = await channel.messages.fetch(messageId);
+      const editPayload: MessageEditOptions = { embeds };
+      if (components !== undefined) {
+        editPayload.components = components as ActionRowBuilder<ButtonBuilder>[];
+      }
+      await message.edit(editPayload);
+
+      return { success: true, messageId };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error, channelId, messageId }, 'Failed to edit embed');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Send a text message to any channel (not just this adapter's bound channel).
+   */
+  async sendToChannel(channelId: string, content: string): Promise<SendResult> {
+    try {
+      const channel = await this.resolveTextChannel(channelId);
+      if (channel === null) {
+        return { success: false, error: `Channel ${channelId} not found` };
+      }
+
+      const chunks = this.splitMessage(content);
+      let lastMessageId = '';
+      for (const chunk of chunks) {
+        const sent = await channel.send(chunk);
+        lastMessageId = sent.id;
+      }
+
+      return { success: true, messageId: lastMessageId };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error, channelId }, 'Failed to send to channel');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  // ============================================================
+  // Forum Channel Operations
+  // ============================================================
+
+  /**
+   * Create a new Forum post (thread) in a Forum channel.
+   * Each post = a task/ticket in the task board.
+   */
+  async createForumPost(
+    forumChannelId: string,
+    title: string,
+    content: string,
+    tagIds?: string[]
+  ): Promise<{ success: boolean; threadId?: string; error?: string }> {
+    try {
+      const channel = await this.resolveChannel(forumChannelId);
+      if (channel === null || channel.type !== ChannelType.GuildForum) {
+        return { success: false, error: `Channel ${forumChannelId} is not a Forum channel` };
+      }
+
+      const forumChannel = channel as ForumChannel;
+      const createOptions: { name: string; message: { content: string }; appliedTags?: string[] } = {
+        name: title.slice(0, 100), // Discord thread name limit
+        message: { content: content.slice(0, MAX_MESSAGE_LENGTH) },
+      };
+      if (tagIds !== undefined) {
+        createOptions.appliedTags = tagIds;
+      }
+      const thread = await forumChannel.threads.create(createOptions);
+
+      return { success: true, threadId: thread.id };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error, forumChannelId, title }, 'Failed to create forum post');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Update tags on a Forum thread (for status/priority changes).
+   */
+  async updateForumPostTags(
+    threadId: string,
+    tagIds: string[]
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (this.client === null) {
+        return { success: false, error: 'Client not initialized' };
+      }
+      const thread = await this.client.channels.fetch(threadId);
+      if (thread === null || !thread.isThread()) {
+        return { success: false, error: `Thread ${threadId} not found` };
+      }
+
+      await (thread as ThreadChannel).setAppliedTags(tagIds);
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error, threadId }, 'Failed to update forum tags');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Reply to a thread (for progress updates on tasks).
+   */
+  async replyToThread(
+    threadId: string,
+    content: string
+  ): Promise<SendResult> {
+    try {
+      if (this.client === null) {
+        return { success: false, error: 'Client not initialized' };
+      }
+      const thread = await this.client.channels.fetch(threadId);
+      if (thread === null || !thread.isThread()) {
+        return { success: false, error: `Thread ${threadId} not found` };
+      }
+
+      const msg = await (thread as ThreadChannel).send(
+        content.slice(0, MAX_MESSAGE_LENGTH)
+      );
+      return { success: true, messageId: msg.id };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error, threadId }, 'Failed to reply to thread');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Archive a thread (for completed/cancelled tasks).
+   */
+  async archiveThread(
+    threadId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (this.client === null) {
+        return { success: false, error: 'Client not initialized' };
+      }
+      const thread = await this.client.channels.fetch(threadId);
+      if (thread === null || !thread.isThread()) {
+        return { success: false, error: `Thread ${threadId} not found` };
+      }
+
+      await (thread as ThreadChannel).setArchived(true);
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error, threadId }, 'Failed to archive thread');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  // ============================================================
+  // Interactive Prompts (Permission / Question / PlanReview)
+  // ============================================================
+
+  override async sendPermissionPrompt(
+    chatId: string,
+    options: PermissionPromptOptions
+  ): Promise<PermissionPromptResult> {
+    try {
+      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      if (channel === null) {
+        return { success: false, error: 'No channel available' };
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle('🔐 Permission Request')
+        .setColor(0xFFA500)
+        .addFields(
+          { name: 'Tool', value: options.toolName, inline: true },
+          { name: 'Reason', value: options.decisionReason ?? 'N/A', inline: true },
+        )
+        .setTimestamp();
+
+      if (options.blockedPath !== undefined) {
+        embed.addFields({ name: 'Path', value: `\`${options.blockedPath}\`` });
+      }
+
+      const inputSummary = JSON.stringify(options.toolInput, null, 2);
+      if (inputSummary.length > 0 && inputSummary !== '{}') {
+        embed.addFields({
+          name: 'Input',
+          value: `\`\`\`json\n${inputSummary.slice(0, 1000)}\n\`\`\``,
+        });
+      }
+
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`perm:allow:${options.requestId}`)
+          .setLabel('Allow')
+          .setStyle(3), // Success (green)
+        new ButtonBuilder()
+          .setCustomId(`perm:always:${options.requestId}`)
+          .setLabel('Always Allow')
+          .setStyle(1), // Primary (blue)
+        new ButtonBuilder()
+          .setCustomId(`perm:deny:${options.requestId}`)
+          .setLabel('Deny')
+          .setStyle(4), // Danger (red)
+      );
+
+      const msg = await channel.send({ embeds: [embed], components: [row] });
+
+      return { success: true, messageId: msg.id };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error }, 'Failed to send permission prompt');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  override async updatePermissionPrompt(
+    chatId: string,
+    messageId: string,
+    text: string
+  ): Promise<void> {
+    try {
+      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      if (channel === null) return;
+
+      const message = await channel.messages.fetch(messageId);
+      await message.edit({ content: text, components: [] });
+    } catch (error) {
+      this.log.warn({ error, messageId }, 'Failed to update permission prompt');
+    }
+  }
+
+  override setPermissionResolver(resolver: PermissionResolver): void {
+    this.permissionResolver = resolver;
+  }
+
+  override async sendQuestionPrompt(
+    chatId: string,
+    options: QuestionPromptOptions
+  ): Promise<QuestionPromptResult> {
+    try {
+      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      if (channel === null) {
+        return { success: false, error: 'No channel available' };
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`❓ ${options.header}`)
+        .setDescription(options.question)
+        .setColor(0x5865F2);
+
+      // Build option buttons (max 5 per row, max 5 rows)
+      const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+      let currentRow = new ActionRowBuilder<ButtonBuilder>();
+      let btnCount = 0;
+
+      for (const opt of options.options) {
+        if (btnCount >= 5) {
+          rows.push(currentRow);
+          currentRow = new ActionRowBuilder<ButtonBuilder>();
+          btnCount = 0;
+          if (rows.length >= 5) break; // Discord limit
+        }
+        currentRow.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`question:${options.requestId}:${opt.label}`)
+            .setLabel(opt.label.slice(0, 80))
+            .setStyle(2) // Secondary
+        );
+        btnCount++;
+      }
+      if (btnCount > 0) rows.push(currentRow);
+
+      const msg = await channel.send({ embeds: [embed], components: rows });
+
+      return { success: true, messageId: msg.id };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error }, 'Failed to send question prompt');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  override async updateQuestionPrompt(
+    chatId: string,
+    messageId: string,
+    text: string
+  ): Promise<void> {
+    try {
+      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      if (channel === null) return;
+
+      const message = await channel.messages.fetch(messageId);
+      await message.edit({ content: text, components: [] });
+    } catch (error) {
+      this.log.warn({ error, messageId }, 'Failed to update question prompt');
+    }
+  }
+
+  override setQuestionResolver(resolver: QuestionResolver): void {
+    this.questionResolver = resolver;
+  }
+
+  override async sendExitPlanModePrompt(
+    chatId: string,
+    options: ExitPlanModePromptOptions
+  ): Promise<ExitPlanModePromptResult> {
+    try {
+      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      if (channel === null) {
+        return { success: false, error: 'No channel available' };
+      }
+
+      const allowedList = options.allowedPrompts?.length
+        ? options.allowedPrompts.map((p) => `• **${p.tool}**: ${p.prompt}`).join('\n')
+        : '（無特殊權限）';
+
+      const embed = new EmbedBuilder()
+        .setTitle('📋 Plan Review')
+        .setDescription('Claude 已完成計畫，請審核：')
+        .addFields({ name: '需要的權限', value: allowedList.slice(0, 1024) })
+        .setColor(0x2B2D31)
+        .setTimestamp();
+
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`plan:approve:${options.requestId}`)
+          .setLabel('Approve Plan')
+          .setStyle(3), // Success
+        new ButtonBuilder()
+          .setCustomId(`plan:reject:${options.requestId}`)
+          .setLabel('Reject Plan')
+          .setStyle(4), // Danger
+      );
+
+      const msg = await channel.send({ embeds: [embed], components: [row] });
+
+      return { success: true, messageId: msg.id };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error }, 'Failed to send plan review prompt');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  override async updateExitPlanModePrompt(
+    chatId: string,
+    messageId: string,
+    text: string
+  ): Promise<void> {
+    try {
+      const channel = await this.resolveTextChannel(chatId) ?? this.channel;
+      if (channel === null) return;
+
+      const message = await channel.messages.fetch(messageId);
+      await message.edit({ content: text, components: [] });
+    } catch (error) {
+      this.log.warn({ error, messageId }, 'Failed to update plan review prompt');
+    }
+  }
+
+  override setExitPlanModeResolver(resolver: ExitPlanModeResolver): void {
+    this.exitPlanModeResolver = resolver;
+  }
+
+  /**
+   * Handle a button interaction routed from InteractionHandler.
+   * Parses customId and routes to the appropriate resolver.
+   */
+  handleButtonInteraction(customId: string): boolean {
+    const parts = customId.split(':');
+    if (parts.length < 3) return false;
+
+    const type = parts[0];
+    const action = parts[1];
+    const requestId = parts[2];
+
+    if (type === undefined || action === undefined || requestId === undefined) {
+      return false;
+    }
+
+    if (type === 'perm' && this.permissionResolver !== null) {
+      const decision = action as 'allow' | 'always' | 'deny';
+      this.permissionResolver(requestId, decision);
+      return true;
+    }
+
+    if (type === 'question' && this.questionResolver !== null) {
+      // For question buttons: customId = "question:<requestId>:<label>"
+      const questionRequestId = parts[1];
+      const label = parts.slice(2).join(':'); // label might contain colons
+      if (questionRequestId !== undefined) {
+        this.questionResolver(questionRequestId, label);
+      }
+      return true;
+    }
+
+    if (type === 'plan' && this.exitPlanModeResolver !== null) {
+      const decision: 'approve' | 'reject' = action === 'approve' ? 'approve' : 'reject';
+      this.exitPlanModeResolver(requestId, decision);
+      return true;
+    }
+
+    return false;
+  }
+
+  // ============================================================
+  // Accessor for discord.js Client (used by InteractionHandler / MainBot)
+  // ============================================================
+
+  /** Get the underlying discord.js Client (null if not initialized) */
+  getClient(): Client | null {
+    return this.client;
+  }
+
+  // ============================================================
+  // Internal helpers
+  // ============================================================
+
+  /**
+   * Resolve a channel ID to a TextChannel. Returns null if not found or wrong type.
+   */
+  private async resolveTextChannel(channelId: string): Promise<TextChannel | null> {
+    if (this.client === null) return null;
+    try {
+      const ch = await this.client.channels.fetch(channelId);
+      if (ch !== null && ch.type === ChannelType.GuildText) {
+        return ch as TextChannel;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Resolve any channel by ID. Returns null if not found.
+   */
+  private async resolveChannel(channelId: string) {
+    if (this.client === null) return null;
+    try {
+      return await this.client.channels.fetch(channelId);
+    } catch {
+      return null;
     }
   }
 
