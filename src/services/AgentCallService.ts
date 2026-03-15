@@ -104,6 +104,21 @@ export class AgentCallService {
       };
     }
 
+    // Directionality check: log if calling across categories without going through manager
+    const fromConfig = this.agentLoader.get(fromAgent);
+    const toConfig = this.agentLoader.get(toAgent);
+    if (fromConfig?.config.discord?.reportsTo !== undefined && toConfig?.config.discord?.reportsTo !== undefined) {
+      const fromReportsTo = fromConfig.config.discord.reportsTo;
+      const toReportsTo = toConfig.config.discord.reportsTo;
+      // Cross-category peer call (neither reports to the other, and they have different managers)
+      if (fromReportsTo !== toAgent && toReportsTo !== fromAgent && fromReportsTo !== toReportsTo) {
+        logger.info(
+          { from: fromAgent, to: toAgent, fromManager: fromReportsTo, toManager: toReportsTo },
+          '[AgentCallService] Cross-category peer call detected (logged, not blocked)'
+        );
+      }
+    }
+
     // 檢查目標 agent 是否存在
     if (!this.agentLoader.has(toAgent)) {
       logger.warn({ callId, toAgent }, '[AgentCallService] Target agent not found');

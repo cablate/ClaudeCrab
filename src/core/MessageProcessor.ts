@@ -34,6 +34,8 @@ import type { ActivityService } from './ActivityService.js';
 import type { AgentCallService } from '../services/AgentCallService.js';
 import type { BudgetService } from '../services/BudgetService.js';
 import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
+import type { TaskService } from '../services/TaskService.js';
+import type { ActivityEventService } from '../services/ActivityEventService.js';
 
 import type { TTSService } from '../services/TTSService.js';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
@@ -119,6 +121,18 @@ export interface MessageProcessorOptions {
    * When provided, every SDK query is logged with trigger info, cost, status.
    */
   executionRecordRepository?: ExecutionRecordRepository;
+
+  /**
+   * Task service for structured task management.
+   * When provided, agents can create/manage tasks via MCP tool.
+   */
+  taskService?: TaskService;
+
+  /**
+   * Activity event service for operational event dual-write.
+   * When provided, events are sent to Discord #system-log/#alerts.
+   */
+  activityEventService?: ActivityEventService;
 }
 
 /**
@@ -174,6 +188,8 @@ export class MessageProcessor {
   private readonly ttsService: TTSService | undefined;
   private readonly budgetService: BudgetService | undefined;
   private readonly executionRecordRepository: ExecutionRecordRepository | undefined;
+  private readonly taskService: TaskService | undefined;
+  private readonly activityEventService: ActivityEventService | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -193,6 +209,8 @@ export class MessageProcessor {
     this.ttsService = options.ttsService;
     this.budgetService = options.budgetService;
     this.executionRecordRepository = options.executionRecordRepository;
+    this.taskService = options.taskService;
+    this.activityEventService = options.activityEventService;
 
     logger.info('MessageProcessor initialized');
   }
@@ -578,6 +596,7 @@ export class MessageProcessor {
         this.ttsService,
         adapter,
         { agentId, chatId, userId },
+        this.taskService,
       );
 
       // Helper: execute SDK query with retry for rate limit / transient errors
@@ -894,6 +913,21 @@ export class MessageProcessor {
             { agentId, reason: budgetStatus.exceededReason, monthCents: budgetStatus.monthCents },
             'Agent budget exceeded after query — will be paused for next query'
           );
+          // Push to Discord #alerts
+          void this.activityEventService?.log({
+            type: 'budget.exceeded',
+            agentId,
+            message: `預算超限 (${budgetStatus.exceededReason})，Agent 已暫停`,
+            details: `月花費: $${(budgetStatus.monthCents / 100).toFixed(2)} / 上限: $${(budgetStatus.monthlyLimitCents / 100).toFixed(2)}`,
+            level: 'error',
+          });
+        } else if (budgetStatus !== null && budgetStatus.warning) {
+          void this.activityEventService?.log({
+            type: 'budget.warning',
+            agentId,
+            message: `預算接近上限 (${Math.round(budgetStatus.monthCents / budgetStatus.monthlyLimitCents * 100)}%)`,
+            level: 'warn',
+          });
         }
       }
 

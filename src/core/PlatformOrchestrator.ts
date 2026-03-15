@@ -274,6 +274,9 @@ export class PlatformOrchestrator {
     if (agent.config.telegramBotToken !== undefined) {
       await this.startTelegramAdapter(agentId, agent.config.telegramBotToken);
     }
+    if (agent.config.discordBotToken !== undefined && agent.config.discordChannelId !== undefined) {
+      await this.startDiscordAdapter(agentId, agent.config.discordBotToken, agent.config.discordChannelId);
+    }
 
     logger.info({ agentId }, 'Agent adapters reloaded');
   }
@@ -361,14 +364,20 @@ export class PlatformOrchestrator {
    * Returns 'running', 'stopped', 'error', or 'no-token' based on the adapter state.
    */
   getBotStatusForAgent(
-    agentId: string
+    agentId: string,
+    platform: 'telegram' | 'discord' = 'telegram'
   ): 'running' | 'stopped' | 'error' | 'no-token' {
     const agent = this.agentLoader.get(agentId);
-    if (agent === undefined || agent.config.telegramBotToken === undefined) {
+    if (agent === undefined) return 'no-token';
+
+    if (platform === 'telegram' && agent.config.telegramBotToken === undefined) {
+      return 'no-token';
+    }
+    if (platform === 'discord' && (agent.config.discordBotToken === undefined || agent.config.discordChannelId === undefined)) {
       return 'no-token';
     }
 
-    const adapter = this.registry.get('telegram', agentId);
+    const adapter = this.registry.get(platform, agentId);
     if (adapter === undefined) {
       return 'stopped';
     }

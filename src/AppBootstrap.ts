@@ -49,6 +49,7 @@ import { BudgetService } from './services/BudgetService.js';
 import { DashboardService } from './services/DashboardService.js';
 import { CostReportService } from './services/CostReportService.js';
 import { TaskService } from './services/TaskService.js';
+import { ActivityEventService } from './services/ActivityEventService.js';
 import { DiscordAdapter } from './adapters/DiscordAdapter.js';
 import { DiscordInteractionHandler } from './adapters/discord/DiscordInteractionHandler.js';
 
@@ -83,6 +84,9 @@ export class AppBootstrap {
   private sseBroadcaster: SSEBroadcaster | null = null;
   private dashboardService: DashboardService | null = null;
   private budgetService: BudgetService | null = null;
+  private activityEventService: ActivityEventService | null = null;
+  private taskService: TaskService | null = null;
+  private costReportTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -181,8 +185,19 @@ export class AppBootstrap {
       activityService.trackActivity(agentId);
     }
 
-    // Discord services initialization (Dashboard, CostReport, InteractionHandler)
+    // Discord services initialization (Dashboard, CostReport, InteractionHandler, ActivityEvent, TaskService)
     await this.initializeDiscordServices(agentLoader, persistence);
+
+    // Post-Discord: wire TaskService + ActivityEventService into MessageProcessor
+    // (These are created during initializeDiscordServices, which runs after MessageProcessor)
+    if (this.taskService !== null) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (messageProcessor as any).taskService = this.taskService;
+    }
+    if (this.activityEventService !== null) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (messageProcessor as any).activityEventService = this.activityEventService;
+    }
 
     this.logStartupSummary(agentLoader);
 
@@ -205,6 +220,15 @@ export class AppBootstrap {
     try {
       if (this.webUIServer !== null) {
         await this.webUIServer.stop();
+      }
+
+      if (this.costReportTimer !== null) {
+        clearInterval(this.costReportTimer);
+        this.costReportTimer = null;
+      }
+
+      if (this.activityEventService !== null) {
+        this.activityEventService.dispose();
       }
 
       if (this.dashboardService !== null) {
@@ -672,6 +696,50 @@ export class AppBootstrap {
       });
       await this.dashboardService.start();
       logger.info({ channelId: channels.dashboard }, 'Dashboard service started');
+    }
+
+    // ActivityEventService (dual-write: SQLite + Discord #system-log/#alerts)
+    if (channels.systemLog || channels.alerts) {
+      const ownerUserId = process.env.DISCORD_OWNER_USER_ID;
+      this.activityEventService = new ActivityEventService({
+        discordAdapter: discordAdapter,
+        ...(channels.systemLog ? { systemLogChannelId: channels.systemLog } : {}),
+        ...(channels.alerts ? { alertsChannelId: channels.alerts } : {}),
+        ...(ownerUserId ? { ownerUserId } : {}),
+      });
+      logger.info('ActivityEventService started (dual-write)');
+    }
+
+    // TaskService (SQLite + Discord Forum dual-layer)
+    if (persistence?.taskRecordRepository !== undefined) {
+      this.taskService = new TaskService({
+        taskRecordRepository: persistence.taskRecordRepository,
+        ...(channels.taskBoard ? { discordAdapter: discordAdapter, forumChannelId: channels.taskBoard } : {}),
+      });
+      logger.info('TaskService started');
+    }
+
+    // CostReportService — daily cron (send at 23:55 local time)
+    if (channels.costReport && persistence?.queryMetricsRepository !== undefined) {
+      const costReportService = new CostReportService({
+        adapter: discordAdapter,
+        channelId: channels.costReport,
+        agentLoader,
+        queryMetricsRepository: persistence.queryMetricsRepository,
+        ...(this.budgetService !== null ? { budgetService: this.budgetService } : {}),
+      });
+
+      // Schedule daily: check every 5 minutes, fire at 23:55
+      this.costReportTimer = setInterval(() => {
+        const now = new Date();
+        if (now.getHours() === 23 && now.getMinutes() >= 55 && now.getMinutes() < 60) {
+          void costReportService.sendDailyReport().catch((err) => {
+            logger.error({ err }, 'Failed to send daily cost report');
+          });
+        }
+      }, 5 * 60 * 1000);
+      this.costReportTimer.unref();
+      logger.info({ channelId: channels.costReport }, 'CostReport daily cron started');
     }
 
     logger.info('Discord services initialized');

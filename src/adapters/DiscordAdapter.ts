@@ -12,6 +12,7 @@ import {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
+  AttachmentBuilder,
   type TextChannel,
   type ForumChannel,
   type ThreadChannel,
@@ -20,6 +21,8 @@ import {
   type APIEmbed,
   ChannelType,
 } from 'discord.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { BaseAdapter } from './BaseAdapter.js';
 import type {
   DiscordAdapterConfig,
@@ -732,6 +735,128 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     return false;
+  }
+
+  // ============================================================
+  // Media Sending (sendPhoto/Document/Audio/Video)
+  // ============================================================
+
+  override async sendPhoto(
+    _chatId: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<SendResult> {
+    return this.sendFileAttachment(filePath, caption);
+  }
+
+  override async sendDocument(
+    _chatId: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<SendResult> {
+    return this.sendFileAttachment(filePath, caption);
+  }
+
+  override async sendAudio(
+    _chatId: string,
+    audio: Buffer,
+    options?: { duration?: number; caption?: string; filename?: string },
+  ): Promise<SendResult> {
+    if (this.channel === null) {
+      return { success: false, error: 'Channel not initialized' };
+    }
+    try {
+      const attachment = new AttachmentBuilder(audio, { name: options?.filename ?? 'audio.mp3' });
+      const payload: { files: AttachmentBuilder[]; content?: string } = { files: [attachment] };
+      if (options?.caption !== undefined) payload.content = options.caption;
+      const msg = await this.channel.send(payload);
+      return { success: true, messageId: msg.id };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error }, 'Failed to send audio');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  override async sendVideo(
+    _chatId: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<SendResult> {
+    return this.sendFileAttachment(filePath, caption);
+  }
+
+  /**
+   * Send a file as a Discord attachment.
+   */
+  private async sendFileAttachment(filePath: string, caption?: string): Promise<SendResult> {
+    if (this.channel === null) {
+      return { success: false, error: 'Channel not initialized' };
+    }
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: `File not found: ${filePath}` };
+      }
+      const attachment = new AttachmentBuilder(filePath, { name: path.basename(filePath) });
+      const payload: { files: AttachmentBuilder[]; content?: string } = { files: [attachment] };
+      if (caption !== undefined) payload.content = caption;
+      const msg = await this.channel.send(payload);
+      return { success: true, messageId: msg.id };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.error({ error, filePath }, 'Failed to send file attachment');
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  // ============================================================
+  // Rate Limiting (simple queue-based)
+  // ============================================================
+
+  /** Pending send queue for rate limiting */
+  private sendQueue: Array<() => Promise<void>> = [];
+  private isFlushing = false;
+  private lastSendTime = 0;
+  private static readonly MIN_SEND_INTERVAL_MS = 1200; // ~5 messages per 5 seconds
+
+  /**
+   * Queue a send operation with rate limiting.
+   */
+  private async rateLimitedSend<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.sendQueue.push(async () => {
+        try {
+          const now = Date.now();
+          const elapsed = now - this.lastSendTime;
+          if (elapsed < DiscordAdapter.MIN_SEND_INTERVAL_MS) {
+            await new Promise(r => setTimeout(r, DiscordAdapter.MIN_SEND_INTERVAL_MS - elapsed));
+          }
+          this.lastSendTime = Date.now();
+          const result = await fn();
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      if (!this.isFlushing) {
+        void this.flushSendQueue();
+      }
+    });
+  }
+
+  private async flushSendQueue(): Promise<void> {
+    if (this.isFlushing) return;
+    this.isFlushing = true;
+
+    while (this.sendQueue.length > 0) {
+      const task = this.sendQueue.shift();
+      if (task !== undefined) {
+        await task();
+      }
+    }
+
+    this.isFlushing = false;
   }
 
   // ============================================================

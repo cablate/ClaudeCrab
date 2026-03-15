@@ -17,8 +17,13 @@ import {
   createSendFileMcpServer,
   getSendFileToolNames,
 } from '../tools/sendFileTool.js';
+import {
+  createTaskMcpServer,
+  getTaskToolNames,
+} from '../tools/taskTool.js';
 import type { AgentCallService } from '../services/AgentCallService.js';
 import type { TTSService } from '../services/TTSService.js';
+import type { TaskService } from '../services/TaskService.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 
 export interface McpSetupContext {
@@ -40,6 +45,7 @@ export function buildMcpSetup(
   ttsService: TTSService | undefined,
   adapter: BaseAdapter,
   ctx: McpSetupContext,
+  taskService?: TaskService,
 ): McpSetupResult {
   const mcpServers: Record<string, ReturnType<typeof createAgentCallMcpServer>> = {};
   const allowedTools: string[] = [];
@@ -60,6 +66,13 @@ export function buildMcpSetup(
   const sendFileServer = createSendFileMcpServer(adapter, ctx.chatId);
   mcpServers['file-send'] = sendFileServer;
   allowedTools.push(...getSendFileToolNames());
+
+  // Task management (available when TaskService is provided)
+  if (taskService) {
+    const server = createTaskMcpServer(taskService, { agentId: ctx.agentId });
+    mcpServers['task-mgmt'] = server;
+    allowedTools.push(...getTaskToolNames());
+  }
 
   return { mcpServers, allowedTools };
 }
