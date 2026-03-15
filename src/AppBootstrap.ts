@@ -52,6 +52,7 @@ import { TaskService } from './services/TaskService.js';
 import { ActivityEventService } from './services/ActivityEventService.js';
 import { DiscordAdapter } from './adapters/DiscordAdapter.js';
 import { DiscordInteractionHandler } from './adapters/discord/DiscordInteractionHandler.js';
+import { registerSlashCommands } from './adapters/discord/DiscordSlashCommands.js';
 
 /** Interval for sending typing indicators to Telegram (ms) */
 const TYPING_INDICATOR_INTERVAL_MS = 5000;
@@ -188,7 +189,7 @@ export class AppBootstrap {
     }
 
     // Discord services initialization (Dashboard, CostReport, InteractionHandler, ActivityEvent, TaskService)
-    await this.initializeDiscordServices(agentLoader, persistence);
+    await this.initializeDiscordServices(agentLoader, persistence, messageProcessor, sessionManager);
 
     // Post-Discord: wire services created during initializeDiscordServices
     // into MessageProcessor and ScheduleExecutor (which were created earlier)
@@ -653,6 +654,8 @@ export class AppBootstrap {
   private async initializeDiscordServices(
     agentLoader: AgentLoader,
     persistence: PersistenceLayer | null,
+    messageProcessor: MessageProcessor,
+    sessionManager: SessionManager,
   ): Promise<void> {
     if (!this.config.discord.enabled) {
       return;
@@ -687,12 +690,29 @@ export class AppBootstrap {
 
     logger.info('Initializing Discord services...');
 
-    // Register InteractionHandler on the system bot for button routing
+    // Register Slash Commands with Discord API
+    const discordMainClientId = this.config.discord.mainBotClientId;
+    const discordGuildId = this.config.discord.guildId;
+    if (discordMainClientId && discordGuildId) {
+      await registerSlashCommands(this.config.discord.mainBotToken, discordMainClientId, discordGuildId);
+    }
+
+    // Register InteractionHandler on the system bot for button + slash command routing
     const systemClient = discordAdapter.getClient();
     if (systemClient !== null) {
       const interactionHandler = new DiscordInteractionHandler({
         client: systemClient,
         adapters: new Map(),
+        slashCommandDeps: {
+          agentLoader,
+          sessionManager,
+          messageProcessor,
+          ...(this.budgetService !== null ? { budgetService: this.budgetService } : {}),
+          ...(this.orchestrator !== null ? {
+            getBotStatus: (agentId: string, platform?: 'telegram' | 'discord') =>
+              this.orchestrator!.getBotStatusForAgent(agentId, platform),
+          } : {}),
+        },
       });
 
       // Register agent Discord adapters for button routing (if any)

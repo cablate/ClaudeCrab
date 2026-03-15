@@ -15,6 +15,7 @@ import type {
   ChatInputCommandInteraction,
 } from 'discord.js';
 import type { DiscordAdapter } from '../DiscordAdapter.js';
+import { handleSlashCommand, type SlashCommandDependencies } from './DiscordSlashCommands.js';
 import { logger } from '../../utils/logger.js';
 
 const log = logger.child({ module: 'DiscordInteractionHandler' });
@@ -39,17 +40,24 @@ export interface DiscordInteractionHandlerOptions {
    * All registered Discord adapters (for broadcast-style lookup).
    */
   adapters?: Map<string, DiscordAdapter>;
+
+  /**
+   * Dependencies for slash command handling.
+   */
+  slashCommandDeps?: SlashCommandDependencies;
 }
 
 export class DiscordInteractionHandler {
   private readonly client: Client;
   private readonly adapters: Map<string, DiscordAdapter>;
   private readonly findAdapterByChannel: ((channelId: string) => DiscordAdapter | undefined) | null;
+  private readonly slashCommandDeps: SlashCommandDependencies | null;
 
   constructor(options: DiscordInteractionHandlerOptions) {
     this.client = options.client;
     this.adapters = options.adapters ?? new Map();
     this.findAdapterByChannel = options.findAdapterByChannel ?? null;
+    this.slashCommandDeps = options.slashCommandDeps ?? null;
 
     this.client.on('interactionCreate', (interaction: Interaction) => {
       void this.handle(interaction).catch((error) => {
@@ -127,22 +135,20 @@ export class DiscordInteractionHandler {
 
   /**
    * Handle slash command interactions.
-   * Phase 3+: /task, /status, /cost, /budget, /schedule, /agent
    */
   private async handleSlashCommand(
     interaction: ChatInputCommandInteraction
   ): Promise<void> {
-    const commandName = interaction.commandName;
-    log.debug({ commandName, userId: interaction.user.id }, 'Slash command received');
+    log.debug({ commandName: interaction.commandName, userId: interaction.user.id }, 'Slash command received');
 
-    // Phase 0: acknowledge but don't process (commands registered in Phase 3+)
-    try {
-      await interaction.reply({
-        content: `Command \`/${commandName}\` received. (Coming in Phase 3)`,
-        ephemeral: true,
-      });
-    } catch (error) {
-      log.error({ error, commandName }, 'Failed to reply to slash command');
+    if (this.slashCommandDeps !== null) {
+      await handleSlashCommand(interaction, this.slashCommandDeps);
+    } else {
+      try {
+        await interaction.reply({ content: '指令系統尚未初始化', ephemeral: true });
+      } catch {
+        // Interaction may have expired
+      }
     }
   }
 }
