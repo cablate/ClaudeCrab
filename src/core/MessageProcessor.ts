@@ -633,9 +633,11 @@ export class MessageProcessor {
         return await retryAsync(
           async () => {
             // V2 persistent session: keeps cli.js process alive → cache persists → ~84%+ efficiency.
-            // MCP servers routed via h9 sdkMcpMap (in-process), not CLI --mcp-config args.
+            // Always use V2 when available — both new sessions and resume.
+            // New session: createSession() starts fresh CLI process (cache created, process stays alive)
+            // Resume: resumeSession() reuses existing process (cache hit ~95%)
             // See: _special-research/sdk-reverse-engineering-v76.md §十一
-            if (resumeId && this.sdkSessionManager) {
+            if (this.sdkSessionManager) {
               try {
                 return await this.sdkSessionManager.executeQuery(
                   sessionId,
