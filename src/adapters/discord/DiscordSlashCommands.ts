@@ -407,7 +407,7 @@ async function handleCtx(
     : null;
 
   // Get recent query metrics for this agent + user
-  // Collect query data for this thread/channel
+  // Collect query data for this thread/channel (newest first from getRecentQueries)
   interface QueryInfo {
     inputTokens: number;
     outputTokens: number;
@@ -417,12 +417,14 @@ async function handleCtx(
     numTurns: number;
   }
   let lastQuery: QueryInfo | undefined;
+  let firstCacheCreation = 0; // First query's cache_creation ≈ system prompt + skills size
   let sessionTotalCost = 0;
   let sessionQueryCount = 0;
   let sessionTotalOutput = 0;
+  const matchedQueries: QueryInfo[] = [];
 
   if (deps.queryMetricsRepository !== undefined) {
-    const recent = deps.queryMetricsRepository.getRecentQueries(50, 0, agentId);
+    const recent = deps.queryMetricsRepository.getRecentQueries(100, 0, agentId);
     for (const q of recent) {
       if (q.platform !== 'discord') continue;
       if (q.chatId !== channelId) continue;
@@ -431,25 +433,31 @@ async function handleCtx(
       sessionTotalCost += q.totalCostUsd;
       sessionTotalOutput += q.outputTokens;
 
+      const info: QueryInfo = {
+        inputTokens: q.inputTokens,
+        outputTokens: q.outputTokens,
+        cacheReadTokens: q.cacheReadTokens,
+        cacheCreationTokens: q.cacheCreationTokens,
+        totalCostUsd: q.totalCostUsd,
+        numTurns: q.numTurns,
+      };
+      matchedQueries.push(info);
+
       if (lastQuery === undefined) {
-        lastQuery = {
-          inputTokens: q.inputTokens,
-          outputTokens: q.outputTokens,
-          cacheReadTokens: q.cacheReadTokens,
-          cacheCreationTokens: q.cacheCreationTokens,
-          totalCostUsd: q.totalCostUsd,
-          numTurns: q.numTurns,
-        };
+        lastQuery = info;
       }
     }
   }
 
-  // Estimate context size: (cache_read + cache_creation) / num_turns
-  // Each turn re-reads the full context, so aggregate is inflated by turn count.
-  // Dividing by turns gives a reasonable per-turn average ≈ actual context size.
-  const estimatedCtx = lastQuery !== undefined && lastQuery.numTurns > 0
-    ? Math.round((lastQuery.cacheReadTokens + lastQuery.cacheCreationTokens) / lastQuery.numTurns)
-    : 0;
+  // The oldest query's cache_creation ≈ base context (system prompt + skills)
+  if (matchedQueries.length > 0) {
+    firstCacheCreation = matchedQueries[matchedQueries.length - 1]!.cacheCreationTokens;
+  }
+
+  // Estimate context window:
+  // base context (first cache_creation) + all conversation output (accumulated responses)
+  // This avoids multi-turn inflation — pure additive.
+  const estimatedCtx = firstCacheCreation + sessionTotalOutput;
   const ctxUsagePct = Math.min(Math.round((estimatedCtx / ctxLimit) * 100), 100);
   const filled = Math.min(Math.max(Math.round(ctxUsagePct / 10), 0), 10);
   const ctxBar = '█'.repeat(filled) + '░'.repeat(10 - filled);
