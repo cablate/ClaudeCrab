@@ -519,7 +519,38 @@ async function handleCtx(
     .setFooter({ text: `${model} · ${isThread ? 'thread' : 'main'} · ${channelId}` })
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  // Per-query history (oldest → newest, max 10)
+  const embeds: EmbedBuilder[] = [embed];
+
+  if (matchedQueries.length > 0) {
+    const historyLines: string[] = [];
+    const chronological = [...matchedQueries].reverse(); // oldest first
+    const showMax = Math.min(chronological.length, 10);
+
+    for (let i = 0; i < showMax; i++) {
+      const q = chronological[i]!;
+      const totalCacheable = q.cacheReadTokens + q.cacheCreationTokens;
+      const hitPct = totalCacheable > 0 ? Math.round((q.cacheReadTokens / totalCacheable) * 100) : 0;
+      const hitBar = hitPct >= 80 ? '🟩' : hitPct >= 40 ? '🟨' : '🟥';
+
+      historyLines.push(
+        `\`#${i + 1}\` ${hitBar} **${hitPct}%** hit · ` +
+        `read ${(q.cacheReadTokens / 1000).toFixed(1)}K · ` +
+        `create ${(q.cacheCreationTokens / 1000).toFixed(1)}K · ` +
+        `out ${(q.outputTokens / 1000).toFixed(1)}K · ` +
+        `${q.numTurns}t · $${q.totalCostUsd.toFixed(3)}`
+      );
+    }
+
+    const historyEmbed = new EmbedBuilder()
+      .setTitle('📜 查詢歷史')
+      .setDescription(historyLines.join('\n'))
+      .setColor(0x2B2D31);
+
+    embeds.push(historyEmbed);
+  }
+
+  await interaction.reply({ embeds, ephemeral: true });
 }
 
 async function handleRestart(
