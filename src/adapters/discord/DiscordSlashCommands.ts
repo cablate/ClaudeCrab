@@ -454,9 +454,11 @@ async function handleCtx(
     cacheHitPct = total > 0 ? Math.round((lastQuery.cacheReadTokens / total) * 100) : 0;
   }
 
-  // Context usage percentage
-  const ctxUsagePct = totalInputTokens > 0 ? Math.round((totalInputTokens / ctxLimit) * 100) : 0;
-  const ctxBar = '█'.repeat(Math.round(ctxUsagePct / 10)) + '░'.repeat(10 - Math.round(ctxUsagePct / 10));
+  // Context usage percentage (clamp to 0-100 for display)
+  const ctxUsagePctRaw = totalInputTokens > 0 ? Math.round((totalInputTokens / ctxLimit) * 100) : 0;
+  const ctxUsagePct = Math.min(ctxUsagePctRaw, 100);
+  const filled = Math.min(Math.max(Math.round(ctxUsagePct / 10), 0), 10);
+  const ctxBar = '█'.repeat(filled) + '░'.repeat(10 - filled);
 
   const embed = new EmbedBuilder()
     .setTitle(`📊 Session Context — ${agentName}`)
