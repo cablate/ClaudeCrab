@@ -395,11 +395,16 @@ async function handleCtx(
   const ctxLimit = ctxLimits[model] ?? 200000;
 
   // Session key: for thread it's userId::thread::threadId, for main channel it's userId
-  const sessionKey = isThread ? `${userId}::thread::${channelId}` : userId;
+  const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;
 
-  // Get V2 session stats (cache liveness)
-  const v2SessionId = `discord::${agentId}::${sessionKey}`;
-  const sessionStats = deps.sdkSessionManager?.getSessionStats(v2SessionId) ?? null;
+  // Get the actual SessionManager session to find the real sessionId
+  const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
+  const realSessionId = session?.sessionId;
+
+  // Get V2 session stats using the real session ID
+  const sessionStats = (realSessionId !== undefined && deps.sdkSessionManager !== undefined)
+    ? deps.sdkSessionManager.getSessionStats(realSessionId)
+    : null;
 
   // Get recent query metrics for this agent + user
   // Collect query data for this thread/channel
