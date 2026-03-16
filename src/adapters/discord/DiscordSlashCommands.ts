@@ -402,21 +402,29 @@ async function handleCtx(
   const sessionStats = deps.sdkSessionManager?.getSessionStats(v2SessionId) ?? null;
 
   // Get recent query metrics for this agent + user
-  let lastQuery: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalCostUsd: number } | undefined;
+  // Collect query data for this thread/channel
+  interface QueryInfo {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    totalCostUsd: number;
+    numTurns: number;
+  }
+  let lastQuery: QueryInfo | undefined;
   let sessionTotalCost = 0;
   let sessionQueryCount = 0;
-  let totalInputTokens = 0;
+  let sessionTotalOutput = 0;
 
   if (deps.queryMetricsRepository !== undefined) {
     const recent = deps.queryMetricsRepository.getRecentQueries(50, 0, agentId);
-    // Filter to THIS thread/channel's queries only
     for (const q of recent) {
       if (q.platform !== 'discord') continue;
       if (q.chatId !== channelId) continue;
 
       sessionQueryCount++;
       sessionTotalCost += q.totalCostUsd;
-      totalInputTokens = Math.max(totalInputTokens, q.inputTokens + q.cacheReadTokens + q.cacheCreationTokens);
+      sessionTotalOutput += q.outputTokens;
 
       if (lastQuery === undefined) {
         lastQuery = {
@@ -425,51 +433,76 @@ async function handleCtx(
           cacheReadTokens: q.cacheReadTokens,
           cacheCreationTokens: q.cacheCreationTokens,
           totalCostUsd: q.totalCostUsd,
+          numTurns: q.numTurns,
         };
       }
     }
   }
 
-  // Cache status
+  // Estimate context size from last query's cache_creation + cache_read
+  // (This approximates the actual context window content, excluding multi-turn re-reads)
+  const estimatedCtx = lastQuery !== undefined
+    ? lastQuery.cacheReadTokens + lastQuery.cacheCreationTokens
+    : 0;
+  const ctxUsagePct = Math.min(Math.round((estimatedCtx / ctxLimit) * 100), 100);
+  const filled = Math.min(Math.max(Math.round(ctxUsagePct / 10), 0), 10);
+  const ctxBar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+
+  // Cache status from V2 session liveness
   let cacheStatus: string;
   if (sessionStats !== null) {
-    const idleMs = Date.now() - (sessionStats.ageMs - sessionStats.messageCount); // approx
-    const lastUsedAgo = sessionStats.ageMs;
-    if (lastUsedAgo < 5 * 60 * 1000) {
-      cacheStatus = '🟢 熱（< 5 分鐘，cache 有效）';
-    } else if (lastUsedAgo < 15 * 60 * 1000) {
-      cacheStatus = '🟡 溫（5-15 分鐘，cache 可能部分過期）';
+    const ageMs = sessionStats.ageMs;
+    if (ageMs < 5 * 60 * 1000) {
+      cacheStatus = '🟢 熱（V2 process 存活，cache 有效）';
+    } else if (ageMs < 15 * 60 * 1000) {
+      cacheStatus = '🟡 溫（process 存活但 cache 可能部分過期）';
     } else {
-      cacheStatus = '🔴 冷（> 15 分鐘，cache 可能已過期）';
+      cacheStatus = '🔴 冷（process 閒置超過 15 分鐘）';
     }
   } else {
-    cacheStatus = '⚫ 無 session（下次對話會建新 session）';
+    cacheStatus = '⚫ 無 V2 session（下次對話會建新 process）';
   }
 
   // Last query cache hit rate
   let cacheHitPct = 0;
+  let cacheDetail = '無資料';
   if (lastQuery !== undefined) {
-    const total = lastQuery.inputTokens + lastQuery.cacheReadTokens + lastQuery.cacheCreationTokens;
-    cacheHitPct = total > 0 ? Math.round((lastQuery.cacheReadTokens / total) * 100) : 0;
+    const totalCacheable = lastQuery.cacheReadTokens + lastQuery.cacheCreationTokens;
+    cacheHitPct = totalCacheable > 0 ? Math.round((lastQuery.cacheReadTokens / totalCacheable) * 100) : 0;
+    cacheDetail = [
+      `${cacheHitPct}%`,
+      `read ${(lastQuery.cacheReadTokens / 1000).toFixed(1)}K`,
+      `create ${(lastQuery.cacheCreationTokens / 1000).toFixed(1)}K`,
+      `new input ${(lastQuery.inputTokens / 1000).toFixed(1)}K`,
+      `output ${(lastQuery.outputTokens / 1000).toFixed(1)}K`,
+      `${lastQuery.numTurns} turns`,
+      `$${lastQuery.totalCostUsd.toFixed(3)}`,
+    ].join(' · ');
   }
 
-  // Context usage percentage (clamp to 0-100 for display)
-  const ctxUsagePctRaw = totalInputTokens > 0 ? Math.round((totalInputTokens / ctxLimit) * 100) : 0;
-  const ctxUsagePct = Math.min(ctxUsagePctRaw, 100);
-  const filled = Math.min(Math.max(Math.round(ctxUsagePct / 10), 0), 10);
-  const ctxBar = '█'.repeat(filled) + '░'.repeat(10 - filled);
-
   const embed = new EmbedBuilder()
-    .setTitle(`📊 Session Context — ${agentName}`)
+    .setTitle(`📊 Session — ${agentName}`)
     .setColor(ctxUsagePct > 80 ? 0xED4245 : ctxUsagePct > 50 ? 0xFEE75C : 0x57F287)
     .addFields(
-      { name: 'Context 使用量', value: `${ctxBar} ${ctxUsagePct}%\n${totalInputTokens.toLocaleString()} / ${ctxLimit.toLocaleString()} tokens`, inline: false },
-      { name: 'Cache 狀態', value: cacheStatus, inline: false },
-      { name: '最近 Cache 命中率', value: lastQuery !== undefined ? `${cacheHitPct}%（read: ${lastQuery.cacheReadTokens.toLocaleString()} / create: ${lastQuery.cacheCreationTokens.toLocaleString()}）` : '無資料', inline: false },
-      { name: 'Session 統計', value: `${sessionQueryCount} 次查詢 · $${sessionTotalCost.toFixed(3)} 花費`, inline: true },
-      { name: 'V2 Process', value: sessionStats !== null ? `🟢 存活（${sessionStats.messageCount} 訊息）` : '⚫ 無', inline: true },
+      {
+        name: '📐 Context Window',
+        value: `${ctxBar} **${ctxUsagePct}%**\n預估 ${(estimatedCtx / 1000).toFixed(1)}K / ${(ctxLimit / 1000).toFixed(0)}K tokens`,
+        inline: false,
+      },
+      { name: '🔄 Cache', value: cacheStatus, inline: false },
+      { name: '📈 最近一次查詢', value: cacheDetail, inline: false },
+      {
+        name: '📊 Session 累計',
+        value: `${sessionQueryCount} 次查詢 · ${(sessionTotalOutput / 1000).toFixed(1)}K output · $${sessionTotalCost.toFixed(3)}`,
+        inline: true,
+      },
+      {
+        name: '⚙️ V2 Process',
+        value: sessionStats !== null ? `🟢 存活（${sessionStats.messageCount} msg）` : '⚫ 無',
+        inline: true,
+      },
     )
-    .setFooter({ text: `Model: ${model} · Thread: ${isThread ? channelId : 'main'}` })
+    .setFooter({ text: `${model} · ${isThread ? 'thread' : 'main'} · ${channelId}` })
     .setTimestamp();
 
   await interaction.reply({ embeds: [embed], ephemeral: true });
