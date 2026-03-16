@@ -55,8 +55,7 @@ export class TaskService {
       // Only care about threads in our task board forum
       if (thread.parentId !== forumId) return;
       // Skip if already tracked (created by our code)
-      const existing = this.repo.listByStatus(undefined, 1000);
-      if (existing.some(t => t.discord_thread_id === thread.id)) return;
+      if (this.repo.getByDiscordThreadId(thread.id) !== undefined) return;
 
       // Parse priority from Forum tags
       const priority = this.parsePriorityFromThread(thread as ThreadChannel);

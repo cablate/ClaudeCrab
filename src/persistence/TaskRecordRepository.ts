@@ -167,6 +167,14 @@ export class TaskRecordRepository {
   }
 
   /**
+   * Get a task by Discord thread ID (for dedup check in Forum listener)
+   */
+  getByDiscordThreadId(threadId: string): TaskRecordRow | undefined {
+    const stmt = this.db.prepare('SELECT * FROM task_records WHERE discord_thread_id = ? LIMIT 1');
+    return stmt.get(threadId) as TaskRecordRow | undefined;
+  }
+
+  /**
    * Get task summary counts by status
    */
   getSummary(): Record<TaskStatus, number> {

@@ -107,14 +107,9 @@ export class BudgetService {
     // Fallback: also check query_metrics (historical data in USD float)
     if (this.queryMetricsRepo !== null && monthCents === 0) {
       try {
-        const stats = (this.queryMetricsRepo as IQueryMetricsRepository & {
-          getAgentStatsSince?(agentId: string, since: string): { total_cost_usd: number } | null;
-        });
-        // Use the existing getAgentStats and filter manually if needed
-        const allStats = this.queryMetricsRepo.getAgentStats(agentId);
-        if (allStats !== null) {
-          // Approximate: use total cost as monthly (conservative)
-          monthCents = Math.max(monthCents, Math.round((allStats.totalCostUsd ?? 0) * 100));
+        const monthlyStats = this.queryMetricsRepo.getAgentStatsSince(agentId, monthStart);
+        if (monthlyStats !== null) {
+          monthCents = Math.max(monthCents, Math.round((monthlyStats.totalCostUsd ?? 0) * 100));
         }
       } catch {
         // Ignore — best effort

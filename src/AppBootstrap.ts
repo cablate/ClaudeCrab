@@ -790,10 +790,13 @@ export class AppBootstrap {
         ...(this.budgetService !== null ? { budgetService: this.budgetService } : {}),
       });
 
-      // Schedule daily: check every 5 minutes, fire at 23:55
+      // Schedule daily: check every 5 minutes, fire once at 23:55
+      let lastCostReportDate = '';
       this.costReportTimer = setInterval(() => {
         const now = new Date();
-        if (now.getHours() === 23 && now.getMinutes() >= 55 && now.getMinutes() < 60) {
+        const dateStr = now.toISOString().slice(0, 10);
+        if (now.getHours() === 23 && now.getMinutes() >= 55 && dateStr !== lastCostReportDate) {
+          lastCostReportDate = dateStr;
           void costReportService.sendDailyReport().catch((err) => {
             logger.error({ err }, 'Failed to send daily cost report');
           });

@@ -142,15 +142,16 @@ export class ActivityEventService {
         embed.addFields({ name: 'Details', value: this.redactSecrets(event.details).slice(0, 1024) });
       }
 
-      let content: string | undefined;
-      if (this.ownerUserId !== undefined && (event.type === 'budget.exceeded' || event.type === 'error.occurred')) {
-        content = `<@${this.ownerUserId}>`; // @mention owner
+      // Send embed (with optional @mention as content in the same message)
+      const shouldMention = this.ownerUserId !== undefined &&
+        (event.type === 'budget.exceeded' || event.type === 'error.occurred');
+
+      if (shouldMention) {
+        // Send mention + embed together via sendToChannel then embed
+        // DiscordAdapter.sendEmbed doesn't support content param, so send mention in embed description
+        embed.setDescription(`<@${this.ownerUserId}> 需要你關注\n\n${embed.data.description ?? ''}`);
       }
 
-      await this.adapter.sendToChannel(
-        this.alertsChannelId,
-        content ?? ''
-      );
       await this.adapter.sendEmbed(this.alertsChannelId, [embed]);
     } catch (err) {
       log.warn({ err }, 'Failed to send alert');

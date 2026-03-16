@@ -95,6 +95,13 @@ export class DiscordInteractionHandler {
     const customId = interaction.customId;
     log.debug({ customId, userId: interaction.user.id }, 'Button interaction received');
 
+    // MUST acknowledge within 3 seconds — deferUpdate FIRST, then process
+    try {
+      await interaction.deferUpdate();
+    } catch {
+      // Already acknowledged
+    }
+
     // Try to find the adapter that owns this channel
     let handled = false;
 
@@ -112,13 +119,6 @@ export class DiscordInteractionHandler {
         handled = adapter.handleButtonInteraction(customId);
         if (handled) break;
       }
-    }
-
-    // Always deferUpdate first (must respond within 3 seconds)
-    try {
-      await interaction.deferUpdate();
-    } catch {
-      // Already acknowledged
     }
 
     if (handled) {
