@@ -717,6 +717,11 @@ export class AppBootstrap {
           ...(this.budgetService !== null ? { budgetService: this.budgetService } : {}),
           // taskService is created later in this method — use getter
           get taskService() { return self.taskService ?? undefined; },
+          ...(persistence?.queryMetricsRepository !== undefined
+            ? { queryMetricsRepository: persistence.queryMetricsRepository }
+            : {}),
+          // sdkSessionManager from MessageProcessor (exposed via getter)
+          get sdkSessionManager() { return (messageProcessor as any).sdkSessionManager; },
           ...(this.orchestrator !== null ? {
             getBotStatus: (agentId: string, platform?: 'telegram' | 'discord') =>
               self.orchestrator!.getBotStatusForAgent(agentId, platform),

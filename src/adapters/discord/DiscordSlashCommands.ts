@@ -14,8 +14,10 @@ import {
 import type { AgentLoader } from '../../core/AgentLoader.js';
 import type { SessionManager } from '../../core/SessionManager.js';
 import type { MessageProcessor } from '../../core/MessageProcessor.js';
+import type { SDKSessionManager } from '../../core/SDKSessionManager.js';
 import type { BudgetService } from '../../services/BudgetService.js';
 import type { TaskService } from '../../services/TaskService.js';
+import type { IQueryMetricsRepository } from '../../persistence/types.js';
 import { logger } from '../../utils/logger.js';
 
 const log = logger.child({ module: 'DiscordSlashCommands' });
@@ -26,6 +28,8 @@ export interface SlashCommandDependencies {
   messageProcessor: MessageProcessor;
   budgetService?: BudgetService;
   taskService?: TaskService | undefined;
+  queryMetricsRepository?: IQueryMetricsRepository;
+  sdkSessionManager?: SDKSessionManager;
   getBotStatus?: (agentId: string, platform?: 'telegram' | 'discord') => 'running' | 'stopped' | 'error' | 'no-token';
 }
 
@@ -77,6 +81,10 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
     new SlashCommandBuilder()
       .setName('restart')
       .setDescription('重啟 ClaudeCab（先跑 tsc 檢查，通過才重啟）'),
+
+    new SlashCommandBuilder()
+      .setName('ctx')
+      .setDescription('顯示當前 session 的 context 使用量、cache 狀態、花費'),
 
     new SlashCommandBuilder()
       .setName('task')
@@ -156,6 +164,9 @@ export async function handleSlashCommand(
         break;
       case 'stop':
         await handleStop(interaction, deps);
+        break;
+      case 'ctx':
+        await handleCtx(interaction, deps);
         break;
       case 'restart':
         await handleRestart(interaction);
@@ -346,6 +357,121 @@ async function handleStop(
     content: '⚠️ Discord 端的停止功能開發中。目前請透過 Telegram 使用 /stop。',
     ephemeral: true,
   });
+}
+
+async function handleCtx(
+  interaction: ChatInputCommandInteraction,
+  deps: SlashCommandDependencies,
+): Promise<void> {
+  const channelId = interaction.channelId;
+  const userId = interaction.user.id;
+  const isThread = interaction.channel?.isThread() ?? false;
+
+  // Find which agent owns this channel (or parent channel if in thread)
+  const parentChannelId = isThread && interaction.channel?.isThread()
+    ? interaction.channel.parentId
+    : channelId;
+
+  let agentId: string | undefined;
+  for (const id of deps.agentLoader.list()) {
+    const agent = deps.agentLoader.get(id);
+    if (agent?.config.discordChannelId === parentChannelId) {
+      agentId = id;
+      break;
+    }
+  }
+
+  if (agentId === undefined) {
+    await interaction.reply({ content: '此頻道沒有綁定 Agent', ephemeral: true });
+    return;
+  }
+
+  const agent = deps.agentLoader.get(agentId)!;
+  const agentName = agent.config.name || agentId;
+  const model = agent.config.model ?? 'sonnet';
+
+  // Context window sizes per model
+  const ctxLimits: Record<string, number> = { opus: 200000, sonnet: 200000, haiku: 200000 };
+  const ctxLimit = ctxLimits[model] ?? 200000;
+
+  // Session key: for thread it's userId::thread::threadId, for main channel it's userId
+  const sessionKey = isThread ? `${userId}::thread::${channelId}` : userId;
+
+  // Get V2 session stats (cache liveness)
+  const v2SessionId = `discord::${agentId}::${sessionKey}`;
+  const sessionStats = deps.sdkSessionManager?.getSessionStats(v2SessionId) ?? null;
+
+  // Get recent query metrics for this agent + user
+  let lastQuery: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; totalCostUsd: number } | undefined;
+  let sessionTotalCost = 0;
+  let sessionQueryCount = 0;
+  let totalInputTokens = 0;
+
+  if (deps.queryMetricsRepository !== undefined) {
+    const recent = deps.queryMetricsRepository.getRecentQueries(50, 0, agentId);
+    // Filter to this user's discord queries
+    for (const q of recent) {
+      if (q.platform !== 'discord') continue;
+      // Match by chatId (thread or channel)
+      if (q.chatId !== channelId && q.userId !== userId) continue;
+
+      sessionQueryCount++;
+      sessionTotalCost += q.totalCostUsd;
+      totalInputTokens = Math.max(totalInputTokens, q.inputTokens + q.cacheReadTokens + q.cacheCreationTokens);
+
+      if (lastQuery === undefined) {
+        lastQuery = {
+          inputTokens: q.inputTokens,
+          outputTokens: q.outputTokens,
+          cacheReadTokens: q.cacheReadTokens,
+          cacheCreationTokens: q.cacheCreationTokens,
+          totalCostUsd: q.totalCostUsd,
+        };
+      }
+    }
+  }
+
+  // Cache status
+  let cacheStatus: string;
+  if (sessionStats !== null) {
+    const idleMs = Date.now() - (sessionStats.ageMs - sessionStats.messageCount); // approx
+    const lastUsedAgo = sessionStats.ageMs;
+    if (lastUsedAgo < 5 * 60 * 1000) {
+      cacheStatus = '🟢 熱（< 5 分鐘，cache 有效）';
+    } else if (lastUsedAgo < 15 * 60 * 1000) {
+      cacheStatus = '🟡 溫（5-15 分鐘，cache 可能部分過期）';
+    } else {
+      cacheStatus = '🔴 冷（> 15 分鐘，cache 可能已過期）';
+    }
+  } else {
+    cacheStatus = '⚫ 無 session（下次對話會建新 session）';
+  }
+
+  // Last query cache hit rate
+  let cacheHitPct = 0;
+  if (lastQuery !== undefined) {
+    const total = lastQuery.inputTokens + lastQuery.cacheReadTokens + lastQuery.cacheCreationTokens;
+    cacheHitPct = total > 0 ? Math.round((lastQuery.cacheReadTokens / total) * 100) : 0;
+  }
+
+  // Context usage percentage
+  const ctxUsagePct = totalInputTokens > 0 ? Math.round((totalInputTokens / ctxLimit) * 100) : 0;
+  const ctxBar = '█'.repeat(Math.round(ctxUsagePct / 10)) + '░'.repeat(10 - Math.round(ctxUsagePct / 10));
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📊 Session Context — ${agentName}`)
+    .setColor(ctxUsagePct > 80 ? 0xED4245 : ctxUsagePct > 50 ? 0xFEE75C : 0x57F287)
+    .addFields(
+      { name: 'Context 使用量', value: `${ctxBar} ${ctxUsagePct}%\n${totalInputTokens.toLocaleString()} / ${ctxLimit.toLocaleString()} tokens`, inline: false },
+      { name: 'Cache 狀態', value: cacheStatus, inline: false },
+      { name: '最近 Cache 命中率', value: lastQuery !== undefined ? `${cacheHitPct}%（read: ${lastQuery.cacheReadTokens.toLocaleString()} / create: ${lastQuery.cacheCreationTokens.toLocaleString()}）` : '無資料', inline: false },
+      { name: 'Session 統計', value: `${sessionQueryCount} 次查詢 · $${sessionTotalCost.toFixed(3)} 花費`, inline: true },
+      { name: 'V2 Process', value: sessionStats !== null ? `🟢 存活（${sessionStats.messageCount} 訊息）` : '⚫ 無', inline: true },
+    )
+    .setFooter({ text: `Model: ${model} · Thread: ${isThread ? channelId : 'main'}` })
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
 }
 
 async function handleRestart(
