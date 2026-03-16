@@ -20,6 +20,7 @@ import {
   type MessageEditOptions,
   type APIEmbed,
   ChannelType,
+  MessageType,
 } from 'discord.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -176,6 +177,11 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
 
     // Ignore bot messages (prevents infinite loops)
     if (message.author.bot) {
+      return;
+    }
+
+    // Ignore system messages (channel rename, pin, member join, etc.)
+    if (message.type !== MessageType.Default && message.type !== MessageType.Reply) {
       return;
     }
 
