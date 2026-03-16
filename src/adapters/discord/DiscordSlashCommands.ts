@@ -444,10 +444,11 @@ async function handleCtx(
     }
   }
 
-  // Estimate context size from last query's cache_creation + cache_read
-  // (This approximates the actual context window content, excluding multi-turn re-reads)
-  const estimatedCtx = lastQuery !== undefined
-    ? lastQuery.cacheReadTokens + lastQuery.cacheCreationTokens
+  // Estimate context size: (cache_read + cache_creation) / num_turns
+  // Each turn re-reads the full context, so aggregate is inflated by turn count.
+  // Dividing by turns gives a reasonable per-turn average ≈ actual context size.
+  const estimatedCtx = lastQuery !== undefined && lastQuery.numTurns > 0
+    ? Math.round((lastQuery.cacheReadTokens + lastQuery.cacheCreationTokens) / lastQuery.numTurns)
     : 0;
   const ctxUsagePct = Math.min(Math.round((estimatedCtx / ctxLimit) * 100), 100);
   const filled = Math.min(Math.max(Math.round(ctxUsagePct / 10), 0), 10);
