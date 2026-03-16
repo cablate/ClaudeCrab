@@ -44,12 +44,24 @@ interface PatchedSessionOptions {
   extraArgs?: Record<string, unknown>;
 }
 
+/** Cumulative usage snapshot — used to compute per-query deltas for V2 sessions */
+interface UsageSnapshot {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  costUsd: number;
+  totalCostUsd: number;
+}
+
 interface ManagedSession {
   session: SDKSession;
   sdkSessionId: string;
   createdAt: number;
   lastUsedAt: number;
   messageCount: number;
+  /** Previous cumulative usage — subtract from current to get per-query delta */
+  prevUsage: UsageSnapshot;
 }
 
 /**
@@ -185,6 +197,7 @@ export class SDKSessionManager {
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
       messageCount: 0,
+      prevUsage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUsd: 0, totalCostUsd: 0 },
     };
 
     this.sessions.set(sessionId, managed);
@@ -295,23 +308,43 @@ export class SDKSessionManager {
         };
 
         if (resultMsg.modelUsage) {
-          let input = 0, output = 0, cacheRead = 0, cacheCreation = 0, cost = 0;
+          // V2 sessions report CUMULATIVE usage across all send() calls.
+          // Compute delta from previous snapshot to get per-query values.
+          let cumInput = 0, cumOutput = 0, cumCacheRead = 0, cumCacheCreation = 0, cumCost = 0;
           for (const mu of Object.values(resultMsg.modelUsage)) {
-            input += mu.inputTokens ?? 0;
-            output += mu.outputTokens ?? 0;
-            cacheRead += mu.cacheReadInputTokens ?? 0;
-            cacheCreation += mu.cacheCreationInputTokens ?? 0;
-            cost += mu.costUSD ?? 0;
+            cumInput += mu.inputTokens ?? 0;
+            cumOutput += mu.outputTokens ?? 0;
+            cumCacheRead += mu.cacheReadInputTokens ?? 0;
+            cumCacheCreation += mu.cacheCreationInputTokens ?? 0;
+            cumCost += mu.costUSD ?? 0;
           }
+
+          const prev = managed.prevUsage;
+          const prevTotalCost = prev.totalCostUsd;
+          const cumTotalCostVal = resultMsg.total_cost_usd ?? 0;
+
+          // Per-query delta
           usage = {
-            inputTokens: input,
-            outputTokens: output,
-            cacheReadInputTokens: cacheRead,
-            cacheCreationInputTokens: cacheCreation,
-            costUsd: cost,
+            inputTokens: Math.max(0, cumInput - prev.inputTokens),
+            outputTokens: Math.max(0, cumOutput - prev.outputTokens),
+            cacheReadInputTokens: Math.max(0, cumCacheRead - prev.cacheReadInputTokens),
+            cacheCreationInputTokens: Math.max(0, cumCacheCreation - prev.cacheCreationInputTokens),
+            costUsd: Math.max(0, cumCost - prev.costUsd),
           };
+          totalCostUsd = Math.max(0, cumTotalCostVal - prevTotalCost);
+
+          // Update snapshot for next query
+          managed.prevUsage = {
+            inputTokens: cumInput,
+            outputTokens: cumOutput,
+            cacheReadInputTokens: cumCacheRead,
+            cacheCreationInputTokens: cumCacheCreation,
+            costUsd: cumCost,
+            totalCostUsd: cumTotalCostVal,
+          };
+        } else {
+          totalCostUsd = resultMsg.total_cost_usd;
         }
-        totalCostUsd = resultMsg.total_cost_usd;
 
         if (message.subtype !== 'success') {
           const errors = 'errors' in message ? (message.errors as string[]) : [];
