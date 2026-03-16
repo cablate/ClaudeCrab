@@ -47,6 +47,20 @@ export interface MessageMetadata {
   /** Group/chat title if applicable */
   chatTitle?: string;
 
+  /**
+   * Override userId for session routing.
+   * When set, MessageProcessor uses this instead of message.userId for session key.
+   * Adapters use this to isolate sub-conversations (e.g., threads) without
+   * core needing to know about platform-specific concepts.
+   */
+  sessionUserId?: string;
+
+  /**
+   * If this message is in a sub-conversation (thread, reply chain, etc.),
+   * the ID of the parent conversation. Platform-agnostic.
+   */
+  parentConversationId?: string;
+
   /** Additional platform-specific data */
   [key: string]: unknown;
 }

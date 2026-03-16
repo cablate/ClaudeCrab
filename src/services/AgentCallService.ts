@@ -35,12 +35,13 @@ export interface AgentCallOptions {
   startNewConversation?: boolean;
   /** Current call depth (incremented automatically on nested calls) */
   depth?: number;
-  /** Platform of the original message (for thread routing) */
+  /** Platform of the original message (for correct adapter routing) */
   platform?: string;
-  /** Thread metadata (Discord only) — for posting summary to target agent's channel */
-  threadId?: string;
-  /** Parent channel ID of the thread (Discord only) */
-  parentChannelId?: string;
+  /** Cross-channel notification (platform-agnostic): post summary in another channel after call */
+  crossChannelNotify?: {
+    targetChannelId: string;
+    sourceConversationId: string;
+  };
 }
 
 export interface AgentCallResult {
@@ -332,31 +333,26 @@ ${message}`;
   }
 
   /**
-   * Post a summary message in the target agent's own Discord channel
-   * when an agent-call happens from a Discord thread.
+   * Post a cross-channel notification after agent-call completes.
+   * Platform-agnostic: uses adapter to send to the specified target channel.
    */
   private postCrossChannelSummary(
     fromAgent: string,
     toAgent: string,
     options?: AgentCallOptions
   ): void {
-    if (options?.platform !== 'discord' || !options?.threadId) return;
-    if (this.getAdapter === undefined) return;
+    const notify = options?.crossChannelNotify;
+    if (notify === undefined) return;
+    if (options?.platform === undefined || this.getAdapter === undefined) return;
 
-    const targetAdapter = this.getAdapter('discord', toAgent);
+    const targetAdapter = this.getAdapter(options.platform, toAgent);
     if (targetAdapter === undefined) return;
-
-    // Get target agent's main channel ID for the summary
-    const targetAgent = this.agentLoader.get(toAgent);
-    const targetChannelId = targetAgent?.config.discordChannelId;
-    if (targetChannelId === undefined) return;
 
     const fromName = this.agentLoader.get(fromAgent)?.config.name ?? fromAgent;
 
-    // Post summary in target agent's main channel (not the thread)
     void targetAdapter.sendMessage(
-      targetChannelId,
-      `📎 正在協助 **${fromName}** 處理任務（來自 <#${options.threadId}>）`
+      notify.targetChannelId,
+      `📎 正在協助 **${fromName}** 處理任務`
     ).catch(() => {
       // Best effort — don't block
     });

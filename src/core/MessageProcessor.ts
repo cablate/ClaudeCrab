@@ -242,15 +242,13 @@ export class MessageProcessor {
     const { platform, userId, chatId, text, id: messageId } = message;
     const isGroupChat = message.metadata?.isGroupChat === true;
 
-    // For group chats, use chatId-based session key to share history among all members
-    // For Discord threads, use chatId (threadId) to isolate session per thread
-    // For private chats, use userId-based session key
-    const isDiscordThread = platform === 'discord' && message.metadata?.isThread === true;
+    // Session key routing (platform-agnostic):
+    // 1. Group chats → chatId-based key (shared among members)
+    // 2. Adapter-provided sessionUserId → used as-is (e.g., thread isolation)
+    // 3. Default → userId
     const effectiveUserId = isGroupChat
       ? buildGroupUserId(chatId)
-      : isDiscordThread
-        ? `${userId}::thread::${chatId}`
-        : userId;
+      : message.metadata?.sessionUserId ?? userId;
 
     logger.debug(
       { platform, userId, agentId, messageId, isGroupChat, effectiveUserId },
@@ -274,7 +272,7 @@ export class MessageProcessor {
     void this.activityEventService?.log({
       type: 'chat.received',
       agentId,
-      message: `收到${platform === 'discord' ? ' Discord' : ''} 訊息「${text.slice(0, 50)}${text.length > 50 ? '...' : ''}」`,
+      message: `收到訊息「${text.slice(0, 50)}${text.length > 50 ? '...' : ''}」`,
     });
 
     // Budget pre-check: block query if agent exceeded budget
@@ -367,6 +365,7 @@ export class MessageProcessor {
               isSynthesis?: boolean;
               isSocial?: boolean;
               agentCallFrom?: string;
+              parentConversationId?: string;
             } = {};
             // Agent call tag: pass the calling agent's ID so responses get tagged
             if (message.metadata?.isAgentCall === true && typeof message.metadata.fromAgent === 'string') {
@@ -390,6 +389,10 @@ export class MessageProcessor {
             }
             if (options?.isSocial === true) {
               queryOptions.isSocial = true;
+            }
+            // Pass sub-conversation context (platform-agnostic)
+            if (message.metadata?.parentConversationId !== undefined) {
+              queryOptions.parentConversationId = message.metadata.parentConversationId;
             }
 
             // Use replyToMessageId from options if provided, otherwise from metadata.
@@ -508,6 +511,8 @@ export class MessageProcessor {
       isSocial?: boolean;
       /** If set, this response is from an agent call — tag the first message with the caller's ID */
       agentCallFrom?: string;
+      /** Parent conversation ID for sub-conversation context (platform-agnostic) */
+      parentConversationId?: string;
     }
   ): Promise<string> {
     // Get internal session for agent info
@@ -604,18 +609,15 @@ export class MessageProcessor {
       );
 
       // Build MCP servers and allowed tools from available services
-      // Pass thread metadata for agent-call cross-channel routing (Discord only)
+      // Pass sub-conversation context for cross-channel agent-call routing (platform-agnostic)
       const mcpCtx: import('./McpToolSetup.js').McpSetupContext = {
         agentId, chatId, userId, platform,
       };
-      // If this is a Discord thread, chatId IS the threadId
-      if (platform === 'discord' && options?.isGroupChat !== true) {
-        // chatId differs from the agent's configured channel → it's a thread
-        const agentConfig = this.sessionManager.getInternalSession(platform, agentId, userId)?.agent;
-        if (agentConfig !== undefined && agentConfig.config.discordChannelId !== undefined && chatId !== agentConfig.config.discordChannelId) {
-          mcpCtx.threadId = chatId;
-          mcpCtx.parentChannelId = agentConfig.config.discordChannelId;
-        }
+      // If adapter provided parentConversationId, this is a sub-conversation (thread, etc.)
+      const parentConvId = options?.parentConversationId;
+      if (parentConvId !== undefined) {
+        mcpCtx.subConversationId = chatId;
+        mcpCtx.parentConversationId = parentConvId;
       }
       const { mcpServers, allowedTools } = buildMcpSetup(
         this.agentCallService,

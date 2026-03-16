@@ -260,9 +260,11 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
         displayName,
         username: message.author.username,
         isGroupChat: false,
-        isThread: threadId !== undefined,
-        threadId,
-        parentChannelId: threadId !== undefined ? this.channelId : undefined,
+        // Thread → isolated session: adapter handles this, core just sees sessionUserId
+        ...(threadId !== undefined ? {
+          sessionUserId: `${userId}::thread::${threadId}`,
+          parentConversationId: this.channelId,
+        } : {}),
       },
     };
 

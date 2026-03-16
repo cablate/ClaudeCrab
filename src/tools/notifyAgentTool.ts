@@ -21,12 +21,12 @@ export interface AgentCallMcpContext {
   chatId: string;
   /** 原始使用者 ID（用於共用使用者 session，降低割裂感） */
   userId: string;
-  /** Platform (for thread routing) */
+  /** Platform (for correct adapter routing) */
   platform?: string;
-  /** Discord thread ID (if message originated from a thread) */
-  threadId?: string;
-  /** Parent channel ID of the thread */
-  parentChannelId?: string;
+  /** Sub-conversation ID (e.g., thread). Platform-agnostic. */
+  subConversationId?: string;
+  /** Parent conversation ID (e.g., main channel). Platform-agnostic. */
+  parentConversationId?: string;
 }
 
 /**
@@ -106,10 +106,16 @@ export function createAgentCallMcpServer(
               userId: context.userId,
               ...(args.awaitResult !== undefined ? { awaitResult: args.awaitResult } : {}),
               ...(args.startNewConversation !== undefined ? { startNewConversation: args.startNewConversation } : {}),
-              // Pass Discord thread metadata for cross-channel routing
+              // Platform + cross-channel notification (platform-agnostic)
               ...(context.platform !== undefined ? { platform: context.platform } : {}),
-              ...(context.threadId !== undefined ? { threadId: context.threadId } : {}),
-              ...(context.parentChannelId !== undefined ? { parentChannelId: context.parentChannelId } : {}),
+              ...(context.subConversationId !== undefined && context.parentConversationId !== undefined
+                ? {
+                    crossChannelNotify: {
+                      targetChannelId: context.parentConversationId,
+                      sourceConversationId: context.subConversationId,
+                    },
+                  }
+                : {}),
             }
           );
 
