@@ -409,11 +409,10 @@ async function handleCtx(
 
   if (deps.queryMetricsRepository !== undefined) {
     const recent = deps.queryMetricsRepository.getRecentQueries(50, 0, agentId);
-    // Filter to this user's discord queries
+    // Filter to THIS thread/channel's queries only
     for (const q of recent) {
       if (q.platform !== 'discord') continue;
-      // Match by chatId (thread or channel)
-      if (q.chatId !== channelId && q.userId !== userId) continue;
+      if (q.chatId !== channelId) continue;
 
       sessionQueryCount++;
       sessionTotalCost += q.totalCostUsd;
