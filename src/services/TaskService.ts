@@ -118,9 +118,9 @@ export class TaskService implements ITaskService {
     const oldStatus = task.status;
     this.repo.update(taskId, { status });
 
-    // Push status change to main thread
-    if (task.discord_thread_id) {
-      await this.threadNotifier?.postToThread(
+    // Push status change to main thread (platform-agnostic: threadNotifier handles routing)
+    if (this.threadNotifier && task.discord_thread_id) {
+      await this.threadNotifier.postToThread(
         task.discord_thread_id,
         `[系統] \u{1F4CC} 狀態變更：${oldStatus} → ${status}`
       );
@@ -136,9 +136,9 @@ export class TaskService implements ITaskService {
 
     // Completion: cost summary + archival
     if (status === 'done' || status === 'cancelled') {
-      if (task.discord_thread_id) {
+      if (this.threadNotifier && task.discord_thread_id) {
         const costDisplay = (task.cost_cents / 100).toFixed(2);
-        await this.threadNotifier?.postToThread(
+        await this.threadNotifier.postToThread(
           task.discord_thread_id,
           `[系統] \u{1F4B0} 累計花費：$${costDisplay}`
         );
@@ -155,14 +155,14 @@ export class TaskService implements ITaskService {
    * Assign task to an agent.
    * Supports options.autoCall: automatically invoke the target agent via AgentCallService.
    */
-  async assignTask(taskId: string, agentId: string, options?: { autoCall?: boolean }): Promise<void> {
+  async assignTask(taskId: string, agentId: string, options?: { autoCall?: boolean; platform?: string }): Promise<void> {
     this.repo.update(taskId, { assigneeAgentId: agentId });
 
     const task = this.repo.getById(taskId);
 
-    // Notify main thread
-    if (task?.discord_thread_id) {
-      await this.threadNotifier?.postToThread(task.discord_thread_id, `[系統] \u{1F464} 已指派給 ${agentId}`);
+    // Notify main thread (platform-agnostic via threadNotifier)
+    if (this.threadNotifier && task?.discord_thread_id) {
+      await this.threadNotifier.postToThread(task.discord_thread_id, `[系統] \u{1F464} 已指派給 ${agentId}`);
     }
 
     // Auto-call if requested
@@ -176,7 +176,7 @@ export class TaskService implements ITaskService {
           `你被指派了一個任務：${task.title}\n\n${task.description ?? ''}`,
           {
             taskId,
-            platform: 'discord',
+            ...(options?.platform !== undefined ? { platform: options.platform } : {}),
           }
         );
       } catch (err) {

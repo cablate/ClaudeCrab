@@ -100,7 +100,7 @@ export function buildPromptContext(
   }
 
   if (chatId) {
-    context += `\n【當前對話】platform: ${platform ?? 'telegram'}, chatId: ${chatId}`;
+    context += `\n【當前對話】platform: ${platform ?? 'unknown'}, chatId: ${chatId}`;
   }
 
   // Always remind agents to check for applicable skills

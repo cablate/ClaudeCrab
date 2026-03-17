@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js';
 import { playSound } from '../utils/localSound.js';
 
 export class ScheduleNotifier {
-  // Map key is agentId (not platform), since each agent has its own adapter
+  // Map key is `${agentId}:${platform}` to support agents with multiple adapters
   constructor(private adapters: Map<string, BaseAdapter>) {}
 
   /**
@@ -20,7 +20,8 @@ export class ScheduleNotifier {
    */
   async notifyComplete(spec: ScheduleSpec, result: QueryResult): Promise<void> {
     const agentId = spec.execution.agent;
-    const adapter = this.adapters.get(agentId);
+    const platform = spec.notification?.platform ?? 'telegram';
+    const adapter = this.adapters.get(`${agentId}:${platform}`) ?? this.adapters.get(agentId);
 
     if (!adapter) {
       logger.warn(`[ScheduleNotifier] Adapter not found for agent: ${agentId}`);
@@ -55,7 +56,8 @@ export class ScheduleNotifier {
    */
   async notifyError(spec: ScheduleSpec, error: unknown): Promise<void> {
     const agentId = spec.execution.agent;
-    const adapter = this.adapters.get(agentId);
+    const platform = spec.notification?.platform ?? 'telegram';
+    const adapter = this.adapters.get(`${agentId}:${platform}`) ?? this.adapters.get(agentId);
 
     if (!adapter) {
       logger.warn(`[ScheduleNotifier] Adapter not found for agent: ${agentId}`);
@@ -93,7 +95,8 @@ export class ScheduleNotifier {
    */
   async notifyAutoPaused(spec: ScheduleSpec, failureCount: number): Promise<void> {
     const agentId = spec.execution.agent;
-    const adapter = this.adapters.get(agentId);
+    const platform = spec.notification?.platform ?? 'telegram';
+    const adapter = this.adapters.get(`${agentId}:${platform}`) ?? this.adapters.get(agentId);
 
     if (!adapter) {
       logger.warn(`[ScheduleNotifier] Adapter not found for agent: ${agentId}`);
@@ -160,14 +163,22 @@ export class ScheduleNotifier {
   /**
    * Add an adapter (keyed by agentId)
    */
+  /**
+   * Add an adapter. Key format: `${agentId}:${platform}` for platform-specific lookup.
+   * Also stores under bare agentId as fallback for backward compatibility.
+   */
   addAdapter(agentId: string, adapter: BaseAdapter): void {
-    this.adapters.set(agentId, adapter);
+    this.adapters.set(`${agentId}:${adapter.platform}`, adapter);
+    this.adapters.set(agentId, adapter); // fallback (last-wins for agents with both platforms)
   }
 
   /**
-   * Remove an adapter
+   * Remove adapters for an agent (both platform-specific and fallback keys)
    */
-  removeAdapter(agentId: string): void {
+  removeAdapter(agentId: string, platform?: string): void {
+    if (platform) {
+      this.adapters.delete(`${agentId}:${platform}`);
+    }
     this.adapters.delete(agentId);
   }
 
