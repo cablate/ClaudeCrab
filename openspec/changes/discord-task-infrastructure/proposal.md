@@ -47,14 +47,19 @@ TaskService、AgentCallService、ActivityEventService 三個模組已各自存�
 
 ## Impact
 
-- 修改 `src/services/AgentCallService.ts` — taskId 綁定、userId/chatId 改寫（task:{taskId} + agent per-task thread）、per-task thread 建立
-- 修改 `src/services/TaskService.ts` — 新增 thread 進度推送、品管閘門方法、assignTask autoCall 選項
-- 修改 `src/tools/taskTool.ts` — 新增 `post_to_thread`、`request_review`、`read_task` MCP tools
+> 注意：codebase 經過 audit v2 重構。services 層已 platform-agnostic，Discord 邏輯在 adapters/discord/services/。
+
+- 修改 `src/services/AgentCallService.ts` — taskId 綁定、userId/chatId 改寫、per-task thread 建立
+- 修改 `src/services/TaskService.ts`（pure）— postToThread/requestReview 業務邏輯，透過 TaskThreadNotifier 推送
+- 修改 `src/adapters/discord/services/DiscordTaskSync.ts` — 擴充 TaskThreadNotifier：per-task thread 建立、摘要推送、審核 Embed、使用者訊息路由
+- 修改 `src/adapters/discord/services/DiscordActivityReporter.ts` — 任務事件 Discord Embed
+- 修改 `src/tools/taskTool.ts` — 新增 post_to_thread、request_review、read_task MCP tools
 - 修改 `src/adapters/discord/DiscordInteractionHandler.ts` — 品管閘門 Button/Modal handler
-- 修改 `src/services/ActivityEventService.ts` — 補齊任務生命週期事件觸發點
-- 修改 `src/core/MessageProcessor.ts` — metadata.taskId 向下傳遞到 execution_records
-- 修改 `src/adapters/DiscordAdapter.ts` — replyToThreadEmbed（Embed + Button 支援）、fetchRecentThreadMessages
-- 修改 `src/persistence/TaskRecordRepository.ts` — 新增 review_count + agent_thread_ids 欄位
-- 修改 `src/persistence/ExecutionRecordRepository.ts` — 新增 task_id FK
-- 新增主 thread 使用者訊息監聽 + 路由到秘書的 per-task thread
-- 不修改 `src/core/SessionManager.ts` — session key 機制不變，透過 userId 參數自然支援任務隔離
+- 修改 `src/services/ActivityEventService.ts`（pure）— 任務生命週期事件觸發點
+- 修改 `src/core/MessageProcessor.ts` — metadata.taskId 傳遞到 execution_records
+- 修改 `src/adapters/DiscordAdapter.ts` — replyToThreadEmbed、fetchRecentThreadMessages、createThreadInChannel
+- 修改 `src/persistence/TaskRecordRepository.ts` — review_count + agent_thread_ids 欄位
+- 修改 `src/persistence/ExecutionRecordRepository.ts` — task_id FK
+- 修改 `src/adapters/discord/DiscordBootstrap.ts` — 串接新 Discord task services
+- 修改 `src/types/interfaces.ts` — 擴充 ITaskService（postToThread、requestReview）
+- 不修改 `src/core/SessionManager.ts` — session key 機制不變

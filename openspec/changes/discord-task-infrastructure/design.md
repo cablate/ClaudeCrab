@@ -1,14 +1,18 @@
 ## Context
 
-ClaudeCab 已有三個獨立運作的模組：
+ClaudeCab 已有三個獨立運作的模組（經 audit v2 重構，services 層已 platform-agnostic）：
 
 | 模組 | 狀態 | 缺口 |
 |------|------|------|
-| **TaskService** + TaskRecordRepository | SQLite + Forum 雙層 CRUD 已實作 | 任務只是靜態記錄，不與執行流程串接 |
-| **AgentCallService** | 跨 Agent 呼叫（fire-and-forget / await）已實作 | 不知道任務存在，無法綁定 taskId |
-| **ActivityEventService** | 雙寫（SQLite queue + Discord）已實作 | 觸發點不完整，任務生命週期事件未串接 |
-| **taskTool** (MCP) | create_task, list_tasks, update_task 已實作 | 缺 post_to_thread, request_review, read_task |
-| **DiscordInteractionHandler** | 基礎 Button handler 已有 | 無品管閘門 Button 處理 |
+| **TaskService**（pure）+ TaskRecordRepository | SQLite CRUD，透過 TaskThreadNotifier 推送 Discord | 不與執行流程串接，缺 postToThread/requestReview 方法 |
+| **DiscordTaskSync**（adapters/discord/services/） | 實作 TaskThreadNotifier，Forum 操作 | 缺 per-task thread 建立、使用者訊息路由、審核 Embed |
+| **AgentCallService** | 跨 Agent 呼叫（fire-and-forget / await） | 不知道任務存在，無法綁定 taskId |
+| **ActivityEventService**（pure） | 事件佇列 + 透過 ActivityNotifier 推送 Discord | 觸發點不完整，任務生命週期事件未串接 |
+| **DiscordActivityReporter** | 實作 ActivityNotifier，Embed 輸出 | 缺任務事件的 Embed 模板 |
+| **taskTool** (MCP) | create_task, list_tasks, update_task | 缺 post_to_thread, request_review, read_task |
+| **DiscordInteractionHandler** | 基礎 Button handler | 無品管閘門 Button 處理 |
+| **types/interfaces.ts** | IActivityEventService, IBudgetService, ITaskService | 需擴充 ITaskService 新方法 |
+| **DiscordBootstrap** | Discord 初始化委派 | 需串接新的 task services |
 
 秘書 SOP 已定義完整工作流程（task-routing.md, quality-gate.md, escalation.md），但引擎層缺乏對應的結構化支撐。
 
