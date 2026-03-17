@@ -25,6 +25,8 @@
     "Grep"
   ],
   "telegramBotToken": "8585127707:AAExHiRF4aF7cbyXcyoN7fX4UgTqhU2u-2A",
+  "discordBotToken": "MTQ4Mjc0MjQ4NDIxOTIwMzY4NQ.GPyi7c.PhozoyFdcHuN2UJYcsj47K-fH14j6G8ZGqK8P0",
+  "discordChannelId": "1482687941175410831",
   "settings": {
     "permissionMode": "default",
     "delegation": {

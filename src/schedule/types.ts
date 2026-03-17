@@ -76,5 +76,7 @@ export interface CreateScheduleOptions {
   notifyOnComplete?: boolean;
   notifyOnError?: boolean;
   notifyChatId?: string;
+  /** Platform for notification delivery (defaults to 'telegram') */
+  notifyPlatform?: string;
   tags?: string[];
 }

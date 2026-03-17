@@ -7,10 +7,9 @@
 ## 共用規則
 
 @../_example/.claude/rules/startup-protocol.md
-@../_example/.claude/rules/observe-user.md
 @../_example/.claude/rules/skill-usage.md
 @../_example/.claude/rules/serena-tools.md
-@../_example/.claude/rules/self-evolution.md
+@../_example/.claude/rules/permissions.md
 
 ---
 
@@ -95,6 +94,7 @@
 ## Lessons Learned
 
 <!-- 操作規則，由 agent 自行維護 -->
+<!-- 新增條目格式：### YYYY-MM-DD: 標題 -->
 
 ### 2026-02-18: ClaudeCab 執行環境注意事項
 
@@ -159,6 +159,10 @@ Spectra 是全域安裝的獨立工具（位於 `/c/Users/User/AppData/Local/Spe
 ### 2026-03-06: 權限 Hook 需要完整的路徑安全檢查
 
 修復路徑解析 bug 時，不只要處理「格式轉換」（Unix-style → Windows），還要考慮「安全性」。完整檢查包含：(1) path traversal 檢測（`../`）、(2) symlink 實際路徑解析、(3) 正規化後再次驗證白名單。2026 年 1 月的 CVE-2026-21636 證明 symlink 可繞過權限檢查。
+
+### 2026-03-16: 驗證系統行為必須查所有配置層級
+
+讀了單一 script（`play_notification.py`）就斷定「Stop hook 不會注入訊息」，結果被全域 `~/.claude/settings.json` 的 Stop hook 打臉。**驗證任何系統行為時，必須查完所有配置層：local settings → project settings → global settings**。Claude Code hooks 的觸發機制有三層，任何一層有設定都可能觸發，不能只看 component 實作就推論系統行為。
 
 ---
 

@@ -8,7 +8,7 @@
 
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import type { SendOptions } from '../adapters/types.js';
-import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
+
 import { isRateLimitError, isTransientError } from '../utils/retry.js';
 import { logger } from '../utils/logger.js';
 
@@ -48,7 +48,7 @@ export async function sendFinalResponse(
     sendOpts.replyToMessageId = options.replyToMessageId;
   }
 
-  const sendResult = await sendWithMarkdownFallback(adapter, chatId, response, sendOpts);
+  const sendResult = await adapter.sendFormattedMessage(chatId, response, sendOpts);
 
   if (!sendResult.success) {
     logger.warn({ error: sendResult.error, chatId }, 'Failed to send response');

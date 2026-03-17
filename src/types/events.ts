@@ -1,8 +1,8 @@
 import type { LoadedAgent } from './agent.js';
 import type { UserSession } from './session.js';
 import type { ClaudeCabError } from './errors.js';
-import type { UnifiedMessage } from '../adapters/types.js';
-import type { ConnectionState } from '../adapters/ConnectionHealthMonitor.js';
+import type { UnifiedMessage } from './message.js';
+import type { ConnectionState } from './message.js';
 
 // ADR-019: ObserveMode removed - only @mentioned bot processes, no silent mode
 

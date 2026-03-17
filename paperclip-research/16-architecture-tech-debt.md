@@ -2,7 +2,7 @@
 
 > 日期：2026-03-16
 > 分支：feat/discord-company-platform
-> 狀態：待修復
+> 狀態：已修復（2026-03-16）
 
 ## 已發現的問題
 
@@ -155,3 +155,46 @@
 | 14. GroupBroadcaster 抽象化 | 平台無關的群組路由 | 3h |
 
 **總計預估：~16h**
+
+---
+
+## 修復結果（2026-03-16）
+
+### 第一波 P0：Core 管線統一
+
+| 任務 | 狀態 | 實際做法 |
+|------|------|---------|
+| 1+2. sendFormattedMessage | **完成** | BaseAdapter 新增 `sendFormattedMessage()`，TelegramAdapter override 帶 MarkdownV2→Markdown→plaintext fallback。替換 ResponseSender/MessageProcessor/ScheduleNotifier 共 6 處 `sendWithMarkdownFallback` 呼叫。不需要獨立 MessageFormatter.ts。 |
+| 3. ScheduleExecutor 改走 MessageProcessor | **設計決策：維持獨立管線** | `executeQueryWithSDK` 530 行深度耦合 chat 邏輯（typing/V2 resume/status/interaction handler）。Schedule 是 fire-and-forget，強制合併增加而非減少複雜度。實際修復：ScheduleNotifier 改用 sendFormattedMessage。 |
+| 4. buildPromptContext 平台參數 | **完成** | 新增 `platform?: string` 參數，hardcoded `telegram` 改為 `platform ?? 'telegram'`。 |
+
+### 第二波 P1：型別洩漏清理
+
+| 任務 | 狀態 | 實際做法 |
+|------|------|---------|
+| 5. Services 改依賴 BaseAdapter | **設計決策：保持 DiscordAdapter 依賴** | 4 個 Service 是 Discord Company Platform 功能，使用 EmbedBuilder/sendEmbed/createForumPost 等 discord.js API。提升到 BaseAdapter 會在 core 引入 discord.js 依賴。正確方向：未來移至 src/discord/。 |
+| 6. AppBootstrap instanceof | **完成** | TelegramAdapter import 移除。getBotInfo() 提升到 BaseAdapter（no-op 預設），TelegramAdapter override。3 處 instanceof 中 2 處改用 adapter.getBotInfo()，1 處改用 adapter.platform === 'discord'。 |
+| 7. as any → wirePostInit() | **完成** | MessageProcessor 新增 `wirePostInit({ taskService?, activityEventService? })`，ScheduleExecutor 新增 `wirePostInit({ activityEventService? })`。MessageProcessor 新增 `sdkSession` getter。AppBootstrap 零 `as any`。 |
+| 8. AgentCallService platform 預設值 | **完成** | 移除 'telegram' 預設值，加 warn log。clearAgentCallSession 改為 required 參數。notifyAgentTool 改為 always pass platform。 |
+
+### 第三波 P2：多平台支援補齊
+
+| 任務 | 狀態 | 實際做法 |
+|------|------|---------|
+| 9. WebUI messages.api | **完成** | /send 和 /chat 接受 `platform` request body 參數，預設 'telegram'。 |
+| 10. MonitoringService | **完成** | getBotStatus() 同時查詢 Telegram + Discord 兩個平台的 adapter 狀態。 |
+| 11. PlatformOrchestrator start/stop | **完成** | startBotForAgent/stopBotForAgent 新增 `platform` 參數，支援 Telegram + Discord。WebUI API 透傳 platform。 |
+| 12. StatusMessageManager Discord | **完成** | DiscordAdapter 新增 sendStatusMessage/updateStatusMessage，使用 discord.js message edit。`isStatusCapable` duck-typing 自動識別。 |
+| 13. WebUI 多平台顯示 | **完成** | agent detail/edit 路由傳遞 discordBotToken/discordChannelId。API list 新增 hasDiscordToken。 |
+
+### 第四波 P3：群組模式
+
+| 任務 | 狀態 | 實際做法 |
+|------|------|---------|
+| 14. GroupBroadcaster | **已是 platform-agnostic** | 零 Telegram/Discord import，透過 EventBus 接收事件。"Telegram" 只出現在註解。Discord 群組是新功能需求，非重構。 |
+
+### 額外修復
+
+| 任務 | 狀態 |
+|------|------|
+| A3. ScheduleManager platform 硬編碼 | **完成** — CreateScheduleOptions 新增 `notifyPlatform?`，ScheduleManager 使用 `options.notifyPlatform ?? 'telegram'` |

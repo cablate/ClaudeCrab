@@ -99,3 +99,9 @@ agents/*/evolution/
 _ProgramOwnProjectClaudeCab*/
 .spectra/
 openspec/.vector-search.db*
+
+# Vector memory databases (LanceDB runtime data)
+agents/*/.memory-db/
+
+# Generated images
+public/images/generated/

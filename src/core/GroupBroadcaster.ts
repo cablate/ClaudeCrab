@@ -129,6 +129,9 @@ export class GroupBroadcaster {
 
   private readonly log = logger.child({ module: 'GroupBroadcaster' });
 
+  /** Unsubscribe functions for EventBus listeners (cleanup in dispose) */
+  private readonly unsubscribers: Array<() => void> = [];
+
   constructor(options: GroupBroadcasterOptions) {
     this.messageProcessor = options.messageProcessor;
     this.getBotInfo = options.getBotInfo;
@@ -164,11 +167,15 @@ export class GroupBroadcaster {
       ...(options.getAgentName ? { getAgentName: options.getAgentName } : {}),
     });
 
-    // Listen to group:message events
-    getEventBus().on('group:message', this.handleGroupMessage.bind(this));
+    // Listen to group:message events (store unsubscriber for dispose)
+    this.unsubscribers.push(
+      getEventBus().on('group:message', this.handleGroupMessage.bind(this))
+    );
 
     // Listen to bot:replied events for recording replies to group_messages
-    getEventBus().on('bot:replied', this.handleBotReplied.bind(this));
+    this.unsubscribers.push(
+      getEventBus().on('bot:replied', this.handleBotReplied.bind(this))
+    );
 
     this.log.info('GroupBroadcaster initialized (ADR-019: no silent mode)');
   }
@@ -556,6 +563,10 @@ export class GroupBroadcaster {
    * Dispose resources
    */
   dispose(): void {
+    // Unsubscribe EventBus listeners to prevent leak
+    for (const unsub of this.unsubscribers) unsub();
+    this.unsubscribers.length = 0;
+
     this.groupMemberships.clear();
     this.perBotMessageIds.clear();
     this.processedMessages.clear();

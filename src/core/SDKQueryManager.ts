@@ -39,6 +39,9 @@ export interface QueryResult {
 
   /** Total cost in USD from SDK (ADR-020 Phase 2) */
   totalCostUsd?: number;
+
+  /** If true, usage values are already per-query deltas (V2 path). If false/undefined, they may be cumulative (V1 with resume). */
+  isUsageDelta?: boolean;
 }
 
 /**

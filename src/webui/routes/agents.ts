@@ -111,6 +111,8 @@ export function createAgentsRouter(): Router {
         description: agent.config.description ?? '',
         model: effectiveModel,
         telegramBotToken: agent.config.telegramBotToken ?? '',
+        discordBotToken: agent.config.discordBotToken ?? '',
+        discordChannelId: agent.config.discordChannelId ?? '',
         path: agent.path,
         // Model parameters
         maxTokens: agent.config.maxTokens ?? '',
@@ -244,6 +246,8 @@ export function createAgentsRouter(): Router {
       sessions,
       botStatus,
       telegramBotToken: agent.config.telegramBotToken ?? null,
+      discordBotToken: agent.config.discordBotToken ?? null,
+      discordChannelId: agent.config.discordChannelId ?? null,
       permissions,
     });
   });

@@ -663,11 +663,40 @@ export async function applyModelChange(
   return { success: true };
 }
 
+/**
+ * Handle /close command
+ * Closes the V2 persistent session (releases cli.js process) without clearing conversation.
+ * Next message will start a fresh session but conversation history is preserved.
+ */
+async function handleClose(
+  ctx: Context,
+  deps: CommandDependencies
+): Promise<void> {
+  const session = await getCurrentSession(ctx, deps);
+  if (session === undefined) {
+    await ctx.reply('ℹ️ 沒有找到 session。');
+    return;
+  }
+
+  try {
+    const closed = deps.messageProcessor.closeSession(session.sessionId);
+    if (closed) {
+      await ctx.reply('🔒 V2 session 已關閉。對話紀錄保留，下次訊息會建立新 session。');
+    } else {
+      await ctx.reply('ℹ️ 目前沒有活躍的 V2 session。');
+    }
+  } catch (error) {
+    logger.error({ error }, 'Failed to close session');
+    await ctx.reply('抱歉，關閉 session 失敗。');
+  }
+}
+
 export const COMMAND_HANDLERS: Record<string, CommandHandler> = {
   start: handleStart,
   help: handleHelp,
   reset: handleReset,
   stop: handleStop,
+  close: handleClose,
   schedule: handleSchedule,
   members: handleMembers,
   status: handleStatus,

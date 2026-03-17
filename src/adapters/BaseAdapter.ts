@@ -182,6 +182,27 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   ): Promise<SendResult>;
 
   /**
+   * Send a message with platform-aware markdown formatting.
+   * Each adapter handles its own conversion (e.g. Telegram MarkdownV2, Discord native markdown).
+   * Default implementation: sends raw text via sendMessage() — subclasses override as needed.
+   */
+  async sendFormattedMessage(
+    chatId: string,
+    text: string,
+    options?: SendOptions
+  ): Promise<SendResult> {
+    return this.sendMessage(chatId, text, options);
+  }
+
+  /**
+   * Get bot identity info (username, id). Override in platform-specific adapters.
+   * Used for group chat context injection and display.
+   */
+  getBotInfo(): { username: string; id: number } | null {
+    return null;
+  }
+
+  /**
    * Send a photo (image file) to the chat. Default no-op — subclasses override.
    */
   async sendPhoto(

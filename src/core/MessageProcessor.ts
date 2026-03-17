@@ -10,13 +10,13 @@ import { EventBus } from './EventBus.js';
 import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
-import { sendWithMarkdownFallback } from '../utils/telegramMarkdown.js';
+
 import {
   isNoiseResponse,
   sendFinalResponse,
   sendErrorToUser,
 } from './ResponseSender.js';
-import { buildMcpSetup } from './McpToolSetup.js';
+import { buildMcpSetup } from '../McpToolSetup.js';
 import { formatBotLabel } from '../utils/format.js';
 import {
   retryAsync,
@@ -188,8 +188,8 @@ export class MessageProcessor {
   private readonly ttsService: TTSService | undefined;
   private readonly budgetService: BudgetService | undefined;
   private readonly executionRecordRepository: ExecutionRecordRepository | undefined;
-  private readonly taskService: TaskService | undefined;
-  private readonly activityEventService: ActivityEventService | undefined;
+  private taskService: TaskService | undefined;
+  private activityEventService: ActivityEventService | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -213,6 +213,23 @@ export class MessageProcessor {
     this.activityEventService = options.activityEventService;
 
     logger.info('MessageProcessor initialized');
+  }
+
+  /**
+   * Wire late-bound dependencies that are created after MessageProcessor construction.
+   * Replaces the unsafe `(messageProcessor as any).prop = value` pattern.
+   */
+  wirePostInit(deps: {
+    taskService?: TaskService;
+    activityEventService?: ActivityEventService;
+  }): void {
+    if (deps.taskService !== undefined) this.taskService = deps.taskService;
+    if (deps.activityEventService !== undefined) this.activityEventService = deps.activityEventService;
+  }
+
+  /** Expose SDKSessionManager for external consumers (e.g. WebUI status endpoint). */
+  get sdkSession(): SDKSessionManager {
+    return this.sdkSessionManager;
   }
 
   /**
@@ -610,7 +627,7 @@ export class MessageProcessor {
 
       // Build MCP servers and allowed tools from available services
       // Pass sub-conversation context for cross-channel agent-call routing (platform-agnostic)
-      const mcpCtx: import('./McpToolSetup.js').McpSetupContext = {
+      const mcpCtx: import('../McpToolSetup.js').McpSetupContext = {
         agentId, chatId, userId, platform,
       };
       // If adapter provided parentConversationId, this is a sub-conversation (thread, etc.)
@@ -668,7 +685,7 @@ export class MessageProcessor {
                         textToSend = `🔗 _回覆 ${options.agentCallFrom} 的協作請求_\n\n${text}`;
                         agentCallPrefixApplied = true;
                       }
-                      const sendResult = await sendWithMarkdownFallback(adapter, chatId, textToSend, sendOpts);
+                      const sendResult = await adapter.sendFormattedMessage(chatId, textToSend, sendOpts);
                       if (sendResult.success && sendResult.messageId) {
                         lastSentMessageId = sendResult.messageId;
                       }
@@ -762,9 +779,7 @@ export class MessageProcessor {
                     agentCallPrefixApplied = true;
                   }
 
-                  const sendResult = await sendWithMarkdownFallback(
-                    adapter, chatId, textToSend, sendOpts
-                  );
+                  const sendResult = await adapter.sendFormattedMessage(chatId, textToSend, sendOpts);
 
                   if (!sendResult.success) {
                     logger.warn(
@@ -1063,16 +1078,50 @@ export class MessageProcessor {
     if (!this.queryMetricsRepository || !result.usage) return;
 
     try {
+      let deltaInput = result.usage.inputTokens;
+      let deltaOutput = result.usage.outputTokens;
+      let deltaCacheRead = result.usage.cacheReadInputTokens;
+      let deltaCacheCreate = result.usage.cacheCreationInputTokens;
+      let deltaCost = result.totalCostUsd ?? result.usage.costUsd;
+
+      // V2 path: usage is already per-query delta (SDKSessionManager computed it).
+      // V1 path (resume): SDK reports CUMULATIVE usage across the full conversation.
+      //   → compute delta from session's previous snapshot.
+      if (result.isUsageDelta !== true) {
+        const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
+        const prev = internalSession?.prevUsage;
+
+        if (prev !== undefined) {
+          deltaInput = Math.max(0, deltaInput - prev.inputTokens);
+          deltaOutput = Math.max(0, deltaOutput - prev.outputTokens);
+          deltaCacheRead = Math.max(0, deltaCacheRead - prev.cacheReadInputTokens);
+          deltaCacheCreate = Math.max(0, deltaCacheCreate - prev.cacheCreationInputTokens);
+          deltaCost = Math.max(0, deltaCost - prev.totalCostUsd);
+        }
+
+        // Update snapshot for next V1 query
+        if (internalSession !== undefined) {
+          internalSession.prevUsage = {
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            cacheReadInputTokens: result.usage.cacheReadInputTokens,
+            cacheCreationInputTokens: result.usage.cacheCreationInputTokens,
+            costUsd: result.usage.costUsd,
+            totalCostUsd: result.totalCostUsd ?? result.usage.costUsd,
+          };
+        }
+      }
+
       this.queryMetricsRepository.record({
         agentId,
         platform,
         chatId,
         userId,
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
-        cacheReadTokens: result.usage.cacheReadInputTokens,
-        cacheCreationTokens: result.usage.cacheCreationInputTokens,
-        totalCostUsd: result.totalCostUsd ?? result.usage.costUsd,
+        inputTokens: deltaInput,
+        outputTokens: deltaOutput,
+        cacheReadTokens: deltaCacheRead,
+        cacheCreationTokens: deltaCacheCreate,
+        totalCostUsd: deltaCost,
         numTurns: result.numTurns ?? 0,
         durationMs: result.durationMs ?? 0,
       });
@@ -1278,6 +1327,13 @@ export class MessageProcessor {
    */
   clearConversation(sessionId: string): void {
     const { platform, agentId, userId } = this.getSessionIdentifiers(sessionId);
+
+    // Destroy V2 persistent session (kills cli.js process) before clearing session key
+    const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
+    if (internalSession?.sdkSessionId !== undefined) {
+      this.sdkSessionManager.destroySession(internalSession.sdkSessionId);
+    }
+
     this.sessionManager.setSdkSessionId(platform, agentId, userId, undefined);
 
     if (this.conversationRepository !== undefined) {
@@ -1286,8 +1342,27 @@ export class MessageProcessor {
 
     logger.debug(
       { sessionId },
-      'Cleared conversation (SDK session + persisted messages)'
+      'Cleared conversation (V2 session destroyed + SDK session + persisted messages)'
     );
+  }
+
+  /**
+   * Close the V2 persistent session (kill cli.js process) without clearing conversation history.
+   * Used by /close command — releases resources while keeping context for future resume.
+   * Returns true if a V2 session was active and destroyed.
+   */
+  closeSession(sessionId: string): boolean {
+    const { platform, agentId, userId } = this.getSessionIdentifiers(sessionId);
+    const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
+
+    if (internalSession?.sdkSessionId !== undefined) {
+      // Only destroy V2 process — keep sdkSessionId so next message can resume
+      this.sdkSessionManager.destroySession(internalSession.sdkSessionId);
+      // sdkSessionId is preserved → next query will use resume: sdkSessionId → conversation continues
+      logger.info({ sessionId, sdkSessionId: internalSession.sdkSessionId }, 'V2 process closed (sdkSessionId preserved for resume)');
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1295,10 +1370,16 @@ export class MessageProcessor {
    * Returns true if a query was cancelled, false if no active query was found.
    */
   cancelQuery(sessionId: string): boolean {
-    const hasActive = this.sdkQueryManager.hasActiveQuery(sessionId);
-    if (hasActive) {
+    // Try V1 (SDKQueryManager) first
+    if (this.sdkQueryManager.hasActiveQuery(sessionId)) {
       this.sdkQueryManager.cancelQuery(sessionId);
-      logger.info({ sessionId }, 'Cancelled active query');
+      logger.info({ sessionId }, 'Cancelled active V1 query');
+      return true;
+    }
+    // Try V2 (SDKSessionManager) — close the session to abort
+    if (this.sdkSessionManager.hasSession(sessionId)) {
+      this.sdkSessionManager.destroySession(sessionId);
+      logger.info({ sessionId }, 'Cancelled active V2 session');
       return true;
     }
     return false;

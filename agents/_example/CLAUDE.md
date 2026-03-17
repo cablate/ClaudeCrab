@@ -7,10 +7,9 @@
 ## 共用規則
 
 @.claude/rules/startup-protocol.md
-@.claude/rules/observe-user.md
 @.claude/rules/skill-usage.md
 @.claude/rules/serena-tools.md
-@.claude/rules/self-evolution.md
+@.claude/rules/permissions.md
 
 ---
 

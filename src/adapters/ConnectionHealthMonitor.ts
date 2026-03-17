@@ -4,7 +4,9 @@
  * to derive an overall connection state: healthy / degraded / unhealthy.
  */
 
-export type ConnectionState = 'healthy' | 'degraded' | 'unhealthy';
+// Canonical definition in src/types/message.ts
+import type { ConnectionState } from '../types/message.js';
+export type { ConnectionState };
 
 export interface ConnectionHealthConfig {
   /** P95 above this → degraded (ms). Default 3000 */

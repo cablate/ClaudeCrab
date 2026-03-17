@@ -64,7 +64,9 @@ export function buildPromptContext(
   chatId?: string,
   isNewSession?: boolean,
   /** Group chat ID when in a group chat (ADR-020) */
-  groupChatId?: string
+  groupChatId?: string,
+  /** Platform identifier (defaults to 'telegram' for backward compat) */
+  platform?: string
 ): string {
   const now = toZonedTime(new Date(), TAIPEI_TZ);
   const yesterday = subDays(now, 1);
@@ -98,7 +100,7 @@ export function buildPromptContext(
   }
 
   if (chatId) {
-    context += `\n【當前對話】platform: telegram, chatId: ${chatId}`;
+    context += `\n【當前對話】platform: ${platform ?? 'telegram'}, chatId: ${chatId}`;
   }
 
   // Always remind agents to check for applicable skills

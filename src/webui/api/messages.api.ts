@@ -7,8 +7,9 @@ import { loadSecurityConfig } from '../../utils/security.js';
 import { logger } from '../../utils/logger.js';
 
 /**
- * Web UI message sending API — shares the same session as Telegram private chat.
- * Uses platform='telegram' + userId=ALLOWED_USERS[0] so session key is identical.
+ * Web UI message sending API — shares the same session as the specified platform's private chat.
+ * Default: platform='telegram' + userId=ALLOWED_USERS[0] so session key is identical to Telegram.
+ * Accepts optional `platform` parameter in request body to route to Discord or other adapters.
  */
 export function createMessagesApiRouter(
   messageProcessor: MessageProcessor,
@@ -25,7 +26,7 @@ export function createMessagesApiRouter(
   }
 
   router.post('/send', async (req: Request, res: Response) => {
-    const { agentId, text } = req.body;
+    const { agentId, text, platform: requestPlatform } = req.body;
 
     if (!agentId || !text) {
       res.status(400).json({ error: 'Missing required fields: agentId, text' });
@@ -44,11 +45,12 @@ export function createMessagesApiRouter(
       return;
     }
 
-    // Build UnifiedMessage — identical to Telegram private chat message
-    // This ensures the same session key: telegram::agentId::ownerUserId
+    // Build UnifiedMessage — defaults to Telegram private chat session key
+    // When platform is specified, routes to that platform's adapter
+    const platform = typeof requestPlatform === 'string' ? requestPlatform : 'telegram';
     const message: UnifiedMessage = {
       id: `web-${Date.now()}`,
-      platform: 'telegram',
+      platform,
       userId: ownerUserId,
       chatId: ownerUserId,
       text,
@@ -68,7 +70,7 @@ export function createMessagesApiRouter(
    * Response: { message: string }
    */
   router.post('/chat', async (req: Request, res: Response) => {
-    const { agentId, text } = req.body;
+    const { agentId, text, platform: requestPlatform } = req.body;
 
     if (!agentId || !text) {
       res.status(400).json({ error: 'Missing required fields: agentId, text' });
@@ -86,9 +88,10 @@ export function createMessagesApiRouter(
       return;
     }
 
+    const platform = typeof requestPlatform === 'string' ? requestPlatform : 'telegram';
     const message: UnifiedMessage = {
       id: `api-${Date.now()}`,
-      platform: 'telegram',
+      platform,
       userId: ownerUserId,
       chatId: ownerUserId,
       text,
@@ -152,6 +155,28 @@ export function createMessagesApiRouter(
     } else {
       bridge.resolveQuestion(requestId, { answer });
     }
+
+    res.json({ success: true });
+  });
+
+  router.post('/resolve-plan', (req: Request, res: Response) => {
+    const { requestId, decision } = req.body as { requestId?: string; decision?: string };
+
+    if (!requestId || !decision) {
+      res.status(400).json({ error: 'Missing requestId or decision' });
+      return;
+    }
+
+    const bridge = InteractionHandler.exitPlanModeRegistry.get(requestId);
+    if (!bridge) {
+      res.status(404).json({ error: 'Plan review request not found or already resolved' });
+      return;
+    }
+
+    bridge.resolveReview(requestId, {
+      approved: decision === 'approve',
+      ...(decision !== 'approve' ? { message: 'Rejected from Web UI' } : {}),
+    });
 
     res.json({ success: true });
   });

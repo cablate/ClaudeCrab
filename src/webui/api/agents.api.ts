@@ -156,6 +156,7 @@ export function createAgentsApiRouter(): Router {
         model: agent?.config.model ?? 'sonnet',
         botStatus: adapters.map((a) => ({ platform: a.platform, status: a.status })),
         hasBotToken: agent?.config.telegramBotToken !== undefined,
+        hasDiscordToken: agent?.config.discordBotToken !== undefined,
       };
     });
 
@@ -611,8 +612,9 @@ export function createAgentsApiRouter(): Router {
     }
 
     try {
-      await platformOrchestrator.startBotForAgent(id);
-      const status = platformOrchestrator.getBotStatusForAgent(id);
+      const platform = (req.body?.platform as 'telegram' | 'discord') ?? 'telegram';
+      await platformOrchestrator.startBotForAgent(id, platform);
+      const status = platformOrchestrator.getBotStatusForAgent(id, platform);
       res.json({
         success: true,
         message: `Bot started for agent "${id}"`,
@@ -644,8 +646,9 @@ export function createAgentsApiRouter(): Router {
     }
 
     try {
-      await platformOrchestrator.stopBotForAgent(id);
-      const status = platformOrchestrator.getBotStatusForAgent(id);
+      const platform = (req.body?.platform as 'telegram' | 'discord') ?? 'telegram';
+      await platformOrchestrator.stopBotForAgent(id, platform);
+      const status = platformOrchestrator.getBotStatusForAgent(id, platform);
       res.json({
         success: true,
         message: `Bot stopped for agent "${id}"`,

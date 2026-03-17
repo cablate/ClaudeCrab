@@ -25,6 +25,16 @@ import {
 /**
  * Internal session data with mutex for concurrency control
  */
+/** Cumulative usage snapshot for per-query delta calculation */
+export interface UsageSnapshot {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  costUsd: number;
+  totalCostUsd: number;
+}
+
 interface InternalSession extends UserSession {
   /** Mutex for preventing concurrent message processing */
   mutex: Mutex;
@@ -32,6 +42,8 @@ interface InternalSession extends UserSession {
   agent: LoadedAgent;
   /** SDK options for this session */
   sdkOptions: SDKOptions;
+  /** Previous cumulative usage — for computing per-query delta (V1 resume also reports cumulative) */
+  prevUsage?: UsageSnapshot;
 }
 
 /**

@@ -69,68 +69,8 @@ Code Review 不只是找 bug，更要審視整體品質：
 
 ---
 
-## 實戰案例：金流專案 Code Review（2026-02-20）
+## 參考文件
 
-### 發現的問題
-
-| 問題 | 檔案 | 處理 |
-|------|------|------|
-| 死碼（JS） | `app.js` (~320 行) | 刪除 — 沒有任何 HTML 載入 |
-| 死碼（CSS） | `style.css` (~300 行) | 刪除 — 舊 Dark Mode 主題 |
-| 死碼（CSS） | `landing.css` (~200 行) | 刪除 — 舊 Landing Page |
-| 重複邏輯 | `checkLoginStatus()` 出現 3 處 | 統一到 `auth.js` 並 export |
-| 重複邏輯 | `formatDate()` 有 2 種實作 | 統一到 `ui.js` |
-| 重複邏輯 | `showLoading/hideLoading` 3 處 | 統一到 `ui.js` |
-
-### 成果
-
-- 刪除 ~820 行死碼/重複代碼
-- 統一模組化結構
-- Commit: `1b7ece0`
-
----
-
-## 什麼時候載入這個 Skill
-
-- 要對一個專案做 Code Review
-- 要清理 legacy code
-- 要評估程式碼品質
-- 被問「這個 codebase 乾淨嗎」
-
----
-
-## 實戰案例：Skill 文件 Review（2026-02-22）
-
-### 對象
-
-dom-remotion-mastery Skill（6 個文件）
-
-### Review 方式
-
-對文件型 Skill 做 Review，檢查維度不同於程式碼：
-
-| 維度 | 檢查項 |
-|------|--------|
-| **死連結** | 引用的檔案/模板是否存在？ |
-| **內容重複** | 是否有不必要的重複？有意重複是否有意義？ |
-| **缺失內容** | 宣稱的能力範圍有沒有漏掉的？ |
-| **實用性** | 能否直接用來完成任務？ |
-
-### 發現
-
-| 問題 | 說明 |
+| 文件 | 內容 |
 |------|------|
-| 死連結 | ✅ 無 — 所有參考模板都存在 |
-| 有意重複 | ✅ 合理 — SKILL.md 速查 vs reference 詳細脈絡 |
-| 缺失 | ⚠️ 音訊整合、Debug 指南、完整分鏡模板 |
-
-### 結論
-
-文件型 Skill 的 Review 重點：
-1. **入口點追蹤** — 從 SKILL.md 追蹤所有引用是否存在
-2. **能力宣稱驗證** — 宣稱的能力是否有對應內容支撐
-3. **實戰驗證** — 真正用一次才知道缺什麼
-
----
-
-*來源：2026-02-20 金流專案 Code Review 經驗、2026-02-22 Skill 文件 Review 經驗*
+| [case-studies.md](references/case-studies.md) | 實戰案例（金流專案 Review、Skill 文件 Review） |

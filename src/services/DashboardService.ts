@@ -66,6 +66,27 @@ export class DashboardService {
   async start(): Promise<void> {
     log.info({ channelId: this.channelId }, 'Starting DashboardService');
 
+    // Try to find and reuse the last dashboard embed (avoids duplicate on restart)
+    try {
+      const client = this.adapter.getClient();
+      if (client !== null) {
+        const channel = await client.channels.fetch(this.channelId);
+        if (channel !== null && channel.isTextBased() && 'messages' in channel) {
+          const recent = await (channel as import('discord.js').TextChannel).messages.fetch({ limit: 10 });
+          const botId = client.user?.id;
+          const existing = recent.find(
+            (m) => m.author.id === botId && m.embeds.length > 0
+          );
+          if (existing !== undefined) {
+            this.dashboardMessageId = existing.id;
+            log.info({ messageId: existing.id }, 'Recovered existing dashboard message (will edit instead of create)');
+          }
+        }
+      }
+    } catch (err) {
+      log.debug({ err }, 'Could not recover dashboard message, will create new');
+    }
+
     await this.update();
 
     this.updateTimer = setInterval(() => {

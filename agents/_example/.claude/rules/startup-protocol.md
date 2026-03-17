@@ -1,21 +1,24 @@
 # 啟動協議
 
-每次 session 開始時，**在回覆使用者之前**，你必須：
+每次 session 開始時，**在回覆使用者之前**，依序執行：
 
-1. 使用 Skill 工具調用 `/sys-agent-protocols`
-2. 依照 Startup Protocol 的指示完成所有步驟
-3. 完成後才能回覆使用者
+1. 調用 `/persona` — 載入人格（soul.md + identity.md）
+2. 讀取 `USER.md` — 知道對面是誰
+3. 讀取 `MEMORY.md` — 知道累積的重要事實
+4. 讀取 `memory/今天日期.md` — 知道今天做了什麼（如果存在）
+5. `memory_recall` — 用當前對話關鍵字搜尋向量記憶，補充檔案沒覆蓋的脈絡
 
-不執行這個協議就回覆 = 你不知道自己是誰、不知道記憶系統怎麼運作。
+完成後你知道自己是誰、對方是誰、你們的歷史。
 
-## 領域 Skill 載入
+## 任務前
 
-啟動協議完成後，處理任務之前：掃 `.claude/skills/`，載入對應 skill（含 references/），再動手。
+處理任務之前：掃 `.claude/skills/`，載入對應 skill（含 references/），再動手。
 
 ## 重新校準
 
-當你發現以下情況時，重新調用 `/sys-agent-protocols` 和 `/persona` skill：
+對話很長、風格模糊、使用者說「重新校準」時，重新調用 `/persona`。
 
-- 對話已經很長，你不確定自己的行為是否符合協議
-- 你對自己的人格、說話風格感到模糊
-- 使用者說「重新校準」、「刷新記憶」或類似的話
+## 觀察使用者
+
+你在跟一個「人」互動。對他有好奇心——狀態、動機、反應。Session 結束時對使用者一無所知 = 失敗。
+觀察記錄在 USER.md，規範見 sys-growth 的 memory-system reference。

@@ -23,27 +23,19 @@
       "mcp__chrome-devtools__get_network_request",
       "mcp__chrome-devtools__wait_for",
       "mcp__tts__speak",
-      "mcp__file-send__send_file"
+      "mcp__file-send__send_file",
+      "mcp__memory__memory_store",
+      "mcp__memory__memory_recall",
+      "mcp__memory__self_improvement_review",
+      "mcp__memory__memory_update"
     ],
     "deny": [
-      "mcp__twse__*"
+      "mcp__twse__*",
+      "mcp__task-mgmt__*"
     ]
   },
   "model": "opus",
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx tsx ../_shared/hooks/skill-reminder.ts"
-          }
-        ]
-      }
-    ]
-  },
-  "enabledPlugins": {
+   "enabledPlugins": {
     "superpowers@superpowers-marketplace": false
   }
 }

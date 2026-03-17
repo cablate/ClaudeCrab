@@ -163,21 +163,32 @@ export class MonitoringService {
       const agent = this.agentLoader.get(agentId);
       if (agent === undefined) continue;
 
-      let status: 'running' | 'stopped' | 'error' | 'no-token' = 'no-token';
-
+      // Telegram status
+      let telegramStatus: 'running' | 'stopped' | 'error' | 'no-token' = 'no-token';
       if (agent.config.telegramBotToken !== undefined) {
-        if (this.platformOrchestrator !== undefined) {
-          status = this.platformOrchestrator.getBotStatusForAgent(agentId);
-        } else {
-          status = 'stopped';
-        }
+        telegramStatus = this.platformOrchestrator !== undefined
+          ? this.platformOrchestrator.getBotStatusForAgent(agentId, 'telegram')
+          : 'stopped';
       }
-
       result.push({
         agentId,
         agentName: agent.config.name,
         platform: 'telegram',
-        status,
+        status: telegramStatus,
+      });
+
+      // Discord status
+      let discordStatus: 'running' | 'stopped' | 'error' | 'no-token' = 'no-token';
+      if (agent.config.discordBotToken !== undefined && agent.config.discordChannelId !== undefined) {
+        discordStatus = this.platformOrchestrator !== undefined
+          ? this.platformOrchestrator.getBotStatusForAgent(agentId, 'discord')
+          : 'stopped';
+      }
+      result.push({
+        agentId,
+        agentName: agent.config.name,
+        platform: 'discord',
+        status: discordStatus,
       });
     }
 

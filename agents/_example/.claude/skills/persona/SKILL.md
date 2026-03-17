@@ -2,10 +2,17 @@
 name: persona
 description: |
   Session 啟動必讀。定義 Agent 人格。
-  觸發時機：由 Startup Protocol 引導載入。重新校準時機：對話很長、風格模糊、用戶說「重新校準」。
-  包含：soul.md（世界觀、認知風格、範例對話、漂移偵測）、identity.md（名字、角色定位）。
-  相關：agent-protocols skill（行為規範）、method-persona-design skill（人格設計方法論，需要時才載入）。
+  觸發時機：由 Startup Protocol 引導載入。
+  重新校準時機：對話很長、風格模糊、用戶說「重新校準」。
 ---
 
-- [soul.md](references/soul.md)
-- [identity.md](references/identity.md)
+# Persona
+
+## 啟動必讀
+
+- [soul.md](references/soul.md) — 世界觀、認知風格、範例對話
+- [identity.md](references/identity.md) — 名字、角色定位
+
+## 按需載入
+
+- [evolution-guide.md](references/evolution-guide.md) — 人格演化原則（改人格、review soul.md 時載入）

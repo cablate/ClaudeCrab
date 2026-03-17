@@ -8,6 +8,66 @@
 
 ## 版本歷史
 
+### v1.48 - 架構技術債修復（多平台管線統一）
+
+**發布日期**：2026-03-16
+
+**背景**：
+- Discord Company Platform 整合後，Core 層存在大量 Telegram-specific 硬編碼
+- `sendWithMarkdownFallback` 在 Core/Schedule 層直接使用 Telegram MarkdownV2 轉換
+- AppBootstrap 用 `instanceof TelegramAdapter`（4 處）、`as any`（4 處）繞過型別系統
+- WebUI/Schedule/AgentCall 的 platform 寫死 'telegram'
+
+**修復項目（18 個問題，14 個任務）**：
+
+1. **BaseAdapter.sendFormattedMessage()**
+   - 平台感知格式化發送，取代 `sendWithMarkdownFallback`（6 處→0 處）
+   - TelegramAdapter override: MarkdownV2 → Markdown → plaintext fallback
+   - DiscordAdapter: 繼承預設（原生 markdown，不需轉換）
+
+2. **BaseAdapter.getBotInfo()**
+   - 通用 bot 身份查詢，取代 `instanceof TelegramAdapter`（4 處→0 處）
+   - TelegramAdapter override 回傳 `{ username, id }`
+
+3. **MessageProcessor.wirePostInit() + sdkSession getter**
+   - 取代 `(messageProcessor as any).prop = value`（4 處→0 處）
+   - Late-bound dependency injection: `taskService`, `activityEventService`
+
+4. **ScheduleExecutor.wirePostInit()**
+   - 取代 `(this.scheduleExecutor as any).activityEventService`
+
+5. **buildPromptContext 平台參數**
+   - 新增 `platform?: string`，不再寫死 'telegram'
+
+6. **PlatformOrchestrator start/stop 多平台**
+   - `startBotForAgent(id, platform)` / `stopBotForAgent(id, platform)` 支援 Discord
+
+7. **DiscordAdapter StatusMessage 支援**
+   - 新增 `sendStatusMessage()` / `updateStatusMessage()`
+   - `isStatusCapable` duck-typing 自動識別
+
+8. **WebUI 多平台**
+   - `messages.api.ts`: /send, /chat 接受 `platform` 參數
+   - `MonitoringService`: 同時查詢 Telegram + Discord 狀態
+   - `agents.api.ts`: bot start/stop 透傳 platform, list +`hasDiscordToken`
+   - `agents.ts` routes: detail/edit 傳遞 Discord config
+
+9. **Platform 硬編碼清理**
+   - `AgentCallService`: 移除 'telegram' 預設值, +warning log
+   - `ScheduleManager`: 新增 `notifyPlatform` 選項
+   - `ScheduleExecutor`: buildPromptContext 傳入 platform
+
+**設計決策**：
+- ScheduleExecutor 維持獨立管線（不強制走 MessageProcessor，因 530 行 chat 邏輯不適用 schedule）
+- Services 層保持 DiscordAdapter 依賴（Discord Company Platform 功能本質上是 Discord-specific）
+- GroupBroadcaster 已是 platform-agnostic（零 Telegram import）
+
+**修改檔案**：18 個 src/ 檔案
+
+**研究文件**：`paperclip-research/16-architecture-tech-debt.md`（含完整修復結果表格）
+
+---
+
 ### v1.47 - SDK V2 Persistent Session（Token 消耗優化）
 
 **發布日期**：2026-03-15

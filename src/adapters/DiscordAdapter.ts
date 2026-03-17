@@ -68,6 +68,8 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   private readonly securityConfig: SecurityConfig;
   private boundMessageHandler: ((message: DiscordMessage) => void) | null =
     null;
+  private boundInteractionHandler: ((interaction: import('discord.js').Interaction) => void) | null =
+    null;
 
   // Interactive prompt resolvers (mirrors TelegramAdapter pattern)
   private permissionResolver: PermissionResolver | null = null;
@@ -141,16 +143,41 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     };
 
     this.client.on('messageCreate', this.boundMessageHandler);
+
+    // Listen for button interactions on THIS bot's client
+    // (Discord routes interactions to the bot that sent the message with buttons)
+    this.boundInteractionHandler = (interaction) => {
+      if (!interaction.isButton()) return;
+      void (async () => {
+        try {
+          await interaction.deferUpdate();
+        } catch { /* already acknowledged */ }
+        const handled = this.handleButtonInteraction(interaction.customId);
+        if (handled) {
+          try { await interaction.editReply({ components: [] }); } catch { /* best effort */ }
+        }
+      })().catch((err) => {
+        this.log.error({ err }, 'Error handling button interaction');
+      });
+    };
+    this.client.on('interactionCreate', this.boundInteractionHandler);
+
     this.log.info(
       { channelId: this.channelId },
-      'Discord adapter listening for messages'
+      'Discord adapter listening for messages and interactions'
     );
   }
 
   protected async doStop(): Promise<void> {
-    if (this.client !== null && this.boundMessageHandler !== null) {
-      this.client.removeListener('messageCreate', this.boundMessageHandler);
-      this.boundMessageHandler = null;
+    if (this.client !== null) {
+      if (this.boundMessageHandler !== null) {
+        this.client.removeListener('messageCreate', this.boundMessageHandler);
+        this.boundMessageHandler = null;
+      }
+      if (this.boundInteractionHandler !== null) {
+        this.client.removeListener('interactionCreate', this.boundInteractionHandler);
+        this.boundInteractionHandler = null;
+      }
     }
   }
 
@@ -186,9 +213,31 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     const userId = message.author.id;
-    const text = message.content;
+    let text = message.content;
 
-    // Skip empty messages (attachments only, etc.)
+    // If message body is empty but has a .txt attachment, extract text from it.
+    // Discord converts long messages (>2000 chars) into .txt file attachments.
+    if (text.length === 0 && message.attachments.size > 0) {
+      const txtAttachment = message.attachments.find(
+        (a) => a.name?.endsWith('.txt') && a.contentType?.startsWith('text/')
+      );
+      if (txtAttachment?.url) {
+        try {
+          const response = await fetch(txtAttachment.url);
+          if (response.ok) {
+            text = await response.text();
+            this.log.info(
+              { userId, fileName: txtAttachment.name, size: txtAttachment.size },
+              'Extracted text from .txt attachment'
+            );
+          }
+        } catch (err) {
+          this.log.warn({ err, url: txtAttachment.url }, 'Failed to fetch .txt attachment');
+        }
+      }
+    }
+
+    // Skip if still empty after attachment check
     if (text.length === 0) {
       return;
     }
@@ -277,6 +326,18 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     });
   }
 
+
+  /**
+   * Get bot identity info from Discord client.
+   * Returns username and numeric id (snowflake converted to number for interface compat).
+   */
+  override getBotInfo(): { username: string; id: number } | null {
+    const user = this.client?.user;
+    if (user === null || user === undefined) return null;
+    // Discord snowflake IDs exceed Number.MAX_SAFE_INTEGER; use lower bits for compat
+    return { username: user.username, id: Number(BigInt(user.id) & BigInt(0x7FFFFFFF)) };
+  }
+
   async sendMessage(
     chatId: string,
     text: string,
@@ -312,6 +373,57 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
         error instanceof Error ? error.message : String(error);
       this.log.error({ error, chatId }, 'Failed to send Discord message');
       return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Send a status message (for StatusMessageManager support).
+   */
+  async sendStatusMessage(
+    chatId: string,
+    initialText: string = '🔄 處理中...'
+  ): Promise<string | null> {
+    try {
+      const targetChannel = chatId !== this.channelId
+        ? await this.resolveTextOrThread(chatId)
+        : this.channel;
+
+      if (targetChannel === null) return null;
+
+      // Wrap in code block to prevent Discord markdown rendering
+      const msg = await targetChannel.send(`\`\`\`\n${initialText}\n\`\`\``);
+      return msg.id;
+    } catch (error) {
+      this.log.warn({ error, chatId }, 'Failed to send status message');
+      return null;
+    }
+  }
+
+  /**
+   * Update a status message in-place (for StatusMessageManager support).
+   */
+  async updateStatusMessage(
+    chatId: string,
+    messageId: string,
+    text: string
+  ): Promise<boolean> {
+    try {
+      const targetChannel = chatId !== this.channelId
+        ? await this.resolveTextOrThread(chatId)
+        : this.channel;
+
+      if (targetChannel === null) return false;
+
+      const msg = await targetChannel.messages.fetch(messageId);
+      // Wrap in code block to prevent Discord markdown rendering
+      await msg.edit(`\`\`\`\n${text}\n\`\`\``);
+      return true;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (!errorMsg.includes('Unknown Message')) {
+        this.log.warn({ error, chatId, messageId }, 'Failed to update status message');
+      }
+      return false;
     }
   }
 
@@ -635,7 +747,8 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       let currentRow = new ActionRowBuilder<ButtonBuilder>();
       let btnCount = 0;
 
-      for (const opt of options.options) {
+      for (let i = 0; i < options.options.length; i++) {
+        const opt = options.options[i]!;
         if (btnCount >= 5) {
           rows.push(currentRow);
           currentRow = new ActionRowBuilder<ButtonBuilder>();
@@ -644,7 +757,8 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
         }
         currentRow.addComponents(
           new ButtonBuilder()
-            .setCustomId(`question:${options.requestId}:${opt.label}`)
+            // Send index (same as Telegram) — InteractionHandler expects parseInt-able value
+            .setCustomId(`question:${options.requestId}:${i}`)
             .setLabel(opt.label.slice(0, 80))
             .setStyle(2) // Secondary
         );
@@ -767,11 +881,11 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     if (type === 'question' && this.questionResolver !== null) {
-      // For question buttons: customId = "question:<requestId>:<label>"
+      // For question buttons: customId = "question:<requestId>:<index>"
       const questionRequestId = parts[1];
-      const label = parts.slice(2).join(':'); // label might contain colons
-      if (questionRequestId !== undefined) {
-        this.questionResolver(questionRequestId, label);
+      const optionIndex = parts[2]; // index string, parsed by InteractionHandler
+      if (questionRequestId !== undefined && optionIndex !== undefined) {
+        this.questionResolver(questionRequestId, optionIndex);
       }
       return true;
     }

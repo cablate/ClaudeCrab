@@ -23,37 +23,14 @@
       "mcp__chrome-devtools__get_network_request",
       "mcp__chrome-devtools__wait_for",
       "mcp__tts__speak",
-      "mcp__file-send__send_file"
+      "mcp__file-send__send_file",
+      "mcp__memory__*"
     ],
     "deny": [
       "mcp__twse__*"
     ]
   },
   "model": "opus",
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|Bash|Read|Glob|Grep",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx tsx ./.claude/hooks/project-whitelist.ts"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx tsx ../_shared/hooks/skill-reminder.ts"
-          }
-        ]
-      }
-    ]
-  },
   "enabledPlugins": {
     "superpowers@superpowers-marketplace": true
   }

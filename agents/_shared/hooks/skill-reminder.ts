@@ -6,5 +6,5 @@
 
 console.log(JSON.stringify({
   decision: "approve",
-  reason: "【Skill】你有專屬領域 skill。任務前掃 .claude/skills/，載入對應 skill（含 references/），再動手。不讀 skill 的你跟通用 AI 沒有差別。"
+  reason: "⚠️ 動手前先載入對應 skill（含 references/）。不要合理化跳過。"
 }));

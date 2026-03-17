@@ -79,6 +79,10 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
       ) as SlashCommandBuilder,
 
     new SlashCommandBuilder()
+      .setName('close')
+      .setDescription('關閉 V2 session（釋放資源，保留對話紀錄）'),
+
+    new SlashCommandBuilder()
       .setName('restart')
       .setDescription('重啟 ClaudeCab（先跑 tsc 檢查，通過才重啟）'),
 
@@ -139,6 +143,41 @@ export async function registerSlashCommands(
 /**
  * Handle a slash command interaction.
  */
+
+async function handleClose(
+  interaction: ChatInputCommandInteraction,
+  deps: SlashCommandDependencies,
+): Promise<void> {
+  const userId = interaction.user.id;
+  const channelId = interaction.channelId;
+  const isThread = interaction.channel?.isThread() ?? false;
+
+  // Thread sessions use userId::thread::threadId as session key
+  const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;
+
+  // Find agent for this channel (check parent for threads)
+  const parentChannelId = isThread && interaction.channel?.isThread()
+    ? interaction.channel.parentId
+    : channelId;
+
+  const agentId = deps.agentLoader.list().find(id => {
+    const agent = deps.agentLoader.get(id);
+    return agent?.config.discordChannelId === parentChannelId;
+  });
+
+  if (agentId === undefined) {
+    await interaction.reply({ content: 'ℹ️ 找不到此頻道的 Agent。', ephemeral: true });
+    return;
+  }
+
+  const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
+  if (session !== undefined && deps.messageProcessor.closeSession(session.sessionId)) {
+    await interaction.reply({ content: '🔒 V2 session 已關閉。對話紀錄保留，下次訊息會建立新 session。', ephemeral: true });
+  } else {
+    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 V2 session。', ephemeral: true });
+  }
+}
+
 export async function handleSlashCommand(
   interaction: ChatInputCommandInteraction,
   deps: SlashCommandDependencies,
@@ -164,6 +203,9 @@ export async function handleSlashCommand(
         break;
       case 'stop':
         await handleStop(interaction, deps);
+        break;
+      case 'close':
+        await handleClose(interaction, deps);
         break;
       case 'ctx':
         await handleCtx(interaction, deps);
@@ -259,21 +301,33 @@ async function handleReset(
 
   const agentId = interaction.options.getString('agent');
   const userId = interaction.user.id;
+  const channelId = interaction.channelId;
+  const isThread = interaction.channel?.isThread() ?? false;
+
+  // Thread sessions use userId::thread::threadId as session key
+  const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;
 
   if (agentId !== null) {
-    // Reset specific agent
     if (!deps.agentLoader.has(agentId)) {
       await interaction.editReply(`❌ Agent「${agentId}」不存在`);
       return;
     }
-    deps.sessionManager.setSdkSessionId('discord', agentId, userId, undefined);
-    await interaction.editReply(`✅ 已重置與 **${agentId}** 的對話`);
-  } else {
-    // Reset all agents for this user on discord
-    for (const id of deps.agentLoader.list()) {
-      deps.sessionManager.setSdkSessionId('discord', id, userId, undefined);
+    const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
+    if (session !== undefined) {
+      deps.messageProcessor.clearConversation(session.sessionId);
     }
-    await interaction.editReply('✅ 已重置所有 Agent 的 Discord 對話');
+    await interaction.editReply(`✅ 已重置與 **${agentId}** 的對話（V2 session 已關閉）`);
+  } else {
+    // Find agent for this channel and reset
+    let resetCount = 0;
+    for (const id of deps.agentLoader.list()) {
+      const session = deps.sessionManager.getSession('discord', id, effectiveUserId);
+      if (session !== undefined) {
+        deps.messageProcessor.clearConversation(session.sessionId);
+        resetCount++;
+      }
+    }
+    await interaction.editReply(`✅ 已重置 ${resetCount} 個對話（V2 session 已關閉）`);
   }
 }
 
@@ -299,9 +353,41 @@ async function handleModel(
     return;
   }
 
-  // Model switching requires file modification — just show current for now
+  // Model switching
+  if (targetModel !== null) {
+    const targetAgent = agentId ?? deps.agentLoader.list()[0];
+    if (targetAgent === undefined) {
+      await interaction.reply({ content: '❌ 找不到 Agent', ephemeral: true });
+      return;
+    }
+
+    try {
+      const { applyModelChange } = await import('../commands/index.js');
+      const result = await applyModelChange(targetAgent, targetModel, deps.agentLoader);
+      if (result.success) {
+        const MODEL_LABELS: Record<string, string> = { opus: '🟣 Opus', sonnet: '🔵 Sonnet', haiku: '🟢 Haiku' };
+        await interaction.reply({
+          content: `✅ **${targetAgent}** 模型已切換為 ${MODEL_LABELS[targetModel] ?? targetModel}`,
+          ephemeral: true,
+        });
+      } else {
+        await interaction.reply({ content: `❌ 切換失敗：${result.error}`, ephemeral: true });
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await interaction.reply({ content: `❌ 切換失敗：${msg}`, ephemeral: true });
+    }
+    return;
+  }
+
+  // Only agentId specified, show that agent's model
+  const agent = deps.agentLoader.get(agentId!);
+  if (agent === undefined) {
+    await interaction.reply({ content: `❌ Agent "${agentId}" 不存在`, ephemeral: true });
+    return;
+  }
   await interaction.reply({
-    content: '模型切換需要修改 agent.json，請使用 Telegram 的 /model 指令或手動編輯設定檔。',
+    content: `🧠 **${agent.config.name ?? agentId}** → \`${agent.config.model ?? 'sonnet'}\``,
     ephemeral: true,
   });
 }
@@ -353,10 +439,36 @@ async function handleStop(
   interaction: ChatInputCommandInteraction,
   deps: SlashCommandDependencies,
 ): Promise<void> {
-  await interaction.reply({
-    content: '⚠️ Discord 端的停止功能開發中。目前請透過 Telegram 使用 /stop。',
-    ephemeral: true,
-  });
+  const agentId = interaction.options.getString('agent');
+  const userId = interaction.user.id;
+  const channelId = interaction.channelId;
+  const isThread = interaction.channel?.isThread() ?? false;
+
+  // Thread sessions use userId::thread::threadId as session key
+  const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;
+
+  const targetAgents = agentId !== null
+    ? [agentId]
+    : deps.agentLoader.list();
+
+  let cancelled = 0;
+  for (const aid of targetAgents) {
+    if (deps.messageProcessor.cancelQueryForUser('discord', aid, effectiveUserId)) {
+      cancelled++;
+    }
+  }
+
+  if (cancelled > 0) {
+    await interaction.reply({
+      content: `🛑 已停止 ${cancelled} 個執行中的查詢。`,
+      ephemeral: true,
+    });
+  } else {
+    await interaction.reply({
+      content: 'ℹ️ 目前沒有正在執行的查詢。',
+      ephemeral: true,
+    });
+  }
 }
 
 async function handleCtx(
@@ -525,7 +637,8 @@ async function handleCtx(
   if (matchedQueries.length > 0) {
     const historyLines: string[] = [];
     const chronological = [...matchedQueries].reverse(); // oldest first
-    const showMax = Math.min(chronological.length, 10);
+    // Show all queries (Discord embed description limit is 4096 chars)
+    const showMax = chronological.length;
 
     for (let i = 0; i < showMax; i++) {
       const q = chronological[i]!;
@@ -542,12 +655,28 @@ async function handleCtx(
       );
     }
 
-    const historyEmbed = new EmbedBuilder()
-      .setTitle('📜 查詢歷史')
-      .setDescription(historyLines.join('\n'))
-      .setColor(0x2B2D31);
+    // Discord embed description limit: 4096 chars. Split into multiple embeds if needed.
+    const EMBED_DESC_LIMIT = 4000; // Leave margin
+    let currentChunk: string[] = [];
+    let currentLen = 0;
+    let chunkIndex = 0;
 
-    embeds.push(historyEmbed);
+    for (const line of historyLines) {
+      if (currentLen + line.length + 1 > EMBED_DESC_LIMIT && currentChunk.length > 0) {
+        const title = chunkIndex === 0 ? `📜 查詢歷史（${chronological.length} 筆）` : '📜 查詢歷史（續）';
+        embeds.push(new EmbedBuilder().setTitle(title).setDescription(currentChunk.join('\n')).setColor(0x2B2D31));
+        currentChunk = [];
+        currentLen = 0;
+        chunkIndex++;
+        if (embeds.length >= 9) break; // Discord max 10 embeds per message
+      }
+      currentChunk.push(line);
+      currentLen += line.length + 1;
+    }
+    if (currentChunk.length > 0) {
+      const title = chunkIndex === 0 ? `📜 查詢歷史（${chronological.length} 筆）` : '📜 查詢歷史（續）';
+      embeds.push(new EmbedBuilder().setTitle(title).setDescription(currentChunk.join('\n')).setColor(0x2B2D31));
+    }
   }
 
   await interaction.reply({ embeds, ephemeral: true });

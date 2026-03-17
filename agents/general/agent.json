@@ -18,6 +18,8 @@
   "version": "1.0.0",
   "model": "opus",
   "telegramBotToken": "8085979533:AAEZ7EVcE1SdhN22LvJBbepmts358Je2af8",
+  "discordBotToken": "MTQ4MzExNzE2MzExMDczMTg4Nw.GEtg9D.XMgbdHsczdnu8otwQjCDFx0KirOWDKJhmk27FM",
+  "discordChannelId": "1483117141245956157",
   "settings": {
     "permissionMode": "default",
     "delegation": {

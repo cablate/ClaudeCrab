@@ -1,8 +1,8 @@
 ---
 name: dom-remotion-mastery
-description: Remotion 影片製作全方位能力。觸發時機：需要製作影片、分析影片需求、設計分鏡腳本、實作動畫元件時。能力範圍：技術實作（Remotion + 生態系整合）、行銷手法（Hook、節奏、情緒曲線）、需求收集（提問引導）、元件複用。
+description: Remotion 影片製作全方位能力。觸發時機：需要製作影片、分析影片需求、設計分鏡腳本、實作動畫元件時。能力範圍：技術實作（Remotion + 生態系整合）、行銷手法（Hook、節奏、情緒曲線）、需求收集（提問引導）、元件複用。涵蓋 best-practices 官方技術參考。
 metadata:
-  tags: remotion, video, animation, marketing, react
+  tags: remotion, video, animation, marketing, react, composition, best-practices
 ---
 
 # Remotion 影片製作 Mastery
@@ -37,7 +37,7 @@ metadata:
 | [ecosystem-integration.md](references/ecosystem-integration.md) | 生態系整合（D3/Three/Lottie/Rive/Skia/GIF/Anime.js） | 需要特定視覺化時 |
 | [visual-catalog.md](references/visual-catalog.md) | 視覺效果目錄與實作指引 | 設計分鏡/選擇效果時 |
 | [lessons-learned.md](references/lessons-learned.md) | 實戰經驗與踩坑記錄 | 開始新專案前 |
-| `dom-remotion-best-practices` | 官方技術參考 | 查閱具體 API 細節時 |
+| [dom-remotion-best-practices](../dom-remotion-best-practices/SKILL.md) | 官方技術參考（rules/ 目錄下按主題分檔） | 查閱具體 API 細節時 |
 
 ### 行銷層
 

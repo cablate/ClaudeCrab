@@ -116,22 +116,26 @@ Level 3+：references/, scripts/, assets/
 
 ### 原則 5：協議與人格分離
 
-建立 AI 助理時，「怎麼做」和「是誰」應該是兩個獨立 Skill：
+建立 AI 助理時，「怎麼做」和「是誰」應該分離：
 
 ```
-CLAUDE.md（精簡，只放入口）
-└── 「回覆前，調用 /agent-protocols」
+CLAUDE.md（精簡，只放入口和 rules 引用）
+
+.claude/rules/          ← 怎麼做（每次自動載入）
+├── startup-protocol.md
+├── permissions.md
+└── serena-tools.md
 
 .claude/skills/
-├── agent-protocols/  ← 怎麼做（協議）
-│   ├── SKILL.md (description: "Session 啟動必讀...")
-│   └── references/ (startup.md, memory.md, safety.md)
-└── persona/          ← 是誰（人格）← 可整包複製到其他專案
+├── sys-growth/    ← 成長機制（按需載入）
+│   ├── SKILL.md
+│   └── references/ (behavior.md, memory-system.md, ...)
+└── persona/       ← 是誰（人格）← 可整包複製到其他專案
     ├── SKILL.md
     └── references/ (soul.md, identity.md)
 ```
 
-好處：CLAUDE.md 精簡、人格可攜帶、協議和人格可靈活組合。
+好處：rules 自動載入（零成本觸發）、人格可攜帶、成長機制按需載入。
 
 ---
 

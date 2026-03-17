@@ -150,7 +150,7 @@ export class ScheduleManager {
       notification: {
         onComplete: options.notifyOnComplete,
         onError: options.notifyOnError,
-        platform: 'telegram',
+        platform: options.notifyPlatform ?? 'telegram',
         chatId: options.notifyChatId,
       },
       metadata: {

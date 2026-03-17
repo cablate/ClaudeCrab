@@ -10,7 +10,9 @@
  */
 
 import { AgentLoader } from '../core/AgentLoader.js';
-import { logger } from '../utils/logger.js';
+import { logger as rootLogger } from '../utils/logger.js';
+
+const logger = rootLogger.child({ module: 'AgentCallService' });
 import { randomUUID } from 'node:crypto';
 import type { MessageProcessor } from '../core/MessageProcessor.js';
 import type { SessionManager } from '../core/SessionManager.js';
@@ -167,7 +169,10 @@ export class AgentCallService {
     }
 
     // Determine platform for correct adapter routing (Discord threads vs Telegram)
-    const effectivePlatform = options?.platform ?? 'telegram';
+    const effectivePlatform = options.platform ?? 'telegram';
+    if (options.platform === undefined) {
+      logger.warn({ callId, from: fromAgent, to: toAgent }, '[AgentCallService] No platform specified — falling back to telegram');
+    }
 
     // 使用真實使用者 session（降低割裂感，讓使用者能在 Telegram 看到並介入）
     const effectiveUserId = options?.userId ?? `agent:${fromAgent}`;
@@ -310,7 +315,7 @@ ${message}`;
   /**
    * 清除特定 agent 間的 session（用於 startNewConversation）
    */
-  private clearAgentCallSession(fromAgent: string, toAgent: string, platform = 'telegram'): void {
+  private clearAgentCallSession(fromAgent: string, toAgent: string, platform: string): void {
     const sessionManager = this.getSessionManager?.();
     if (!sessionManager) {
       logger.debug('[AgentCallService] SessionManager not available, skip clearing session');

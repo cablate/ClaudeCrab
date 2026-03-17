@@ -3,6 +3,17 @@
     "serena": {
       "command": "uvx",
       "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["tsx", "F:/_Program/OwnProject/memory-lancedb-pro/server.ts"],
+      "env": {
+        "EMBEDDING_API_KEY": "mwDv444iP1EhAEfja1zOVgu1YmC234jL",
+        "EMBEDDING_MODEL": "Qwen/Qwen3-Embedding-8B",
+        "EMBEDDING_BASE_URL": "https://api.deepinfra.com/v1/openai",
+        "EMBEDDING_DIMENSIONS": "1024",
+        "MEMORY_DB_PATH": "F:/_Program/OwnProject/ClaudeCab/agents/oss-coder/.memory-db"
+      }
     }
   }
 }

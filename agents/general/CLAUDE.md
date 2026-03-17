@@ -7,10 +7,9 @@
 ## 共用規則
 
 @../_example/.claude/rules/startup-protocol.md
-@../_example/.claude/rules/observe-user.md
 @../_example/.claude/rules/skill-usage.md
 @../_example/.claude/rules/serena-tools.md
-@../_example/.claude/rules/self-evolution.md
+@../_example/.claude/rules/permissions.md
 
 ---
 
@@ -208,6 +207,10 @@ daily-reflection 是系統排程任務，執行完成後不需要向使用者回
 
 CLAUDE.md 已有「知識先查」原則，但容易忘記。開始任務 → 先 Glob knowledge/ → 讀取相關檔案 → 再動手。不只是當下研究的 ClawWorks，過去反思學到的知識也要翻出來用。
 
+### 2026-03-16：BPS 素材不等於 Cab 本人經歷
+
+BrainPlanStorming 目錄混合了：Cab 的真實想法、AI 生成的教學內容（電子書）、為他人諮詢的素材。掃描 BPS 後引用素材時，必須區分「他寫的內容」和「他的親身經歷」。不確定的標 [待確認]，不要直接當事實寫進記憶。
+
 ---
 
 ## 目錄結構參考
@@ -217,6 +220,7 @@ CLAUDE.md 已有「知識先查」原則，但容易忘記。開始任務 → �
 | memory/ | 每日工作記憶 | 🟢 自由讀寫 |
 | knowledge/ | 知識暫存區（反思/研究學到的知識素材，尚未歸納進 Skill） | 🟢 自由讀寫 |
 | playbooks/ | 已驗證方法論（通過實戰驗證、可交接給其他 AI/人獨立執行的方法論。knowledge/ 的畢業生，.claude/skills/ 的候選人） | 🟢 自由讀寫 |
+| company/ | 公司營運系統（規則、SOP、品管、協調、進化機制、員工檔案） | 🟢 自由讀寫 |
 | output/ | 交付產出（使用者交辦的成果物，按任務/專案分子目錄） | 🟢 自由讀寫 |
 | plans/ | 任務規劃（plan mode 產出的規劃文件） | 🟢 自由讀寫 |
 | evolution/weekly/ | 每週反思彙整 | 🟢 自由寫入 |

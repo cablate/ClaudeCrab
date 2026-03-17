@@ -103,10 +103,12 @@ export class PlatformOrchestrator {
     this.groupBroadcaster = options.groupBroadcaster ?? new GroupBroadcaster({
       messageProcessor: this.messageProcessor,
       getBotInfo: (agentId: string) => {
-        // Get adapter from registry and retrieve bot info
-        const adapter = this.registry.get('telegram', agentId);
-        if (adapter !== undefined && adapter instanceof TelegramAdapter) {
-          return adapter.getBotInfo();
+        // Get bot info from any registered adapter (platform-agnostic)
+        for (const adapter of this.registry.getAll()) {
+          if (adapter.agentId === agentId) {
+            const info = adapter.getBotInfo();
+            if (info !== null) return info;
+          }
         }
         return null;
       },
@@ -396,20 +398,26 @@ export class PlatformOrchestrator {
    * Start the bot for a specific agent.
    * Does nothing if the bot is already running or the agent has no token.
    */
-  async startBotForAgent(agentId: string): Promise<void> {
+  async startBotForAgent(agentId: string, platform: 'telegram' | 'discord' = 'telegram'): Promise<void> {
     const agent = this.agentLoader.get(agentId);
     if (agent === undefined) {
       throw new Error(`Agent "${agentId}" not found`);
     }
 
-    if (agent.config.telegramBotToken === undefined) {
-      throw new Error(`Agent "${agentId}" has no Telegram bot token configured`);
+    if (platform === 'telegram') {
+      if (agent.config.telegramBotToken === undefined) {
+        throw new Error(`Agent "${agentId}" has no Telegram bot token configured`);
+      }
+    } else if (platform === 'discord') {
+      if (agent.config.discordBotToken === undefined || agent.config.discordChannelId === undefined) {
+        throw new Error(`Agent "${agentId}" has no Discord bot token/channel configured`);
+      }
     }
 
     // Check if already running
-    const existingAdapter = this.registry.get('telegram', agentId);
+    const existingAdapter = this.registry.get(platform, agentId);
     if (existingAdapter !== undefined && existingAdapter.state === 'running') {
-      logger.info({ agentId }, 'Bot already running, skipping start');
+      logger.info({ agentId, platform }, 'Bot already running, skipping start');
       return;
     }
 
@@ -419,34 +427,38 @@ export class PlatformOrchestrator {
         await existingAdapter.stop();
         await existingAdapter.dispose();
       } catch (error) {
-        logger.warn({ error, agentId }, 'Error stopping existing adapter');
+        logger.warn({ error, agentId, platform }, 'Error stopping existing adapter');
       }
-      this.registry.unregister('telegram', agentId);
+      this.registry.unregister(platform, agentId);
     }
 
     // Start new adapter
-    await this.startTelegramAdapter(agentId, agent.config.telegramBotToken);
-    logger.info({ agentId }, 'Bot started for agent');
+    if (platform === 'telegram') {
+      await this.startTelegramAdapter(agentId, agent.config.telegramBotToken!);
+    } else if (platform === 'discord') {
+      await this.startDiscordAdapter(agentId, agent.config.discordBotToken!, agent.config.discordChannelId!);
+    }
+    logger.info({ agentId, platform }, 'Bot started for agent');
   }
 
   /**
    * Stop the bot for a specific agent.
    * Does nothing if the bot is not running.
    */
-  async stopBotForAgent(agentId: string): Promise<void> {
-    const adapter = this.registry.get('telegram', agentId);
+  async stopBotForAgent(agentId: string, platform: 'telegram' | 'discord' = 'telegram'): Promise<void> {
+    const adapter = this.registry.get(platform, agentId);
     if (adapter === undefined) {
-      logger.info({ agentId }, 'No running bot found, skipping stop');
+      logger.info({ agentId, platform }, 'No running bot found, skipping stop');
       return;
     }
 
     try {
       await adapter.stop();
       await adapter.dispose();
-      this.registry.unregister('telegram', agentId);
-      logger.info({ agentId }, 'Bot stopped for agent');
+      this.registry.unregister(platform, agentId);
+      logger.info({ agentId, platform }, 'Bot stopped for agent');
     } catch (error) {
-      logger.error({ error, agentId }, 'Error stopping bot');
+      logger.error({ error, agentId, platform }, 'Error stopping bot');
       throw error;
     }
   }
@@ -499,10 +511,14 @@ export class PlatformOrchestrator {
         const memberAgentIds = this.groupBroadcaster.getGroupMembers(chatId);
         return memberAgentIds.map((id) => {
           const agent = this.agentLoader.get(id);
-          const tgAdapter = this.registry.get('telegram', id) as
-            | TelegramAdapter
-            | undefined;
-          const botInfo = tgAdapter?.getBotInfo();
+          // Platform-agnostic: search all adapters for bot info
+          let botInfo: { username: string; id: number } | null = null;
+          for (const adapter of this.registry.getAll()) {
+            if (adapter.agentId === id) {
+              botInfo = adapter.getBotInfo();
+              if (botInfo !== null) break;
+            }
+          }
           const result: {
             agentId: string;
             name: string;

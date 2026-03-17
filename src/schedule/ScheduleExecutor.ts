@@ -44,6 +44,16 @@ export class ScheduleExecutor {
   ) {}
 
   /**
+   * Wire late-bound dependencies created after ScheduleExecutor construction.
+   * Replaces the unsafe `(this.scheduleExecutor as any).prop = value` pattern.
+   */
+  wirePostInit(deps: {
+    activityEventService?: ActivityEventService;
+  }): void {
+    if (deps.activityEventService !== undefined) this.activityEventService = deps.activityEventService;
+  }
+
+  /**
    * Execute a scheduled task
    */
   async execute(agentId: string, spec: ScheduleSpec): Promise<ExecutionResult> {
@@ -124,7 +134,9 @@ export class ScheduleExecutor {
                               hookEventName: 'UserPromptSubmit' as const,
                               additionalContext: buildPromptContext(
                                 spec.notification?.chatId ?? '',
-                                true // always new session
+                                true, // always new session
+                                undefined, // no group chat
+                                spec.notification?.platform ?? 'schedule'
                               ),
                             },
                           }),

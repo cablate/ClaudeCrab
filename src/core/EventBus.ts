@@ -140,7 +140,9 @@ export class EventBus {
    * @param payload Event payload
    */
   emitSync<K extends EventName>(event: K, payload: EventMap[K]): void {
-    void this.emit(event, payload);
+    void this.emit(event, payload).catch((err) => {
+      logger.error({ err, event }, 'Unhandled error in emitSync event handler');
+    });
   }
 
   /**

@@ -319,17 +319,15 @@ agent-browser record start ./debug.webm   # Record video from current page
 agent-browser record stop                 # Save recording
 ```
 
-## Deep-dive documentation
+## References（按需載入，不要一次全讀）
 
-For detailed patterns and best practices, see:
-
-| Reference | Description |
-|-----------|-------------|
-| [references/snapshot-refs.md](references/snapshot-refs.md) | Ref lifecycle, invalidation rules, troubleshooting |
-| [references/session-management.md](references/session-management.md) | Parallel sessions, state persistence, concurrent scraping |
-| [references/authentication.md](references/authentication.md) | Login flows, OAuth, 2FA handling, state reuse |
-| [references/video-recording.md](references/video-recording.md) | Recording workflows for debugging and documentation |
-| [references/proxy-support.md](references/proxy-support.md) | Proxy configuration, geo-testing, rotating proxies |
+| Reference | 何時載入 |
+|-----------|---------|
+| [snapshot-refs.md](references/snapshot-refs.md) | 每次使用瀏覽器時 |
+| [authentication.md](references/authentication.md) | 需要登入網站時 |
+| [session-management.md](references/session-management.md) | 管理多 session 時 |
+| [proxy-support.md](references/proxy-support.md) | 需要代理時 |
+| [video-recording.md](references/video-recording.md) | 需要錄影時 |
 
 ## Ready-to-use templates
 

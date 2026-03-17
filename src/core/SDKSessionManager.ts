@@ -116,7 +116,28 @@ export class SDKSessionManager {
       managed.messageCount++;
 
       // Process stream
-      return await this.processStream(sessionId, managed, options, startTime);
+      const result = await this.processStream(sessionId, managed, options, startTime);
+
+      // If resumed session returned 0 content, the resume likely failed silently.
+      // Destroy and retry with a fresh (non-resume) session.
+      if (options.resume && result.response.length === 0 && managed.messageCount === 1) {
+        logger.warn(
+          { sessionId, sdkSessionId: managed.sdkSessionId },
+          'V2 resumed session returned empty response — retrying with fresh session'
+        );
+        this.destroySession(sessionId);
+
+        const freshOptions = { ...options, resume: undefined };
+        managed = await this.createSession(sessionId, agent, freshOptions);
+
+        await managed.session.send(prompt);
+        managed.lastUsedAt = Date.now();
+        managed.messageCount++;
+
+        return await this.processStream(sessionId, managed, freshOptions, Date.now());
+      }
+
+      return result;
     } catch (error) {
       // Session might have died — clean up and let caller retry with V1 fallback
       logger.warn(
@@ -140,6 +161,9 @@ export class SDKSessionManager {
       model: agent.config.model ?? 'claude-sonnet-4-20250514',
       cwd: options.cwd, // Agent working directory — critical for JSONL path resolution
       permissionMode: 'default',
+      // V2 reads settings.local.json via settingSources for permissions (allow/deny).
+      // WARNING: settings.local.json must NOT contain "hooks" — V2 CLI cannot execute
+      // command-type hooks and returns 0 turns immediately if hooks are present.
       settingSources: options.settingSources ?? ['project', 'local'],
       env: {
         CLAUDE_CODE_REMOTE: '1', // Skip gitStatus injection
@@ -175,6 +199,56 @@ export class SDKSessionManager {
       sessionOptions.maxTurns = options.maxTurns;
     }
 
+    // canUseTool: interactive permission prompt (Telegram/Discord buttons)
+    if (options.additionalOptions?.canUseTool !== undefined) {
+      (sessionOptions as unknown as Record<string, unknown>).canUseTool = options.additionalOptions.canUseTool;
+    }
+
+    // V2 hooks must be JS callbacks (not command-type).
+    // settings.local.json hooks cause 0-turn responses in V2.
+    // SDK registers callback IDs → CLI sends hook_callback → SDK executes callback.
+    const agentCwd = options.cwd;
+    (sessionOptions as unknown as Record<string, unknown>).hooks = {
+      UserPromptSubmit: [{
+        matcher: '',
+        hooks: [async () => {
+          try {
+            const { execSync } = await import('child_process');
+            const out = execSync('bash ../_shared/hooks/skill-reminder.sh', { cwd: agentCwd, timeout: 5000, encoding: 'utf-8' });
+            return JSON.parse(out.trim());
+          } catch { return { continue: true }; }
+        }],
+      }],
+      PostToolUse: [{
+        matcher: 'Bash',
+        hooks: [async (input: unknown) => {
+          try {
+            const { execSync } = await import('child_process');
+            const toolOutput = (input as { tool_output?: string })?.tool_output ?? '';
+            const out = execSync('bash ../_shared/hooks/error-detector.sh', {
+              cwd: agentCwd,
+              timeout: 5000,
+              encoding: 'utf-8',
+              env: { ...process.env, CLAUDE_TOOL_OUTPUT: toolOutput },
+            });
+            if (out.trim()) return { continue: true, hookSpecificOutput: { additionalContext: out.trim() } };
+            return { continue: true };
+          } catch { return { continue: true }; }
+        }],
+      }],
+      Stop: [{
+        matcher: '',
+        hooks: [async (input: unknown) => {
+          const { stop_hook_active } = input as { stop_hook_active?: boolean };
+          if (stop_hook_active) return { continue: true }; // Already in stop hook — don't recurse
+          return {
+            decision: 'block' as const,
+            reason: '⚠️ Session 結束前，讀取 ../_shared/hooks/session-end-checklist.md 並靜默執行所有檢查項。',
+          };
+        }],
+      }],
+    };
+
     // Create or resume session
     let session: SDKSession;
     if (options.resume) {
@@ -203,7 +277,19 @@ export class SDKSessionManager {
     this.sessions.set(sessionId, managed);
 
     logger.info(
-      { sessionId, sdkSessionId, hasResume: !!options.resume },
+      {
+        sessionId,
+        sdkSessionId,
+        hasResume: !!options.resume,
+        sessionOpts: {
+          model: sessionOptions.model,
+          cwd: sessionOptions.cwd,
+          settingSources: sessionOptions.settingSources,
+          permissionMode: sessionOptions.permissionMode,
+          allowedToolsCount: sessionOptions.allowedTools?.length ?? 0,
+          hasMcpServers: sessionOptions.mcpServers ? Object.keys(sessionOptions.mcpServers).length : 0,
+        },
+      },
       'V2 persistent session created'
     );
 
@@ -227,12 +313,24 @@ export class SDKSessionManager {
     let totalCostUsd: number | undefined;
     const toolIdToName = new Map<string, string>();
 
+    let streamMsgIndex = 0;
     for await (const message of managed.session.stream()) {
-      // Extract session_id from init
+      logger.info(
+        { sessionId, msgIndex: streamMsgIndex, msgType: message.type, msgSubtype: 'subtype' in message ? (message as any).subtype : undefined },
+        'V2 stream message received'
+      );
+      streamMsgIndex++;
+      // Extract session_id from init and log hook events
       if (message.type === 'system' && 'subtype' in message) {
-        const systemMsg = message as { subtype?: string; session_id?: string };
+        const systemMsg = message as { subtype?: string; session_id?: string; hook_event?: string; hook_name?: string; outcome?: string; exit_code?: number; stderr?: string };
         if (systemMsg.subtype === 'init' && systemMsg.session_id) {
           managed.sdkSessionId = systemMsg.session_id;
+        }
+        // Log hook lifecycle for debugging
+        if (systemMsg.subtype === 'hook_started') {
+          logger.info({ sessionId, hookEvent: systemMsg.hook_event, hookName: systemMsg.hook_name }, 'V2 hook started');
+        } else if (systemMsg.subtype === 'hook_response') {
+          logger.info({ sessionId, hookEvent: systemMsg.hook_event, hookName: systemMsg.hook_name, outcome: systemMsg.outcome, exitCode: systemMsg.exit_code, stderr: systemMsg.stderr?.substring(0, 200) }, 'V2 hook response');
         }
       }
 
@@ -396,6 +494,7 @@ export class SDKSessionManager {
       numTurns,
       durationMs,
       intermediateMessageCount: intermediateCount,
+      isUsageDelta: true, // V2 delta already computed above
     };
     if (usage) queryResult.usage = usage;
     if (totalCostUsd !== undefined) queryResult.totalCostUsd = totalCostUsd;

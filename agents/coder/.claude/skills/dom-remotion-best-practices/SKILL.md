@@ -1,6 +1,8 @@
 ---
 name: remotion-best-practices
-description: Best practices for Remotion - Video creation in React
+description: |
+  Best practices for Remotion - Video creation in React.
+  被 dom-remotion-mastery 引用作為技術參考，不需單獨載入——透過 mastery 的技術層表格按需載入。
 metadata:
   tags: remotion, video, react, animation, composition
 ---

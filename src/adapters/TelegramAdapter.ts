@@ -38,6 +38,7 @@ import { getEventBus } from '../core/EventBus.js';
 import type { GroupMessagePayload } from '../types/events.js';
 import { RateLimiter, computeLatencyStats, type LatencyStats } from './RateLimiter.js';
 import { TelegramCallbackHandler } from './TelegramCallbackHandler.js';
+import { convertToTelegramMarkdown } from '../utils/telegramMarkdown.js';
 
 /**
  * Default security configuration
@@ -150,7 +151,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
    * Get bot info (username, id) for group message handling.
    * Returns null if bot is not initialized yet.
    */
-  getBotInfo(): { username: string; id: number } | null {
+  override getBotInfo(): { username: string; id: number } | null {
     return this.botInfo;
   }
 
@@ -186,12 +187,18 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     // If the handler blocks, grammy can't poll for new updates (e.g. callback_query
     // from permission inline keyboards), causing a deadlock.
     this.bot.on('message:text', (ctx) => {
-      // Skip if this is a command message and we have command handlers
+      // Only skip messages that match a registered bot command (e.g. /help, /reset).
+      // Unrecognized slash commands (e.g. /commit, /review-pr) should pass through
+      // to the AI — they may be Claude Code skills or slash commands.
       if (
         this.commandDeps !== undefined &&
         ctx.message?.text?.startsWith('/')
       ) {
-        return;
+        const commandName = ctx.message.text.split(/[\s@]/)[0]?.slice(1);
+        if (commandName !== undefined && (commandName in COMMAND_HANDLERS || commandName === 'apistats')) {
+          return; // Handled by bot.command() — don't double-process
+        }
+        // Unknown command (e.g. /commit) — fall through to AI processing
       }
       void this.handleTextMessage(ctx).catch((error) => {
         this.log.error({ error }, 'Unhandled error in message handler');
@@ -856,6 +863,37 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       this.log.error({ error, chatId }, 'Failed to send message');
       return { success: false, error: errorMessage };
     }
+  }
+
+  /**
+   * Platform-aware formatted send: MarkdownV2 → Markdown → plaintext fallback.
+   */
+  override async sendFormattedMessage(
+    chatId: string,
+    text: string,
+    options?: SendOptions
+  ): Promise<SendResult> {
+    const converted = convertToTelegramMarkdown(text);
+    let result: SendResult = converted
+      ? await this.sendMessage(chatId, converted, {
+          parseMode: 'MarkdownV2',
+          ...options,
+        })
+      : { success: false as const, error: 'Conversion failed' };
+
+    if (!result.success) {
+      result = await this.sendMessage(chatId, text, {
+        parseMode: 'Markdown',
+        ...options,
+      });
+    }
+
+    // Final fallback: plain text to ensure delivery
+    if (!result.success) {
+      result = await this.sendMessage(chatId, text, options);
+    }
+
+    return result;
   }
 
   /**

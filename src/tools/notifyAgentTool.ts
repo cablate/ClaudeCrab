@@ -106,8 +106,8 @@ export function createAgentCallMcpServer(
               userId: context.userId,
               ...(args.awaitResult !== undefined ? { awaitResult: args.awaitResult } : {}),
               ...(args.startNewConversation !== undefined ? { startNewConversation: args.startNewConversation } : {}),
-              // Platform + cross-channel notification (platform-agnostic)
-              ...(context.platform !== undefined ? { platform: context.platform } : {}),
+              // Platform for correct adapter routing
+              platform: context.platform ?? 'telegram',
               ...(context.subConversationId !== undefined && context.parentConversationId !== undefined
                 ? {
                     crossChannelNotify: {

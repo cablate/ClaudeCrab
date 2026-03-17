@@ -50,9 +50,9 @@ npm run typecheck    # TypeScript 型別檢查
 | 修改 SDK 呼叫方式（V1 fallback） | `src/core/SDKQueryManager.ts` | - |
 | 修改 SDK V2 persistent session | `src/core/SDKSessionManager.ts` | `scripts/patch-sdk-v2.cjs` |
 | 修改 SDK V2 patch（升級後必檢） | `scripts/patch-sdk-v2.cjs` | `_special-research/sdk-anchor-index-v76.md` |
-| 修改訊息處理流程 | `src/core/MessageProcessor.ts` | `SDKSessionManager.ts`, `SDKQueryManager.ts`, `SessionManager.ts`, `InteractionHandler.ts`, `StatusMessageManager.ts`, `constants.ts` |
+| 修改訊息處理流程 | `src/core/MessageProcessor.ts` | `SDKSessionManager.ts`, `SDKQueryManager.ts`, `SessionManager.ts`, `InteractionHandler.ts`, `StatusMessageManager.ts`, `constants.ts`。Late-bound deps 用 `wirePostInit()`，SDK session 用 `sdkSession` getter |
 | 修改 Session 管理 | `src/core/SessionManager.ts` | `src/types/session.ts` |
-| 管理平台 Adapter 生命週期 | `src/core/PlatformOrchestrator.ts` | `src/core/AdapterRegistry.ts`, `src/adapters/TelegramAdapter.ts` |
+| 管理平台 Adapter 生命週期 | `src/core/PlatformOrchestrator.ts` | `src/core/AdapterRegistry.ts`, `src/adapters/TelegramAdapter.ts`, `src/adapters/DiscordAdapter.ts` |
 | 修改核心常數（如記憶檢查提醒） | `src/core/constants.ts` | `MessageProcessor.ts` |
 
 ---
@@ -66,7 +66,7 @@ npm run typecheck    # TypeScript 型別檢查
 | 修改訊息分割邏輯 | `src/adapters/TelegramAdapter.ts` | `splitMessage()` 方法 |
 | 新增其他平台 Adapter | 繼承 `src/adapters/BaseAdapter.ts` | `src/core/AdapterRegistry.ts` |
 | 取消執行中查詢 | `src/core/MessageProcessor.ts` | `cancelQuery()`、`cancelQueryForUser()` |
-| 修改即時狀態訊息 | `src/adapters/TelegramAdapter.ts` | `sendStatusMessage()`、`updateStatusMessage()` |
+| 修改即時狀態訊息 | `src/adapters/TelegramAdapter.ts`, `src/adapters/DiscordAdapter.ts` | `sendStatusMessage()`、`updateStatusMessage()`（兩個 adapter 都有實作） |
 | 修改工具事件捕捉 | `src/core/SDKQueryManager.ts` | `onToolEvent` callback |
 | 修改狀態訊息整合 | `src/core/StatusMessageManager.ts` | debounce 邏輯、`ToolEventEntry` 類型 |
 
@@ -84,6 +84,29 @@ npm run typecheck    # TypeScript 型別檢查
 - `@botname` → 只有指定 Bot 執行
 - `@all` → 所有 Bot 執行，一條統一回覆
 - Dedup key：`chatId:date:userId:command`（Telegram 對每個 bot 分配不同 message_id）
+
+---
+
+## Discord 相關
+
+| 要做什麼 | 主要檔案 | 相關檔案 |
+|----------|----------|----------|
+| 修改 Discord 訊息發送 | `src/adapters/DiscordAdapter.ts` | `sendMessage()`、`sendFormattedMessage()`（繼承 BaseAdapter 預設） |
+| 修改 Discord 狀態訊息 | `src/adapters/DiscordAdapter.ts` | `sendStatusMessage()`、`updateStatusMessage()` |
+| 修改 Discord Embed 發送 | `src/adapters/DiscordAdapter.ts` | `sendEmbed()`、`editEmbed()` |
+| 修改 Discord Forum/Thread | `src/adapters/DiscordAdapter.ts` | `createForumPost()`、`replyToThread()`、`archiveThread()` |
+| 修改 Dashboard Embed | `src/services/DashboardService.ts` | Discord-specific service |
+| 修改 Cost Report | `src/services/CostReportService.ts` | Discord-specific service |
+| 修改 Activity Event 推送 | `src/services/ActivityEventService.ts` | #system-log、#alerts channel |
+| 修改 Task Board | `src/services/TaskService.ts` | Discord Forum channel |
+| 修改 Discord 按鈕互動 | `src/adapters/DiscordCallbackHandler.ts` | `InteractionHandler.ts` |
+
+**平台抽象層（v1.48 tech debt 修復後）**：
+- `BaseAdapter.sendFormattedMessage()` — 平台感知格式化發送（adapter 自行決定 markdown 轉換）
+- `BaseAdapter.getBotInfo()` — 通用 bot 身份查詢（TelegramAdapter override，DiscordAdapter 回傳 null）
+- `MessageProcessor.wirePostInit()` — late-bound dependency injection（取代 `as any`）
+- `PlatformOrchestrator.startBotForAgent(id, platform)` / `stopBotForAgent(id, platform)` — 多平台 start/stop
+- `StatusMessageManager` — duck-typing `StatusCapableAdapter` 介面，Telegram + Discord 都支援
 
 ---
 
@@ -126,7 +149,7 @@ npm run typecheck    # TypeScript 型別檢查
 | 修改排程載入邏輯 | `src/schedule/ScheduleLoader.ts` | - |
 | 修改 cron 觸發邏輯 | `src/schedule/CronScheduler.ts` | `node-cron` |
 | 修改任務執行邏輯 | `src/schedule/ScheduleExecutor.ts` | `SDKQueryManager.ts`、`constants.ts` |
-| 修改執行通知 | `src/schedule/ScheduleNotifier.ts` | `telegramMarkdown.ts`（sendWithMarkdownFallback） |
+| 修改執行通知 | `src/schedule/ScheduleNotifier.ts` | 使用 `adapter.sendFormattedMessage()`（平台感知格式化） |
 | 修改排程管理 API | `src/schedule/ScheduleManager.ts` | - |
 | 修改 /schedule 指令 | `src/adapters/commands/TelegramCommands.ts` | `handleSchedule*` 函數 |
 | 修改排程資料庫操作 | `src/persistence/ScheduleRepository.ts` | `DatabaseManager.ts` |
@@ -137,7 +160,7 @@ npm run typecheck    # TypeScript 型別檢查
 **排程執行特性**：
 - 每次執行建立獨立 session（`schedule:{specId}:{uuid}`），不影響對話 session
 - Hooks：UserPromptSubmit（時間注入）— 無 PreToolUse、無 Stop hook、無 canUseTool
-- 通知使用 `sendWithMarkdownFallback`（MarkdownV2 → Markdown fallback）
+- 通知使用 `adapter.sendFormattedMessage()`（TelegramAdapter: MarkdownV2 → Markdown → plaintext fallback；DiscordAdapter: 原生 markdown）
 - Schema 容錯：`type:"at"` → `"once"`、`datetime` → `at`
 - **Retry**：`retryAsync()` 包裝 executeQuery，3 次重試（5s→15s→45s backoff），每次 retry 新 session ID
 - **Circuit Breaker**：CronScheduler 追蹤連續失敗次數，達 3 次自動暫停 + Telegram 通知

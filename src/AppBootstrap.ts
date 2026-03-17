@@ -12,7 +12,6 @@ import { PlatformOrchestrator } from './core/PlatformOrchestrator.js';
 import { getEventBus } from './core/EventBus.js';
 import { CRASH_MARKER_PATH } from './constants.js';
 import { ContextInjector, type GroupMemberInfo } from './core/ContextInjector.js';
-import { TelegramAdapter } from './adapters/TelegramAdapter.js';
 import { loadSecurityConfig } from './utils/security.js';
 import { DatabaseManager } from './persistence/DatabaseManager.js';
 import { SessionRepository } from './persistence/SessionRepository.js';
@@ -193,18 +192,14 @@ export class AppBootstrap {
 
     // Post-Discord: wire services created during initializeDiscordServices
     // into MessageProcessor and ScheduleExecutor (which were created earlier)
-    if (this.taskService !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (messageProcessor as any).taskService = this.taskService;
-    }
-    if (this.activityEventService !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (messageProcessor as any).activityEventService = this.activityEventService;
-      // Also wire into ScheduleExecutor
-      if (this.scheduleExecutor !== null) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (this.scheduleExecutor as any).activityEventService = this.activityEventService;
-      }
+    messageProcessor.wirePostInit({
+      ...(this.taskService !== null ? { taskService: this.taskService } : {}),
+      ...(this.activityEventService !== null ? { activityEventService: this.activityEventService } : {}),
+    });
+    if (this.activityEventService !== null && this.scheduleExecutor !== null) {
+      this.scheduleExecutor.wirePostInit({
+        activityEventService: this.activityEventService,
+      });
     }
 
     this.logStartupSummary(agentLoader);
@@ -354,9 +349,9 @@ export class AppBootstrap {
         if (agent?.config.description) {
           info.description = agent.config.description;
         }
-        // Get Telegram @username from running adapter
+        // Get bot @username from running adapter (platform-agnostic)
         const adapter = this.orchestrator?.getRegistry().get(platform, row.agent_id);
-        if (adapter instanceof TelegramAdapter) {
+        if (adapter !== undefined) {
           const botInfo = adapter.getBotInfo();
           if (botInfo) {
             info.username = botInfo.username;
@@ -452,11 +447,14 @@ export class AppBootstrap {
         ? { queryMetricsRepository }
         : {}),
       getBotInfo: (agentId) => {
-        const adapter = this.orchestrator
-          ?.getRegistry()
-          .get('telegram', agentId);
-        if (adapter !== undefined && adapter instanceof TelegramAdapter) {
-          return adapter.getBotInfo();
+        // Try all platforms to find a running adapter with bot info
+        const registry = this.orchestrator?.getRegistry();
+        if (registry === undefined) return null;
+        for (const adapter of registry.getAll()) {
+          if (adapter.agentId === agentId) {
+            const info = adapter.getBotInfo();
+            if (info !== null) return info;
+          }
         }
         return null;
       },
@@ -721,7 +719,7 @@ export class AppBootstrap {
             ? { queryMetricsRepository: persistence.queryMetricsRepository }
             : {}),
           // sdkSessionManager from MessageProcessor (exposed via getter)
-          get sdkSessionManager() { return (messageProcessor as any).sdkSessionManager; },
+          get sdkSessionManager() { return messageProcessor.sdkSession; },
           ...(this.orchestrator !== null ? {
             getBotStatus: (agentId: string, platform?: 'telegram' | 'discord') =>
               self.orchestrator!.getBotStatusForAgent(agentId, platform),
@@ -732,8 +730,8 @@ export class AppBootstrap {
       // Register agent Discord adapters for button routing (if any)
       if (this.orchestrator !== null) {
         for (const adapter of this.orchestrator.getRegistry().getAll()) {
-          if (adapter instanceof DiscordAdapter) {
-            interactionHandler.registerAdapter(adapter.agentId, adapter);
+          if (adapter.platform === 'discord') {
+            interactionHandler.registerAdapter(adapter.agentId, adapter as DiscordAdapter);
           }
         }
       }
