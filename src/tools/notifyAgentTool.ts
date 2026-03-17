@@ -120,8 +120,8 @@ export function createAgentCallMcpServer(
             callOptions.userId = context.userId;
           }
 
-          // Cross-channel notification
-          if (context.subConversationId !== undefined && context.parentConversationId !== undefined) {
+          // Cross-channel notification (only for non-task calls — task system has its own notification routing)
+          if (args.taskId === undefined && context.subConversationId !== undefined && context.parentConversationId !== undefined) {
             callOptions.crossChannelNotify = {
               targetChannelId: context.parentConversationId,
               sourceConversationId: context.subConversationId,
