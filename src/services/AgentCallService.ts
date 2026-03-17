@@ -403,7 +403,7 @@ ${message}`;
               };
               if (options.chatId !== undefined) callbackOpts.chatId = options.chatId;
               if (options.platform !== undefined) callbackOpts.platform = options.platform;
-              void this.callAgent(creatorAgent, toAgent,
+              void this.callAgent(toAgent, creatorAgent,
                 `【品管 Callback】\n${toAgent} 已完成任務「${task.title}」\n\n以下是回覆摘要：\n${summaryText}\n\n請進行品管審核。通過後用 request_review 推到主 thread。`,
                 callbackOpts
               ).catch(err => {
