@@ -22,6 +22,9 @@ import { logger } from '../../utils/logger.js';
 
 const log = logger.child({ module: 'DiscordSlashCommands' });
 
+/** Claude's context window size in tokens (all current models: opus/sonnet/haiku) */
+const CLAUDE_CONTEXT_WINDOW_TOKENS = 200_000;
+
 export interface SlashCommandDependencies {
   agentLoader: AgentLoader;
   sessionManager: SessionManager;
@@ -502,9 +505,13 @@ async function handleCtx(
   const agentName = agent.config.name || agentId;
   const model = agent.config.model ?? 'sonnet';
 
-  // Context window sizes per model
-  const ctxLimits: Record<string, number> = { opus: 200000, sonnet: 200000, haiku: 200000 };
-  const ctxLimit = ctxLimits[model] ?? 200000;
+  // Context window sizes per model (all current Claude models share the same limit)
+  const ctxLimits: Record<string, number> = {
+    opus: CLAUDE_CONTEXT_WINDOW_TOKENS,
+    sonnet: CLAUDE_CONTEXT_WINDOW_TOKENS,
+    haiku: CLAUDE_CONTEXT_WINDOW_TOKENS,
+  };
+  const ctxLimit = ctxLimits[model] ?? CLAUDE_CONTEXT_WINDOW_TOKENS;
 
   // Session key: for thread it's userId::thread::threadId, for main channel it's userId
   const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;

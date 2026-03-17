@@ -49,14 +49,9 @@ export {
 
 // Event types
 export {
-  EVENT_NAMES,
   type EventMap,
   type EventHandler,
   type EventName,
-  type MessageSentPayload,
-  type SessionClosedPayload,
-  type SessionSwitchedPayload,
-  type SessionStateChangedPayload,
   type GroupMessagePayload,
   type BotRepliedPayload,
   type InteractionEvent,
@@ -67,11 +62,14 @@ export {
   ClaudeCabError,
   AgentLoadError,
   AgentConfigError,
-  AgentNotFoundError,
   SessionError,
-  RateLimitError,
-  AdapterError,
   ValidationError,
-  isClaudeCabError,
   type SessionErrorCode,
 } from './errors.js';
+
+// Service interfaces (for dependency inversion — core depends on these, not concrete classes)
+export {
+  type IActivityEventService,
+  type IBudgetService,
+  type ITaskService,
+} from './interfaces.js';

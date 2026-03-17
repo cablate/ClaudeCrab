@@ -6,7 +6,6 @@ export {
   isTransientError,
   shouldRetryError,
   API_RETRY_OPTIONS,
-  RATE_LIMIT_RETRY_OPTIONS,
   type RetryOptions,
   type RetryResult,
 } from './retry.js';

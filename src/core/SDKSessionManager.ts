@@ -44,6 +44,16 @@ interface PatchedSessionOptions {
   extraArgs?: Record<string, unknown>;
 }
 
+/**
+ * Extended session options that include runtime-only fields not in the TypeScript types
+ * (canUseTool callback, hooks). These are passed directly to the SDK at runtime.
+ */
+interface ExtendedSessionOptions extends PatchedSessionOptions {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  canUseTool?: (...args: any[]) => Promise<unknown>;
+  hooks?: Record<string, unknown>;
+}
+
 /** Cumulative usage snapshot — used to compute per-query deltas for V2 sessions */
 interface UsageSnapshot {
   inputTokens: number;
@@ -157,7 +167,7 @@ export class SDKSessionManager {
     agent: LoadedAgent,
     options: ExecuteQueryOptions
   ): Promise<ManagedSession> {
-    const sessionOptions: PatchedSessionOptions = {
+    const sessionOptions: ExtendedSessionOptions = {
       model: agent.config.model ?? 'claude-sonnet-4-20250514',
       cwd: options.cwd, // Agent working directory — critical for JSONL path resolution
       permissionMode: 'default',
@@ -201,14 +211,14 @@ export class SDKSessionManager {
 
     // canUseTool: interactive permission prompt (Telegram/Discord buttons)
     if (options.additionalOptions?.canUseTool !== undefined) {
-      (sessionOptions as unknown as Record<string, unknown>).canUseTool = options.additionalOptions.canUseTool;
+      sessionOptions.canUseTool = options.additionalOptions.canUseTool;
     }
 
     // V2 hooks must be JS callbacks (not command-type).
     // settings.local.json hooks cause 0-turn responses in V2.
     // SDK registers callback IDs → CLI sends hook_callback → SDK executes callback.
     const agentCwd = options.cwd;
-    (sessionOptions as unknown as Record<string, unknown>).hooks = {
+    sessionOptions.hooks = {
       UserPromptSubmit: [{
         matcher: '',
         hooks: [async () => {
@@ -216,7 +226,10 @@ export class SDKSessionManager {
             const { execSync } = await import('child_process');
             const out = execSync('bash ../_shared/hooks/skill-reminder.sh', { cwd: agentCwd, timeout: 5000, encoding: 'utf-8' });
             return JSON.parse(out.trim());
-          } catch { return { continue: true }; }
+          } catch (err) {
+            logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Hook execution failed');
+            return { continue: true };
+          }
         }],
       }],
       PostToolUse: [{
@@ -233,7 +246,10 @@ export class SDKSessionManager {
             });
             if (out.trim()) return { continue: true, hookSpecificOutput: { additionalContext: out.trim() } };
             return { continue: true };
-          } catch { return { continue: true }; }
+          } catch (err) {
+            logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Hook execution failed');
+            return { continue: true };
+          }
         }],
       }],
       Stop: [{
@@ -250,15 +266,17 @@ export class SDKSessionManager {
     };
 
     // Create or resume session
+    // Double cast is intentional: ExtendedSessionOptions includes runtime-only fields
+    // (canUseTool, hooks) that exist in the SDK at runtime but not in its TypeScript types.
     let session: SDKSession;
     if (options.resume) {
       session = unstable_v2_resumeSession(
         options.resume,
-        sessionOptions as Parameters<typeof unstable_v2_resumeSession>[1]
+        sessionOptions as unknown as Parameters<typeof unstable_v2_resumeSession>[1]
       );
     } else {
       session = unstable_v2_createSession(
-        sessionOptions as Parameters<typeof unstable_v2_createSession>[0]
+        sessionOptions as unknown as Parameters<typeof unstable_v2_createSession>[0]
       );
     }
 
@@ -316,7 +334,7 @@ export class SDKSessionManager {
     let streamMsgIndex = 0;
     for await (const message of managed.session.stream()) {
       logger.info(
-        { sessionId, msgIndex: streamMsgIndex, msgType: message.type, msgSubtype: 'subtype' in message ? (message as any).subtype : undefined },
+        { sessionId, msgIndex: streamMsgIndex, msgType: message.type, msgSubtype: 'subtype' in message ? (message as { subtype?: string }).subtype : undefined },
         'V2 stream message received'
       );
       streamMsgIndex++;

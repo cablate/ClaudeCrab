@@ -164,17 +164,6 @@ export interface ToolEvent {
   timestamp: number;
 }
 
-export interface StatusMessageOptions {
-  chatId: string;
-  initialText?: string;
-}
-
-export interface StatusMessageResult {
-  success: boolean;
-  messageId?: string;
-  error?: string;
-}
-
 /**
  * Adapter lifecycle state
  */
@@ -281,6 +270,9 @@ export interface TelegramAdapterConfig extends AdapterConfig {
 
   /** Security configuration */
   securityConfig?: AdapterSecurityConfig;
+
+  // TODO: STT/TTS interfaces are pure types that could live in src/types/media.ts
+  // to decouple adapters/ from core/stt/ and core/tts/ (D9+D15)
 
   /** Speech-to-text provider for voice message transcription */
   sttProvider?: import('../core/stt/index.js').STTProvider;

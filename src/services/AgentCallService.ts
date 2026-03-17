@@ -125,6 +125,8 @@ export class AgentCallService {
     // Directionality check: log if calling across categories without going through manager
     const fromConfig = this.agentLoader.get(fromAgent);
     const toConfig = this.agentLoader.get(toAgent);
+    // NOTE: Directionality check uses discord.reportsTo config. This is a platform-specific
+    // concept that should eventually move to a platform-agnostic org hierarchy service.
     if (fromConfig?.config.discord?.reportsTo !== undefined && toConfig?.config.discord?.reportsTo !== undefined) {
       const fromReportsTo = fromConfig.config.discord.reportsTo;
       const toReportsTo = toConfig.config.discord.reportsTo;

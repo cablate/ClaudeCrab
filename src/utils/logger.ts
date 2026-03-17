@@ -60,7 +60,7 @@ const devOptions: LoggerOptions = {
 
 export const logger = pino(isDev ? devOptions : baseOptions);
 
-export const createChildLogger = (
+const createChildLogger = (
   context: Record<string, unknown>
 ): pino.Logger => {
   return logger.child(context);

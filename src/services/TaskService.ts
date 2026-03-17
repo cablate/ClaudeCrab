@@ -1,13 +1,11 @@
 /**
- * TaskService — structured task management (Discord Forum + SQLite dual-layer).
+ * TaskService — pure SQLite task management.
  *
- * Wraps TaskRecordRepository with Discord Forum operations.
- * When a Discord adapter is available, tasks are created as Forum posts
- * and kept in sync with SQLite records.
+ * Wraps TaskRecordRepository with business logic.
+ * Discord Forum operations are handled by DiscordTaskSync (adapters/discord/services/).
+ * Uses an optional threadNotifier to delegate platform-specific operations.
  */
 
-import { ChannelType, type Client, type ThreadChannel } from 'discord.js';
-import type { DiscordAdapter } from '../adapters/DiscordAdapter.js';
 import {
   TaskRecordRepository,
   type CreateTaskInput,
@@ -16,133 +14,55 @@ import {
   type TaskPriority,
   type TaskRecordRow,
 } from '../persistence/TaskRecordRepository.js';
+import type { ITaskService } from '../types/interfaces.js';
 import { logger } from '../utils/logger.js';
 
 const log = logger.child({ module: 'TaskService' });
 
-export interface TaskServiceOptions {
-  taskRecordRepository: TaskRecordRepository;
-  /** Discord adapter (main bot) for Forum operations. If null, SQLite-only mode. */
-  discordAdapter?: DiscordAdapter;
-  /** Forum channel ID for task board */
-  forumChannelId?: string;
+/**
+ * Platform-agnostic thread notifier interface.
+ * Discord implementation: DiscordTaskSync
+ */
+export interface TaskThreadNotifier {
+  /** Create a forum/thread post for a new task. Returns the thread ID. */
+  createForumPost(input: CreateTaskInput, formattedTitle: string, formattedContent: string): Promise<{ threadId: string } | undefined>;
+  /** Post a status update to the task's thread */
+  postToThread(threadId: string, content: string): Promise<void>;
+  /** Archive a task's thread */
+  archiveThread(threadId: string): Promise<void>;
 }
 
-export class TaskService {
+export interface TaskServiceOptions {
+  taskRecordRepository: TaskRecordRepository;
+  /** Optional platform-specific notifier for thread operations */
+  threadNotifier?: TaskThreadNotifier;
+}
+
+export class TaskService implements ITaskService {
   private readonly repo: TaskRecordRepository;
-  private readonly adapter: DiscordAdapter | undefined;
-  private readonly forumChannelId: string | undefined;
+  private readonly threadNotifier: TaskThreadNotifier | undefined;
 
   constructor(options: TaskServiceOptions) {
     this.repo = options.taskRecordRepository;
-    this.adapter = options.discordAdapter;
-    this.forumChannelId = options.forumChannelId;
+    this.threadNotifier = options.threadNotifier;
   }
 
   /**
-   * Start listening for Forum post creation by humans.
-   * When a user creates a post directly in #任務看板, sync it to SQLite.
-   */
-  startForumListener(): void {
-    if (this.adapter === undefined || this.forumChannelId === undefined) return;
-
-    const client = this.adapter.getClient();
-    if (client === null) return;
-
-    const forumId = this.forumChannelId;
-
-    client.on('threadCreate', (thread) => {
-      // Only care about threads in our task board forum
-      if (thread.parentId !== forumId) return;
-      // Skip if already tracked (created by our code)
-      if (this.repo.getByDiscordThreadId(thread.id) !== undefined) return;
-
-      // Parse priority from Forum tags
-      const priority = this.parsePriorityFromThread(thread as ThreadChannel);
-      const assignee = this.parseAssigneeFromThread(thread as ThreadChannel);
-
-      const taskId = this.repo.insert({
-        title: thread.name,
-        priority,
-        discordThreadId: thread.id,
-        createdByUserId: thread.ownerId ?? 'unknown',
-        ...(assignee !== undefined ? { assigneeAgentId: assignee } : {}),
-      });
-
-      log.info(
-        { taskId, threadId: thread.id, title: thread.name },
-        'Forum post synced to SQLite (user-created)'
-      );
-    });
-
-    log.info({ forumId }, 'Forum listener started — user posts will sync to SQLite');
-  }
-
-  /**
-   * Parse priority from Forum thread applied tags.
-   */
-  private parsePriorityFromThread(thread: ThreadChannel): TaskPriority {
-    const tagNames = this.getAppliedTagNames(thread);
-    if (tagNames.some(t => t.includes('urgent') || t.includes('🔴'))) return 'urgent';
-    if (tagNames.some(t => t.includes('low') || t.includes('🟢'))) return 'low';
-    return 'medium';
-  }
-
-  /**
-   * Parse assignee agent from Forum thread applied tags.
-   */
-  private parseAssigneeFromThread(thread: ThreadChannel): string | undefined {
-    const tagNames = this.getAppliedTagNames(thread);
-    const agentTags: Record<string, string> = {
-      'coder': 'coder', '工程師': 'coder',
-      'writer': 'writer', '寫手': 'writer',
-      'admin': 'admin', '管理員': 'admin',
-      'seo': 'seo',
-      'transcriber': 'transcriber', '轉寫員': 'transcriber',
-      'media': 'media', '媒體製作': 'media',
-      'oss-coder': 'oss-coder', '開源工程師': 'oss-coder',
-    };
-
-    for (const tagName of tagNames) {
-      const lower = tagName.toLowerCase().replace(/[🤖📝🔧🌐🎙🎨💻\s]/g, '');
-      for (const [key, agentId] of Object.entries(agentTags)) {
-        if (lower.includes(key)) return agentId;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Get applied tag names from a Forum thread.
-   */
-  private getAppliedTagNames(thread: ThreadChannel): string[] {
-    if (thread.parent === null || thread.parent.type !== ChannelType.GuildForum) return [];
-    const forum = thread.parent;
-    const appliedIds = thread.appliedTags;
-    return forum.availableTags
-      .filter(t => appliedIds.includes(t.id))
-      .map(t => t.name);
-  }
-
-  /**
-   * Create a new task (SQLite + optionally Discord Forum post).
+   * Create a new task (SQLite + optionally platform thread).
    */
   async createTask(input: CreateTaskInput): Promise<string> {
     // Create in SQLite first
     const taskId = this.repo.insert(input);
     log.info({ taskId, title: input.title }, 'Task created in SQLite');
 
-    // Create Discord Forum post if adapter available
-    if (this.adapter !== undefined && this.forumChannelId !== undefined) {
+    // Create platform thread if notifier available
+    if (this.threadNotifier !== undefined) {
       try {
+        const title = this.formatForumTitle(input);
         const content = this.formatTaskContent(input);
-        const result = await this.adapter.createForumPost(
-          this.forumChannelId,
-          this.formatForumTitle(input),
-          content,
-        );
+        const result = await this.threadNotifier.createForumPost(input, title, content);
 
-        if (result.success && result.threadId !== undefined) {
+        if (result !== undefined && result.threadId !== undefined) {
           this.repo.update(taskId, { discordThreadId: result.threadId });
           log.info({ taskId, threadId: result.threadId }, 'Forum post created');
         }
@@ -160,13 +80,13 @@ export class TaskService {
   async updateStatus(taskId: string, status: TaskStatus): Promise<void> {
     this.repo.update(taskId, { status });
 
-    // Update Discord thread
+    // Notify platform thread
     const task = this.repo.getById(taskId);
-    if (task !== undefined && task.discord_thread_id !== null && this.adapter !== undefined) {
+    if (task !== undefined && task.discord_thread_id !== null && this.threadNotifier !== undefined) {
       try {
-        await this.adapter.replyToThread(
+        await this.threadNotifier.postToThread(
           task.discord_thread_id,
-          `📌 Status: **${status}**`
+          `\u{1F4CC} Status: **${status}**`
         );
       } catch {
         // Best effort
@@ -183,11 +103,11 @@ export class TaskService {
     this.repo.update(taskId, { assigneeAgentId: agentId });
 
     const task = this.repo.getById(taskId);
-    if (task !== undefined && task.discord_thread_id !== null && this.adapter !== undefined) {
+    if (task !== undefined && task.discord_thread_id !== null && this.threadNotifier !== undefined) {
       try {
-        await this.adapter.replyToThread(
+        await this.threadNotifier.postToThread(
           task.discord_thread_id,
-          `👤 Assigned to **${agentId}**`
+          `\u{1F464} Assigned to **${agentId}**`
         );
       } catch {
         // Best effort
@@ -203,11 +123,11 @@ export class TaskService {
   async completeTask(taskId: string): Promise<void> {
     await this.updateStatus(taskId, 'done');
 
-    // Archive the Discord thread
+    // Archive the thread
     const task = this.repo.getById(taskId);
-    if (task !== undefined && task.discord_thread_id !== null && this.adapter !== undefined) {
+    if (task !== undefined && task.discord_thread_id !== null && this.threadNotifier !== undefined) {
       try {
-        await this.adapter.archiveThread(task.discord_thread_id);
+        await this.threadNotifier.archiveThread(task.discord_thread_id);
       } catch {
         // Best effort
       }
@@ -242,8 +162,15 @@ export class TaskService {
     this.repo.addCost(taskId, costCents);
   }
 
+  /**
+   * Get the underlying repository (for platform-specific code that needs direct access).
+   */
+  getRepository(): TaskRecordRepository {
+    return this.repo;
+  }
+
   private formatForumTitle(input: CreateTaskInput): string {
-    const priorityEmoji = input.priority === 'urgent' ? '🔴' : input.priority === 'low' ? '🟢' : '🟡';
+    const priorityEmoji = input.priority === 'urgent' ? '\u{1F534}' : input.priority === 'low' ? '\u{1F7E2}' : '\u{1F7E1}';
     return `${priorityEmoji} ${input.title}`;
   }
 

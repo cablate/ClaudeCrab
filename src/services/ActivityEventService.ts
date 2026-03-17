@@ -1,16 +1,16 @@
 /**
- * ActivityEventService — operational event dual-write (SQLite + Discord).
+ * ActivityEventService — operational event logging with pluggable notification.
  *
- * Logs structured events to execution_records/activity tables AND
- * sends formatted messages to Discord #system-log and #alerts channels.
+ * Logs structured events and sends formatted messages via an injected notifier.
+ * The notifier is platform-agnostic — Discord implementation lives in
+ * adapters/discord/services/DiscordActivityReporter.ts.
  *
  * NOT the same as ActivityService (WebUI personality reactions).
  * This is for operational visibility: schedule results, budget alerts, errors.
  */
 
-import { EmbedBuilder } from 'discord.js';
-import type { DiscordAdapter } from '../adapters/DiscordAdapter.js';
 import { logger } from '../utils/logger.js';
+import type { IActivityEventService } from '../types/interfaces.js';
 
 const log = logger.child({ module: 'ActivityEventService' });
 
@@ -44,36 +44,40 @@ export interface OperationalEvent {
   level?: 'info' | 'warn' | 'error';
 }
 
-const EVENT_EMOJI: Record<string, string> = {
-  'chat.received': '📩',
-  'chat.responded': '💬',
-  'schedule.started': '⏰',
-  'schedule.completed': '✅',
-  'schedule.failed': '❌',
-  'agent_call.sent': '📤',
-  'agent_call.received': '📥',
-  'budget.warning': '⚠️',
-  'budget.exceeded': '🔴',
-  'task.created': '📋',
-  'task.completed': '✅',
-  'error.occurred': '🚨',
+export const EVENT_EMOJI: Record<string, string> = {
+  'chat.received': '\u{1F4E9}',
+  'chat.responded': '\u{1F4AC}',
+  'schedule.started': '\u23F0',
+  'schedule.completed': '\u2705',
+  'schedule.failed': '\u274C',
+  'agent_call.sent': '\u{1F4E4}',
+  'agent_call.received': '\u{1F4E5}',
+  'budget.warning': '\u26A0\uFE0F',
+  'budget.exceeded': '\u{1F534}',
+  'task.created': '\u{1F4CB}',
+  'task.completed': '\u2705',
+  'error.occurred': '\u{1F6A8}',
 };
 
+/**
+ * Notifier interface — platform-specific implementations handle the actual message delivery.
+ */
+export interface ActivityNotifier {
+  /** Send a batch of log lines to the system log channel */
+  sendSystemLog(text: string): Promise<void>;
+  /** Send an alert (structured event data for rich formatting) */
+  sendAlert(event: OperationalEvent, formattedMessage: string): Promise<void>;
+}
+
 export interface ActivityEventServiceOptions {
-  /** Discord adapter (main bot) for sending events */
-  discordAdapter?: DiscordAdapter;
-  /** #system-log channel ID */
-  systemLogChannelId?: string;
-  /** #alerts channel ID */
-  alertsChannelId?: string;
+  /** Platform-specific notifier for sending events */
+  notifier?: ActivityNotifier;
   /** Owner user ID for @mention in alerts */
   ownerUserId?: string;
 }
 
-export class ActivityEventService {
-  private readonly adapter: DiscordAdapter | undefined;
-  private readonly systemLogChannelId: string | undefined;
-  private readonly alertsChannelId: string | undefined;
+export class ActivityEventService implements IActivityEventService {
+  private readonly notifier: ActivityNotifier | undefined;
   private readonly ownerUserId: string | undefined;
 
   /** Batch queue: accumulate events, flush periodically */
@@ -83,13 +87,11 @@ export class ActivityEventService {
   private static readonly MAX_BATCH_SIZE = 10;
 
   constructor(options: ActivityEventServiceOptions) {
-    this.adapter = options.discordAdapter;
-    this.systemLogChannelId = options.systemLogChannelId;
-    this.alertsChannelId = options.alertsChannelId;
+    this.notifier = options.notifier;
     this.ownerUserId = options.ownerUserId;
 
     // Start batch flush timer
-    if (this.adapter !== undefined && this.systemLogChannelId !== undefined) {
+    if (this.notifier !== undefined) {
       this.flushTimer = setInterval(() => {
         void this.flush().catch((err) => {
           log.warn({ err }, 'Failed to flush activity events');
@@ -100,10 +102,10 @@ export class ActivityEventService {
   }
 
   /**
-   * Log an operational event. Sends to Discord if configured.
+   * Log an operational event. Sends via notifier if configured.
    */
   async log(event: OperationalEvent): Promise<void> {
-    const emoji = EVENT_EMOJI[event.type] ?? '📌';
+    const emoji = EVENT_EMOJI[event.type] ?? '\u{1F4CC}';
     const line = `${emoji} **${event.agentId}** ${event.message}`;
 
     // Determine routing
@@ -114,7 +116,7 @@ export class ActivityEventService {
       await this.sendAlert(event);
     }
 
-    // Queue for #system-log batch
+    // Queue for system-log batch
     this.queue.push(this.redactSecrets(line));
 
     if (this.queue.length >= ActivityEventService.MAX_BATCH_SIZE) {
@@ -123,47 +125,30 @@ export class ActivityEventService {
   }
 
   /**
-   * Send an alert embed to #alerts channel.
+   * Send an alert via notifier.
    */
   private async sendAlert(event: OperationalEvent): Promise<void> {
-    if (this.adapter === undefined || this.alertsChannelId === undefined) return;
+    if (this.notifier === undefined) return;
 
     try {
-      const embed = new EmbedBuilder()
-        .setTitle(`${EVENT_EMOJI[event.type] ?? '⚠️'} ${event.type}`)
-        .setColor(event.type === 'budget.exceeded' || event.type === 'error.occurred' ? 0xFF0000 : 0xFFA500)
-        .addFields(
-          { name: 'Agent', value: event.agentId, inline: true },
-          { name: 'Message', value: this.redactSecrets(event.message).slice(0, 1024) },
-        )
-        .setTimestamp();
-
-      if (event.details !== undefined) {
-        embed.addFields({ name: 'Details', value: this.redactSecrets(event.details).slice(0, 1024) });
-      }
-
-      // Send embed (with optional @mention as content in the same message)
+      const redactedMessage = this.redactSecrets(event.message).slice(0, 1024);
       const shouldMention = this.ownerUserId !== undefined &&
         (event.type === 'budget.exceeded' || event.type === 'error.occurred');
 
-      if (shouldMention) {
-        // Send mention + embed together via sendToChannel then embed
-        // DiscordAdapter.sendEmbed doesn't support content param, so send mention in embed description
-        embed.setDescription(`<@${this.ownerUserId}> 需要你關注\n\n${embed.data.description ?? ''}`);
-      }
+      const formattedMessage = shouldMention ? `<@${this.ownerUserId}>` : '';
 
-      await this.adapter.sendEmbed(this.alertsChannelId, [embed]);
+      await this.notifier.sendAlert(event, formattedMessage);
     } catch (err) {
       log.warn({ err }, 'Failed to send alert');
     }
   }
 
   /**
-   * Flush queued events to #system-log as a single message.
+   * Flush queued events to system-log as a single message.
    */
   private async flush(): Promise<void> {
     if (this.queue.length === 0) return;
-    if (this.adapter === undefined || this.systemLogChannelId === undefined) {
+    if (this.notifier === undefined) {
       this.queue = [];
       return;
     }
@@ -172,16 +157,16 @@ export class ActivityEventService {
     const text = batch.join('\n');
 
     try {
-      await this.adapter.sendToChannel(this.systemLogChannelId, text);
+      await this.notifier.sendSystemLog(text);
     } catch (err) {
-      log.warn({ err, batchSize: batch.length }, 'Failed to flush to #system-log');
+      log.warn({ err, batchSize: batch.length }, 'Failed to flush to system-log');
     }
   }
 
   /**
    * Redact secrets from text.
    */
-  private redactSecrets(text: string): string {
+  redactSecrets(text: string): string {
     let result = text;
     for (const pattern of SECRET_PATTERNS) {
       result = result.replace(pattern, '[REDACTED]');
@@ -190,14 +175,13 @@ export class ActivityEventService {
   }
 
   /**
-   * Stop the flush timer.
+   * Stop the flush timer and flush remaining events.
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
     if (this.flushTimer !== null) {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
-    // Final flush
-    void this.flush().catch(() => {});
+    await this.flush();
   }
 }

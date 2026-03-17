@@ -22,7 +22,6 @@ export {
   type PermissionDecision,
   type PermissionRequestInfo,
 } from './PermissionBridge.js';
-export { MEMORY_CHECKPOINT_CONTEXT } from './constants.js';
 export {
   ContextInjector,
   type InjectionContext,

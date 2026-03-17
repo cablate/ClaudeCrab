@@ -10,7 +10,7 @@ import { toZonedTime } from 'date-fns-tz';
  * Memory checkpoint reminder injected via UserPromptSubmit hook.
  * Reminds the agent to follow memory-system protocol.
  */
-export const MEMORY_CHECKPOINT_CONTEXT = `【記憶（靜默）】遵循 memory-system 規範，靜默執行記憶操作。不要在回覆中提及記憶寫入過程或結果。
+const MEMORY_CHECKPOINT_CONTEXT = `【記憶（靜默）】遵循 memory-system 規範，靜默執行記憶操作。不要在回覆中提及記憶寫入過程或結果。
 1. 上輪有漏記？→ 根據規範寫入對應檔案
 2. 處理用戶訊息並回覆
 3. 結束前靜默檢查，不要輸出檢查過程`;
@@ -20,7 +20,7 @@ export const MEMORY_CHECKPOINT_CONTEXT = `【記憶（靜默）】遵循 memory-
  * When an interactive session is about to stop, this prompt is injected
  * to ensure the agent performs a final memory checkpoint before exiting.
  */
-export const MEMORY_STOP_CHECKPOINT =
+const MEMORY_STOP_CHECKPOINT =
   '⚠️【系統任務：記憶檢查】這不是對話延續——禁止回覆使用者、禁止重複上輪內容。\n\n' +
   '靜默執行：有該記的→寫檔；沒有→直接結束（不輸出文字）。\n\n' +
   '檢查項（靜默）：\n' +

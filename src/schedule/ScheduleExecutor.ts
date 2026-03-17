@@ -12,6 +12,8 @@ import type { ScheduleNotifier } from './ScheduleNotifier.js';
 import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import type { IQueryMetricsRepository } from '../persistence/types.js';
 import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
+import type { IBudgetService, IActivityEventService } from '../types/interfaces.js';
+// Concrete types kept for wirePostInit/constructor compatibility
 import type { BudgetService } from '../services/BudgetService.js';
 import type { ActivityEventService } from '../services/ActivityEventService.js';
 import type { AgentLoader } from '../core/AgentLoader.js';
@@ -44,8 +46,11 @@ export class ScheduleExecutor {
   ) {}
 
   /**
-   * Wire late-bound dependencies created after ScheduleExecutor construction.
-   * Replaces the unsafe `(this.scheduleExecutor as any).prop = value` pattern.
+   * Late dependency injection for services that depend on Discord adapters.
+   * Called by AppBootstrap after Discord initialization completes.
+   *
+   * Race window: between construction and wirePostInit(), these services are undefined.
+   * All usage sites have null guards (optional chaining) to handle this gracefully.
    */
   wirePostInit(deps: {
     activityEventService?: ActivityEventService;

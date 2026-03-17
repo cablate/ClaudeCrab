@@ -113,7 +113,7 @@ export interface BotRepliedPayload {
 /**
  * Payload for message:sent event
  */
-export interface MessageSentPayload {
+interface MessageSentPayload {
   chatId: string;
   text: string;
   platform: string;
@@ -124,7 +124,7 @@ export interface MessageSentPayload {
 /**
  * Payload for session:closed event
  */
-export interface SessionClosedPayload {
+interface SessionClosedPayload {
   sessionId: string;
   reason: 'timeout' | 'user_request' | 'error' | 'agent_switch';
   platform: string;
@@ -134,7 +134,7 @@ export interface SessionClosedPayload {
 /**
  * Payload for session:switched event
  */
-export interface SessionSwitchedPayload {
+interface SessionSwitchedPayload {
   oldAgentId: string;
   newAgentId: string;
   sessionId: string;
@@ -145,7 +145,7 @@ export interface SessionSwitchedPayload {
 /**
  * Payload for session:stateChanged event
  */
-export interface SessionStateChangedPayload {
+interface SessionStateChangedPayload {
   sessionId: string;
   previousState: 'idle' | 'processing' | 'error';
   newState: 'idle' | 'processing' | 'error';
@@ -185,7 +185,7 @@ export type EventName = keyof EventMap;
 /**
  * List of all event names
  */
-export const EVENT_NAMES: EventName[] = [
+const EVENT_NAMES: EventName[] = [
   'message:received',
   'message:sent',
   'session:created',

@@ -1,5 +1,5 @@
 import { logger } from './logger.js';
-import type { UnifiedMessage } from '../adapters/types.js';
+import type { UnifiedMessage } from '../types/message.js';
 
 /**
  * Audit event types
@@ -201,29 +201,6 @@ class AuditLogger {
       sessionId,
       data: {
         agentId,
-      },
-      outcome: 'success',
-    });
-  }
-
-  /**
-   * Log agent switch
-   */
-  logAgentSwitch(
-    platform: string,
-    userId: string,
-    sessionId: string,
-    fromAgentId: string,
-    toAgentId: string
-  ): void {
-    this.log({
-      type: 'session:switched',
-      platform,
-      userId,
-      sessionId,
-      data: {
-        fromAgentId,
-        toAgentId,
       },
       outcome: 'success',
     });

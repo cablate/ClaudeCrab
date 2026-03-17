@@ -262,7 +262,7 @@ export const API_RETRY_OPTIONS: RetryOptions = {
 /**
  * Rate limit specific retry options (longer delays)
  */
-export const RATE_LIMIT_RETRY_OPTIONS: RetryOptions = {
+const RATE_LIMIT_RETRY_OPTIONS: RetryOptions = {
   maxAttempts: 5,
   initialDelayMs: 5000,
   maxDelayMs: 60000,

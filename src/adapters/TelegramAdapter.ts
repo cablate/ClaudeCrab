@@ -1,3 +1,14 @@
+/**
+ * TelegramAdapter — Telegram platform adapter using grammy.
+ *
+ * Handles message receiving/routing, message sending (text/photo/audio/document/video),
+ * interactive UI (Permission/Question/ExitPlanMode prompts via InlineKeyboard),
+ * and connection health monitoring.
+ *
+ * Uses RateLimiter for all Telegram API calls to prevent 429 errors.
+ * Supports group chat routing via GroupBroadcaster integration.
+ */
+
 import { Bot, Context, GrammyError, HttpError, InlineKeyboard, InputFile } from 'grammy';
 import { BaseAdapter } from './BaseAdapter.js';
 import type {
@@ -148,6 +159,28 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
   }
 
   /**
+   * Assert that bot is initialized and return it.
+   * Throws if called before start().
+   */
+  private assertBot(): Bot<Context> {
+    if (this.bot === null) {
+      throw new Error('TelegramAdapter: bot not initialized. Call start() first.');
+    }
+    return this.bot;
+  }
+
+  /**
+   * Assert that callbackHandler is initialized and return it.
+   * Throws if called before start().
+   */
+  private assertCallbackHandler(): TelegramCallbackHandler {
+    if (this.callbackHandler === null) {
+      throw new Error('TelegramAdapter: callbackHandler not initialized. Call start() first.');
+    }
+    return this.callbackHandler;
+  }
+
+  /**
    * Get bot info (username, id) for group message handling.
    * Returns null if bot is not initialized yet.
    */
@@ -232,7 +265,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         return;
       }
 
-      void this.callbackHandler!.handle(ctx).catch((error) => {
+      void this.assertCallbackHandler().handle(ctx).catch((error) => {
         this.log.error({ error }, 'Unhandled error in callback handler');
       });
     });
@@ -845,7 +878,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         }
 
         const result = await this.rateLimiter.execute(async () => {
-          return this.bot!.api.sendMessage(chatId, chunk, sendOptions);
+          return this.assertBot().api.sendMessage(chatId, chunk, sendOptions);
         });
 
         lastMessageId = result.message_id.toString();
@@ -912,7 +945,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       const result = await this.rateLimiter.execute(async () => {
         const opts: Record<string, unknown> = {};
         if (caption) opts.caption = caption.substring(0, 1024);
-        return this.bot!.api.sendPhoto(chatId, new InputFile(filePath), opts);
+        return this.assertBot().api.sendPhoto(chatId, new InputFile(filePath), opts);
       });
 
       return { success: true, messageId: result.message_id.toString() };
@@ -939,7 +972,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       const result = await this.rateLimiter.execute(async () => {
         const opts: Record<string, unknown> = {};
         if (caption) opts.caption = caption.substring(0, 1024);
-        return this.bot!.api.sendDocument(chatId, new InputFile(filePath), opts);
+        return this.assertBot().api.sendDocument(chatId, new InputFile(filePath), opts);
       });
 
       return { success: true, messageId: result.message_id.toString() };
@@ -966,7 +999,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       const result = await this.rateLimiter.execute(async () => {
         const opts: Record<string, unknown> = {};
         if (caption) opts.caption = caption.substring(0, 1024);
-        return this.bot!.api.sendVideo(chatId, new InputFile(filePath), opts);
+        return this.assertBot().api.sendVideo(chatId, new InputFile(filePath), opts);
       });
 
       return { success: true, messageId: result.message_id.toString() };
@@ -995,7 +1028,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         if (options?.duration !== undefined) opts.duration = options.duration;
         if (options?.caption) opts.caption = options.caption.substring(0, 1024);
         const filename = options?.filename ?? 'audio.mp3';
-        return this.bot!.api.sendAudio(chatId, new InputFile(audio, filename), opts);
+        return this.assertBot().api.sendAudio(chatId, new InputFile(audio, filename), opts);
       });
 
       return { success: true, messageId: result.message_id.toString() };
@@ -1016,7 +1049,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
     try {
       await this.rateLimiter.execute(async () => {
-        await this.bot!.api.sendChatAction(chatId, 'typing');
+        await this.assertBot().api.sendChatAction(chatId, 'typing');
       });
     } catch (error) {
       this.log.warn({ error, chatId }, 'Failed to send typing indicator');
@@ -1038,7 +1071,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     try {
       const result = await this.rateLimiter.execute(async () => {
         // Use plain text to avoid Markdown parsing issues with tool names
-        return await this.bot!.api.sendMessage(chatId, initialText);
+        return await this.assertBot().api.sendMessage(chatId, initialText);
       });
       return String(result.message_id);
     } catch (error) {
@@ -1063,7 +1096,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
     try {
       await this.rateLimiter.execute(async () => {
         // Use plain text to avoid Markdown parsing issues with tool names
-        await this.bot!.api.editMessageText(
+        await this.assertBot().api.editMessageText(
           chatId,
           parseInt(messageId, 10),
           text
@@ -1126,7 +1159,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       ].join('\n');
 
       const result = await this.rateLimiter.execute(async () => {
-        return this.bot!.api.sendMessage(chatId, text, {
+        return this.assertBot().api.sendMessage(chatId, text, {
           parse_mode: 'Markdown',
           reply_markup: keyboard,
         });
@@ -1157,7 +1190,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
     try {
       await this.rateLimiter.execute(async () => {
-        await this.bot!.api.editMessageText(
+        await this.assertBot().api.editMessageText(
           chatId,
           parseInt(messageId, 10),
           text,
@@ -1239,7 +1272,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       ].join('\n');
 
       const result = await this.rateLimiter.execute(async () => {
-        return this.bot!.api.sendMessage(chatId, text, {
+        return this.assertBot().api.sendMessage(chatId, text, {
           parse_mode: 'Markdown',
           reply_markup: keyboard,
         });
@@ -1247,7 +1280,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
       // Initialize multi-select state if needed
       if (options.multiSelect) {
-        this.callbackHandler!.initMultiSelectState(
+        this.assertCallbackHandler().initMultiSelectState(
           options.requestId,
           result.message_id.toString(),
           chatId,
@@ -1280,7 +1313,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
     try {
       await this.rateLimiter.execute(async () => {
-        await this.bot!.api.editMessageText(
+        await this.assertBot().api.editMessageText(
           chatId,
           parseInt(messageId, 10),
           text,
@@ -1338,7 +1371,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       ].join('\n');
 
       const result = await this.rateLimiter.execute(async () => {
-        return this.bot!.api.sendMessage(chatId, text, {
+        return this.assertBot().api.sendMessage(chatId, text, {
           parse_mode: 'Markdown',
           reply_markup: keyboard,
         });
@@ -1369,7 +1402,7 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
 
     try {
       await this.rateLimiter.execute(async () => {
-        await this.bot!.api.editMessageText(
+        await this.assertBot().api.editMessageText(
           chatId,
           parseInt(messageId, 10),
           text,

@@ -1,13 +1,28 @@
+/**
+ * MessageProcessor — Unified message processing pipeline.
+ *
+ * Receives UnifiedMessage → manages session → executes SDK query → routes response.
+ * Supports V1 (stateless query via SDKQueryManager) and V2 (cached session via SDKSessionManager).
+ *
+ * Key dependencies:
+ * - SessionManager: conversation session lifecycle
+ * - SDKQueryManager / SDKSessionManager: Claude SDK query execution
+ * - ResponseSender: routes replies to the correct platform adapter
+ * - AgentCallService: cross-agent calls (via interface, not concrete class)
+ *
+ * Main flow: processMessage() → getOrCreateSession() → executeQueryWithSDK() → sendResponse()
+ */
+
 import type { UnifiedMessage } from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
-import type { SendOptions, SendResult } from '../adapters/types.js';
+import type { SendOptions } from '../adapters/types.js';
 import type { IConversationRepository, IQueryMetricsRepository } from '../persistence/types.js';
 import { SessionManager } from './SessionManager.js';
 import { SDKQueryManager, type QueryResult } from './SDKQueryManager.js';
 import { SDKSessionManager } from './SDKSessionManager.js';
 import { InteractionHandler } from './InteractionHandler.js';
 import { EventBus } from './EventBus.js';
-import { buildPromptContext, MEMORY_STOP_CHECKPOINT } from './constants.js';
+import { buildPromptContext } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 
@@ -32,10 +47,12 @@ import {
 } from './StatusMessageManager.js';
 import type { ActivityService } from './ActivityService.js';
 import type { AgentCallService } from '../services/AgentCallService.js';
-import type { BudgetService } from '../services/BudgetService.js';
 import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
+import type { ITaskService, IBudgetService, IActivityEventService } from '../types/interfaces.js';
+// Concrete types kept for wirePostInit compatibility — consumers pass concrete instances
 import type { TaskService } from '../services/TaskService.js';
 import type { ActivityEventService } from '../services/ActivityEventService.js';
+import type { BudgetService } from '../services/BudgetService.js';
 
 import type { TTSService } from '../services/TTSService.js';
 import { buildGroupUserId, isGroupUserId, extractChatIdFromGroupUserId } from '../utils/groupSession.js';
@@ -216,8 +233,11 @@ export class MessageProcessor {
   }
 
   /**
-   * Wire late-bound dependencies that are created after MessageProcessor construction.
-   * Replaces the unsafe `(messageProcessor as any).prop = value` pattern.
+   * Late dependency injection for services that depend on Discord adapters.
+   * Called by AppBootstrap after Discord initialization completes.
+   *
+   * Race window: between construction and wirePostInit(), these services are undefined.
+   * All usage sites have null guards (optional chaining) to handle this gracefully.
    */
   wirePostInit(deps: {
     taskService?: TaskService;
@@ -592,56 +612,14 @@ export class MessageProcessor {
       // Agent call: track whether the response prefix has been applied
       let agentCallPrefixApplied = false;
 
-      // Context injection for multi-bot group chats (ADR-019)
-      // Get messages since last query to inject as context
-      let injectionContext: { formattedHistory: string; messageCount: number; lastMessageId: string | null } | null = null;
-      if (options?.isGroupChat && this.contextInjector) {
-        // Extract chatId from group userId format
-        const groupChatId = isGroupUserId(userId) ? extractChatIdFromGroupUserId(userId) : chatId;
-        injectionContext = this.contextInjector.getInjectionContext(
-          agentId,
-          groupChatId,
-          platform
-        );
-        if (injectionContext.messageCount > 0) {
-          logger.info(
-            { agentId, chatId: groupChatId, messageCount: injectionContext.messageCount },
-            'Injecting group chat context'
-          );
-          logger.debug(
-            { agentId, formattedHistory: injectionContext.formattedHistory },
-            'Injection context content'
-          );
-        }
-      }
-
-      // Build final prompt with injected context
-      const finalPrompt = injectionContext?.formattedHistory
-        ? `${injectionContext.formattedHistory}\n${prompt}`
-        : prompt;
-
-      logger.debug(
-        { agentId, originalPrompt: prompt.substring(0, 100), hasInjection: !!injectionContext?.formattedHistory },
-        'Final prompt built'
+      // Prepare group context injection and build final prompt (ADR-019)
+      const { finalPrompt, injectionContext } = this.prepareGroupContext(
+        prompt, agentId, chatId, userId, platform, options?.isGroupChat
       );
 
-      // Build MCP servers and allowed tools from available services
-      // Pass sub-conversation context for cross-channel agent-call routing (platform-agnostic)
-      const mcpCtx: import('../McpToolSetup.js').McpSetupContext = {
-        agentId, chatId, userId, platform,
-      };
-      // If adapter provided parentConversationId, this is a sub-conversation (thread, etc.)
-      const parentConvId = options?.parentConversationId;
-      if (parentConvId !== undefined) {
-        mcpCtx.subConversationId = chatId;
-        mcpCtx.parentConversationId = parentConvId;
-      }
-      const { mcpServers, allowedTools } = buildMcpSetup(
-        this.agentCallService,
-        this.ttsService,
-        adapter,
-        mcpCtx,
-        this.taskService,
+      // Build MCP tool configuration for this query
+      const { mcpServers, allowedTools } = this.buildMcpConfig(
+        agentId, chatId, userId, platform, adapter, options?.parentConversationId
       );
 
       // Helper: execute SDK query with retry for rate limit / transient errors
@@ -951,30 +929,7 @@ export class MessageProcessor {
       this.recordExecutionAudit(result, agentId, 'chat', userId, chatId);
 
       // Budget post-check: may pause agent for next query
-      if (this.budgetService !== undefined) {
-        const budgetStatus = this.budgetService.postQueryCheck(agentId);
-        if (budgetStatus !== null && budgetStatus.exceeded) {
-          logger.warn(
-            { agentId, reason: budgetStatus.exceededReason, monthCents: budgetStatus.monthCents },
-            'Agent budget exceeded after query — will be paused for next query'
-          );
-          // Push to Discord #alerts
-          void this.activityEventService?.log({
-            type: 'budget.exceeded',
-            agentId,
-            message: `預算超限 (${budgetStatus.exceededReason})，Agent 已暫停`,
-            details: `月花費: $${(budgetStatus.monthCents / 100).toFixed(2)} / 上限: $${(budgetStatus.monthlyLimitCents / 100).toFixed(2)}`,
-            level: 'error',
-          });
-        } else if (budgetStatus !== null && budgetStatus.warning) {
-          void this.activityEventService?.log({
-            type: 'budget.warning',
-            agentId,
-            message: `預算接近上限 (${Math.round(budgetStatus.monthCents / budgetStatus.monthlyLimitCents * 100)}%)`,
-            level: 'warn',
-          });
-        }
-      }
+      this.handleBudgetPostCheck(agentId);
 
       this.updateInjectionCursor(injectionContext, userId, chatId, agentId, platform);
       this.persistConversation(sessionId, prompt, intermediateMessages, result.response, agentId, options);
@@ -1032,6 +987,110 @@ export class MessageProcessor {
       if (typingInterval !== null) {
         clearInterval(typingInterval);
       }
+    }
+  }
+
+  // --- Query preparation helpers ---
+
+  /**
+   * Prepare group chat context injection and build the final prompt.
+   * Injects recent group messages as context prefix for multi-bot group chats (ADR-019).
+   */
+  private prepareGroupContext(
+    prompt: string,
+    agentId: string,
+    chatId: string,
+    userId: string,
+    platform: string,
+    isGroupChat?: boolean
+  ): {
+    finalPrompt: string;
+    injectionContext: { formattedHistory: string; messageCount: number; lastMessageId: string | null } | null;
+  } {
+    let injectionContext: { formattedHistory: string; messageCount: number; lastMessageId: string | null } | null = null;
+
+    if (isGroupChat && this.contextInjector) {
+      const groupChatId = isGroupUserId(userId) ? extractChatIdFromGroupUserId(userId) : chatId;
+      injectionContext = this.contextInjector.getInjectionContext(agentId, groupChatId, platform);
+      if (injectionContext.messageCount > 0) {
+        logger.info(
+          { agentId, chatId: groupChatId, messageCount: injectionContext.messageCount },
+          'Injecting group chat context'
+        );
+        logger.debug(
+          { agentId, formattedHistory: injectionContext.formattedHistory },
+          'Injection context content'
+        );
+      }
+    }
+
+    const finalPrompt = injectionContext?.formattedHistory
+      ? `${injectionContext.formattedHistory}\n${prompt}`
+      : prompt;
+
+    logger.debug(
+      { agentId, originalPrompt: prompt.substring(0, 100), hasInjection: !!injectionContext?.formattedHistory },
+      'Final prompt built'
+    );
+
+    return { finalPrompt, injectionContext };
+  }
+
+  /**
+   * Build MCP server configuration and allowed tools for a query.
+   * Includes agent-call, TTS, task tools based on available services.
+   */
+  private buildMcpConfig(
+    agentId: string,
+    chatId: string,
+    userId: string,
+    platform: string,
+    adapter: BaseAdapter,
+    parentConversationId?: string
+  ): import('../McpToolSetup.js').McpSetupResult {
+    const mcpCtx: import('../McpToolSetup.js').McpSetupContext = {
+      agentId, chatId, userId, platform,
+    };
+    if (parentConversationId !== undefined) {
+      mcpCtx.subConversationId = chatId;
+      mcpCtx.parentConversationId = parentConversationId;
+    }
+    return buildMcpSetup(
+      this.agentCallService,
+      this.ttsService,
+      adapter,
+      mcpCtx,
+      this.taskService,
+    );
+  }
+
+  /**
+   * Run budget post-check after a query completes.
+   * Logs warnings and emits activity events if budget is exceeded or near limit.
+   */
+  private handleBudgetPostCheck(agentId: string): void {
+    if (this.budgetService === undefined) return;
+
+    const budgetStatus = this.budgetService.postQueryCheck(agentId);
+    if (budgetStatus !== null && budgetStatus.exceeded) {
+      logger.warn(
+        { agentId, reason: budgetStatus.exceededReason, monthCents: budgetStatus.monthCents },
+        'Agent budget exceeded after query — will be paused for next query'
+      );
+      void this.activityEventService?.log({
+        type: 'budget.exceeded',
+        agentId,
+        message: `預算超限 (${budgetStatus.exceededReason})，Agent 已暫停`,
+        details: `月花費: $${(budgetStatus.monthCents / 100).toFixed(2)} / 上限: $${(budgetStatus.monthlyLimitCents / 100).toFixed(2)}`,
+        level: 'error',
+      });
+    } else if (budgetStatus !== null && budgetStatus.warning) {
+      void this.activityEventService?.log({
+        type: 'budget.warning',
+        agentId,
+        message: `預算接近上限 (${Math.round(budgetStatus.monthCents / budgetStatus.monthlyLimitCents * 100)}%)`,
+        level: 'warn',
+      });
     }
   }
 
@@ -1427,8 +1486,8 @@ export class MessageProcessor {
   /**
    * Dispose resources
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
     this.sdkQueryManager.dispose();
-    void this.sdkSessionManager.dispose();
+    await this.sdkSessionManager.dispose();
   }
 }

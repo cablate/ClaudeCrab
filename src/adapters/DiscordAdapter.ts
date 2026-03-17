@@ -142,6 +142,10 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       });
     };
 
+    this.client.on('error', (error) => {
+      this.log.error({ error: error.message }, 'Discord client error');
+    });
+
     this.client.on('messageCreate', this.boundMessageHandler);
 
     // Listen for button interactions on THIS bot's client
@@ -361,7 +365,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       let lastMessageId = '';
 
       for (const chunk of chunks) {
-        const sent = await targetChannel.send(chunk);
+        const sent = await this.rateLimitedSend(() => targetChannel.send(chunk));
         lastMessageId = sent.id;
       }
 
@@ -391,7 +395,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       if (targetChannel === null) return null;
 
       // Wrap in code block to prevent Discord markdown rendering
-      const msg = await targetChannel.send(`\`\`\`\n${initialText}\n\`\`\``);
+      const msg = await this.rateLimitedSend(() => targetChannel.send(`\`\`\`\n${initialText}\n\`\`\``));
       return msg.id;
     } catch (error) {
       this.log.warn({ error, chatId }, 'Failed to send status message');
@@ -416,7 +420,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
 
       const msg = await targetChannel.messages.fetch(messageId);
       // Wrap in code block to prevent Discord markdown rendering
-      await msg.edit(`\`\`\`\n${text}\n\`\`\``);
+      await this.rateLimitedSend(() => msg.edit(`\`\`\`\n${text}\n\`\`\``));
       return true;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -468,7 +472,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       if (components !== undefined) {
         payload.components = components;
       }
-      const msg = await channel.send(payload);
+      const msg = await this.rateLimitedSend(() => channel.send(payload));
 
       return { success: true, messageId: msg.id };
     } catch (error) {
@@ -498,7 +502,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       if (components !== undefined) {
         editPayload.components = components as ActionRowBuilder<ButtonBuilder>[];
       }
-      await message.edit(editPayload);
+      await this.rateLimitedSend(() => message.edit(editPayload));
 
       return { success: true, messageId };
     } catch (error) {
@@ -521,7 +525,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       const chunks = this.splitMessage(content);
       let lastMessageId = '';
       for (const chunk of chunks) {
-        const sent = await channel.send(chunk);
+        const sent = await this.rateLimitedSend(() => channel.send(chunk));
         lastMessageId = sent.id;
       }
 
@@ -612,8 +616,8 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
         return { success: false, error: `Thread ${threadId} not found` };
       }
 
-      const msg = await (thread as ThreadChannel).send(
-        content.slice(0, MAX_MESSAGE_LENGTH)
+      const msg = await this.rateLimitedSend(() =>
+        (thread as ThreadChannel).send(content.slice(0, MAX_MESSAGE_LENGTH))
       );
       return { success: true, messageId: msg.id };
     } catch (error) {
@@ -697,7 +701,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
           .setStyle(4), // Danger (red)
       );
 
-      const msg = await channel.send({ embeds: [embed], components: [row] });
+      const msg = await this.rateLimitedSend(() => channel.send({ embeds: [embed], components: [row] }));
 
       return { success: true, messageId: msg.id };
     } catch (error) {
@@ -717,7 +721,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       if (channel === null) return;
 
       const message = await channel.messages.fetch(messageId);
-      await message.edit({ content: text, components: [] });
+      await this.rateLimitedSend(() => message.edit({ content: text, components: [] }));
     } catch (error) {
       this.log.warn({ error, messageId }, 'Failed to update permission prompt');
     }
@@ -766,7 +770,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       }
       if (btnCount > 0) rows.push(currentRow);
 
-      const msg = await channel.send({ embeds: [embed], components: rows });
+      const msg = await this.rateLimitedSend(() => channel.send({ embeds: [embed], components: rows }));
 
       return { success: true, messageId: msg.id };
     } catch (error) {
@@ -786,7 +790,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       if (channel === null) return;
 
       const message = await channel.messages.fetch(messageId);
-      await message.edit({ content: text, components: [] });
+      await this.rateLimitedSend(() => message.edit({ content: text, components: [] }));
     } catch (error) {
       this.log.warn({ error, messageId }, 'Failed to update question prompt');
     }
@@ -828,7 +832,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
           .setStyle(4), // Danger
       );
 
-      const msg = await channel.send({ embeds: [embed], components: [row] });
+      const msg = await this.rateLimitedSend(() => channel.send({ embeds: [embed], components: [row] }));
 
       return { success: true, messageId: msg.id };
     } catch (error) {
@@ -848,7 +852,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       if (channel === null) return;
 
       const message = await channel.messages.fetch(messageId);
-      await message.edit({ content: text, components: [] });
+      await this.rateLimitedSend(() => message.edit({ content: text, components: [] }));
     } catch (error) {
       this.log.warn({ error, messageId }, 'Failed to update plan review prompt');
     }
@@ -934,7 +938,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       const attachment = new AttachmentBuilder(audio, { name: options?.filename ?? 'audio.mp3' });
       const payload: { files: AttachmentBuilder[]; content?: string } = { files: [attachment] };
       if (options?.caption !== undefined) payload.content = options.caption;
-      const msg = await target.send(payload);
+      const msg = await this.rateLimitedSend(() => target.send(payload));
       return { success: true, messageId: msg.id };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -968,7 +972,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       const attachment = new AttachmentBuilder(filePath, { name: path.basename(filePath) });
       const payload: { files: AttachmentBuilder[]; content?: string } = { files: [attachment] };
       if (caption !== undefined) payload.content = caption;
-      const msg = await target.send(payload);
+      const msg = await this.rateLimitedSend(() => target.send(payload));
       return { success: true, messageId: msg.id };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

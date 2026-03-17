@@ -1,3 +1,13 @@
+/**
+ * WebUI authentication middleware.
+ *
+ * Reads from environment variables directly (WEBUI_JWT_SECRET, WEBUI_PASSWORD,
+ * WEBUI_SESSION_EXPIRE) rather than AppConfig because Express middleware is
+ * registered at module load time, before AppConfig is passed in. These values
+ * are also centrally documented in AppConfig.webui (src/config.ts) for
+ * discoverability.
+ */
+
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import type { JWTPayload } from '../types.js';

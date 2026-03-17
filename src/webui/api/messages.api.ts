@@ -110,6 +110,8 @@ export function createMessagesApiRouter(
   });
 
   // --- Resolve interactive hooks from Web UI ---
+  // NOTE: Directly accesses InteractionHandler static registries for permission/question resolution.
+  // This couples webui to core. TODO: inject registries via middleware or route context.
 
   router.post('/resolve-permission', (req: Request, res: Response) => {
     const { requestId, decision } = req.body as { requestId?: string; decision?: string };

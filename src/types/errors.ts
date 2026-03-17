@@ -79,7 +79,7 @@ export class AgentConfigError extends ClaudeCabError {
 /**
  * Error thrown when agent is not found
  */
-export class AgentNotFoundError extends ClaudeCabError {
+class AgentNotFoundError extends ClaudeCabError {
   constructor(public readonly agentId: string) {
     super(
       `Agent "${agentId}" not found`,
@@ -117,7 +117,7 @@ export class SessionError extends ClaudeCabError {
 /**
  * Error thrown when rate limited
  */
-export class RateLimitError extends ClaudeCabError {
+class RateLimitError extends ClaudeCabError {
   constructor(
     /** Time to wait before retrying in milliseconds */
     public readonly retryAfter: number
@@ -135,7 +135,7 @@ export class RateLimitError extends ClaudeCabError {
 /**
  * Error thrown when adapter operations fail
  */
-export class AdapterError extends ClaudeCabError {
+class AdapterError extends ClaudeCabError {
   constructor(
     public readonly platform: string,
     message: string,
@@ -224,7 +224,7 @@ export class ProcessingError extends ClaudeCabError {
 /**
  * Check if an error is a ClaudeCabError
  */
-export function isClaudeCabError(error: unknown): error is ClaudeCabError {
+function isClaudeCabError(error: unknown): error is ClaudeCabError {
   return error instanceof ClaudeCabError;
 }
 

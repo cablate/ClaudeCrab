@@ -42,9 +42,3 @@ export interface ActivityEvent {
   /** Additional context (tool name, error info, task content, etc.) */
   metadata?: Record<string, unknown>;
 }
-
-/** Agent display configuration (from agent.json) */
-export interface AgentDisplayConfig {
-  avatar: string;
-  color: string;
-}

@@ -45,13 +45,11 @@ import { AgentCallService } from './services/AgentCallService.js';
 import { ExecutionRecordRepository } from './persistence/ExecutionRecordRepository.js';
 import { TaskRecordRepository } from './persistence/TaskRecordRepository.js';
 import { BudgetService } from './services/BudgetService.js';
-import { DashboardService } from './services/DashboardService.js';
-import { CostReportService } from './services/CostReportService.js';
 import { TaskService } from './services/TaskService.js';
 import { ActivityEventService } from './services/ActivityEventService.js';
 import { DiscordAdapter } from './adapters/DiscordAdapter.js';
-import { DiscordInteractionHandler } from './adapters/discord/DiscordInteractionHandler.js';
-import { registerSlashCommands } from './adapters/discord/DiscordSlashCommands.js';
+import { DiscordDashboard } from './adapters/discord/services/DiscordDashboard.js';
+import { initializeDiscordServices, type DiscordServices } from './adapters/discord/DiscordBootstrap.js';
 
 /** Interval for sending typing indicators to Telegram (ms) */
 const TYPING_INDICATOR_INTERVAL_MS = 5000;
@@ -82,7 +80,7 @@ export class AppBootstrap {
   private _reactionGenerator: ReactionGenerator | null = null;
   private activityService: ActivityService | null = null;
   private sseBroadcaster: SSEBroadcaster | null = null;
-  private dashboardService: DashboardService | null = null;
+  private dashboardService: DiscordDashboard | null = null;
   private budgetService: BudgetService | null = null;
   private activityEventService: ActivityEventService | null = null;
   private taskService: TaskService | null = null;
@@ -231,7 +229,7 @@ export class AppBootstrap {
       }
 
       if (this.activityEventService !== null) {
-        this.activityEventService.dispose();
+        await this.activityEventService.dispose();
       }
 
       if (this.dashboardService !== null) {
@@ -651,9 +649,9 @@ export class AppBootstrap {
   }
 
   /**
-   * Initialize Discord-specific services (Dashboard, CostReport, InteractionHandler).
-   * Uses DISCORD_MAIN_BOT_TOKEN to create a system-level Bot Client.
-   * This bot handles Dashboard, Alerts, Cost Report, System Log — independent of agent bots.
+   * Initialize Discord-specific services via DiscordBootstrap module.
+   * Delegates all Discord setup to adapters/discord/DiscordBootstrap.ts and
+   * maps returned services back to AppBootstrap instance properties.
    */
   private async initializeDiscordServices(
     agentLoader: AgentLoader,
@@ -665,151 +663,43 @@ export class AppBootstrap {
       return;
     }
 
-    const self = this; // for closures/getters below
-    const { mainBotToken, channels, dashboardUpdateMinutes } = this.config.discord;
-
+    const { mainBotToken } = this.config.discord;
     if (!mainBotToken) {
       logger.info('DISCORD_MAIN_BOT_TOKEN not set — skipping Discord services');
       return;
     }
 
-    // Create a dedicated system adapter using the main bot token
-    // This is NOT an agent adapter — it's for system-level operations only
-    logger.info('Creating Discord system bot...');
-    const systemAdapterConfig = {
-      platform: 'discord' as const,
-      agentId: '_system',
-      token: mainBotToken,
-      channelId: channels.systemLog || channels.dashboard || '',
-    };
-
-    const discordAdapter = new DiscordAdapter(systemAdapterConfig);
-    try {
-      await discordAdapter.initialize();
-      this.discordSystemAdapter = discordAdapter;
-      logger.info('Discord system bot authenticated');
-    } catch (error) {
-      logger.error({ error }, 'Failed to initialize Discord system bot — skipping Discord services');
-      return;
-    }
-
-    logger.info('Initializing Discord services...');
-
-    // Register Slash Commands with Discord API
-    const discordMainClientId = this.config.discord.mainBotClientId;
-    const discordGuildId = this.config.discord.guildId;
-    if (discordMainClientId && discordGuildId) {
-      await registerSlashCommands(this.config.discord.mainBotToken, discordMainClientId, discordGuildId);
-    }
-
-    // Register InteractionHandler on the system bot for button + slash command routing
-    const systemClient = discordAdapter.getClient();
-    if (systemClient !== null) {
-      const interactionHandler = new DiscordInteractionHandler({
-        client: systemClient,
-        adapters: new Map(),
-        slashCommandDeps: {
-          agentLoader,
-          sessionManager,
-          messageProcessor,
-          ...(this.budgetService !== null ? { budgetService: this.budgetService } : {}),
-          // taskService is created later in this method — use getter
-          get taskService() { return self.taskService ?? undefined; },
-          ...(persistence?.queryMetricsRepository !== undefined
-            ? { queryMetricsRepository: persistence.queryMetricsRepository }
-            : {}),
-          // sdkSessionManager from MessageProcessor (exposed via getter)
-          get sdkSessionManager() { return messageProcessor.sdkSession; },
-          ...(this.orchestrator !== null ? {
-            getBotStatus: (agentId: string, platform?: 'telegram' | 'discord') =>
-              self.orchestrator!.getBotStatusForAgent(agentId, platform),
-          } : {}),
-        },
-      });
-
-      // Register agent Discord adapters for button routing (if any)
-      if (this.orchestrator !== null) {
-        for (const adapter of this.orchestrator.getRegistry().getAll()) {
-          if (adapter.platform === 'discord') {
-            interactionHandler.registerAdapter(adapter.agentId, adapter as DiscordAdapter);
-          }
-        }
-      }
-    }
-
-    // Dashboard Service
-    if (channels.dashboard) {
-      this.dashboardService = new DashboardService({
-        adapter: discordAdapter,
-        channelId: channels.dashboard,
-        agentLoader,
-        ...(persistence?.queryMetricsRepository !== undefined
-          ? { queryMetricsRepository: persistence.queryMetricsRepository }
-          : {}),
-        ...(persistence?.taskRecordRepository !== undefined
-          ? { taskRecordRepository: persistence.taskRecordRepository }
-          : {}),
-        ...(persistence?.executionRecordRepository !== undefined
-          ? { executionRecordRepository: persistence.executionRecordRepository }
-          : {}),
-        ...(this.budgetService !== null
-          ? { budgetService: this.budgetService }
-          : {}),
-        updateIntervalMinutes: dashboardUpdateMinutes,
-      });
-      await this.dashboardService.start();
-      logger.info({ channelId: channels.dashboard }, 'Dashboard service started');
-    }
-
-    // ActivityEventService (dual-write: SQLite + Discord #system-log/#alerts)
-    if (channels.systemLog || channels.alerts) {
-      const ownerUserId = process.env.DISCORD_OWNER_USER_ID;
-      this.activityEventService = new ActivityEventService({
-        discordAdapter: discordAdapter,
-        ...(channels.systemLog ? { systemLogChannelId: channels.systemLog } : {}),
-        ...(channels.alerts ? { alertsChannelId: channels.alerts } : {}),
-        ...(ownerUserId ? { ownerUserId } : {}),
-      });
-      logger.info('ActivityEventService started (dual-write)');
-    }
-
-    // TaskService (SQLite + Discord Forum dual-layer)
-    if (persistence?.taskRecordRepository !== undefined) {
-      this.taskService = new TaskService({
-        taskRecordRepository: persistence.taskRecordRepository,
-        ...(channels.taskBoard ? { discordAdapter: discordAdapter, forumChannelId: channels.taskBoard } : {}),
-      });
-      this.taskService.startForumListener();
-      logger.info('TaskService started (Forum listener active)');
-    }
-
-    // CostReportService — daily cron (send at 23:55 local time)
-    if (channels.costReport && persistence?.queryMetricsRepository !== undefined) {
-      const costReportService = new CostReportService({
-        adapter: discordAdapter,
-        channelId: channels.costReport,
-        agentLoader,
+    const services = await initializeDiscordServices({
+      agentLoader,
+      messageProcessor,
+      sessionManager,
+      orchestrator: this.orchestrator,
+      budgetService: this.budgetService,
+      discordConfig: {
+        mainBotToken,
+        mainBotClientId: this.config.discord.mainBotClientId,
+        guildId: this.config.discord.guildId,
+        ownerUserId: this.config.discord.ownerUserId,
+        channels: this.config.discord.channels,
+        dashboardUpdateMinutes: this.config.discord.dashboardUpdateMinutes,
+      },
+      persistence: persistence !== null ? {
         queryMetricsRepository: persistence.queryMetricsRepository,
-        ...(this.budgetService !== null ? { budgetService: this.budgetService } : {}),
-      });
+        taskRecordRepository: persistence.taskRecordRepository,
+        executionRecordRepository: persistence.executionRecordRepository,
+      } : null,
+    });
 
-      // Schedule daily: check every 5 minutes, fire once at 23:55
-      let lastCostReportDate = '';
-      this.costReportTimer = setInterval(() => {
-        const now = new Date();
-        const dateStr = now.toISOString().slice(0, 10);
-        if (now.getHours() === 23 && now.getMinutes() >= 55 && dateStr !== lastCostReportDate) {
-          lastCostReportDate = dateStr;
-          void costReportService.sendDailyReport().catch((err) => {
-            logger.error({ err }, 'Failed to send daily cost report');
-          });
-        }
-      }, 5 * 60 * 1000);
-      this.costReportTimer.unref();
-      logger.info({ channelId: channels.costReport }, 'CostReport daily cron started');
+    if (services === null) {
+      return; // initialization failed (logged inside initializeDiscordServices)
     }
 
-    logger.info('Discord services initialized');
+    // Map returned services to AppBootstrap instance properties for lifecycle management
+    this.discordSystemAdapter = services.systemAdapter;
+    if (services.dashboardService !== undefined) this.dashboardService = services.dashboardService;
+    if (services.activityEventService !== undefined) this.activityEventService = services.activityEventService;
+    if (services.taskService !== undefined) this.taskService = services.taskService;
+    if (services.costReportTimer !== undefined) this.costReportTimer = services.costReportTimer;
   }
 
   private logStartupSummary(agentLoader: AgentLoader): void {

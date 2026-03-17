@@ -1,6 +1,4 @@
 import telegramifyMarkdown from 'telegramify-markdown';
-import type { BaseAdapter } from '../adapters/BaseAdapter.js';
-import type { SendOptions, SendResult } from '../adapters/types.js';
 
 /**
  * Regex to detect markdown table syntax.
@@ -76,7 +74,7 @@ function convertSingleTable(tableText: string): string {
  * Convert all markdown tables in text to Telegram-compatible format.
  * This should be called BEFORE telegramifyMarkdown to avoid escaping issues.
  */
-export function convertTablesToTelegramFormat(text: string): string {
+function convertTablesToTelegramFormat(text: string): string {
   return text.replace(TABLE_REGEX, (match) => {
     // Preserve leading newline if present
     const leadingNewline = match.startsWith('\n') ? '\n' : '';
@@ -105,41 +103,3 @@ export function convertToTelegramMarkdown(text: string): string | null {
   }
 }
 
-/**
- * Send a message with MarkdownV2 formatting, falling back to Markdown on failure.
- *
- * This consolidates the common pattern of:
- * 1. Convert text to MarkdownV2
- * 2. Try sending with MarkdownV2
- * 3. If that fails, send with plain Markdown
- */
-export async function sendWithMarkdownFallback(
-  adapter: BaseAdapter,
-  chatId: string,
-  text: string,
-  sendOpts?: SendOptions
-): Promise<SendResult> {
-  const converted = convertToTelegramMarkdown(text);
-  let result = converted
-    ? await adapter.sendMessage(chatId, converted, {
-        parseMode: 'MarkdownV2',
-        ...sendOpts,
-      })
-    : { success: false as const, error: 'Conversion failed' };
-
-  if (!result.success) {
-    result = await adapter.sendMessage(chatId, text, {
-      parseMode: 'Markdown',
-      ...sendOpts,
-    });
-  }
-
-  // Final fallback: plain text (no parse_mode) to ensure message is always delivered
-  if (!result.success) {
-    result = await adapter.sendMessage(chatId, text, {
-      ...sendOpts,
-    });
-  }
-
-  return result;
-}

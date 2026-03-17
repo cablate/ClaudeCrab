@@ -20,6 +20,12 @@ export interface AppConfig {
   webui: {
     enabled: boolean;
     port: number;
+    /** WebUI login password */
+    password?: string;
+    /** JWT signing secret */
+    jwtSecret?: string;
+    /** Session expiration in milliseconds */
+    sessionExpireMs?: number;
   };
   schedule: {
     enabled: boolean;
@@ -56,6 +62,20 @@ export interface AppConfig {
     };
     /** Dashboard update interval in minutes */
     dashboardUpdateMinutes: number;
+    /** Discord owner user ID for DM notifications */
+    ownerUserId?: string;
+  };
+  security?: {
+    /** Comma-separated list of allowed user IDs (empty = allow all) */
+    allowedUsers?: string;
+    /** Maximum message length in characters */
+    maxMessageLength?: number;
+    /** Whether to enable prompt injection detection */
+    promptInjectionDetection?: boolean;
+  };
+  audit?: {
+    /** Whether audit logging is enabled (default: true) */
+    enabled?: boolean;
   };
 }
 
@@ -78,6 +98,11 @@ export function loadAppConfig(): AppConfig {
     webui: {
       enabled: process.env.WEBUI_ENABLED === 'true',
       port: parseInt(process.env.WEBUI_PORT ?? '3001', 10),
+      ...(process.env.WEBUI_PASSWORD !== undefined ? { password: process.env.WEBUI_PASSWORD } : {}),
+      ...(process.env.WEBUI_JWT_SECRET !== undefined ? { jwtSecret: process.env.WEBUI_JWT_SECRET } : {}),
+      ...(process.env.WEBUI_SESSION_EXPIRE !== undefined
+        ? { sessionExpireMs: parseInt(process.env.WEBUI_SESSION_EXPIRE, 10) }
+        : {}),
     },
     schedule: {
       enabled: process.env.SCHEDULE_ENABLED !== 'false', // Default enabled
@@ -109,6 +134,17 @@ export function loadAppConfig(): AppConfig {
         systemLog: process.env.DISCORD_CHANNEL_SYSTEM_LOG ?? '',
       },
       dashboardUpdateMinutes: parseInt(process.env.DISCORD_DASHBOARD_UPDATE_MINUTES ?? '15', 10),
+      ...(process.env.DISCORD_OWNER_USER_ID !== undefined ? { ownerUserId: process.env.DISCORD_OWNER_USER_ID } : {}),
+    },
+    security: {
+      ...(process.env.ALLOWED_USERS !== undefined ? { allowedUsers: process.env.ALLOWED_USERS } : {}),
+      ...(process.env.MAX_MESSAGE_LENGTH !== undefined
+        ? { maxMessageLength: parseInt(process.env.MAX_MESSAGE_LENGTH, 10) }
+        : {}),
+      promptInjectionDetection: process.env.PROMPT_INJECTION_DETECTION === 'true',
+    },
+    audit: {
+      enabled: process.env.AUDIT_LOGGING !== 'false',
     },
   };
 }

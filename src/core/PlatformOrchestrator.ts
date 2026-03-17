@@ -434,9 +434,13 @@ export class PlatformOrchestrator {
 
     // Start new adapter
     if (platform === 'telegram') {
-      await this.startTelegramAdapter(agentId, agent.config.telegramBotToken!);
+      if (agent.config.telegramBotToken) {
+        await this.startTelegramAdapter(agentId, agent.config.telegramBotToken);
+      }
     } else if (platform === 'discord') {
-      await this.startDiscordAdapter(agentId, agent.config.discordBotToken!, agent.config.discordChannelId!);
+      if (agent.config.discordBotToken && agent.config.discordChannelId) {
+        await this.startDiscordAdapter(agentId, agent.config.discordBotToken, agent.config.discordChannelId);
+      }
     }
     logger.info({ agentId, platform }, 'Bot started for agent');
   }
@@ -463,6 +467,25 @@ export class PlatformOrchestrator {
     }
   }
 
+  // --- Adapter factory methods ---
+  // TODO: inject adapter factories via constructor for full decoupling (core/ → adapters/)
+
+  /**
+   * Create a TelegramAdapter instance from config.
+   * Extracted to isolate concrete adapter construction from orchestration logic.
+   */
+  private createTelegramAdapter(config: TelegramAdapterConfig): TelegramAdapter {
+    return new TelegramAdapter(config);
+  }
+
+  /**
+   * Create a DiscordAdapter instance from config.
+   * Extracted to isolate concrete adapter construction from orchestration logic.
+   */
+  private createDiscordAdapter(config: DiscordAdapterConfig): DiscordAdapter {
+    return new DiscordAdapter(config);
+  }
+
   /**
    * Create and start a Telegram adapter for a specific agent.
    */
@@ -487,7 +510,7 @@ export class PlatformOrchestrator {
         : {}),
     };
 
-    const adapter = new TelegramAdapter(config);
+    const adapter = this.createTelegramAdapter(config);
 
     // Set up command dependencies
     const commandDeps: CommandDependencies = {
@@ -577,7 +600,7 @@ export class PlatformOrchestrator {
         : {}),
     };
 
-    const adapter = new DiscordAdapter(config);
+    const adapter = this.createDiscordAdapter(config);
 
     // Register message handler — passes agentId to MessageProcessor
     adapter.onMessage(async (message) => {
