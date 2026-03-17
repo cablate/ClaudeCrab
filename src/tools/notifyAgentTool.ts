@@ -11,7 +11,7 @@
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import type { AgentCallService } from '../services/AgentCallService.js';
+import type { AgentCallService, AgentCallOptions } from '../services/AgentCallService.js';
 import { logger } from '../utils/logger.js';
 
 export interface AgentCallMcpContext {
@@ -58,6 +58,10 @@ export function createAgentCallMcpServer(
             .boolean()
             .optional()
             .describe('強制建立新對話，不延續先前的對話 context（預設 false = 自動 resume）'),
+          taskId: z
+            .string()
+            .optional()
+            .describe('任務 ID（如果是任務相關的呼叫，帶上 taskId 讓目標 agent 在專屬 thread 工作並追蹤花費）'),
         },
         async (args) => {
           logger.info(
@@ -95,28 +99,38 @@ export function createAgentCallMcpServer(
             };
           }
 
-          // 觸發跨 agent 呼叫（使用真實 userId，共用使用者 session）
+          // 觸發跨 agent 呼叫
+          const callOptions: AgentCallOptions = {
+            platform: context.platform ?? 'telegram',
+          };
+
+          if (args.priority !== undefined) callOptions.priority = args.priority;
+          if (args.awaitResult !== undefined) callOptions.awaitResult = args.awaitResult;
+          if (args.startNewConversation !== undefined) callOptions.startNewConversation = args.startNewConversation;
+
+          if (args.taskId !== undefined) {
+            // Task-bound call: let AgentCallService handle userId/chatId via task binding
+            callOptions.taskId = args.taskId;
+            callOptions.chatId = context.chatId; // fallback if task thread creation fails
+          } else {
+            // Direct call: use caller's context (backward compatible)
+            callOptions.chatId = context.chatId;
+            callOptions.userId = context.userId;
+          }
+
+          // Cross-channel notification
+          if (context.subConversationId !== undefined && context.parentConversationId !== undefined) {
+            callOptions.crossChannelNotify = {
+              targetChannelId: context.parentConversationId,
+              sourceConversationId: context.subConversationId,
+            };
+          }
+
           const result = await agentCallService.callAgent(
             context.agentId,
             args.targetAgent,
             args.message,
-            {
-              ...(args.priority !== undefined ? { priority: args.priority } : {}),
-              chatId: context.chatId,
-              userId: context.userId,
-              ...(args.awaitResult !== undefined ? { awaitResult: args.awaitResult } : {}),
-              ...(args.startNewConversation !== undefined ? { startNewConversation: args.startNewConversation } : {}),
-              // Platform for correct adapter routing
-              platform: context.platform ?? 'telegram',
-              ...(context.subConversationId !== undefined && context.parentConversationId !== undefined
-                ? {
-                    crossChannelNotify: {
-                      targetChannelId: context.parentConversationId,
-                      sourceConversationId: context.subConversationId,
-                    },
-                  }
-                : {}),
-            }
+            callOptions,
           );
 
           if (result.success) {

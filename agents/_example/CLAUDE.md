@@ -10,6 +10,7 @@
 @.claude/rules/skill-usage.md
 @.claude/rules/serena-tools.md
 @.claude/rules/permissions.md
+@.claude/rules/task-workflow.md
 
 ---
 

@@ -170,26 +170,16 @@ export class AgentCallService {
       };
     }
 
-    // 需要 chatId 才能處理（因為要透過正常流程發送回覆）
-    if (!options?.chatId) {
-      logger.warn({ callId }, '[AgentCallService] chatId is required for cross-agent call');
-      return {
-        success: false,
-        callId,
-        error: 'chatId is required for cross-agent call',
-      };
-    }
-
     // Determine platform for correct adapter routing (Discord threads vs Telegram)
-    const effectivePlatform = options.platform ?? 'telegram';
-    if (options.platform === undefined) {
+    const effectivePlatform = options?.platform ?? 'telegram';
+    if (options?.platform === undefined) {
       logger.warn({ callId, from: fromAgent, to: toAgent }, '[AgentCallService] No platform specified — falling back to telegram');
     }
 
     // 使用真實使用者 session（降低割裂感，讓使用者能在 Telegram 看到並介入）
     let effectiveUserId = options?.userId ?? `agent:${fromAgent}`;
     const useUserSession = !!options?.userId;
-    let effectiveChatId = options.chatId;
+    let effectiveChatId = options?.chatId;
 
     // Task binding: when taskId is provided, override userId and chatId for two-layer thread
     let taskContext = '';
@@ -249,13 +239,23 @@ export class AgentCallService {
       }
     }
 
+    // chatId is required after task binding (task binding may have derived it from per-task thread)
+    if (!effectiveChatId) {
+      logger.warn({ callId }, '[AgentCallService] chatId is required (and could not be derived from taskId)');
+      return {
+        success: false,
+        callId,
+        error: 'chatId is required for cross-agent call',
+      };
+    }
+
     // 強制新對話：僅在獨立通道模式下清除 session（不應影響使用者的現有 session）
-    if (options.startNewConversation && !useUserSession) {
+    if (options?.startNewConversation && !useUserSession) {
       this.clearAgentCallSession(fromAgent, toAgent, effectivePlatform);
     }
 
     // 建構帶有來源資訊的 prompt
-    const callModeNote = options.awaitResult
+    const callModeNote = options?.awaitResult
       ? '模式: await（對方正在等待你的回覆）\n⚠️ 直接回覆即可，不要使用 call_agent。你的回覆會自動傳達給對方。'
       : '模式: fire-and-forget（對方不等待回覆）\n📝 直接回覆即可，回覆會顯示在聊天室。僅在必要時才使用 call_agent 聯繫對方。';
     const enrichedMessage = `${taskContext}【跨 Agent 呼叫】
@@ -284,7 +284,7 @@ ${message}`;
     };
 
     // awaitResult 模式：等待回覆
-    if (options.awaitResult) {
+    if (options?.awaitResult) {
       return this.executeAndAwait(messageProcessor, unifiedMessage, toAgent, callId, fromAgent);
     }
 
