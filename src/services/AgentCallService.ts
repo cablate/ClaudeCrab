@@ -220,18 +220,13 @@ export class AgentCallService {
               // Reuse existing thread
               effectiveChatId = existingThreadId;
             } else {
-              // Create new per-task thread
-              const discordAdapter = adapter as unknown as Record<string, unknown>;
+              // Create new per-task thread — call on the adapter object to preserve `this` binding
+              const discordAdapter = adapter as unknown as { createThreadInChannel?: (channelId: string, title: string, msg: string) => Promise<{ success: boolean; threadId?: string }> };
               if (typeof discordAdapter.createThreadInChannel === 'function') {
                 const toConfig = this.agentLoader.get(toAgent);
                 const channelId = toConfig?.config.discordChannelId;
                 if (channelId) {
-                  const createThread = discordAdapter.createThreadInChannel as (
-                    channelId: string,
-                    title: string,
-                    initialMessage: string
-                  ) => Promise<{ success: boolean; threadId?: string }>;
-                  const result = await createThread(
+                  const result = await discordAdapter.createThreadInChannel(
                     channelId,
                     `📋 任務：${task.title}`,
                     `**任務指派**\n標題：${task.title}\n描述：${task.description ?? '無'}\n優先級：${task.priority}\n指派給：${toAgent}`
