@@ -198,6 +198,14 @@ export class TaskRecordRepository {
   }
 
   /**
+   * Clear discord_thread_id (used to resolve Forum listener race condition)
+   */
+  clearDiscordThreadId(id: string): void {
+    this.db.prepare('UPDATE task_records SET discord_thread_id = NULL, updated_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), id);
+  }
+
+  /**
    * Add cost to a task (accumulate)
    */
   addCost(taskId: string, costCents: number): void {

@@ -89,6 +89,13 @@ export class TaskService implements ITaskService {
         const result = await this.threadNotifier.createForumPost(input, title, content);
 
         if (result !== undefined && result.threadId !== undefined) {
+          // Check if Forum listener already created a record for this thread (race condition)
+          const existingByThread = this.repo.getByDiscordThreadId(result.threadId);
+          if (existingByThread && existingByThread.id !== taskId) {
+            // Forum listener beat us — null out the duplicate's thread ID so ours can take it
+            this.repo.clearDiscordThreadId(existingByThread.id);
+            log.info({ taskId, duplicateId: existingByThread.id }, 'Resolved Forum listener race condition');
+          }
           this.repo.update(taskId, { discordThreadId: result.threadId });
           log.info({ taskId, threadId: result.threadId }, 'Forum post created');
         }

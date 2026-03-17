@@ -104,6 +104,27 @@ export class AgentCallService {
     const callId = randomUUID();
     const depth = options?.depth ?? 0;
 
+    try {
+    return await this._callAgentImpl(callId, fromAgent, toAgent, message, options, depth);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error(
+        { callId, from: fromAgent, to: toAgent, taskId: options?.taskId, error: errorMsg, stack: error instanceof Error ? error.stack : undefined },
+        '[AgentCallService] Unexpected error in callAgent'
+      );
+      return { success: false, callId, error: errorMsg };
+    }
+  }
+
+  private async _callAgentImpl(
+    callId: string,
+    fromAgent: string,
+    toAgent: string,
+    message: string,
+    options: AgentCallOptions | undefined,
+    depth: number,
+  ): Promise<AgentCallResult> {
+
     logger.info(
       {
         callId,
@@ -183,6 +204,7 @@ export class AgentCallService {
 
     // Task binding: when taskId is provided, override userId and chatId for two-layer thread
     let taskContext = '';
+    logger.info({ callId, taskId: options?.taskId, hasTaskRecordRepo: !!this.taskRecordRepo }, '[AgentCallService] Task binding check');
     if (options?.taskId && this.taskRecordRepo) {
       const task = this.taskRecordRepo.getById(options.taskId);
       if (task) {

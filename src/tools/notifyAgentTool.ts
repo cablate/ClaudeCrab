@@ -71,6 +71,7 @@ export function createAgentCallMcpServer(
               priority: args.priority,
               awaitResult: args.awaitResult,
               startNewConversation: args.startNewConversation,
+              taskId: args.taskId,
             },
             'Agent call tool invoked'
           );
@@ -100,6 +101,7 @@ export function createAgentCallMcpServer(
           }
 
           // 觸發跨 agent 呼叫
+          try {
           const callOptions: AgentCallOptions = {
             platform: context.platform ?? 'telegram',
           };
@@ -163,6 +165,13 @@ export function createAgentCallMcpServer(
                   text: `❌ 呼叫失敗：${result.error}`,
                 },
               ],
+            };
+          }
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            logger.error({ from: context.agentId, to: args.targetAgent, taskId: args.taskId, error: errorMsg }, 'Agent call tool error');
+            return {
+              content: [{ type: 'text' as const, text: `❌ 呼叫異常：${errorMsg}` }],
             };
           }
         }
