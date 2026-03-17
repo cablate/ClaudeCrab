@@ -239,15 +239,18 @@ export class DiscordTaskSync implements TaskThreadNotifier {
 狀態：${task.status}
 使用者訊息：${content}`;
 
+    // Route to secretary with taskId — session key will be task:{taskId}
+    // so secretary hits the same session as previous task interactions.
+    // fromAgent = 'general' (self-routing for task context continuity)
     await this.agentCallService.callAgent(
-      'user',
+      'general',
       'general', // secretary agent
       enrichedMessage,
       {
         taskId,
         platform: 'discord',
-        userId, // real user ID for session
-        chatId: threadId, // route reply back to the task thread
+        // Don't pass userId — let AgentCallService derive task:{taskId} from taskId
+        // Don't pass chatId — let AgentCallService use secretary's per-task thread
       }
     );
   }
