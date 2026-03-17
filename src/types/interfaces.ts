@@ -53,6 +53,8 @@ export interface ITaskService {
     created_by_user_id: string | null;
     parent_task_id: string | null;
     cost_cents: number;
+    review_count: number;
+    agent_thread_ids: string;
     created_at: string;
     updated_at: string;
     completed_at: string | null;
@@ -65,7 +67,7 @@ export interface ITaskService {
     createdByAgentId?: string;
   }): Promise<string>;
   updateStatus(taskId: string, status: string): Promise<void>;
-  assignTask(taskId: string, agentId: string): Promise<void>;
+  assignTask(taskId: string, agentId: string, options?: { autoCall?: boolean }): Promise<void>;
   completeTask(taskId: string): Promise<void>;
   addCost(taskId: string, costCents: number): void;
   getSummary(): Record<string, number>;
@@ -85,4 +87,6 @@ export interface ITaskService {
     updated_at: string;
     completed_at: string | null;
   }>;
+  postToThread(taskId: string, content: string, type?: 'progress' | 'deliverable' | 'note'): Promise<void>;
+  requestReview(taskId: string, summary: string, deliverables?: string[]): Promise<void>;
 }

@@ -403,6 +403,7 @@ export class MessageProcessor {
               isSocial?: boolean;
               agentCallFrom?: string;
               parentConversationId?: string;
+              taskId?: string;
             } = {};
             // Agent call tag: pass the calling agent's ID so responses get tagged
             if (message.metadata?.isAgentCall === true && typeof message.metadata.fromAgent === 'string') {
@@ -430,6 +431,10 @@ export class MessageProcessor {
             // Pass sub-conversation context (platform-agnostic)
             if (message.metadata?.parentConversationId !== undefined) {
               queryOptions.parentConversationId = message.metadata.parentConversationId;
+            }
+            // Pass task ID for execution audit trail
+            if (typeof message.metadata?.taskId === 'string') {
+              queryOptions.taskId = message.metadata.taskId;
             }
 
             // Use replyToMessageId from options if provided, otherwise from metadata.
@@ -550,6 +555,8 @@ export class MessageProcessor {
       agentCallFrom?: string;
       /** Parent conversation ID for sub-conversation context (platform-agnostic) */
       parentConversationId?: string;
+      /** Task ID for execution audit trail (two-layer thread architecture) */
+      taskId?: string;
     }
   ): Promise<string> {
     // Get internal session for agent info
@@ -926,7 +933,7 @@ export class MessageProcessor {
       this.recordQueryMetrics(result, agentId, platform, chatId, userId);
 
       // Execution audit log: record this query
-      this.recordExecutionAudit(result, agentId, 'chat', userId, chatId);
+      this.recordExecutionAudit(result, agentId, 'chat', userId, chatId, options?.taskId);
 
       // Budget post-check: may pause agent for next query
       this.handleBudgetPostCheck(agentId);
@@ -1200,7 +1207,8 @@ export class MessageProcessor {
     agentId: string,
     triggerType: 'chat' | 'schedule' | 'agent_call',
     triggerSource: string,
-    _chatId?: string
+    _chatId?: string,
+    taskId?: string
   ): void {
     if (this.executionRecordRepository === undefined || result.usage === undefined) return;
 
@@ -1210,6 +1218,7 @@ export class MessageProcessor {
         agentId,
         triggerType,
         triggerSource,
+        ...(taskId !== undefined ? { taskId } : {}),
         // promptSummary omitted — optional field
         responseSummary: result.response?.slice(0, 200),
         inputTokens: result.usage.inputTokens,

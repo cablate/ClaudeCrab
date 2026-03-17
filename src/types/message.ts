@@ -67,6 +67,12 @@ export interface MessageMetadata {
    */
   parentConversationId?: string;
 
+  /**
+   * Task ID for two-layer thread architecture.
+   * When present, links this message to a structured task for audit trail.
+   */
+  taskId?: string;
+
   /** Additional platform-specific data */
   [key: string]: unknown;
 }

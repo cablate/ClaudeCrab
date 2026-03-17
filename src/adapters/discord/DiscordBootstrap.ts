@@ -27,6 +27,7 @@ import type { MessageProcessor } from '../../core/MessageProcessor.js';
 import type { SessionManager } from '../../core/SessionManager.js';
 import type { PlatformOrchestrator } from '../../core/PlatformOrchestrator.js';
 import type { BudgetService } from '../../services/BudgetService.js';
+import type { AgentCallService } from '../../services/AgentCallService.js';
 import type { QueryMetricsRepository } from '../../persistence/QueryMetricsRepository.js';
 import type { TaskRecordRepository } from '../../persistence/TaskRecordRepository.js';
 import type { ExecutionRecordRepository } from '../../persistence/ExecutionRecordRepository.js';
@@ -38,6 +39,7 @@ export interface DiscordBootstrapDeps {
   sessionManager: SessionManager;
   orchestrator: PlatformOrchestrator | null;
   budgetService: BudgetService | null;
+  agentCallService?: AgentCallService;
   discordConfig: {
     mainBotToken: string;
     mainBotClientId?: string | undefined;
@@ -81,7 +83,7 @@ export async function initializeDiscordServices(
 ): Promise<DiscordServices | null> {
   const {
     agentLoader, messageProcessor, sessionManager, orchestrator,
-    budgetService, discordConfig, persistence,
+    budgetService, agentCallService, discordConfig, persistence,
   } = deps;
   const { mainBotToken, channels, dashboardUpdateMinutes } = discordConfig;
 
@@ -189,12 +191,18 @@ export async function initializeDiscordServices(
 
   // === TASK SERVICE (SQLite + optional Discord Forum sync) ===
   if (persistence?.taskRecordRepository !== undefined) {
+    // Wire agentCallService -> taskRecordRepository (two-layer thread architecture)
+    if (agentCallService !== undefined) {
+      agentCallService.setTaskRecordRepository(persistence.taskRecordRepository);
+    }
+
     let threadNotifier: DiscordTaskSync | undefined;
     if (channels.taskBoard) {
       threadNotifier = new DiscordTaskSync({
         discordAdapter,
         forumChannelId: channels.taskBoard,
         taskRecordRepository: persistence.taskRecordRepository,
+        ...(agentCallService !== undefined ? { agentCallService } : {}),
       });
     }
 
@@ -204,9 +212,10 @@ export async function initializeDiscordServices(
     });
 
     if (threadNotifier !== undefined) {
+      // startForumListener also calls startUserMessageListener internally
       threadNotifier.startForumListener();
     }
-    logger.info('TaskService started (Forum listener active)');
+    logger.info('TaskService started (Forum listener + User message listener active)');
   }
 
   // === COST REPORT (daily cron) ===

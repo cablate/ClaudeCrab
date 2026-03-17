@@ -202,7 +202,9 @@ CREATE TABLE IF NOT EXISTS task_records (
     cost_cents INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    completed_at TEXT
+    completed_at TEXT,
+    review_count INTEGER NOT NULL DEFAULT 0,
+    agent_thread_ids TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_status ON task_records(status);
@@ -233,7 +235,7 @@ CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, c
 CREATE INDEX IF NOT EXISTS idx_exec_task ON execution_records(task_id);
 `;
 
-export const SCHEMA_VERSION = '10';
+export const SCHEMA_VERSION = '11';
 
 /**
  * Migration SQL from v1 to v2:
@@ -466,7 +468,9 @@ CREATE TABLE IF NOT EXISTS task_records (
     cost_cents INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    completed_at TEXT
+    completed_at TEXT,
+    review_count INTEGER NOT NULL DEFAULT 0,
+    agent_thread_ids TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_status ON task_records(status);
@@ -503,6 +507,12 @@ ALTER TABLE query_metrics ADD COLUMN total_cost_cents INTEGER NOT NULL DEFAULT 0
 
 -- Backfill from existing USD data
 UPDATE query_metrics SET total_cost_cents = ROUND(total_cost_usd * 100) WHERE total_cost_cents = 0 AND total_cost_usd > 0;
+`;
+
+const MIGRATION_V10_TO_V11 = `
+-- Add review_count and agent_thread_ids to task_records
+ALTER TABLE task_records ADD COLUMN review_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE task_records ADD COLUMN agent_thread_ids TEXT NOT NULL DEFAULT '{}';
 `;
 
 /**
@@ -571,6 +581,12 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   if (currentVersion === '9') {
     db.exec(MIGRATION_V9_TO_V10);
     logger.info('Migration v9 → v10 completed');
+    currentVersion = '10';
+  }
+
+  if (currentVersion === '10') {
+    db.exec(MIGRATION_V10_TO_V11);
+    logger.info('Migration v10 → v11 completed');
   }
 
   // Update schema version

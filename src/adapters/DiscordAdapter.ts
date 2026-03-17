@@ -628,6 +628,38 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   }
 
   /**
+   * Create a new thread in a text channel from an initial message.
+   * Used for creating per-task agent threads.
+   */
+  async createThreadInChannel(
+    channelId: string,
+    threadName: string,
+    initialContent: string
+  ): Promise<{ success: boolean; threadId?: string; error?: string }> {
+    try {
+      const channel = await this.resolveTextOrThread(channelId);
+      if (channel === null || channel.isThread()) {
+        return { success: false, error: `Channel ${channelId} not found or not text-based` };
+      }
+
+      const textChannel = channel as TextChannel;
+      const message = await this.rateLimitedSend(async () =>
+        textChannel.send(initialContent)
+      );
+
+      const thread = await message.startThread({
+        name: threadName,
+      });
+
+      return { success: true, threadId: thread.id };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      this.log.warn({ err: errorMsg, channelId, threadName }, 'Failed to create thread in channel');
+      return { success: false, error: errorMsg };
+    }
+  }
+
+  /**
    * Archive a thread (for completed/cancelled tasks).
    */
   async archiveThread(
@@ -648,6 +680,63 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.log.error({ error, threadId }, 'Failed to archive thread');
       return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Send an Embed with optional action buttons to a thread.
+   * Used for quality gate review Embeds.
+   */
+  async replyToThreadEmbed(
+    threadId: string,
+    embeds: EmbedBuilder[],
+    components?: ActionRowBuilder<ButtonBuilder>[]
+  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const thread = await this.client?.channels.fetch(threadId);
+      if (!thread || !thread.isTextBased()) {
+        return { success: false, error: `Thread ${threadId} not found` };
+      }
+
+      const msg = await this.rateLimitedSend(async () =>
+        (thread as TextChannel).send({
+          embeds,
+          ...(components ? { components } : {}),
+        })
+      );
+
+      return { success: true, messageId: msg.id };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      this.log.warn({ err: errorMsg, threadId }, 'Failed to send embed to thread');
+      return { success: false, error: errorMsg };
+    }
+  }
+
+  /**
+   * Fetch recent messages from a thread.
+   * Used by read_task MCP tool to return thread context.
+   */
+  async fetchRecentThreadMessages(
+    threadId: string,
+    limit = 10
+  ): Promise<Array<{ author: string; content: string; timestamp: string }>> {
+    try {
+      const thread = await this.client?.channels.fetch(threadId);
+      if (!thread || !thread.isTextBased()) return [];
+
+      const messages = await (thread as TextChannel).messages.fetch({ limit });
+
+      return [...messages.values()]
+        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+        .map(m => ({
+          author: m.author.username,
+          content: m.content.slice(0, 500),
+          timestamp: m.createdAt.toISOString(),
+        }));
+    } catch (err) {
+      this.log.warn({ err: err instanceof Error ? err.message : String(err), threadId }, 'Failed to fetch thread messages');
+      return [];
     }
   }
 

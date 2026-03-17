@@ -23,6 +23,8 @@ export interface TaskRecordRow {
   created_by_user_id: string | null;
   parent_task_id: string | null;
   cost_cents: number;
+  review_count: number;
+  agent_thread_ids: string; // JSON: { [agentId]: threadId }
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -203,5 +205,43 @@ export class TaskRecordRepository {
       'UPDATE task_records SET cost_cents = cost_cents + ?, updated_at = ? WHERE id = ?'
     );
     stmt.run(costCents, new Date().toISOString(), taskId);
+  }
+
+  /**
+   * Increment the review_count by 1
+   */
+  incrementReviewCount(taskId: string): void {
+    this.db.prepare('UPDATE task_records SET review_count = review_count + 1, updated_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), taskId);
+  }
+
+  /**
+   * Reset review_count to 0
+   */
+  resetReviewCount(taskId: string): void {
+    this.db.prepare('UPDATE task_records SET review_count = 0, updated_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), taskId);
+  }
+
+  /**
+   * Get the thread ID for a specific agent on this task
+   */
+  getAgentThreadId(taskId: string, agentId: string): string | undefined {
+    const task = this.getById(taskId);
+    if (!task) return undefined;
+    const map = JSON.parse(task.agent_thread_ids) as Record<string, string>;
+    return map[agentId];
+  }
+
+  /**
+   * Set the thread ID for a specific agent on this task
+   */
+  setAgentThreadId(taskId: string, agentId: string, threadId: string): void {
+    const task = this.getById(taskId);
+    if (!task) return;
+    const map = JSON.parse(task.agent_thread_ids) as Record<string, string>;
+    map[agentId] = threadId;
+    this.db.prepare('UPDATE task_records SET agent_thread_ids = ?, updated_at = ? WHERE id = ?')
+      .run(JSON.stringify(map), new Date().toISOString(), taskId);
   }
 }

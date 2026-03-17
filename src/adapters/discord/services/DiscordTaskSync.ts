@@ -8,10 +8,12 @@
  * - Listening for user-created Forum posts and syncing to SQLite
  */
 
-import { ChannelType, type ThreadChannel } from 'discord.js';
+import { ChannelType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, type ThreadChannel } from 'discord.js';
 import type { DiscordAdapter } from '../../DiscordAdapter.js';
 import type { TaskThreadNotifier } from '../../../services/TaskService.js';
 import type { TaskRecordRepository, CreateTaskInput, TaskPriority } from '../../../persistence/TaskRecordRepository.js';
+import type { IAgentRepository } from '../../../types/agent.js';
+import type { AgentCallService } from '../../../services/AgentCallService.js';
 import { logger } from '../../../utils/logger.js';
 
 const log = logger.child({ module: 'DiscordTaskSync' });
@@ -20,17 +22,23 @@ export interface DiscordTaskSyncOptions {
   discordAdapter: DiscordAdapter;
   forumChannelId: string;
   taskRecordRepository: TaskRecordRepository;
+  agentLoader?: IAgentRepository;
+  agentCallService?: AgentCallService;
 }
 
 export class DiscordTaskSync implements TaskThreadNotifier {
   private readonly adapter: DiscordAdapter;
   private readonly forumChannelId: string;
   private readonly repo: TaskRecordRepository;
+  private readonly agentLoader: IAgentRepository | undefined;
+  private readonly agentCallService: AgentCallService | undefined;
 
   constructor(options: DiscordTaskSyncOptions) {
     this.adapter = options.discordAdapter;
     this.forumChannelId = options.forumChannelId;
     this.repo = options.taskRecordRepository;
+    this.agentLoader = options.agentLoader;
+    this.agentCallService = options.agentCallService;
   }
 
   /**
@@ -57,7 +65,12 @@ export class DiscordTaskSync implements TaskThreadNotifier {
    * Post a status update to a task's Discord thread.
    */
   async postToThread(threadId: string, content: string): Promise<void> {
-    await this.adapter.replyToThread(threadId, content);
+    if (!threadId) return;
+    try {
+      await this.adapter.replyToThread(threadId, content);
+    } catch (err) {
+      log.warn({ err: err instanceof Error ? err.message : String(err), threadId }, 'Failed to post to thread');
+    }
   }
 
   /**
@@ -65,6 +78,83 @@ export class DiscordTaskSync implements TaskThreadNotifier {
    */
   async archiveThread(threadId: string): Promise<void> {
     await this.adapter.archiveThread(threadId);
+  }
+
+  /**
+   * Send a review embed with Approve/Reject buttons to a task's thread.
+   */
+  async sendReviewEmbed(
+    threadId: string,
+    taskId: string,
+    summary: string,
+    deliverables: string[],
+    reviewCount: number
+  ): Promise<void> {
+    if (!threadId) return;
+
+    try {
+      const embed = new EmbedBuilder()
+        .setTitle('📋 審核請求')
+        .setDescription(summary)
+        .setColor(reviewCount >= 3 ? 0xFF0000 : 0x0099FF)
+        .setTimestamp();
+
+      if (deliverables.length > 0) {
+        embed.addFields({ name: '交付物', value: deliverables.map(d => `• ${d}`).join('\n') });
+      }
+
+      if (reviewCount >= 3) {
+        embed.addFields({ name: '⚠️ 警告', value: `第 ${reviewCount} 次審核 — 依品管 SOP，秘書介入處理` });
+      }
+
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`review:approve:${taskId}`).setLabel('✅ 通過').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`review:reject:${taskId}`).setLabel('❌ 退回').setStyle(ButtonStyle.Danger),
+      );
+
+      await this.adapter.replyToThreadEmbed(threadId, [embed], [row]);
+    } catch (err) {
+      log.warn({ err: err instanceof Error ? err.message : String(err), threadId, taskId }, 'Failed to send review embed');
+    }
+  }
+
+  /**
+   * Archive the main task thread and all agent per-task threads.
+   */
+  async archiveAllThreads(taskId: string): Promise<void> {
+    // Archive main thread
+    const task = this.repo.getById(taskId);
+    if (task?.discord_thread_id) {
+      await this.adapter.archiveThread(task.discord_thread_id).catch(() => {});
+    }
+
+    // Archive all agent per-task threads
+    if (task?.agent_thread_ids) {
+      try {
+        const threadMap = JSON.parse(task.agent_thread_ids) as Record<string, string>;
+        for (const threadId of Object.values(threadMap)) {
+          await this.adapter.archiveThread(threadId).catch(() => {});
+        }
+      } catch {
+        // JSON parse error — ignore
+      }
+    }
+  }
+
+  /**
+   * Notify an agent's Discord channel with a message.
+   */
+  async notifyAgentChannel(agentId: string, message: string): Promise<void> {
+    // Find agent's Discord channel
+    const agent = this.agentLoader?.get(agentId);
+    const channelId = agent?.config.discordChannelId;
+    if (!channelId) return;
+
+    try {
+      await this.adapter.sendToChannel(channelId, message);
+    } catch (err) {
+      log.warn({ err: err instanceof Error ? err.message : String(err), agentId }, 'Failed to notify agent channel');
+    }
   }
 
   /**
@@ -102,6 +192,64 @@ export class DiscordTaskSync implements TaskThreadNotifier {
     });
 
     log.info({ forumId }, 'Forum listener started \u2014 user posts will sync to SQLite');
+
+    // Also start listening for user messages in existing task threads
+    this.startUserMessageListener();
+  }
+
+  /**
+   * Listen for user messages in task main threads.
+   * Routes them to the secretary agent for processing.
+   */
+  startUserMessageListener(): void {
+    const client = this.adapter.getClient();
+    if (client === null || !this.forumChannelId) return;
+
+    client.on('messageCreate', (message) => {
+      // Only care about messages in threads under our forum
+      if (message.author.bot) return;
+      if (!message.channel.isThread()) return;
+      if (message.channel.parentId !== this.forumChannelId) return;
+
+      // Look up the task by thread ID
+      const task = this.repo.getByDiscordThreadId(message.channel.id);
+      if (!task) return; // Not a tracked task thread
+
+      // Route to secretary
+      void this.routeToSecretary(task.id, message.content, message.author.id, message.channel.id).catch(err => {
+        log.warn({ err: err instanceof Error ? err.message : String(err), taskId: task.id },
+          'Failed to route user message to secretary');
+      });
+    });
+
+    log.info('User message listener started for task main threads');
+  }
+
+  private async routeToSecretary(taskId: string, content: string, userId: string, threadId: string): Promise<void> {
+    if (!this.agentCallService) {
+      log.warn({ taskId }, 'Cannot route to secretary: AgentCallService not available');
+      return;
+    }
+
+    const task = this.repo.getById(taskId);
+    if (!task) return;
+
+    const enrichedMessage = `【使用者在任務 Thread 留言】
+任務：${task.title}（${taskId.slice(0, 8)}）
+狀態：${task.status}
+使用者訊息：${content}`;
+
+    await this.agentCallService.callAgent(
+      'user',
+      'general', // secretary agent
+      enrichedMessage,
+      {
+        taskId,
+        platform: 'discord',
+        userId, // real user ID for session
+        chatId: threadId, // route reply back to the task thread
+      }
+    );
   }
 
   /**

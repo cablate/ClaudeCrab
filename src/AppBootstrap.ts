@@ -87,6 +87,7 @@ export class AppBootstrap {
   private costReportTimer: ReturnType<typeof setInterval> | null = null;
   private discordSystemAdapter: DiscordAdapter | null = null;
   private scheduleExecutor: ScheduleExecutor | null = null;
+  private agentCallService: AgentCallService | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -474,6 +475,9 @@ export class AppBootstrap {
       this.orchestrator?.getRegistry().get(platform, agentId)
     );
 
+    // Store for later use in Discord wiring
+    this.agentCallService = agentCallService;
+
     return messageProcessor;
   }
 
@@ -675,6 +679,7 @@ export class AppBootstrap {
       sessionManager,
       orchestrator: this.orchestrator,
       budgetService: this.budgetService,
+      ...(this.agentCallService !== null ? { agentCallService: this.agentCallService } : {}),
       discordConfig: {
         mainBotToken,
         mainBotClientId: this.config.discord.mainBotClientId,

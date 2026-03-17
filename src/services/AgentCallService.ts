@@ -18,6 +18,7 @@ import type { MessageProcessor } from '../core/MessageProcessor.js';
 import type { SessionManager } from '../core/SessionManager.js';
 import type { UnifiedMessage } from '../adapters/types.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
+import type { TaskRecordRepository } from '../persistence/TaskRecordRepository.js';
 
 /** Maximum nested agent-call depth to prevent infinite loops (A→B→C→A) */
 const MAX_CALL_DEPTH = 5;
@@ -44,6 +45,8 @@ export interface AgentCallOptions {
     targetChannelId: string;
     sourceConversationId: string;
   };
+  /** Task ID for two-layer thread architecture: binds this call to a task */
+  taskId?: string;
 }
 
 export interface AgentCallResult {
@@ -59,6 +62,8 @@ export interface AgentCallResult {
 export class AgentCallService {
   /** Optional: get adapter for cross-channel summary posting */
   private getAdapter?: (platform: string, agentId: string) => BaseAdapter | undefined;
+  /** Optional: task record repository for two-layer thread architecture */
+  private taskRecordRepo?: TaskRecordRepository;
 
   constructor(
     private readonly agentLoader: AgentLoader,
@@ -69,6 +74,11 @@ export class AgentCallService {
   /** Set adapter getter (called after PlatformOrchestrator is ready) */
   setAdapterGetter(fn: (platform: string, agentId: string) => BaseAdapter | undefined): void {
     this.getAdapter = fn;
+  }
+
+  /** Set task record repository (called after persistence is ready) */
+  setTaskRecordRepository(repo: TaskRecordRepository): void {
+    this.taskRecordRepo = repo;
   }
 
   /**
@@ -177,8 +187,67 @@ export class AgentCallService {
     }
 
     // 使用真實使用者 session（降低割裂感，讓使用者能在 Telegram 看到並介入）
-    const effectiveUserId = options?.userId ?? `agent:${fromAgent}`;
+    let effectiveUserId = options?.userId ?? `agent:${fromAgent}`;
     const useUserSession = !!options?.userId;
+    let effectiveChatId = options.chatId;
+
+    // Task binding: when taskId is provided, override userId and chatId for two-layer thread
+    let taskContext = '';
+    if (options?.taskId && this.taskRecordRepo) {
+      const task = this.taskRecordRepo.getById(options.taskId);
+      if (task) {
+        // (a) Override userId for session isolation per task
+        effectiveUserId = `task:${options.taskId}`;
+
+        // (b) Find or create per-task thread in agent's channel
+        if (effectivePlatform === 'discord' && this.getAdapter) {
+          const adapter = this.getAdapter(effectivePlatform, toAgent);
+          if (adapter) {
+            const existingThreadId = this.taskRecordRepo.getAgentThreadId(options.taskId, toAgent);
+            if (existingThreadId) {
+              // Reuse existing thread
+              effectiveChatId = existingThreadId;
+            } else {
+              // Create new per-task thread
+              const discordAdapter = adapter as unknown as Record<string, unknown>;
+              if (typeof discordAdapter.createThreadInChannel === 'function') {
+                const toConfig = this.agentLoader.get(toAgent);
+                const channelId = toConfig?.config.discordChannelId;
+                if (channelId) {
+                  const createThread = discordAdapter.createThreadInChannel as (
+                    channelId: string,
+                    title: string,
+                    initialMessage: string
+                  ) => Promise<{ success: boolean; threadId?: string }>;
+                  const result = await createThread(
+                    channelId,
+                    `📋 任務：${task.title}`,
+                    `**任務指派**\n標題：${task.title}\n描述：${task.description ?? '無'}\n優先級：${task.priority}\n指派給：${toAgent}`
+                  );
+                  if (result.success && result.threadId) {
+                    this.taskRecordRepo.setAgentThreadId(options.taskId, toAgent, result.threadId);
+                    effectiveChatId = result.threadId;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // (c) Build task context for enrichedMessage
+        taskContext = `【任務上下文】
+任務 ID: ${task.id.slice(0, 8)}
+標題: ${task.title}
+描述: ${task.description ?? '無'}
+狀態: ${task.status}
+優先級: ${task.priority}
+審核次數: ${task.review_count ?? 0}
+---
+`;
+      } else {
+        logger.warn({ taskId: options.taskId }, '[AgentCallService] Task not found, proceeding without task context');
+      }
+    }
 
     // 強制新對話：僅在獨立通道模式下清除 session（不應影響使用者的現有 session）
     if (options.startNewConversation && !useUserSession) {
@@ -189,7 +258,7 @@ export class AgentCallService {
     const callModeNote = options.awaitResult
       ? '模式: await（對方正在等待你的回覆）\n⚠️ 直接回覆即可，不要使用 call_agent。你的回覆會自動傳達給對方。'
       : '模式: fire-and-forget（對方不等待回覆）\n📝 直接回覆即可，回覆會顯示在聊天室。僅在必要時才使用 call_agent 聯繫對方。';
-    const enrichedMessage = `【跨 Agent 呼叫】
+    const enrichedMessage = `${taskContext}【跨 Agent 呼叫】
 來自: ${fromAgent}
 優先級: ${options?.priority ?? 'normal'}
 ${callModeNote}
@@ -197,17 +266,21 @@ ${callModeNote}
 ${message}`;
 
     // 構造 UnifiedMessage — use original platform for correct adapter routing
+    const metadata: Record<string, unknown> = {
+      isAgentCall: true,
+      fromAgent,
+    };
+    if (options?.taskId !== undefined) {
+      metadata.taskId = options.taskId;
+    }
     const unifiedMessage: UnifiedMessage = {
       id: callId,
       platform: effectivePlatform,
       userId: effectiveUserId,
-      chatId: options.chatId,
+      chatId: effectiveChatId,
       text: enrichedMessage,
       timestamp: new Date(),
-      metadata: {
-        isAgentCall: true,
-        fromAgent,
-      },
+      metadata,
     };
 
     // awaitResult 模式：等待回覆
@@ -297,6 +370,32 @@ ${message}`;
           { callId, from: fromAgent, to: toAgent },
           '[AgentCallService] Background execution completed via MessageProcessor'
         );
+
+        // Quality gate callback: notify task creator when agent completes work
+        if (options?.taskId && this.taskRecordRepo) {
+          const task = this.taskRecordRepo.getById(options.taskId);
+          if (task) {
+            const creatorAgent = task.created_by_agent_id ?? 'general';
+            if (creatorAgent !== toAgent) { // Don't callback self
+              const summaryText = result.response ? result.response.slice(0, 500) : '(執行完成，無文字回覆)';
+
+              // Fire-and-forget callback to secretary
+              const callbackOpts: AgentCallOptions = {
+                taskId: options.taskId,
+                depth: (options.depth ?? 0) + 1,
+              };
+              if (options.chatId !== undefined) callbackOpts.chatId = options.chatId;
+              if (options.platform !== undefined) callbackOpts.platform = options.platform;
+              void this.callAgent(creatorAgent, toAgent,
+                `【品管 Callback】\n${toAgent} 已完成任務「${task.title}」\n\n以下是回覆摘要：\n${summaryText}\n\n請進行品管審核。通過後用 request_review 推到主 thread。`,
+                callbackOpts
+              ).catch(err => {
+                logger.warn({ err: err instanceof Error ? err.message : String(err), taskId: options.taskId },
+                  '[AgentCallService] Quality gate callback failed');
+              });
+            }
+          }
+        }
 
         // Discord thread: post summary link in target agent's own channel
         this.postCrossChannelSummary(fromAgent, toAgent, options);
