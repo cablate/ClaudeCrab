@@ -519,6 +519,9 @@ export class AppBootstrap {
         : {}),
       ...(sttProvider !== undefined ? { sttProvider } : {}),
       ...(ttsProvider !== undefined ? { ttsProvider } : {}),
+      ...(persistence?.taskRecordRepository !== undefined
+        ? { taskRecordRepository: persistence.taskRecordRepository }
+        : {}),
     });
   }
 

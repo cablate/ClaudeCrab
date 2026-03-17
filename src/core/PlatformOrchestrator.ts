@@ -71,6 +71,8 @@ export interface PlatformOrchestratorOptions {
   sttProvider?: import('./stt/index.js').STTProvider;
   /** Text-to-speech provider for voice message synthesis */
   ttsProvider?: import('./tts/index.js').TTSProvider;
+  /** Task record repository for per-task thread session resolution */
+  taskRecordRepository?: import('../persistence/TaskRecordRepository.js').TaskRecordRepository;
 }
 
 /**
@@ -89,6 +91,7 @@ export class PlatformOrchestrator {
   private readonly groupBroadcaster: GroupBroadcaster;
   private readonly sttProvider: import('./stt/index.js').STTProvider | undefined;
   private readonly ttsProvider: import('./tts/index.js').TTSProvider | undefined;
+  private readonly taskRecordRepository: import('../persistence/TaskRecordRepository.js').TaskRecordRepository | undefined;
   constructor(options: PlatformOrchestratorOptions) {
     this.agentLoader = options.agentLoader;
     this.sessionManager = options.sessionManager;
@@ -97,6 +100,7 @@ export class PlatformOrchestrator {
     this.scheduleManager = options.scheduleManager;
     this.sttProvider = options.sttProvider;
     this.ttsProvider = options.ttsProvider;
+    this.taskRecordRepository = options.taskRecordRepository;
 
     // Initialize GroupBroadcaster for multi-bot group message handling (ADR-019)
     // Supports dependency injection for testing
@@ -608,6 +612,25 @@ export class PlatformOrchestrator {
     });
 
     // Initialize and start
+    // Set task thread resolver for session continuity
+    if (this.taskRecordRepository) {
+      const repo = this.taskRecordRepository;
+      adapter.setTaskThreadResolver((threadId: string) => {
+        // Check all tasks to see if this threadId is a per-task agent thread
+        const tasks = repo.listByStatus(undefined, 200);
+        for (const task of tasks) {
+          if (!task.agent_thread_ids) continue;
+          try {
+            const threadMap = JSON.parse(task.agent_thread_ids) as Record<string, string>;
+            for (const tid of Object.values(threadMap)) {
+              if (tid === threadId) return { taskId: task.id };
+            }
+          } catch { /* ignore parse errors */ }
+        }
+        return undefined;
+      });
+    }
+
     await adapter.initialize();
     await adapter.start();
 

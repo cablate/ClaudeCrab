@@ -71,6 +71,18 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   private boundInteractionHandler: ((interaction: import('discord.js').Interaction) => void) | null =
     null;
 
+  // Task thread resolver: given a threadId, returns taskId if this thread belongs to a task
+  private taskThreadResolver?: (threadId: string) => { taskId: string } | undefined;
+
+  /**
+   * Set a resolver that maps thread IDs to task IDs.
+   * Used to override userId when a user messages in a per-task agent thread,
+   * ensuring session continuity with the agent call.
+   */
+  setTaskThreadResolver(resolver: (threadId: string) => { taskId: string } | undefined): void {
+    this.taskThreadResolver = resolver;
+  }
+
   // Interactive prompt resolvers (mirrors TelegramAdapter pattern)
   private permissionResolver: PermissionResolver | null = null;
   private questionResolver: QuestionResolver | null = null;
@@ -216,7 +228,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       return;
     }
 
-    const userId = message.author.id;
+    let userId = message.author.id;
     let text = message.content;
 
     // If message body is empty but has a .txt attachment, extract text from it.
@@ -298,6 +310,18 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       }
     }
 
+    // Task thread override: if this thread belongs to a task, override userId
+    // so the user's message hits the same session as the agent call
+    let taskId: string | undefined;
+    if (isChildThread && this.taskThreadResolver) {
+      const resolved = this.taskThreadResolver(message.channelId);
+      if (resolved) {
+        taskId = resolved.taskId;
+        userId = `task:${resolved.taskId}`;
+        this.log.info({ threadId: message.channelId, taskId: resolved.taskId }, 'Task thread detected — overriding userId for session continuity');
+      }
+    }
+
     // Build UnifiedMessage
     const displayName = message.member?.displayName ?? message.author.displayName;
 
@@ -313,8 +337,9 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
         displayName,
         username: message.author.username,
         isGroupChat: false,
+        ...(taskId !== undefined ? { taskId } : {}),
         // Thread → isolated session: adapter handles this, core just sees sessionUserId
-        ...(threadId !== undefined ? {
+        ...(threadId !== undefined && taskId === undefined ? {
           sessionUserId: `${userId}::thread::${threadId}`,
           parentConversationId: this.channelId,
         } : {}),
