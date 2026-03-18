@@ -33,6 +33,9 @@ export interface UserSession {
 
   /** Optional SDK session reference for resumption */
   sdkSessionId?: string;
+
+  /** Whether this session is active (false = soft-deleted via /reset) */
+  isActive: boolean;
 }
 
 /**

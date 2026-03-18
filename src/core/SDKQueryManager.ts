@@ -42,6 +42,9 @@ export interface QueryResult {
 
   /** If true, usage values are already per-query deltas (V2 path). If false/undefined, they may be cumulative (V1 with resume). */
   isUsageDelta?: boolean;
+
+  /** If true, the session resume failed and a fresh session was created — conversation history is lost. */
+  resumeLost?: boolean;
 }
 
 /**

@@ -45,8 +45,8 @@ export class SessionRepository implements ISessionRepository {
     const stmt = this.db.prepare(`
       INSERT INTO sessions (
         session_id, agent_id, platform, user_id, state,
-        created_at, last_active_at, sdk_session_id, processed_message_ids
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, last_active_at, sdk_session_id, processed_message_ids, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         agent_id = excluded.agent_id,
         platform = excluded.platform,
@@ -54,7 +54,8 @@ export class SessionRepository implements ISessionRepository {
         state = excluded.state,
         last_active_at = excluded.last_active_at,
         sdk_session_id = excluded.sdk_session_id,
-        processed_message_ids = excluded.processed_message_ids
+        processed_message_ids = excluded.processed_message_ids,
+        is_active = excluded.is_active
     `);
 
     stmt.run(
@@ -66,7 +67,8 @@ export class SessionRepository implements ISessionRepository {
       session.created_at,
       session.last_active_at,
       session.sdk_session_id,
-      session.processed_message_ids
+      session.processed_message_ids,
+      session.is_active
     );
 
     logger.debug({ sessionId: session.session_id }, 'Session saved to database');
@@ -140,6 +142,31 @@ export class SessionRepository implements ISessionRepository {
     `);
     stmt.run(sdkSessionId, dateToString(new Date()), sessionId);
     logger.debug({ sessionId, sdkSessionId }, 'SDK session ID updated in database');
+  }
+
+  /**
+   * Soft-delete or reactivate a session.
+   * Used by /reset to mark sessions as inactive (survives process restart).
+   */
+  updateIsActive(sessionId: string, isActive: boolean): void {
+    const stmt = this.db.prepare(`
+      UPDATE sessions SET is_active = ? WHERE session_id = ?
+    `);
+    stmt.run(isActive ? 1 : 0, sessionId);
+    logger.debug({ sessionId, isActive }, 'Session is_active updated in database');
+  }
+
+  /**
+   * Soft-delete by platform/agent/user lookup (for sessions not in memory).
+   * Returns true if a row was updated.
+   */
+  deactivateByPlatformAgentAndUser(platform: string, agentId: string, userId: string): boolean {
+    const stmt = this.db.prepare(`
+      UPDATE sessions SET is_active = 0, sdk_session_id = NULL
+      WHERE platform = ? AND agent_id = ? AND user_id = ? AND is_active = 1
+    `);
+    const result = stmt.run(platform, agentId, userId);
+    return (result.changes ?? 0) > 0;
   }
 
   /**

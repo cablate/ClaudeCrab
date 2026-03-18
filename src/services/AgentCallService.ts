@@ -256,6 +256,39 @@ export class AgentCallService {
       }
     }
 
+    // Discord non-task calls: route to target agent's own channel instead of using caller's chatId.
+    // Without this, the target agent's response pollutes the caller's thread.
+    if (effectivePlatform === 'discord' && !options?.taskId && this.getAdapter) {
+      const toConfig = this.agentLoader.get(toAgent);
+      const channelId = toConfig?.config.discordChannelId;
+      if (channelId) {
+        const adapter = this.getAdapter(effectivePlatform, toAgent);
+        if (adapter) {
+          const discordAdapter = adapter as unknown as { createThreadInChannel?: (channelId: string, title: string, msg: string) => Promise<{ success: boolean; threadId?: string }> };
+          if (typeof discordAdapter.createThreadInChannel === 'function') {
+            const fromName = fromConfig?.config.name ?? fromAgent;
+            const threadTitle = `💬 ${fromName} → ${toConfig?.config.name ?? toAgent}`;
+            const preview = message.length > 200 ? message.slice(0, 197) + '...' : message;
+            try {
+              const result = await discordAdapter.createThreadInChannel(channelId, threadTitle, preview);
+              if (result.success && result.threadId) {
+                effectiveChatId = result.threadId;
+                logger.info(
+                  { callId, threadId: result.threadId, channelId },
+                  '[AgentCallService] Created thread in target agent channel for non-task Discord call'
+                );
+              }
+            } catch (err) {
+              logger.warn(
+                { callId, err: err instanceof Error ? err.message : String(err) },
+                '[AgentCallService] Failed to create thread in target agent channel, falling back to caller chatId'
+              );
+            }
+          }
+        }
+      }
+    }
+
     // chatId is required after task binding (task binding may have derived it from per-task thread)
     if (!effectiveChatId) {
       logger.warn({ callId }, '[AgentCallService] chatId is required (and could not be derived from taskId)');

@@ -915,6 +915,11 @@ export class MessageProcessor {
             },
             'SDK resume failed, retrying without resume (new conversation)'
           );
+          // Notify user that conversation history is lost
+          await adapter.sendFormattedMessage(
+            chatId,
+            '⚠️ 對話記憶恢復失敗，已自動建立新對話。先前的對話內容不會被記得。'
+          );
           this.sessionManager.setSdkSessionId(
             platform,
             agentId,
@@ -929,6 +934,15 @@ export class MessageProcessor {
       }
 
       // --- Post-query handling ---
+
+      // Notify user if resume silently failed (V2 empty-response fallback)
+      if (result.resumeLost) {
+        await adapter.sendFormattedMessage(
+          chatId,
+          '⚠️ 對話記憶恢復失敗，已自動建立新對話。先前的對話內容不會被記得。'
+        );
+      }
+
       this.saveSDKSessionId(result, internalSession, platform, agentId, userId, sessionId);
       this.recordQueryMetrics(result, agentId, platform, chatId, userId);
 
@@ -1402,7 +1416,8 @@ export class MessageProcessor {
       this.sdkSessionManager.destroySession(internalSession.sdkSessionId);
     }
 
-    this.sessionManager.setSdkSessionId(platform, agentId, userId, undefined);
+    // Soft-delete session in memory + DB (survives restart)
+    this.sessionManager.softDeleteSession(platform, agentId, userId);
 
     if (this.conversationRepository !== undefined) {
       this.conversationRepository.clearConversation(sessionId);
@@ -1410,7 +1425,7 @@ export class MessageProcessor {
 
     logger.debug(
       { sessionId },
-      'Cleared conversation (V2 session destroyed + SDK session + persisted messages)'
+      'Cleared conversation (V2 session destroyed + session soft-deleted in memory/DB)'
     );
   }
 

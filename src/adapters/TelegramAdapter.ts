@@ -245,6 +245,14 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       });
     });
 
+    // Set up document message handler (extract text from .txt/.md attachments)
+    // Telegram auto-converts long pasted text into .txt file attachments.
+    this.bot.on('message:document', (ctx) => {
+      void this.handleDocumentMessage(ctx).catch((error) => {
+        this.log.error({ error }, 'Unhandled error in document handler');
+      });
+    });
+
     // Set up callback query handler (delegated to TelegramCallbackHandler)
     this.callbackHandler = new TelegramCallbackHandler({
       rateLimiter: this.rateLimiter,
@@ -772,6 +780,98 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
       ...(duration !== undefined ? { voiceDuration: duration } : {}),
       ...(language !== undefined ? { voiceLanguage: language } : {}),
     });
+  }
+
+  /**
+   * Handle incoming document messages: extract text from .txt/.md attachments.
+   * Telegram auto-converts long pasted text (>4096 chars) into .txt file attachments.
+   */
+  private async handleDocumentMessage(ctx: Context): Promise<void> {
+    const message = ctx.message;
+    if (message?.document === undefined) {
+      return;
+    }
+
+    const doc = message.document;
+    const fileName = doc.file_name ?? '';
+    const mimeType = doc.mime_type ?? '';
+
+    // Only handle text-based files that are likely pasted long messages
+    const isTextFile =
+      fileName.endsWith('.txt') || fileName.endsWith('.md');
+    const isTextMime = mimeType.startsWith('text/');
+    if (!isTextFile && !isTextMime) {
+      return;
+    }
+
+    const from = message.from;
+    if (from === undefined) {
+      return;
+    }
+
+    // Filter out messages from other bots
+    if (from.is_bot === true) {
+      this.log.debug({ botId: from.id }, 'Ignoring document from bot');
+      return;
+    }
+
+    const userId = from.id.toString();
+    const chatId = message.chat.id.toString();
+
+    // Track last active chat for proactive alerts
+    this.lastActiveChatId = chatId;
+
+    // Allowlist check (pass empty text — only authorization matters for document)
+    const validation = validateMessage('', userId, this.securityConfig);
+    if (!validation.valid && validation.error === 'unauthorized') {
+      auditLogger.logUnauthorizedAccess('telegram', userId, chatId);
+      this.log.warn({ userId, chatId }, 'Unauthorized document access attempt');
+      await ctx.reply(getSecurityErrorMessage('unauthorized'));
+      return;
+    }
+
+    // Download and read file content
+    let text: string;
+    try {
+      const file = await ctx.getFile();
+      const fileUrl = `https://api.telegram.org/file/bot${this.config.token}/${file.file_path}`;
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        throw new Error(`Document download failed: ${response.status} ${response.statusText}`);
+      }
+      text = await response.text();
+    } catch (error) {
+      this.log.error({ error, chatId, userId, fileName }, 'Failed to download document file');
+      await ctx.reply('檔案下載失敗，請重新嘗試。');
+      return;
+    }
+
+    if (text.trim().length === 0) {
+      return;
+    }
+
+    // Prepend caption if present (user may add context before the file)
+    if (message.caption !== undefined && message.caption.length > 0) {
+      text = `${message.caption}\n\n${text}`;
+    }
+
+    this.log.info(
+      { userId, chatId, fileName, size: doc.file_size, textLength: text.length },
+      'Extracted text from document attachment'
+    );
+
+    // Skip maxMessageLength validation — this is intentionally long text.
+    // Check for prompt injection (warning only)
+    const patterns = detectPromptInjection(text, this.securityConfig);
+    if (patterns.length > 0) {
+      auditLogger.logInjectionDetected('telegram', userId, patterns, chatId);
+      this.log.warn(
+        { userId, chatId, patternCount: patterns.length },
+        'Potential prompt injection detected in document'
+      );
+    }
+
+    this.processIncomingMessage(ctx, text);
   }
 
   /**

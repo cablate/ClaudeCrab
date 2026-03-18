@@ -233,6 +233,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
 
     // If message body is empty but has a .txt attachment, extract text from it.
     // Discord converts long messages (>2000 chars) into .txt file attachments.
+    let isFromAttachment = false;
     if (text.length === 0 && message.attachments.size > 0) {
       const txtAttachment = message.attachments.find(
         (a) => a.name?.endsWith('.txt') && a.contentType?.startsWith('text/')
@@ -242,6 +243,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
           const response = await fetch(txtAttachment.url);
           if (response.ok) {
             text = await response.text();
+            isFromAttachment = true;
             this.log.info(
               { userId, fileName: txtAttachment.name, size: txtAttachment.size },
               'Extracted text from .txt attachment'
@@ -259,7 +261,10 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     // Security validation (use main channelId for consistent logging)
-    const validation = validateMessage(text, userId, this.securityConfig);
+    // Skip maxMessageLength for attachment-extracted text — it's intentionally long.
+    const validation = isFromAttachment
+      ? validateMessage('', userId, this.securityConfig)
+      : validateMessage(text, userId, this.securityConfig);
 
     if (!validation.valid) {
       if (validation.error === 'unauthorized') {
@@ -279,6 +284,16 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       const patterns = detectPromptInjection(text, this.securityConfig);
       auditLogger.logInjectionDetected('discord', userId, patterns, this.channelId);
       this.log.warn({ userId, patternCount: patterns.length }, 'Potential prompt injection detected');
+    }
+
+    // For attachment-extracted text, run injection check explicitly
+    // (validateMessage was called with '' so warnings won't include it)
+    if (isFromAttachment) {
+      const patterns = detectPromptInjection(text, this.securityConfig);
+      if (patterns.length > 0) {
+        auditLogger.logInjectionDetected('discord', userId, patterns, this.channelId);
+        this.log.warn({ userId, patternCount: patterns.length }, 'Potential prompt injection detected in attachment');
+      }
     }
 
     // --- Thread routing ---

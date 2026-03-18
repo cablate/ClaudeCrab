@@ -318,19 +318,25 @@ async function handleReset(
     const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
     if (session !== undefined) {
       deps.messageProcessor.clearConversation(session.sessionId);
+    } else {
+      // Session not in memory (expired/cleaned up) — soft-delete DB row
+      deps.sessionManager.softDeleteSession('discord', agentId, effectiveUserId);
     }
-    await interaction.editReply(`✅ 已重置與 **${agentId}** 的對話（V2 session 已關閉）`);
+    await interaction.editReply(`✅ 已重置與 **${agentId}** 的對話`);
   } else {
-    // Find agent for this channel and reset
+    // Reset all agents for this user
     let resetCount = 0;
     for (const id of deps.agentLoader.list()) {
       const session = deps.sessionManager.getSession('discord', id, effectiveUserId);
       if (session !== undefined) {
         deps.messageProcessor.clearConversation(session.sessionId);
         resetCount++;
+      } else if (deps.sessionManager.softDeleteSession('discord', id, effectiveUserId)) {
+        // Session not in memory but DB row existed — soft-deleted
+        resetCount++;
       }
     }
-    await interaction.editReply(`✅ 已重置 ${resetCount} 個對話（V2 session 已關閉）`);
+    await interaction.editReply(`✅ 已重置 ${resetCount} 個對話`);
   }
 }
 
@@ -518,6 +524,13 @@ async function handleCtx(
 
   // Get the actual SessionManager session to find the real sessionId
   const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
+
+  // Session was soft-deleted (reset) and no new message yet
+  if (session !== undefined && !session.isActive) {
+    await interaction.reply({ content: '🔄 Session 已重置，尚無活躍 session。發送訊息後會建立新 session。', ephemeral: true });
+    return;
+  }
+
   const realSessionId = session?.sessionId;
 
   // Get V2 session stats using the real session ID
@@ -547,6 +560,8 @@ async function handleCtx(
     for (const q of recent) {
       if (q.platform !== 'discord') continue;
       if (q.chatId !== channelId) continue;
+      // Only include queries from the current session (after last reset)
+      if (session !== undefined && new Date(q.createdAt) < session.createdAt) continue;
 
       sessionQueryCount++;
       sessionTotalCost += q.totalCostUsd;

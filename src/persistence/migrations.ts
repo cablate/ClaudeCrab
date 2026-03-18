@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_active_at TEXT NOT NULL,
     sdk_session_id TEXT,
     processed_message_ids TEXT NOT NULL DEFAULT '[]',
+    is_active INTEGER NOT NULL DEFAULT 1,
     UNIQUE (platform, agent_id, user_id)
 );
 
@@ -235,7 +236,7 @@ CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, c
 CREATE INDEX IF NOT EXISTS idx_exec_task ON execution_records(task_id);
 `;
 
-export const SCHEMA_VERSION = '11';
+export const SCHEMA_VERSION = '12';
 
 /**
  * Migration SQL from v1 to v2:
@@ -515,6 +516,11 @@ ALTER TABLE task_records ADD COLUMN review_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE task_records ADD COLUMN agent_thread_ids TEXT NOT NULL DEFAULT '{}';
 `;
 
+const MIGRATION_V11_TO_V12 = `
+-- Add is_active column for soft-delete on /reset (survives process restart)
+ALTER TABLE sessions ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;
+`;
+
 /**
  * Run database migrations from currentVersion to SCHEMA_VERSION
  */
@@ -587,6 +593,12 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   if (currentVersion === '10') {
     db.exec(MIGRATION_V10_TO_V11);
     logger.info('Migration v10 → v11 completed');
+    currentVersion = '11';
+  }
+
+  if (currentVersion === '11') {
+    db.exec(MIGRATION_V11_TO_V12);
+    logger.info('Migration v11 → v12 completed');
   }
 
   // Update schema version

@@ -164,6 +164,30 @@ Spectra 是全域安裝的獨立工具（位於 `/c/Users/User/AppData/Local/Spe
 
 讀了單一 script（`play_notification.py`）就斷定「Stop hook 不會注入訊息」，結果被全域 `~/.claude/settings.json` 的 Stop hook 打臉。**驗證任何系統行為時，必須查完所有配置層：local settings → project settings → global settings**。Claude Code hooks 的觸發機制有三層，任何一層有設定都可能觸發，不能只看 component 實作就推論系統行為。
 
+### 2026-03-17: Git Bash 下的 Tauri/Rust 編譯需設定 MSVC 環境
+
+從 Git Bash (MSYS2) 執行 `npx tauri build` 會因缺少 `cl.exe`、`kernel32.lib` 而失敗。需手動設定三個環境變數：`PATH`（加 MSVC bin）、`LIB`（Windows SDK um/x64 + ucrt/x64 + MSVC lib/x64）、`INCLUDE`（對應 include 目錄）。或者改從 "x64 Native Tools Command Prompt" 執行。
+
+### 2026-03-17: Tauri v2 capability 名稱對照
+
+Tauri v2 的 tray icon 權限不是 `tray-icon:default`，是 `core:tray:default`。建置時的錯誤會列出所有可用 permission，直接從中找正確名稱。
+
+### 2026-03-17: Claude Agent SDK 型別名稱
+
+SDK 的 query options 型別是 `Options`（非 `ClaudeAgentOptions`），從 `@anthropic-ai/claude-agent-sdk` 直接 import。SDK 版本 v0.2.76+。
+
+### 2026-03-17: MSYS2 環境下 Tauri build 必須用 cmd.exe
+
+Git Bash 設定 LIB/INCLUDE 環境變數會被 MSYS2 路徑轉換破壞（分號→冒號、路徑格式改變），導致 linker 找不到 kernel32.lib。正確做法：寫 `.bat` 檔 → `call vcvars64.bat` → `npx tauri build`，用 `cmd.exe //c build.bat` 執行。不要在 Git Bash 手動 export LIB/INCLUDE。
+
+### 2026-03-17: Tauri v2 macOS 透明視窗雙重設定
+
+macOS 透明視窗必須**同時**設定：(1) `tauri.conf.json` 的 `macOSPrivateApi: true` (2) `Cargo.toml` 的 `macos-private-api` feature。只設一處會靜默失敗。
+
+### 2026-03-18: 使用者提到之前討論過的主題時先搜記憶
+
+使用者說「這個企劃」「之前那個」等指涉過去討論的用語時，**先搜 memory/、output/、knowledge/ 找脈絡**，不要反問「哪個？」。之前討論過的 = 已知前提，重新問會被認為沒做功課。
+
 ---
 
 ## 目錄結構參考

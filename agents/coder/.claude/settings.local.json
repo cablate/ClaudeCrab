@@ -27,11 +27,12 @@
       "mcp__memory__memory_store",
       "mcp__memory__memory_recall",
       "mcp__memory__self_improvement_review",
-      "mcp__memory__memory_update"
+      "mcp__memory__memory_update",
+      "mcp__task-mgmt__*",
+      "mcp__agent-call__*"
     ],
     "deny": [
-      "mcp__twse__*",
-      "mcp__task-mgmt__*"
+      "mcp__twse__*"
     ]
   },
   "model": "opus",

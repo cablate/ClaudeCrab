@@ -17,6 +17,7 @@ export interface SessionRow {
   last_active_at: string;
   sdk_session_id: string | null;
   processed_message_ids: string; // JSON array string
+  is_active: number; // SQLite boolean: 1 = active, 0 = soft-deleted (reset)
 }
 
 /**
@@ -85,6 +86,17 @@ export interface ISessionRepository {
    * Update processed message IDs
    */
   updateProcessedMessageIds(sessionId: string, messageIds: Set<string>): void;
+
+  /**
+   * Soft-delete or reactivate a session (persists across restart).
+   */
+  updateIsActive(sessionId: string, isActive: boolean): void;
+
+  /**
+   * Soft-delete by platform/agent/user lookup (for sessions not in memory).
+   * Also clears sdk_session_id. Returns true if a row was updated.
+   */
+  deactivateByPlatformAgentAndUser(platform: string, agentId: string, userId: string): boolean;
 }
 
 /**

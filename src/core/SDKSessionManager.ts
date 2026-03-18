@@ -144,7 +144,9 @@ export class SDKSessionManager {
         managed.lastUsedAt = Date.now();
         managed.messageCount++;
 
-        return await this.processStream(sessionId, managed, freshOptions, Date.now());
+        const freshResult = await this.processStream(sessionId, managed, freshOptions, Date.now());
+        freshResult.resumeLost = true;
+        return freshResult;
       }
 
       return result;

@@ -209,6 +209,7 @@ export class SessionManager {
       sdkOptions,
       // Inherit sdkSessionId for SDK resume (conversation continuity)
       ...(previousSdkSessionId !== undefined ? { sdkSessionId: previousSdkSessionId } : {}),
+      isActive: true,
     };
 
     this.sessions.set(key, session);
@@ -246,8 +247,15 @@ export class SessionManager {
     }
 
     const existing = this.getSession(platform, agentId, userId);
-    if (existing !== undefined) {
+    if (existing !== undefined && existing.isActive) {
       return existing;
+    }
+
+    // Soft-deleted (isActive=false) or no session — remove stale entry and create fresh
+    if (existing !== undefined && !existing.isActive) {
+      const key = getSessionKey(platform, agentId, userId);
+      this.sessions.delete(key);
+      logger.info({ key }, 'Removed soft-deleted session, creating fresh one');
     }
 
     return this.createSession(options);
@@ -321,6 +329,37 @@ export class SessionManager {
     });
 
     return true;
+  }
+
+  /**
+   * Soft-delete a session: mark as inactive in memory + DB.
+   * Used by /reset — survives process restart (unlike memory-only isActive).
+   * Also handles sessions that have been expired from memory but still exist in DB.
+   */
+  softDeleteSession(platform: string, agentId: string, userId: string): boolean {
+    const key = getSessionKey(platform, agentId, userId);
+    const session = this.sessions.get(key);
+
+    if (session !== undefined) {
+      session.isActive = false;
+      if (this.sessionRepository !== undefined) {
+        this.sessionRepository.updateIsActive(session.sessionId, false);
+        this.sessionRepository.updateSdkSessionId(session.sessionId, null);
+      }
+      logger.info({ sessionId: session.sessionId }, 'Session soft-deleted');
+      return true;
+    }
+
+    // Session not in memory (expired/cleaned up) — deactivate DB row directly
+    if (this.sessionRepository !== undefined) {
+      const deactivated = this.sessionRepository.deactivateByPlatformAgentAndUser(platform, agentId, userId);
+      if (deactivated) {
+        logger.info({ platform, agentId, userId }, 'Session soft-deleted (DB-only, was not in memory)');
+      }
+      return deactivated;
+    }
+
+    return false;
   }
 
   /**
@@ -526,6 +565,15 @@ export class SessionManager {
         // Reset stuck 'processing' state (server crash recovery)
         const restoredState = row.state === 'processing' ? 'idle' : row.state;
 
+        // Skip soft-deleted sessions (reset by user, persisted to DB)
+        if (row.is_active === 0) {
+          logger.debug(
+            { sessionId: row.session_id, platform: row.platform, userId: row.user_id },
+            'Skipped inactive (soft-deleted) session'
+          );
+          continue;
+        }
+
         const session: InternalSession = {
           sessionId: row.session_id,
           agentId: row.agent_id,
@@ -538,6 +586,7 @@ export class SessionManager {
           mutex: new Mutex(),
           agent,
           sdkOptions,
+          isActive: true,
         };
 
         // Only set sdkSessionId if it exists in the database
@@ -624,6 +673,7 @@ export class SessionManager {
       ...(internal.sdkSessionId !== undefined
         ? { sdkSessionId: internal.sdkSessionId }
         : {}),
+      isActive: internal.isActive,
     };
   }
 
@@ -641,6 +691,7 @@ export class SessionManager {
       last_active_at: dateToString(internal.lastActiveAt),
       sdk_session_id: internal.sdkSessionId ?? null,
       processed_message_ids: serializeMessageIds(internal.processedMessageIds),
+      is_active: internal.isActive ? 1 : 0,
     };
   }
 
