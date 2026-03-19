@@ -706,9 +706,20 @@ export class MessageProcessor {
                   }
                 );
               } catch (v2Error) {
-                // V2 failed — destroy session and fall through to V1
+                // SDK abort may throw non-Error values like { value: "Claude Code process aborted by user" }
+                const errMsg = v2Error instanceof Error
+                  ? v2Error.message
+                  : typeof v2Error === 'object' && v2Error !== null && 'value' in v2Error
+                    ? String((v2Error as { value: unknown }).value)
+                    : String(v2Error);
+                // If query was cancelled by user (/stop), don't fallback — just stop
+                if (errMsg.includes('cancelled by user') || errMsg.includes('aborted by user')) {
+                  logger.info({ sessionId, errMsg }, 'V2 query cancelled by user — not falling back to V1');
+                  throw Object.assign(new Error('Query cancelled'), { _cancelled: true });
+                }
+                // V2 failed for other reasons — destroy session and fall through to V1
                 logger.warn(
-                  { sessionId, error: (v2Error as Error).message },
+                  { sessionId, error: errMsg },
                   'V2 persistent session failed, falling back to V1 query()'
                 );
                 this.sdkSessionManager.destroySession(sessionId);
@@ -872,7 +883,8 @@ export class MessageProcessor {
           {
             ...API_RETRY_OPTIONS,
             isRetryable: (err) =>
-              isRateLimitError(err) || isTransientError(err),
+              !(err instanceof Error && '_cancelled' in err) &&
+              (isRateLimitError(err) || isTransientError(err)),
             onRetry: (attempt, err, delayMs) => {
               intermediateMessages.length = 0;
               logger.warn(
@@ -895,6 +907,20 @@ export class MessageProcessor {
       try {
         result = await executeWithRetry(internalSession.sdkSessionId);
       } catch (error) {
+        // User-initiated cancel (/stop) — don't retry, don't send error, just stop
+        // V2 cancel: tagged with _cancelled flag
+        // V1 cancel: AbortError from AbortController.abort()
+        // SDK abort: { value: "Claude Code process aborted by user" }
+        const isCancelled =
+          (error instanceof Error && '_cancelled' in error) ||
+          (error instanceof Error && error.name === 'AbortError') ||
+          (error instanceof Error && error.message.includes('aborted by user')) ||
+          (typeof error === 'object' && error !== null && 'value' in error &&
+            String((error as { value: unknown }).value).includes('aborted by user'));
+        if (isCancelled) {
+          logger.info({ sessionId }, 'Query cancelled — returning empty response');
+          return '';
+        }
         const errorMsg = error instanceof Error ? error.message : String(error);
 
         // Check if this is a resume-specific error (session not found, expired, corrupted, etc.)
@@ -1410,11 +1436,9 @@ export class MessageProcessor {
   clearConversation(sessionId: string): void {
     const { platform, agentId, userId } = this.getSessionIdentifiers(sessionId);
 
-    // Destroy V2 persistent session (kills cli.js process) before clearing session key
-    const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
-    if (internalSession?.sdkSessionId !== undefined) {
-      this.sdkSessionManager.destroySession(internalSession.sdkSessionId);
-    }
+    // Destroy V2 persistent session (kills cli.js process) before clearing session key.
+    // IMPORTANT: SDKSessionManager.sessions is keyed by ClaudeCab sessionId, NOT sdkSessionId.
+    this.sdkSessionManager.destroySession(sessionId);
 
     // Soft-delete session in memory + DB (survives restart)
     this.sessionManager.softDeleteSession(platform, agentId, userId);
@@ -1439,8 +1463,9 @@ export class MessageProcessor {
     const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
 
     if (internalSession?.sdkSessionId !== undefined) {
-      // Only destroy V2 process — keep sdkSessionId so next message can resume
-      this.sdkSessionManager.destroySession(internalSession.sdkSessionId);
+      // Only destroy V2 process — keep sdkSessionId so next message can resume.
+      // IMPORTANT: SDKSessionManager.sessions is keyed by ClaudeCab sessionId, NOT sdkSessionId.
+      this.sdkSessionManager.destroySession(sessionId);
       // sdkSessionId is preserved → next query will use resume: sdkSessionId → conversation continues
       logger.info({ sessionId, sdkSessionId: internalSession.sdkSessionId }, 'V2 process closed (sdkSessionId preserved for resume)');
       return true;
@@ -1459,10 +1484,10 @@ export class MessageProcessor {
       logger.info({ sessionId }, 'Cancelled active V1 query');
       return true;
     }
-    // Try V2 (SDKSessionManager) — close the session to abort
-    if (this.sdkSessionManager.hasSession(sessionId)) {
-      this.sdkSessionManager.destroySession(sessionId);
-      logger.info({ sessionId }, 'Cancelled active V2 session');
+    // Try V2 (SDKSessionManager) — only if a query is actually running
+    if (this.sdkSessionManager.hasActiveQuery(sessionId)) {
+      this.sdkSessionManager.cancelActiveQuery(sessionId);
+      logger.info({ sessionId }, 'Cancelled active V2 query');
       return true;
     }
     return false;

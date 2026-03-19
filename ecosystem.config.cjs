@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'claudecab',
-      script: 'src/index.ts',
+      script: 'start.ts',
       interpreter: 'node',
       interpreter_args: '--import tsx',
       cwd: __dirname,
@@ -26,8 +26,8 @@ module.exports = {
       
       // Logging
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
-      error_file: 'logs/pm2-error.log',
-      out_file: 'logs/pm2-out.log',
+      error_file: 'logs/supervisor-error.log',
+      out_file: 'logs/supervisor-out.log',
       merge_logs: true,
       
       // Memory management

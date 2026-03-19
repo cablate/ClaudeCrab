@@ -5,6 +5,17 @@ import { loadAppConfig } from './config.js';
 import { AppBootstrap } from './AppBootstrap.js';
 import { CRASH_MARKER_PATH } from './constants.js';
 
+// Windows: ignore console close events (CTRL_CLOSE_EVENT → SIGHUP in Node.js).
+// Without this handler, Windows kills the process with STATUS_CONTROL_C_EXIT (0xC000013A)
+// when the hidden console session ends. The supervisor manages process lifecycle instead.
+// Linux/macOS: SIGHUP has different semantics (terminal disconnect / config reload);
+// no CTRL_CLOSE_EVENT issue exists, so this handler is Windows-only.
+if (process.platform === 'win32') {
+  process.on('SIGHUP', () => {
+    logger.info('Console close event (SIGHUP) — ignoring (supervisor manages lifecycle)');
+  });
+}
+
 // Global error handlers — prevent silent crashes under PM2
 process.on('unhandledRejection', (reason) => {
   logger.fatal({ err: reason }, 'Unhandled promise rejection');

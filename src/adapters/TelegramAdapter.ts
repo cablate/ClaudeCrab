@@ -447,9 +447,32 @@ export class TelegramAdapter extends BaseAdapter<TelegramAdapterConfig> {
         onStart: (botInfo) => {
           this.log.info({ username: botInfo.username }, 'Bot started polling');
         },
-      }).catch((err) => {
-        this.log.fatal({ err }, 'Polling loop crashed — exiting for PM2 restart');
-        process.exit(1);
+      }).catch(async (err) => {
+        this.log.error({ err }, 'Polling loop crashed — attempting auto-recovery');
+
+        // Wait before retry to avoid tight loop
+        const retryDelay = 5000;
+        this.log.info({ retryDelay }, 'Waiting before polling restart');
+        await new Promise(r => setTimeout(r, retryDelay));
+
+        try {
+          if (!this.bot) return; // adapter disposed during wait
+          // Stop the bot cleanly, then restart polling
+          try { await this.bot.stop(); } catch { /* ignore stop errors */ }
+          this.log.info('Restarting polling loop');
+          this.bot!.start({
+            allowed_updates: ['message', 'callback_query'],
+            timeout: 30,
+            onStart: (botInfo) => {
+              this.log.info({ username: botInfo.username }, 'Bot re-started polling after crash recovery');
+            },
+          }).catch((retryErr) => {
+            this.log.error({ err: retryErr }, 'Polling loop crashed again after recovery — giving up on this adapter');
+            // Don't process.exit — let other adapters keep running
+          });
+        } catch (recoveryErr) {
+          this.log.error({ err: recoveryErr }, 'Polling crash recovery failed');
+        }
       });
     }
   }

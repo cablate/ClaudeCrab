@@ -72,6 +72,10 @@ interface ManagedSession {
   messageCount: number;
   /** Previous cumulative usage — subtract from current to get per-query delta */
   prevUsage: UsageSnapshot;
+  /** True while executeQuery is running (send + processStream in progress) */
+  isQuerying: boolean;
+  /** Set to true when /stop is called — processStream checks this to break the loop */
+  cancelled?: boolean;
 }
 
 /**
@@ -120,6 +124,8 @@ export class SDKSessionManager {
       'Sending message via persistent V2 session'
     );
 
+    managed.isQuerying = true;
+    managed.cancelled = false;
     try {
       await managed.session.send(prompt);
       managed.lastUsedAt = Date.now();
@@ -128,9 +134,20 @@ export class SDKSessionManager {
       // Process stream
       const result = await this.processStream(sessionId, managed, options, startTime);
 
-      // If resumed session returned 0 content, the resume likely failed silently.
-      // Destroy and retry with a fresh (non-resume) session.
-      if (options.resume && result.response.length === 0 && managed.messageCount === 1) {
+      // If resumed session returned 0 content AND no intermediate messages were sent,
+      // the resume likely failed silently. Destroy and retry with a fresh session.
+      // NOTE: When onIntermediateMessage is used (Discord/Telegram), text goes through
+      // the callback — response is always empty. Only treat as failure if BOTH are zero.
+      const intermediateCount = result.intermediateMessageCount ?? 0;
+      const outputTokens = result.usage?.outputTokens ?? 0;
+      const hasOutput = result.response.length > 0 || intermediateCount > 0 || outputTokens > 0;
+      if (options.resume && managed.messageCount === 1) {
+        logger.debug(
+          { sessionId, hasOutput, responseLen: result.response.length, intermediateCount, outputTokens },
+          'V2 resume output check'
+        );
+      }
+      if (options.resume && !hasOutput && managed.messageCount === 1) {
         logger.warn(
           { sessionId, sdkSessionId: managed.sdkSessionId },
           'V2 resumed session returned empty response — retrying with fresh session'
@@ -139,6 +156,7 @@ export class SDKSessionManager {
 
         const freshOptions = { ...options, resume: undefined };
         managed = await this.createSession(sessionId, agent, freshOptions);
+        managed.isQuerying = true;
 
         await managed.session.send(prompt);
         managed.lastUsedAt = Date.now();
@@ -152,12 +170,26 @@ export class SDKSessionManager {
       return result;
     } catch (error) {
       // Session might have died — clean up and let caller retry with V1 fallback
+      // SDK abort may throw non-Error values like { value: "..." }
+      const errDetail = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'value' in error
+          ? String((error as { value: unknown }).value)
+          : String(error);
       logger.warn(
-        { sessionId, error: (error as Error).message },
+        { sessionId, error: errDetail },
         'V2 session error, cleaning up'
       );
       this.destroySession(sessionId);
       throw error;
+    } finally {
+      // Clear querying flag — managed may have been replaced (fresh session retry),
+      // so also clear on the current sessions map entry if it still exists.
+      managed.isQuerying = false;
+      const current = this.sessions.get(sessionId);
+      if (current && current !== managed) {
+        current.isQuerying = false;
+      }
     }
   }
 
@@ -219,37 +251,56 @@ export class SDKSessionManager {
     // V2 hooks must be JS callbacks (not command-type).
     // settings.local.json hooks cause 0-turn responses in V2.
     // SDK registers callback IDs → CLI sends hook_callback → SDK executes callback.
-    const agentCwd = options.cwd;
+    // All hooks implemented in pure JS (no shell scripts) for Windows compatibility.
     sessionOptions.hooks = {
       UserPromptSubmit: [{
         matcher: '',
         hooks: [async () => {
-          try {
-            const { execSync } = await import('child_process');
-            const out = execSync('bash ../_shared/hooks/skill-reminder.sh', { cwd: agentCwd, timeout: 5000, encoding: 'utf-8' });
-            return JSON.parse(out.trim());
-          } catch (err) {
-            logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Hook execution failed');
-            return { continue: true };
-          }
+          // Inline equivalent of skill-reminder.sh — no bash dependency
+          return {
+            decision: 'approve' as const,
+            reason: '⚠️ 動手前先載入對應 skill（含 references/）。不要合理化跳過。',
+          };
         }],
       }],
       PostToolUse: [{
         matcher: 'Bash',
         hooks: [async (input: unknown) => {
           try {
-            const { execSync } = await import('child_process');
+            // Inline equivalent of error-detector.sh — pure JS, no bash dependency
             const toolOutput = (input as { tool_output?: string })?.tool_output ?? '';
-            const out = execSync('bash ../_shared/hooks/error-detector.sh', {
-              cwd: agentCwd,
-              timeout: 5000,
-              encoding: 'utf-8',
-              env: { ...process.env, CLAUDE_TOOL_OUTPUT: toolOutput },
-            });
-            if (out.trim()) return { continue: true, hookSpecificOutput: { additionalContext: out.trim() } };
+            if (!toolOutput) return { continue: true };
+
+            // Error pattern matching (mirrors error-detector.sh)
+            const errorPatterns = [
+              // Generic errors
+              /^error:/im, /^Error:/m, /fatal:/i, /FAILED/i,
+              /command not found/, /No such file or directory/,
+              /Permission denied/i,
+              // Node.js / npm
+              /npm ERR!/, /Cannot find module/, /MODULE_NOT_FOUND/, /ERR_MODULE_NOT_FOUND/,
+              // Python
+              /Traceback \(most recent call last\)/, /SyntaxError:/, /ModuleNotFoundError:/,
+              // TypeScript / JavaScript
+              /TypeError:/, /ReferenceError:/,
+              // System
+              /ENOENT/, /EACCES/, /EPERM/, /ENOMEM/,
+              // Exit code
+              /exit code [1-9]|Exit code: [1-9]|exited with code [1-9]/i,
+            ];
+
+            const hasError = errorPatterns.some(p => p.test(toolOutput));
+            if (hasError) {
+              return {
+                continue: true,
+                hookSpecificOutput: {
+                  additionalContext: '<error-detected>\n偵測到指令錯誤。如果這個錯誤值得記錄（非一次性的、可能再次遇到），\n請記錄到 `.learnings/ERRORS.md`，格式參考該檔案頂部的模板。\n如果這個錯誤已經在 ERRORS.md 中有記錄，更新其 Recurrence 計數。\n</error-detected>',
+                },
+              };
+            }
             return { continue: true };
           } catch (err) {
-            logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'Hook execution failed');
+            logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'PostToolUse hook failed');
             return { continue: true };
           }
         }],
@@ -292,6 +343,7 @@ export class SDKSessionManager {
       lastUsedAt: Date.now(),
       messageCount: 0,
       prevUsage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUsd: 0, totalCostUsd: 0 },
+      isQuerying: false,
     };
 
     this.sessions.set(sessionId, managed);
@@ -334,17 +386,39 @@ export class SDKSessionManager {
     const toolIdToName = new Map<string, string>();
 
     let streamMsgIndex = 0;
+    // Stale replay filter (resumed sessions only):
+    // stream() may replay ALL buffered messages from previous queries in one burst
+    // (all at elapsed ~0ms) before delivering the current query's response.
+    // We use two signals to detect when the real stream begins:
+    //   1. system:init message (primary signal — CLI subprocess confirmed alive)
+    //   2. Elapsed time > 3000ms (fallback — in case init is delayed by MCP startup)
+    // Fresh sessions never have stale replays, so streamReady starts true.
+    let streamReady = !options.resume;
+
     for await (const message of managed.session.stream()) {
+      // Cooperative cancellation: /stop sets managed.cancelled = true
+      if (managed.cancelled) {
+        logger.info({ sessionId }, 'Query cancelled by user — breaking stream');
+        throw new Error('Query cancelled by user');
+      }
+
+      const elapsed = Date.now() - startTime;
       logger.info(
-        { sessionId, msgIndex: streamMsgIndex, msgType: message.type, msgSubtype: 'subtype' in message ? (message as { subtype?: string }).subtype : undefined },
+        { sessionId, msgIndex: streamMsgIndex, msgType: message.type, msgSubtype: 'subtype' in message ? (message as { subtype?: string }).subtype : undefined, elapsed, streamReady },
         'V2 stream message received'
       );
       streamMsgIndex++;
-      // Extract session_id from init and log hook events
+
+      // Extract session_id from init and use it as the streamReady signal.
+      // system:init confirms the CLI subprocess is alive and processing THIS query.
+      // All messages before init are stale replays from the previous query's buffer.
       if (message.type === 'system' && 'subtype' in message) {
         const systemMsg = message as { subtype?: string; session_id?: string; hook_event?: string; hook_name?: string; outcome?: string; exit_code?: number; stderr?: string };
-        if (systemMsg.subtype === 'init' && systemMsg.session_id) {
-          managed.sdkSessionId = systemMsg.session_id;
+        if (systemMsg.subtype === 'init') {
+          streamReady = true;
+          if (systemMsg.session_id) {
+            managed.sdkSessionId = systemMsg.session_id;
+          }
         }
         // Log hook lifecycle for debugging
         if (systemMsg.subtype === 'hook_started') {
@@ -354,7 +428,21 @@ export class SDKSessionManager {
         }
       }
 
-      // Collect assistant text
+      // Elapsed time fallback: if enough time has passed, the real stream must have started
+      // even if we never saw system:init (can happen when init is among the stale batch).
+      if (!streamReady && elapsed >= 3000) {
+        logger.info({ sessionId, elapsed }, 'Stream ready via elapsed time fallback (no init seen)');
+        streamReady = true;
+      }
+
+      // Skip ALL stale replay messages (resumed sessions only).
+      // Before streamReady, everything — including result messages from previous queries —
+      // is a replay from the session's JSONL buffer. We must skip them all.
+      if (!streamReady && message.type !== 'system') {
+        logger.info({ sessionId, msgIndex: streamMsgIndex - 1, msgType: message.type, elapsed }, 'Skipping stale replay message');
+        continue;
+      }
+
       if (message.type === 'assistant' && message.message?.content) {
         const textParts: string[] = [];
         for (const block of message.message.content) {
@@ -541,6 +629,33 @@ export class SDKSessionManager {
    */
   hasSession(sessionId: string): boolean {
     return this.sessions.has(sessionId);
+  }
+
+  /**
+   * Check if a session has an active query in progress (send + processStream running)
+   */
+  hasActiveQuery(sessionId: string): boolean {
+    return this.sessions.get(sessionId)?.isQuerying === true;
+  }
+
+  /**
+   * Cancel an active query by closing the session.
+   * Returns true only if a query was actually running; false if session is idle or absent.
+   */
+  cancelActiveQuery(sessionId: string): boolean {
+    const managed = this.sessions.get(sessionId);
+    if (!managed?.isQuerying) {
+      return false;
+    }
+    // Two-phase cancel:
+    // 1. Set cancelled flag — processStream checks this on each iteration to break the loop
+    // 2. close() kills the CLI subprocess — accelerates stream break on Windows
+    // Session cleanup (delete from Map) is NOT done here — executeQuery's catch block handles it
+    // to avoid double-destroy and keep cleanup responsibility in one place.
+    managed.cancelled = true;
+    logger.info({ sessionId, sdkSessionId: managed.sdkSessionId }, 'Cancelling active V2 query');
+    try { managed.session.close(); } catch { /* ignore close errors */ }
+    return true;
   }
 
   /**

@@ -73,6 +73,12 @@ export class TaskService implements ITaskService {
     if (deps.agentCallService !== undefined) this.agentCallService = deps.agentCallService;
   }
 
+  /** Look up a task by its Discord thread ID (used by slash commands for session key resolution) */
+  getTaskByThreadId(threadId: string): { taskId: string } | undefined {
+    const row = this.repo.getByDiscordThreadId(threadId);
+    return row ? { taskId: row.id } : undefined;
+  }
+
   /**
    * Create a new task (SQLite + optionally platform thread).
    */

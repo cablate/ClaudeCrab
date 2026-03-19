@@ -135,6 +135,13 @@ export async function initializeDiscordServices(
           getBotStatus: (agentId: string, platform?: 'telegram' | 'discord') =>
             orchestrator!.getBotStatusForAgent(agentId, platform),
         } : {}),
+        // Task thread resolver: maps Discord thread ID → task ID for session key matching.
+        // Uses lazy getter because taskService is created after this object.
+        get resolveTaskThread() {
+          const taskSvc = result.taskService;
+          if (!taskSvc) return undefined;
+          return (threadId: string) => taskSvc.getTaskByThreadId(threadId);
+        },
       },
     });
 

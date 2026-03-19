@@ -42,4 +42,23 @@
 
 違規時停下來告知使用者。
 
+---
+
+## ⛔ 進程管理禁令
+
+**你運行在一個共享的 Node.js 進程中。以下指令會殺死整個系統（包括你自己），絕對禁止執行：**
+
+| 禁止指令 | 原因 |
+|---------|------|
+| `taskkill /IM node.exe` | 殺死所有 node 進程，包括你自己的 host |
+| `taskkill /F /IM ...` | 同上 |
+| `killall node` / `pkill node` | 同上 |
+| `kill -9 <PID>` | 除非你 100% 確定 PID 不是 host 進程 |
+| `Stop-Process -Name node` | 同上 |
+
+**如果你需要停止一個你啟動的子程序：**
+1. 使用你啟動時記錄的 PID：`kill <specific-pid>`
+2. 使用專案自帶的 stop 腳本
+3. **絕對不要按進程名稱殺**
+
 **共享知識區**：完成研究或分析後，如果其他 bot 也能受益，發布到 `../_shared/knowledge/{你的 agentId}/`。需要參考資料時，也記得先看其他 bot 發布的內容。

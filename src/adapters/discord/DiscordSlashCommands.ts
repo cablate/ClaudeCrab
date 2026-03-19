@@ -34,6 +34,29 @@ export interface SlashCommandDependencies {
   queryMetricsRepository?: IQueryMetricsRepository;
   sdkSessionManager?: SDKSessionManager;
   getBotStatus?: (agentId: string, platform?: 'telegram' | 'discord') => 'running' | 'stopped' | 'error' | 'no-token';
+  /** Resolve a Discord thread ID to a task ID (for task thread session key matching) */
+  resolveTaskThread?: ((threadId: string) => { taskId: string } | undefined) | undefined;
+}
+
+/**
+ * Compute the effective userId for a Discord slash command interaction.
+ * Handles three session key patterns:
+ * - Main channel: userId
+ * - Normal thread: userId::thread::threadId
+ * - Task thread: task:${taskId}
+ */
+function resolveEffectiveUserId(
+  userId: string,
+  channelId: string,
+  isThread: boolean,
+  deps: SlashCommandDependencies,
+): string {
+  if (!isThread) return userId;
+  // Check if this thread is a task thread first
+  const taskResolved = deps.resolveTaskThread?.(channelId);
+  if (taskResolved) return `task:${taskResolved.taskId}`;
+  // Normal thread
+  return `${userId}::thread::${channelId}`;
 }
 
 /** Build the slash command definitions for guild registration */
@@ -154,9 +177,7 @@ async function handleClose(
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
-
-  // Thread sessions use userId::thread::threadId as session key
-  const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
 
   // Find agent for this channel (check parent for threads)
   const parentChannelId = isThread && interaction.channel?.isThread()
@@ -306,9 +327,7 @@ async function handleReset(
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
-
-  // Thread sessions use userId::thread::threadId as session key
-  const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
 
   if (agentId !== null) {
     if (!deps.agentLoader.has(agentId)) {
@@ -452,9 +471,7 @@ async function handleStop(
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
-
-  // Thread sessions use userId::thread::threadId as session key
-  const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
 
   const targetAgents = agentId !== null
     ? [agentId]
@@ -519,8 +536,7 @@ async function handleCtx(
   };
   const ctxLimit = ctxLimits[model] ?? CLAUDE_CONTEXT_WINDOW_TOKENS;
 
-  // Session key: for thread it's userId::thread::threadId, for main channel it's userId
-  const effectiveUserId = isThread ? `${userId}::thread::${channelId}` : userId;
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
 
   // Get the actual SessionManager session to find the real sessionId
   const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
@@ -707,7 +723,7 @@ async function handleCtx(
 async function handleRestart(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
-  await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
   log.info({ userId: interaction.user.id }, 'Discord /restart command received');
   await interaction.editReply('🔍 正在檢查程式碼（`npm run build`）...');
