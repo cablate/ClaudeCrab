@@ -9,6 +9,6 @@
 - CLAUDE.md Lessons Learned — 操作規則
 - knowledge/ — 可複用知識
 - MEMORY.md Personality Journal — 人格發現
-- **向量記憶（強制）** — 本輪有新的持久事實、踩坑、決策嗎？有 → `memory_store` 寫入，踩坑必須雙層（fact + decision）
+- **向量記憶（強制）** — 本輪有新的持久事實、踩坑、決策嗎？有 → `memory_store` 寫入，踩坑必須雙層（fact + decision）。寫入時根據確信程度分級：明確表達 → importance 0.9 / tier core；實作驗證 → 0.7-0.8 / working；探索性討論 → 0.4-0.5 / peripheral
 
 「沒有」是合理答案，但先回顧再判斷。

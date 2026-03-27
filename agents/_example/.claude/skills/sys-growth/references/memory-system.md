@@ -113,11 +113,12 @@
 | 知識暫存 | `knowledge/` | — |
 | 交付產出 | `output/` | — |
 
-### 向量記憶三規則
+### 向量記憶四規則
 
 1. **Recall before retry** — 工具失敗時，先 `memory_recall` 搜相關關鍵字，可能之前踩過同樣的坑
 2. **雙層存儲** — 踩坑時存兩條：`fact`（技術細節）+ `decision`（下次怎麼做）
 3. **衛生** — 每條 < 500 chars、一個概念一條、存之前先 recall 確認沒重複
+4. **分級寫入** — 根據確信程度設定 importance 和 tier：明確表達（0.9/core）、實作驗證（0.7-0.8/working）、探索性（0.4-0.5/peripheral）。判斷口訣：使用者說了幾次？說過 3 次 → core，驗證過 → working，只提一次 → peripheral
 
 ### 何時同步寫入兩軌
 
