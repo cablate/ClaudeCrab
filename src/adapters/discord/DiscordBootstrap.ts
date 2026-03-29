@@ -109,12 +109,9 @@ export async function initializeDiscordServices(
 
   logger.info('Initializing Discord services...');
 
-  // === SLASH COMMANDS ===
-  if (discordConfig.mainBotClientId && discordConfig.guildId) {
-    await registerSlashCommands(mainBotToken, discordConfig.mainBotClientId, discordConfig.guildId);
-  }
-
   // === INTERACTION HANDLER ===
+  // Must be set up before parallel tasks so that lazy getters on `result` are
+  // wired correctly before any service (e.g. taskService) populates `result`.
   const systemClient = discordAdapter.getClient();
   if (systemClient !== null) {
     const interactionHandler = new DiscordInteractionHandler({
@@ -134,6 +131,9 @@ export async function initializeDiscordServices(
         ...(orchestrator !== null ? {
           getBotStatus: (agentId: string, platform?: 'telegram' | 'discord') =>
             orchestrator!.getBotStatusForAgent(agentId, platform),
+        } : {}),
+        ...(orchestrator !== null ? {
+          reloadAgent: (agentId: string) => orchestrator!.reloadAgent(agentId),
         } : {}),
         // Task thread resolver: maps Discord thread ID → task ID for session key matching.
         // Uses lazy getter because taskService is created after this object.
@@ -155,31 +155,54 @@ export async function initializeDiscordServices(
     }
   }
 
-  // === DASHBOARD ===
-  if (channels.dashboard) {
-    const dashboardService = new DiscordDashboard({
-      adapter: discordAdapter,
-      channelId: channels.dashboard,
-      agentLoader,
-      ...(persistence?.queryMetricsRepository !== undefined
-        ? { queryMetricsRepository: persistence.queryMetricsRepository }
-        : {}),
-      ...(persistence?.taskRecordRepository !== undefined
-        ? { taskRecordRepository: persistence.taskRecordRepository }
-        : {}),
-      ...(persistence?.executionRecordRepository !== undefined
-        ? { executionRecordRepository: persistence.executionRecordRepository }
-        : {}),
-      ...(budgetService !== null
-        ? { budgetService }
-        : {}),
-      ...(dashboardUpdateMinutes !== undefined
-        ? { updateIntervalMinutes: dashboardUpdateMinutes }
-        : {}),
-    });
-    await dashboardService.start();
-    result.dashboardService = dashboardService;
-    logger.info({ channelId: channels.dashboard }, 'Dashboard service started');
+  // === PARALLEL: SLASH COMMANDS + DASHBOARD ===
+  // These two are independent of each other and only depend on the already-
+  // authenticated discordAdapter, so they can be started concurrently.
+  // Promise.allSettled ensures one failure does not abort the other.
+  {
+    const slashCommandsTask = (discordConfig.mainBotClientId && discordConfig.guildId)
+      ? registerSlashCommands(mainBotToken, discordConfig.mainBotClientId, discordConfig.guildId)
+      : Promise.resolve();
+
+    let pendingDashboard: DiscordDashboard | undefined;
+    const dashboardTask = channels.dashboard
+      ? (() => {
+          pendingDashboard = new DiscordDashboard({
+            adapter: discordAdapter,
+            channelId: channels.dashboard!,
+            agentLoader,
+            ...(persistence?.queryMetricsRepository !== undefined
+              ? { queryMetricsRepository: persistence.queryMetricsRepository }
+              : {}),
+            ...(persistence?.taskRecordRepository !== undefined
+              ? { taskRecordRepository: persistence.taskRecordRepository }
+              : {}),
+            ...(persistence?.executionRecordRepository !== undefined
+              ? { executionRecordRepository: persistence.executionRecordRepository }
+              : {}),
+            ...(budgetService !== null
+              ? { budgetService }
+              : {}),
+            ...(dashboardUpdateMinutes !== undefined
+              ? { updateIntervalMinutes: dashboardUpdateMinutes }
+              : {}),
+          });
+          return pendingDashboard.start();
+        })()
+      : Promise.resolve();
+
+    const [slashResult, dashResult] = await Promise.allSettled([slashCommandsTask, dashboardTask]);
+
+    if (slashResult.status === 'rejected') {
+      logger.error({ error: slashResult.reason }, 'Slash command registration failed');
+    }
+
+    if (dashResult.status === 'rejected') {
+      logger.error({ error: dashResult.reason }, 'Dashboard service failed to start');
+    } else if (pendingDashboard !== undefined) {
+      result.dashboardService = pendingDashboard;
+      logger.info({ channelId: channels.dashboard }, 'Dashboard service started');
+    }
   }
 
   // === ACTIVITY EVENT SERVICE (pure service + Discord notifier) ===
