@@ -89,6 +89,8 @@ interface ManagedSession {
   bgDrainDone?: () => void;
   /** Callback to push messages between queries (stored from last processStream) */
   onIntermediateMessage?: (text: string) => void | Promise<void>;
+  /** Our own Stop hook guard — SDK's stop_hook_active resets across Yh() calls, this persists per-session */
+  stopHookFired?: boolean;
 }
 
 /**
@@ -176,6 +178,7 @@ export class SDKSessionManager {
 
     managed.isQuerying = true;
     managed.cancelled = false;
+    managed.stopHookFired = false; // Reset per-query — allow Stop hook to block once for checklist
     try {
       await managed.session.send(prompt);
       managed.lastUsedAt = Date.now();
@@ -393,17 +396,20 @@ export class SDKSessionManager {
           return { decision: 'approve' as const };
         }],
       }],
-      // Stop hook: inject checklist reminder as context, then approve the stop.
-      // MUST use 'approve' (not 'block') — 'block' causes infinite recursion:
-      // block → CLI executes checklist → tries to stop again → hook blocks again → loop.
+      // Stop hook: block once to force checklist execution, then allow stop on retry.
+      // SDK's internal stop_hook_active resets across Yh() calls (per-prompt scope),
+      // so we use our own managed.stopHookFired flag (per-session, JS heap) to prevent loops.
       Stop: [{
         matcher: '',
-        hooks: [async () => {
+        hooks: [async (input: unknown) => {
+          const { stop_hook_active } = input as { stop_hook_active?: boolean };
+          if (stop_hook_active || managed.stopHookFired) {
+            return { continue: true }; // Already blocked once — let it stop
+          }
+          managed.stopHookFired = true;
           return {
-            decision: 'approve' as const,
-            hookSpecificOutput: {
-              additionalContext: '⚠️ Session 結束前，讀取 ../_shared/hooks/session-end-checklist.md 並靜默執行所有檢查項。',
-            },
+            decision: 'block' as const,
+            reason: '⚠️ Session 結束前，讀取 ../_shared/hooks/session-end-checklist.md 並靜默執行所有檢查項。',
           };
         }],
       }],
