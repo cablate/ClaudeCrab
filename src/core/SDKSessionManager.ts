@@ -576,9 +576,6 @@ export class SDKSessionManager {
     // Initialized to 0 — set to Date.now() on the first replay message to avoid inflating the
     // first gap measurement with time elapsed before the stream loop started.
     let lastReplayMsgTime = 0;
-    // After replay boundary detected, skip until we see the new user message.
-    // This prevents post-result stale content (hook output etc.) from being treated as real.
-    let skipUntilUserMessage = false;
 
     // Manual iteration (not for-await) so that break does NOT call iterator.return().
     // This keeps the iterator alive for the post-result drain phase.
@@ -657,7 +654,6 @@ export class SDKSessionManager {
               'Stream ready via result counting (persistent follow-up)'
             );
             streamReady = true;
-            skipUntilUserMessage = true;
           }
         }
 
@@ -668,7 +664,6 @@ export class SDKSessionManager {
             'Stream ready via gap detection fallback (persistent follow-up)'
           );
           streamReady = true;
-          skipUntilUserMessage = true;
         }
 
         if (!streamReady) {
@@ -678,17 +673,6 @@ export class SDKSessionManager {
         // Both branches fall through here — skip boundary message
         // (either the replayed result that triggered result-counting, or the gap-trigger message)
         continue;
-      }
-
-      // After replay boundary: skip everything until the new user message.
-      // This filters out post-result stale content (hook output, bg-task responses)
-      // that sits between the last replayed result and the new query's user message.
-      if (skipUntilUserMessage) {
-        if (message.type === 'user') {
-          skipUntilUserMessage = false;
-          logger.info({ sessionId, elapsed }, 'User message boundary found — processing real messages');
-        }
-        continue; // Skip stale content AND the user message itself
       }
 
       // Elapsed time fallback: if init never arrives, force streamReady.
