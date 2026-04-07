@@ -85,6 +85,8 @@ interface ManagedSession {
   streamIterator?: AsyncIterator<any>;
   /** Whether background drain is actively consuming the stream */
   bgDrainActive?: boolean;
+  /** Resolved when bgDrainActive transitions to false — used by stopBackgroundDrain */
+  bgDrainDone?: () => void;
   /** Callback to push messages between queries (stored from last processStream) */
   onIntermediateMessage?: (text: string) => void | Promise<void>;
 }
@@ -108,6 +110,22 @@ const CACHE_KEEPALIVE_INTERVAL_MS = 4 * 60 * 1000; // 4 minutes
 const CACHE_KEEPALIVE_SKIP_IF_RECENT_MS = 3 * 60 * 1000; // 3 minutes
 /** Cache efficiency threshold — warn if rolling average drops below this */
 const CACHE_EFFICIENCY_WARN_THRESHOLD = 50;
+/** Sentinel used by Promise.race to distinguish a timeout from a real stream message */
+const DRAIN_SENTINEL = Symbol('drain-timeout');
+
+/**
+ * Extract assistant text from a stream message.
+ * Returns concatenated text content, or an empty string if the message is not
+ * an assistant message or contains no text blocks.
+ */
+function extractAssistantText(msg: any): string {
+  if (msg.type !== 'assistant' || !msg.message?.content) return '';
+  const parts: string[] = [];
+  for (const block of msg.message.content) {
+    if (block.type === 'text') parts.push(block.text);
+  }
+  return parts.join('');
+}
 
 export class SDKSessionManager {
   private sessions = new Map<string, ManagedSession>();
@@ -455,34 +473,33 @@ export class SDKSessionManager {
     const iterator = managed.streamIterator;
     const onMsg = managed.onIntermediateMessage;
 
-    const TIMEOUT = Symbol('bg-timeout');
+    // Register drain-done signal so stopBackgroundDrain can await instead of blind-sleeping
+    const drainDonePromise = new Promise<void>(resolve => {
+      managed.bgDrainDone = resolve;
+    });
+    void drainDonePromise; // suppress unused-variable lint
+
     (async () => {
       while (managed.bgDrainActive && !managed.isQuerying) {
         try {
           const raceResult = await Promise.race([
             iterator.next(),
-            new Promise<typeof TIMEOUT>(resolve =>
-              setTimeout(() => resolve(TIMEOUT), 5000)
+            new Promise<typeof DRAIN_SENTINEL>(resolve =>
+              setTimeout(() => resolve(DRAIN_SENTINEL), 5000)
             ),
           ]);
 
-          if (raceResult === TIMEOUT) continue; // No message, keep waiting
+          if (raceResult === DRAIN_SENTINEL) continue; // No message, keep waiting
           const { done, value: msg } = raceResult as IteratorResult<any>;
           if (done) break;
 
           // Push assistant text to user immediately
-          if (msg.type === 'assistant' && msg.message?.content) {
-            const textParts: string[] = [];
-            for (const block of msg.message.content) {
-              if (block.type === 'text') textParts.push(block.text);
-            }
-            const text = textParts.join('');
-            if (text.length > 0) {
-              try {
-                await onMsg(text);
-              } catch (err) {
-                logger.warn({ sessionId, error: err }, 'Background drain: failed to push message');
-              }
+          const text = extractAssistantText(msg);
+          if (text.length > 0) {
+            try {
+              await onMsg(text);
+            } catch (err) {
+              logger.warn({ sessionId, error: err }, 'Background drain: failed to push message');
             }
           }
 
@@ -493,6 +510,7 @@ export class SDKSessionManager {
         }
       }
       managed.bgDrainActive = false;
+      managed.bgDrainDone?.();
       logger.debug({ sessionId }, 'Background drain stopped');
     })();
   }
@@ -502,9 +520,14 @@ export class SDKSessionManager {
    */
   private async stopBackgroundDrain(managed: ManagedSession): Promise<void> {
     if (!managed.bgDrainActive) return;
+    // Signal the loop to stop, then await its completion via the stored resolve callback.
+    // Fall back to a 300ms timeout if bgDrainDone was never set (shouldn't happen).
+    const done = new Promise<void>(resolve => {
+      const prev = managed.bgDrainDone;
+      managed.bgDrainDone = () => { prev?.(); resolve(); };
+    });
     managed.bgDrainActive = false;
-    // Give the bg loop time to exit its current iteration
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await Promise.race([done, new Promise<void>(resolve => setTimeout(resolve, 300))]);
   }
 
   /**
@@ -542,13 +565,17 @@ export class SDKSessionManager {
     // NOTE: messageCount is already incremented before processStream, so >= 2 means
     // there was at least one prior query with a result to replay.
     const isPersistentFollowUp = !options.resume && managed.messageCount >= 2;
+    // Fresh sessions (not resume, not persistent follow-up) have no prior history to replay,
+    // so streamReady starts true — all messages are real from the first one.
     let streamReady = !options.resume && !isPersistentFollowUp;
     // Result-counting replay detection (fast path): each previous query produced one result,
     // so we skip until we've seen (messageCount - 1) results. Instant streamReady when it works.
     const expectedReplayResults = isPersistentFollowUp ? managed.messageCount - 1 : 0;
     let replayResultCount = 0;
     // Gap detection fallback: if SDK doesn't replay result messages, fall back to timing heuristics.
-    let lastReplayMsgTime = startTime;
+    // Initialized to 0 — set to Date.now() on the first replay message to avoid inflating the
+    // first gap measurement with time elapsed before the stream loop started.
+    let lastReplayMsgTime = 0;
     // After replay boundary detected, skip until we see the new user message.
     // This prevents post-result stale content (hook output etc.) from being treated as real.
     let skipUntilUserMessage = false;
@@ -571,17 +598,24 @@ export class SDKSessionManager {
       }
 
       const elapsed = Date.now() - startTime;
-      logger.info(
-        { sessionId, msgIndex: streamMsgIndex, msgType: message.type, msgSubtype: 'subtype' in message ? (message as { subtype?: string }).subtype : undefined, elapsed, streamReady },
-        'V2 stream message received'
-      );
+      if (streamReady) {
+        logger.info(
+          { sessionId, msgIndex: streamMsgIndex, msgType: message.type, msgSubtype: 'subtype' in message ? (message as { subtype?: string }).subtype : undefined, elapsed, streamReady },
+          'V2 stream message received'
+        );
+      } else {
+        logger.debug(
+          { sessionId, msgIndex: streamMsgIndex, msgType: message.type, msgSubtype: 'subtype' in message ? (message as { subtype?: string }).subtype : undefined, elapsed, streamReady },
+          'V2 stream message received (replay)'
+        );
+      }
       streamMsgIndex++;
 
       // Extract session_id from init.
       // For resumed sessions (new CLI process), init = reliable streamReady signal.
       // For persistent follow-ups, init arrives WITHIN the replay batch (same timestamp
-      // as buffered history messages), so it must NOT set streamReady — we rely on the
-      // elapsed time fallback instead.
+      // as buffered history messages), so it must NOT set streamReady — persistent
+      // follow-ups use result counting + gap detection, not the init message.
       if (message.type === 'system' && 'subtype' in message) {
         const systemMsg = message as { subtype?: string; session_id?: string; hook_event?: string; hook_name?: string; outcome?: string; exit_code?: number; stderr?: string };
         if (systemMsg.subtype === 'init') {
@@ -609,6 +643,9 @@ export class SDKSessionManager {
       // timing gap between rapid-fire replay burst and the real response (model thinking time).
       if (isPersistentFollowUp && !streamReady) {
         const now = Date.now();
+        // Initialize lastReplayMsgTime on the first replay message (not before the loop)
+        // to avoid inflating the first gap with time spent before iteration started.
+        if (lastReplayMsgTime === 0) lastReplayMsgTime = now;
         const gapMs = now - lastReplayMsgTime;
 
         // Fast path: count replayed results
@@ -638,7 +675,8 @@ export class SDKSessionManager {
           lastReplayMsgTime = now;
           continue; // Still replaying — skip
         }
-        // streamReady just set — skip this message (replayed result or gap-trigger message)
+        // Both branches fall through here — skip boundary message
+        // (either the replayed result that triggered result-counting, or the gap-trigger message)
         continue;
       }
 
@@ -665,25 +703,17 @@ export class SDKSessionManager {
       // Skip stale replay messages (resumed sessions only — NOT persistent follow-up).
       // Before streamReady, everything is a JSONL replay. We must skip them all.
       if (!streamReady && message.type !== 'system') {
-        logger.info({ sessionId, msgIndex: streamMsgIndex - 1, msgType: message.type, elapsed }, 'Skipping stale replay message');
+        logger.debug({ sessionId, msgIndex: streamMsgIndex - 1, msgType: message.type, elapsed }, 'Skipping stale replay message');
         continue;
       }
 
-      if (message.type === 'assistant' && message.message?.content) {
-        const textParts: string[] = [];
-        for (const block of message.message.content) {
-          if (block.type === 'text') {
-            textParts.push(block.text);
-          }
-        }
-        const messageText = textParts.join('');
-        if (messageText.length > 0) {
-          if (options.onIntermediateMessage) {
-            await options.onIntermediateMessage(messageText);
-            intermediateCount++;
-          } else {
-            responseChunks.push(messageText);
-          }
+      const messageText = extractAssistantText(message);
+      if (messageText.length > 0) {
+        if (options.onIntermediateMessage) {
+          await options.onIntermediateMessage(messageText);
+          intermediateCount++;
+        } else {
+          responseChunks.push(messageText);
         }
       }
 
@@ -798,7 +828,6 @@ export class SDKSessionManager {
     {
       const DRAIN_TIMEOUT_MS = 3000;
       const drainDeadline = Date.now() + DRAIN_TIMEOUT_MS;
-      const TIMEOUT = Symbol('drain-timeout');
 
       while (true) {
         const remaining = drainDeadline - Date.now();
@@ -806,12 +835,12 @@ export class SDKSessionManager {
 
         const raceResult = await Promise.race([
           streamIterator.next(),
-          new Promise<typeof TIMEOUT>(resolve =>
-            setTimeout(() => resolve(TIMEOUT), remaining)
+          new Promise<typeof DRAIN_SENTINEL>(resolve =>
+            setTimeout(() => resolve(DRAIN_SENTINEL), remaining)
           ),
         ]);
 
-        if (raceResult === TIMEOUT) {
+        if (raceResult === DRAIN_SENTINEL) {
           logger.debug({ sessionId }, 'Post-result drain timeout — no more trailing messages');
           break;
         }
@@ -820,19 +849,13 @@ export class SDKSessionManager {
         if (done) break;
 
         // Push assistant text to user immediately (same path as main loop)
-        if (drainMsg.type === 'assistant' && drainMsg.message?.content) {
-          const textParts: string[] = [];
-          for (const block of drainMsg.message.content) {
-            if (block.type === 'text') textParts.push(block.text);
-          }
-          const drainText = textParts.join('');
-          if (drainText.length > 0) {
-            if (options.onIntermediateMessage) {
-              await options.onIntermediateMessage(drainText);
-              intermediateCount++;
-            } else {
-              responseChunks.push(drainText);
-            }
+        const drainText = extractAssistantText(drainMsg);
+        if (drainText.length > 0) {
+          if (options.onIntermediateMessage) {
+            await options.onIntermediateMessage(drainText);
+            intermediateCount++;
+          } else {
+            responseChunks.push(drainText);
           }
         }
 
@@ -861,7 +884,7 @@ export class SDKSessionManager {
         sdkSessionId: managed.sdkSessionId,
         responseLength: response.length,
         numTurns,
-        durationMs: Date.now() - startTime,
+        wallClockMs: Date.now() - startTime,
         sessionMessageCount: managed.messageCount,
         ...(usage ? {
           usage: {
