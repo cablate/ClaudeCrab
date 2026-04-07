@@ -105,3 +105,6 @@ agents/*/.memory-db/
 
 # Generated images
 public/images/generated/
+
+# Personal profile data in skills (contains personal post analytics)
+agents/*/.claude/skills/*/references/personal-profile.md

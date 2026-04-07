@@ -42,6 +42,7 @@ interface PatchedSessionOptions {
   maxTurns?: number;
   maxBudgetUsd?: number;
   extraArgs?: Record<string, unknown>;
+  additionalDirectories?: string[];
 }
 
 /**
@@ -76,6 +77,16 @@ interface ManagedSession {
   isQuerying: boolean;
   /** Set to true when /stop is called — processStream checks this to break the loop */
   cancelled?: boolean;
+  /** Cache keepalive timer — pings session to prevent Anthropic API cache TTL expiry */
+  keepaliveTimer?: ReturnType<typeof setInterval> | undefined;
+  /** Rolling cache efficiency (0-100) for monitoring */
+  cacheEfficiencyAvg?: number | undefined;
+  /** Stream iterator preserved across queries for background drain */
+  streamIterator?: AsyncIterator<any>;
+  /** Whether background drain is actively consuming the stream */
+  bgDrainActive?: boolean;
+  /** Callback to push messages between queries (stored from last processStream) */
+  onIntermediateMessage?: (text: string) => void | Promise<void>;
 }
 
 /**
@@ -85,6 +96,19 @@ interface ManagedSession {
  * - V1 (old): each executeQuery() spawns new CLI process → cache bust
  * - V2 (this): process stays alive between messages → cache persists
  */
+/**
+ * Cache keepalive interval. Anthropic API cache TTL:
+ * - Standard accounts: 5 minutes
+ * - Claude Max / first-party: up to 1 hour (if querySource is in allowlist)
+ * We use a conservative 4-minute interval to cover the 5-min minimum TTL.
+ * The ping is cheap (~10 output tokens) vs cache rebuild cost (125% of full context).
+ */
+const CACHE_KEEPALIVE_INTERVAL_MS = 4 * 60 * 1000; // 4 minutes
+/** Skip keepalive if session was used recently (within this window) */
+const CACHE_KEEPALIVE_SKIP_IF_RECENT_MS = 3 * 60 * 1000; // 3 minutes
+/** Cache efficiency threshold — warn if rolling average drops below this */
+const CACHE_EFFICIENCY_WARN_THRESHOLD = 50;
+
 export class SDKSessionManager {
   private sessions = new Map<string, ManagedSession>();
   private disposed = false;
@@ -123,6 +147,14 @@ export class SDKSessionManager {
       },
       'Sending message via persistent V2 session'
     );
+
+    // Stop background drain before starting new query
+    await this.stopBackgroundDrain(managed);
+
+    // Store callback for background drain to use between queries
+    if (options.onIntermediateMessage) {
+      managed.onIntermediateMessage = options.onIntermediateMessage;
+    }
 
     managed.isQuerying = true;
     managed.cancelled = false;
@@ -164,23 +196,40 @@ export class SDKSessionManager {
 
         const freshResult = await this.processStream(sessionId, managed, freshOptions, Date.now());
         freshResult.resumeLost = true;
+        // Start background drain — keep pushing any stray messages between queries
+        this.startBackgroundDrain(sessionId, managed);
         return freshResult;
       }
 
+      // Start background drain — keep pushing any stray messages between queries
+      this.startBackgroundDrain(sessionId, managed);
       return result;
     } catch (error) {
-      // Session might have died — clean up and let caller retry with V1 fallback
       // SDK abort may throw non-Error values like { value: "..." }
       const errDetail = error instanceof Error
         ? error.message
         : typeof error === 'object' && error !== null && 'value' in error
           ? String((error as { value: unknown }).value)
           : String(error);
+
+      // Preserve sdkSessionId before destroying — allows caller to save it for resume
+      const preservedSdkSessionId = managed.sdkSessionId;
+      const wasCancelled = managed.cancelled === true;
+
       logger.warn(
-        { sessionId, error: errDetail },
+        { sessionId, error: errDetail, sdkSessionId: preservedSdkSessionId, wasCancelled },
         'V2 session error, cleaning up'
       );
       this.destroySession(sessionId);
+
+      // Attach sdkSessionId to the error so caller can persist it for resume
+      if (preservedSdkSessionId) {
+        if (error instanceof Error) {
+          (error as Error & { _sdkSessionId?: string })._sdkSessionId = preservedSdkSessionId;
+        } else if (typeof error === 'object' && error !== null) {
+          (error as Record<string, unknown>)._sdkSessionId = preservedSdkSessionId;
+        }
+      }
       throw error;
     } finally {
       // Clear querying flag — managed may have been replaced (fresh session retry),
@@ -211,8 +260,14 @@ export class SDKSessionManager {
       settingSources: options.settingSources ?? ['project', 'local'],
       env: {
         CLAUDE_CODE_REMOTE: '1', // Skip gitStatus injection
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', // Skip quota probe, metrics export, bootstrap, changelog
       },
     };
+
+    // Shared skills directory: --add-dir for cross-agent shared skills
+    if (options.additionalDirectories && options.additionalDirectories.length > 0) {
+      sessionOptions.additionalDirectories = options.additionalDirectories;
+    }
 
     // System prompt
     if (options.systemPrompt) {
@@ -241,6 +296,12 @@ export class SDKSessionManager {
     // Max turns
     if (options.maxTurns !== undefined) {
       sessionOptions.maxTurns = options.maxTurns;
+    }
+
+    // Thinking config: control extended thinking behavior.
+    // Default to disabled to save tokens unless agent explicitly enables it.
+    if (agent.config.settings?.thinking) {
+      sessionOptions.thinking = agent.config.settings.thinking as { type: string };
     }
 
     // canUseTool: interactive permission prompt (Telegram/Discord buttons)
@@ -305,6 +366,15 @@ export class SDKSessionManager {
           }
         }],
       }],
+      PreCompact: [{
+        matcher: '',
+        hooks: [async (input: unknown) => {
+          const { trigger } = input as { trigger?: string };
+          logger.info({ sessionId, trigger }, 'Context compaction triggered');
+          // Approve compaction — the keepalive timer will handle cache warmup after
+          return { decision: 'approve' as const };
+        }],
+      }],
       Stop: [{
         matcher: '',
         hooks: [async (input: unknown) => {
@@ -348,11 +418,15 @@ export class SDKSessionManager {
 
     this.sessions.set(sessionId, managed);
 
+    // Start cache keepalive timer to prevent API prompt cache TTL expiry
+    this.startKeepalive(sessionId);
+
     logger.info(
       {
         sessionId,
         sdkSessionId,
         hasResume: !!options.resume,
+        keepaliveIntervalMs: CACHE_KEEPALIVE_INTERVAL_MS,
         sessionOpts: {
           model: sessionOptions.model,
           cwd: sessionOptions.cwd,
@@ -362,10 +436,75 @@ export class SDKSessionManager {
           hasMcpServers: sessionOptions.mcpServers ? Object.keys(sessionOptions.mcpServers).length : 0,
         },
       },
-      'V2 persistent session created'
+      'V2 persistent session created (with cache keepalive)'
     );
 
     return managed;
+  }
+
+  /**
+   * Start background drain: keep reading the stream between queries.
+   * Any assistant messages that arrive (hooks, bg-tasks) are pushed to the user immediately.
+   * Stops when the next query starts or the session is destroyed.
+   */
+  private startBackgroundDrain(sessionId: string, managed: ManagedSession): void {
+    if (!managed.streamIterator || !managed.onIntermediateMessage) return;
+    if (managed.bgDrainActive) return;
+
+    managed.bgDrainActive = true;
+    const iterator = managed.streamIterator;
+    const onMsg = managed.onIntermediateMessage;
+
+    const TIMEOUT = Symbol('bg-timeout');
+    (async () => {
+      while (managed.bgDrainActive && !managed.isQuerying) {
+        try {
+          const raceResult = await Promise.race([
+            iterator.next(),
+            new Promise<typeof TIMEOUT>(resolve =>
+              setTimeout(() => resolve(TIMEOUT), 5000)
+            ),
+          ]);
+
+          if (raceResult === TIMEOUT) continue; // No message, keep waiting
+          const { done, value: msg } = raceResult as IteratorResult<any>;
+          if (done) break;
+
+          // Push assistant text to user immediately
+          if (msg.type === 'assistant' && msg.message?.content) {
+            const textParts: string[] = [];
+            for (const block of msg.message.content) {
+              if (block.type === 'text') textParts.push(block.text);
+            }
+            const text = textParts.join('');
+            if (text.length > 0) {
+              try {
+                await onMsg(text);
+              } catch (err) {
+                logger.warn({ sessionId, error: err }, 'Background drain: failed to push message');
+              }
+            }
+          }
+
+          logger.debug({ sessionId, msgType: msg.type }, 'Background drain: consumed message');
+        } catch (err) {
+          logger.warn({ sessionId, error: err }, 'Background drain: iteration error');
+          break;
+        }
+      }
+      managed.bgDrainActive = false;
+      logger.debug({ sessionId }, 'Background drain stopped');
+    })();
+  }
+
+  /**
+   * Stop background drain before starting a new query.
+   */
+  private async stopBackgroundDrain(managed: ManagedSession): Promise<void> {
+    if (!managed.bgDrainActive) return;
+    managed.bgDrainActive = false;
+    // Give the bg loop time to exit its current iteration
+    await new Promise(resolve => setTimeout(resolve, 150));
   }
 
   /**
@@ -386,16 +525,45 @@ export class SDKSessionManager {
     const toolIdToName = new Map<string, string>();
 
     let streamMsgIndex = 0;
-    // Stale replay filter (resumed sessions only):
-    // stream() may replay ALL buffered messages from previous queries in one burst
-    // (all at elapsed ~0ms) before delivering the current query's response.
-    // We use two signals to detect when the real stream begins:
-    //   1. system:init message (primary signal — CLI subprocess confirmed alive)
-    //   2. Elapsed time > 3000ms (fallback — in case init is delayed by MCP startup)
-    // Fresh sessions never have stale replays, so streamReady starts true.
-    let streamReady = !options.resume;
+    // Stale message filter — two modes:
+    //
+    // 1. Resumed sessions (new CLI process):
+    //    stream() replays ALL buffered JSONL messages before delivering current query's response.
+    //    We wait for system:init (or 3s fallback) to mark the real stream start.
+    //
+    // 2. Persistent sessions (CLI process stays alive, messageCount >= 2):
+    //    stream() replays the ENTIRE conversation history (system:init + all user/assistant pairs)
+    //    in rapid bursts before delivering the new query's response.
+    //    We skip replay by counting result messages: each previous query produced exactly one
+    //    result, so we skip until we've seen (messageCount - 1) results. Deterministic, no timing hacks.
+    //
+    // Both modes use streamReady=false to gate message delivery.
+    //
+    // NOTE: messageCount is already incremented before processStream, so >= 2 means
+    // there was at least one prior query with a result to replay.
+    const isPersistentFollowUp = !options.resume && managed.messageCount >= 2;
+    let streamReady = !options.resume && !isPersistentFollowUp;
+    // Result-counting replay detection (fast path): each previous query produced one result,
+    // so we skip until we've seen (messageCount - 1) results. Instant streamReady when it works.
+    const expectedReplayResults = isPersistentFollowUp ? managed.messageCount - 1 : 0;
+    let replayResultCount = 0;
+    // Gap detection fallback: if SDK doesn't replay result messages, fall back to timing heuristics.
+    let lastReplayMsgTime = startTime;
+    // After replay boundary detected, skip until we see the new user message.
+    // This prevents post-result stale content (hook output etc.) from being treated as real.
+    let skipUntilUserMessage = false;
 
-    for await (const message of managed.session.stream()) {
+    // Manual iteration (not for-await) so that break does NOT call iterator.return().
+    // This keeps the iterator alive for the post-result drain phase.
+    // Create new iterator for this query (stream() replays conversation + new response)
+    const streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
+    // Store on managed session so background drain can continue using it after processStream
+    managed.streamIterator = streamIterator;
+    while (true) {
+      const __iterResult = await streamIterator.next();
+      if (__iterResult.done) break;
+      const message = __iterResult.value;
+
       // Cooperative cancellation: /stop sets managed.cancelled = true
       if (managed.cancelled) {
         logger.info({ sessionId }, 'Query cancelled by user — breaking stream');
@@ -409,13 +577,17 @@ export class SDKSessionManager {
       );
       streamMsgIndex++;
 
-      // Extract session_id from init and use it as the streamReady signal.
-      // system:init confirms the CLI subprocess is alive and processing THIS query.
-      // All messages before init are stale replays from the previous query's buffer.
+      // Extract session_id from init.
+      // For resumed sessions (new CLI process), init = reliable streamReady signal.
+      // For persistent follow-ups, init arrives WITHIN the replay batch (same timestamp
+      // as buffered history messages), so it must NOT set streamReady — we rely on the
+      // elapsed time fallback instead.
       if (message.type === 'system' && 'subtype' in message) {
         const systemMsg = message as { subtype?: string; session_id?: string; hook_event?: string; hook_name?: string; outcome?: string; exit_code?: number; stderr?: string };
         if (systemMsg.subtype === 'init') {
-          streamReady = true;
+          if (!isPersistentFollowUp) {
+            streamReady = true;
+          }
           if (systemMsg.session_id) {
             managed.sdkSessionId = systemMsg.session_id;
           }
@@ -428,16 +600,70 @@ export class SDKSessionManager {
         }
       }
 
-      // Elapsed time fallback: if enough time has passed, the real stream must have started
-      // even if we never saw system:init (can happen when init is among the stale batch).
-      if (!streamReady && elapsed >= 3000) {
-        logger.info({ sessionId, elapsed }, 'Stream ready via elapsed time fallback (no init seen)');
+      // Persistent follow-up: skip replay messages using a two-tier strategy.
+      //
+      // Fast path (result counting): each previous query produced one result message.
+      // Count replayed results — when we've seen (messageCount - 1), replay is over. Instant.
+      //
+      // Fallback (gap detection): if SDK doesn't replay result messages, detect the
+      // timing gap between rapid-fire replay burst and the real response (model thinking time).
+      if (isPersistentFollowUp && !streamReady) {
+        const now = Date.now();
+        const gapMs = now - lastReplayMsgTime;
+
+        // Fast path: count replayed results
+        if (message.type === 'result') {
+          replayResultCount++;
+          if (replayResultCount >= expectedReplayResults) {
+            logger.info(
+              { sessionId, replayResultCount, expectedReplayResults, elapsed },
+              'Stream ready via result counting (persistent follow-up)'
+            );
+            streamReady = true;
+            skipUntilUserMessage = true;
+          }
+        }
+
+        // Fallback: gap detection (only if result counting hasn't triggered yet)
+        if (!streamReady && ((elapsed >= 2000 && gapMs >= 1000) || elapsed >= 5000)) {
+          logger.info(
+            { sessionId, elapsed, gapMs, replayResultCount, expectedReplayResults, msgType: message.type },
+            'Stream ready via gap detection fallback (persistent follow-up)'
+          );
+          streamReady = true;
+          skipUntilUserMessage = true;
+        }
+
+        if (!streamReady) {
+          lastReplayMsgTime = now;
+          continue; // Still replaying — skip
+        }
+        // streamReady just set — skip this message (replayed result or gap-trigger message)
+        continue;
+      }
+
+      // After replay boundary: skip everything until the new user message.
+      // This filters out post-result stale content (hook output, bg-task responses)
+      // that sits between the last replayed result and the new query's user message.
+      if (skipUntilUserMessage) {
+        if (message.type === 'user') {
+          skipUntilUserMessage = false;
+          logger.info({ sessionId, elapsed }, 'User message boundary found — processing real messages');
+        }
+        continue; // Skip stale content AND the user message itself
+      }
+
+      // Elapsed time fallback: if init never arrives, force streamReady.
+      // Resume sessions need longer timeout (CLI cold start can take 10-30s).
+      // Non-resume, non-persistent-followup sessions use a shorter timeout.
+      const fallbackMs = options.resume ? 30000 : 3000;
+      if (!streamReady && elapsed >= fallbackMs) {
+        logger.info({ sessionId, elapsed, isResume: !!options.resume }, 'Stream ready via elapsed time fallback');
         streamReady = true;
       }
 
-      // Skip ALL stale replay messages (resumed sessions only).
-      // Before streamReady, everything — including result messages from previous queries —
-      // is a replay from the session's JSONL buffer. We must skip them all.
+      // Skip stale replay messages (resumed sessions only — NOT persistent follow-up).
+      // Before streamReady, everything is a JSONL replay. We must skip them all.
       if (!streamReady && message.type !== 'system') {
         logger.info({ sessionId, msgIndex: streamMsgIndex - 1, msgType: message.type, elapsed }, 'Skipping stale replay message');
         continue;
@@ -558,19 +784,75 @@ export class SDKSessionManager {
           throw new Error(`SDK V2 session error: ${errorMsg}`);
         }
 
-        break; // stream() returns after result, but break explicitly
+        break; // Exit main loop — drain phase below will catch trailing messages
+      }
+    }
+
+    // Post-result drain: keep reading the stream with a timeout to push any trailing
+    // messages (hooks, bg-tasks) to the user immediately instead of letting them
+    // accumulate in the buffer and pollute the next query as stale replay.
+    //
+    // Because we used manual iteration (not for-await), the iterator is still alive
+    // after break — we can continue reading from it.
+    // Promise.race with timeout prevents blocking if no more messages arrive.
+    {
+      const DRAIN_TIMEOUT_MS = 3000;
+      const drainDeadline = Date.now() + DRAIN_TIMEOUT_MS;
+      const TIMEOUT = Symbol('drain-timeout');
+
+      while (true) {
+        const remaining = drainDeadline - Date.now();
+        if (remaining <= 0) break;
+
+        const raceResult = await Promise.race([
+          streamIterator.next(),
+          new Promise<typeof TIMEOUT>(resolve =>
+            setTimeout(() => resolve(TIMEOUT), remaining)
+          ),
+        ]);
+
+        if (raceResult === TIMEOUT) {
+          logger.debug({ sessionId }, 'Post-result drain timeout — no more trailing messages');
+          break;
+        }
+
+        const { done, value: drainMsg } = raceResult as IteratorResult<any>;
+        if (done) break;
+
+        // Push assistant text to user immediately (same path as main loop)
+        if (drainMsg.type === 'assistant' && drainMsg.message?.content) {
+          const textParts: string[] = [];
+          for (const block of drainMsg.message.content) {
+            if (block.type === 'text') textParts.push(block.text);
+          }
+          const drainText = textParts.join('');
+          if (drainText.length > 0) {
+            if (options.onIntermediateMessage) {
+              await options.onIntermediateMessage(drainText);
+              intermediateCount++;
+            } else {
+              responseChunks.push(drainText);
+            }
+          }
+        }
+
+        logger.debug(
+          { sessionId, msgType: drainMsg.type },
+          'Drained post-result stream message'
+        );
       }
     }
 
     const response = responseChunks.join('');
 
-    // Cache efficiency monitoring
+    // Cache efficiency monitoring + rolling average tracking
     let cacheEfficiency: number | undefined;
     if (usage) {
       const totalInput = (usage.inputTokens ?? 0) + (usage.cacheReadInputTokens ?? 0) + (usage.cacheCreationInputTokens ?? 0);
       cacheEfficiency = totalInput > 0
         ? Math.round(((usage.cacheReadInputTokens ?? 0) / totalInput) * 100)
         : 0;
+      this.updateCacheEfficiency(sessionId, managed, usage);
     }
 
     logger.info(
@@ -616,6 +898,11 @@ export class SDKSessionManager {
   destroySession(sessionId: string): void {
     const managed = this.sessions.get(sessionId);
     if (managed) {
+      // Clear keepalive timer first
+      if (managed.keepaliveTimer) {
+        clearInterval(managed.keepaliveTimer);
+        managed.keepaliveTimer = undefined;
+      }
       try {
         managed.session.close();
       } catch { /* ignore close errors */ }
@@ -668,6 +955,81 @@ export class SDKSessionManager {
       messageCount: managed.messageCount,
       ageMs: Date.now() - managed.createdAt,
     };
+  }
+
+  /**
+   * Start cache keepalive timer for a session.
+   * Sends lightweight pings to prevent Anthropic API prompt cache TTL expiry.
+   * Cost: ~10 output tokens per ping vs ~125% of full context on cache rebuild.
+   */
+  private startKeepalive(sessionId: string): void {
+    const managed = this.sessions.get(sessionId);
+    if (!managed) return;
+
+    // Clear existing timer if any
+    if (managed.keepaliveTimer) {
+      clearInterval(managed.keepaliveTimer);
+    }
+
+    managed.keepaliveTimer = setInterval(async () => {
+      const current = this.sessions.get(sessionId);
+      if (!current || current.isQuerying || this.disposed) return;
+
+      // Skip if session was used recently
+      const idleMs = Date.now() - current.lastUsedAt;
+      if (idleMs < CACHE_KEEPALIVE_SKIP_IF_RECENT_MS) return;
+
+      try {
+        logger.debug({ sessionId, idleMs }, 'Cache keepalive ping');
+        await current.session.send("Reply with only 'ok'");
+        current.lastUsedAt = Date.now();
+
+        // Drain the stream (consume the response without processing)
+        for await (const message of current.session.stream()) {
+          if (message.type === 'result') break;
+        }
+        logger.debug({ sessionId }, 'Cache keepalive ping completed');
+      } catch (err) {
+        // Keepalive failure is non-critical — log and continue
+        // Session may have died; it will be recreated on next real query
+        logger.warn(
+          { sessionId, err: err instanceof Error ? err.message : String(err) },
+          'Cache keepalive ping failed'
+        );
+        // Stop keepalive for this session to avoid repeated failures
+        if (current.keepaliveTimer) {
+          clearInterval(current.keepaliveTimer);
+          current.keepaliveTimer = undefined;
+        }
+      }
+    }, CACHE_KEEPALIVE_INTERVAL_MS);
+  }
+
+  /**
+   * Update rolling cache efficiency average and warn if below threshold.
+   */
+  private updateCacheEfficiency(sessionId: string, managed: ManagedSession, usage: QueryUsage): void {
+    const totalInput = (usage.inputTokens ?? 0) + (usage.cacheReadInputTokens ?? 0) + (usage.cacheCreationInputTokens ?? 0);
+    if (totalInput === 0) return;
+
+    const efficiency = Math.round(((usage.cacheReadInputTokens ?? 0) / totalInput) * 100);
+
+    // Exponential moving average (alpha = 0.3 for responsiveness)
+    const prev = managed.cacheEfficiencyAvg ?? efficiency;
+    managed.cacheEfficiencyAvg = Math.round(prev * 0.7 + efficiency * 0.3);
+
+    if (managed.messageCount > 2 && managed.cacheEfficiencyAvg < CACHE_EFFICIENCY_WARN_THRESHOLD) {
+      logger.warn(
+        {
+          sessionId,
+          currentEfficiency: efficiency,
+          rollingAvg: managed.cacheEfficiencyAvg,
+          messageCount: managed.messageCount,
+          threshold: CACHE_EFFICIENCY_WARN_THRESHOLD,
+        },
+        `Cache efficiency below ${CACHE_EFFICIENCY_WARN_THRESHOLD}% — possible cache bust issue`
+      );
+    }
   }
 
   /**
