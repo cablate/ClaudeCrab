@@ -480,16 +480,26 @@ export class SDKSessionManager {
     void drainDonePromise; // suppress unused-variable lint
 
     (async () => {
+      // Reuse a single pending .next() call to avoid accumulating concurrent calls
+      // on the async iterator (which can trigger repeated CLI hook invocations).
+      let pendingNext: Promise<IteratorResult<any>> | null = null;
+
       while (managed.bgDrainActive && !managed.isQuerying) {
         try {
+          // Only create a new .next() if none is pending
+          if (!pendingNext) {
+            pendingNext = iterator.next();
+          }
+
           const raceResult = await Promise.race([
-            iterator.next(),
+            pendingNext,
             new Promise<typeof DRAIN_SENTINEL>(resolve =>
               setTimeout(() => resolve(DRAIN_SENTINEL), 5000)
             ),
           ]);
 
-          if (raceResult === DRAIN_SENTINEL) continue; // No message, keep waiting
+          if (raceResult === DRAIN_SENTINEL) continue; // Timeout — same pendingNext reused next iteration
+          pendingNext = null; // .next() resolved — clear for next iteration
           const { done, value: msg } = raceResult as IteratorResult<any>;
           if (done) break;
 
