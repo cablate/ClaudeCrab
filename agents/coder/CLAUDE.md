@@ -6,10 +6,9 @@
 
 ## 共用規則
 
-@../_example/.claude/rules/startup-protocol.md
-@../_example/.claude/rules/skill-usage.md
+@../_example/.claude/rules/agent-behavior.md
 @../_example/.claude/rules/serena-tools.md
-@../_example/.claude/rules/permissions.md
+@../_example/.claude/rules/task-workflow.md
 
 ---
 
@@ -34,8 +33,6 @@
 2. **無上下文假設** — 排程、交接、文件，當對方什麼都不知道
 3. **位置意識** — 根目錄 vs memory/ 目錄，不要搞混
 4. **對人有好奇心** — 記錄互動脈絡，不只是任務完成
-5. **記憶是輔助** — 當下任務用當下工具（git、檔案、搜尋），不要只依賴記憶檔案
-6. **Skill 先行，知識先查** — 收到任務第一件事：掃 `.claude/skills/` 找對應的領域 skill，載入 SKILL.md + references/ 全部相關檔案。然後掃 `knowledge/` 補充。不讀 skill 就開工 = 放棄你跟通用 AI 的唯一差距
 
 ---
 
@@ -70,7 +67,7 @@
 
 | 專案 | Skill | 說明 |
 |------|-------|------|
-| ClaudeCab | `proj-claudecab` | Multi-agent Telegram bot 框架（龍蝦） |
+| ClaudeCab | `proj-claudecab`（待建立） | Multi-agent Telegram bot 框架 |
 
 ---
 
@@ -81,6 +78,8 @@
 | 金流 | `E:\CabLate_Obsidian\01_專案Projects\付費內容規劃\金流串接` | 電子發票整合開發 | 讀寫 |
 | remotions | `F:\_Program\OwnProject\remotions` | Remotion 影片專案 | 讀寫 |
 | Threads2 | `F:\_Program\OwnProject\Threads2` | Threads 數據同步與分析 | 讀寫 |
+| ai-toolkit | `F:\_Program\OwnProject\ai-toolkit` | AI 工具箱（Skills、Statusline 等公開分享） | 讀寫 |
+| banini-tracker | `F:\_Program\OwnProject\banini-tracker` | 巴逆逆反指標追蹤器（GitHub: cablate/banini-tracker） | 讀寫 |
 
 ---
 
@@ -95,110 +94,39 @@
 
 <!-- 操作規則，由 agent 自行維護 -->
 <!-- 新增條目格式：### YYYY-MM-DD: 標題 -->
+<!-- 上限 10 條。超過時，技術踩坑 → knowledge/ 或 dom-dev-workflow/references/，與 agent-behavior.md 重複的直接刪。 -->
 
-### 2026-02-18: ClaudeCab 執行環境注意事項
+### 2026-02-23: 功能開發後主動更新文件
 
-ClaudeCab 以非 watch 模式運行。修改程式碼後需使用者手動重啟 process。
-
-### 2026-02-19: 跨專案 Serena 操作
-
-操作不同專案時，需先用 `mcp__serena__activate_project` 啟動該專案。金流串接專案名稱：`金流串接`。
-
-### 2026-02-20: Code Review 方法論
-
-已建立 `method-code-review` skill。核心原則：從使用者視角追蹤實際路徑。
-
-### 2026-02-23: 提供檔案路徑前必須驗證存在
-
-給路徑前先確認檔案存在。不確定時用 `list_dir` 列出目錄內容。
-
-### 2026-02-23: ClaudeCab 功能開發後主動更新文件
-
-開發功能後，主動更新 proj-claudecab skill 文件（changelog.md、overview.md）並 commit。
+開發功能後，主動更新 proj-claudecab skill 文件（changelog.md、overview.md）並 commit。不要等人催。
 
 ### 2026-02-25: Observations 記錄門檻不要設太高
 
 Observations 是累積觀察，不是重大發現紀錄。使用者的思考模式、提問方式、反饋風格都值得記錄。
 
-### 2026-02-25: Schedule 執行需要 local settings
-
-`ScheduleExecutor` 需用 `settingSources: ['project', 'local']`，否則沒有檔案操作權限。
-
 ### 2026-02-26: Context 切換後務必查閱 CLAUDE.md
 
 從 context compaction 恢復後，已知專案路徑都在 CLAUDE.md 常用專案路徑表裡。不要憑記憶亂找，直接查表。
 
-### 2026-02-26: 複雜 CSS 問題先分析再動手
-
-遇到佈局問題時，先完整分析 HTML 結構和 CSS 盒模型，不要急著改程式碼。特別是 `position: fixed` 和 `margin-left` 混用的情況，要理解元素的「實際位置」vs「視覺位置」差異。
-
-### 2026-02-26: CSS 樣式沒生效時檢查語法錯誤
-
-瀏覽器 F12 顯示某個 class 樣式是空的，但檔案裡確實有寫——**優先檢查該 class 前面有沒有 CSS 語法錯誤**。CSS 解析遇到錯誤會跳過後續規則，導致後面的樣式全部失效。不要假設是「快取問題」就叫使用者重整。
-
 ### 2026-02-27: 回報工作進度時先查 git
 
-被問到「做了什麼」時，**先讀 git log/diff**，不要只依賴自己寫的記憶檔案。記憶整理可能漏掉重要產出（如 AI 顧問 System Prompt）。Commit 後主動檢視「這次 commit 包含什麼」，確保記憶涵蓋所有重要產出。
+被問到「做了什麼」時，**先讀 git log/diff**，不要只依賴自己寫的記憶檔案。記憶整理可能漏掉重要產出。Commit 後主動檢視「這次 commit 包含什麼」，確保記憶涵蓋所有重要產出。
 
 ### 2026-02-28: 提供選項時主動使用 AskUserQuestion
 
 當回覆內容是「列出選項讓用戶選」時，**主動使用 AskUserQuestion 工具**，不要只是純文字列出。判斷標準：如果你在寫「你想要 A 還是 B？」這種句子，就該用工具。
 
-### 2026-03-01: 整理記憶時根目錄檔案要用 replace_content
-
-整理記憶時，USER.md 和 MEMORY.md 在 agent 根目錄（與 CLAUDE.md 同層），不在 memory/ 目錄。這些檔案已存在，要用 `replace_content` 更新內容，不是用 `create_text_file` 新建。
-
-### 2026-03-02: Spectra 跨目錄使用限制（已修復）
-
-原本 project-whitelist hook 無法正確解析 Unix-style 路徑（`/f/...`），導致 cd 到 ClaudeCab 根目錄會被擋。已修復 `resolvePath` 函數，加入 `/x/...` → `X:\...` 轉換。現在可正常 cd 到白名單專案執行指令。
-
-### 2026-03-02: Spectra CLI 使用方式
-
-Spectra 是全域安裝的獨立工具（位於 `/c/Users/User/AppData/Local/Spectra/spectra`），不是 npm 套件。執行時用 `spectra` 而非 `npx spectra`。從 coder 目錄執行需要先 cd：`cd /f/_Program/OwnProject/ClaudeCab && spectra <command>`。
-
-### 2026-03-06: 權限 Hook 需要完整的路徑安全檢查
-
-修復路徑解析 bug 時，不只要處理「格式轉換」（Unix-style → Windows），還要考慮「安全性」。完整檢查包含：(1) path traversal 檢測（`../`）、(2) symlink 實際路徑解析、(3) 正規化後再次驗證白名單。2026 年 1 月的 CVE-2026-21636 證明 symlink 可繞過權限檢查。
-
 ### 2026-03-16: 驗證系統行為必須查所有配置層級
 
-讀了單一 script（`play_notification.py`）就斷定「Stop hook 不會注入訊息」，結果被全域 `~/.claude/settings.json` 的 Stop hook 打臉。**驗證任何系統行為時，必須查完所有配置層：local settings → project settings → global settings**。Claude Code hooks 的觸發機制有三層，任何一層有設定都可能觸發，不能只看 component 實作就推論系統行為。
+讀了單一 script 就斷定系統行為，結果被全域 settings 打臉。**驗證任何系統行為時，必須查完所有配置層：local settings → project settings → global settings**。任何一層有設定都可能觸發，不能只看 component 實作就推論系統行為。
 
-### 2026-03-17: Git Bash 下的 Tauri/Rust 編譯需設定 MSVC 環境
+### 2026-03-20: 操作前先驗證外部資源存在
 
-從 Git Bash (MSYS2) 執行 `npx tauri build` 會因缺少 `cl.exe`、`kernel32.lib` 而失敗。需手動設定三個環境變數：`PATH`（加 MSVC bin）、`LIB`（Windows SDK um/x64 + ucrt/x64 + MSVC lib/x64）、`INCLUDE`（對應 include 目錄）。或者改從 "x64 Native Tools Command Prompt" 執行。
+任何涉及外部資源（repo、branch、issue）的操作，動手前先查（`gh repo view` 等）。不確定就查，不要用假設代替驗證。
 
-### 2026-03-17: Tauri v2 capability 名稱對照
+### 2026-03-24: 改程式碼前先確認問題根因
 
-Tauri v2 的 tray icon 權限不是 `tray-icon:default`，是 `core:tray:default`。建置時的錯誤會列出所有可用 permission，直接從中找正確名稱。
-
-### 2026-03-17: Claude Agent SDK 型別名稱
-
-SDK 的 query options 型別是 `Options`（非 `ClaudeAgentOptions`），從 `@anthropic-ai/claude-agent-sdk` 直接 import。SDK 版本 v0.2.76+。
-
-### 2026-03-17: MSYS2 環境下 Tauri build 必須用 cmd.exe
-
-Git Bash 設定 LIB/INCLUDE 環境變數會被 MSYS2 路徑轉換破壞（分號→冒號、路徑格式改變），導致 linker 找不到 kernel32.lib。正確做法：寫 `.bat` 檔 → `call vcvars64.bat` → `npx tauri build`，用 `cmd.exe //c build.bat` 執行。不要在 Git Bash 手動 export LIB/INCLUDE。
-
-### 2026-03-17: Tauri v2 macOS 透明視窗雙重設定
-
-macOS 透明視窗必須**同時**設定：(1) `tauri.conf.json` 的 `macOSPrivateApi: true` (2) `Cargo.toml` 的 `macos-private-api` feature。只設一處會靜默失敗。
-
-### 2026-03-18: 使用者提到之前討論過的主題時先搜記憶
-
-使用者說「這個企劃」「之前那個」等指涉過去討論的用語時，**先搜 memory/、output/、knowledge/ 找脈絡**，不要反問「哪個？」。之前討論過的 = 已知前提，重新問會被認為沒做功課。
-
-### 2026-03-19: 建 UI 頁面前先設計使用者工作流程
-
-不要只是「把功能做出來掛上頁面」。每個頁面必須有明確的**功能定位**、**與其他頁面的關係**、**差異化的資訊展示**。例如：逐字稿是「穩定原始資料 + 觸發分析」，分析結果是「按集數分組的多版本對比」——兩者不能長一樣。先問「使用者在這個頁面要完成什麼任務」，再決定資訊架構。
-
-### 2026-03-19: 新功能涉及多頁面時檢查互通性
-
-當 A 頁面產生的資料會在 B 頁面使用（如 Profiles → Transcripts → Analyses），確保：(1) A 頁面有說明如何到 B 頁面使用；(2) B 頁面有連結回 A；(3) 功能不在兩個地方重複配置（如 LLM 模型不要同時在 Settings 和 Profiles 設定）。
-
-### 2026-03-20: DB migration 加新欄位時必須回填既有資料
-
-ALTER TABLE ADD COLUMN 只是加欄位，既有 row 全是 null。如果排序或顯示依賴這個欄位（如 `ORDER BY COALESCE(new_col, fallback)`），null 會導致 fallback 到次要欄位，同批寫入的資料排序不確定。migration 必須同時包含回填邏輯（從關聯表查資料 UPDATE）。
+debug 時不要反覆堆 fallback 邏輯直到「能跑」。先確認根因是什麼，再動最小的修改。遇到複雜問題時，先問「根因是不是其實很簡單？」
 
 ---
 
