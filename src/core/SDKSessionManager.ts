@@ -661,43 +661,42 @@ export class SDKSessionManager {
     // first gap measurement with time elapsed before the stream loop started.
     let lastReplayMsgTime = 0;
 
-    // Consume any pending rawQueryIterator .next() from the previous background drain.
-    // When stopBackgroundDrain runs, the drain may have an in-flight .next() on the raw
-    // iterator. If we don't consume it here, it will "steal" the first message from the
-    // new stream() generator (they share the same underlying async iterator).
-    if (managed.pendingRawNext) {
-      try {
-        // Race with a short timeout — the pending next might resolve immediately
-        // (if a message was already buffered) or never (if CLI is idle).
-        const pending = await Promise.race([
-          managed.pendingRawNext,
-          new Promise<typeof DRAIN_SENTINEL>(r => setTimeout(() => r(DRAIN_SENTINEL), 100)),
-        ]);
-        if (pending !== DRAIN_SENTINEL) {
-          const { done, value: pendingMsg } = pending as IteratorResult<any>;
-          if (!done) {
-            // Between-query message — deliver it immediately
-            const pendingText = extractAssistantText(pendingMsg);
-            if (pendingText.length > 0 && options.onIntermediateMessage) {
-              try {
-                await options.onIntermediateMessage(pendingText);
-              } catch { /* best effort */ }
-            }
-            logger.debug({ sessionId, msgType: pendingMsg.type }, 'Consumed pending drain message before new query');
-          }
-        }
-      } catch { /* ignore errors from abandoned iterator */ }
-      managed.pendingRawNext = null;
+    // Choose the iterator for this query.
+    //
+    // First query: use stream() to bootstrap (sets session.queryIterator internally).
+    // Subsequent queries: read rawQueryIterator DIRECTLY — no stream() generator.
+    //
+    // Why bypass stream()? The SDK's stream() generator returns on 'result'. The
+    // background drain also reads from the same underlying queryIterator. When the
+    // drain has a pending .next() and processStream creates a NEW stream() generator,
+    // both compete for messages — the drain's orphaned .next() steals the first
+    // replay message, causing the replay filter to miscount results and stream() to
+    // return on the wrong result (a replay result, not the actual query result).
+    //
+    // By reading rawQueryIterator directly, processStream and drain share ONE consumer
+    // sequentially (drain stops → processStream starts). The drain's pendingRawNext
+    // is reused as the first read — zero orphaned promises, zero message loss.
+    let streamIterator: AsyncIterator<any>;
+    let firstRead: Promise<IteratorResult<any>> | null = null;
+
+    if (managed.rawQueryIterator) {
+      // Subsequent query: reuse rawQueryIterator directly (no stream() generator)
+      streamIterator = managed.rawQueryIterator;
+      // Reuse drain's pending .next() as our first read — no orphan, no message loss
+      if (managed.pendingRawNext) {
+        firstRead = managed.pendingRawNext;
+        managed.pendingRawNext = null;
+      }
+    } else {
+      // First query: use stream() to bootstrap session.queryIterator
+      const streamGen = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
+      managed.streamIterator = streamGen;
+      streamIterator = streamGen;
     }
 
-    // Manual iteration (not for-await) so that break does NOT call iterator.return().
-    // This keeps the iterator alive for the post-result drain phase.
-    // Create new iterator for this query (stream() replays conversation + new response)
-    const streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
-    // Store on managed session so background drain can continue using it after processStream
-    managed.streamIterator = streamIterator;
     while (true) {
-      const __iterResult = await streamIterator.next();
+      const __iterResult = firstRead ? await firstRead : await streamIterator.next();
+      firstRead = null; // Only used once
       if (__iterResult.done) break;
       const message = __iterResult.value;
 
