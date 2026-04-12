@@ -83,6 +83,23 @@ interface ManagedSession {
   cacheEfficiencyAvg?: number | undefined;
   /** Stream iterator preserved across queries for background drain */
   streamIterator?: AsyncIterator<any>;
+  /**
+   * Raw query iterator — reads directly from SDK's internal sdkMessages generator,
+   * bypassing stream()'s return-on-result behavior. Used by background drain to
+   * continuously receive messages between queries.
+   *
+   * SDK's stream() is a generator that returns after 'result'. This means
+   * streamIterator dies after each query. rawQueryIterator stays alive as long
+   * as the CLI process runs, so the drain can keep pushing messages to the user.
+   */
+  rawQueryIterator?: AsyncIterator<any>;
+  /**
+   * Pending .next() call on rawQueryIterator from the background drain.
+   * When the drain is stopped, this promise may still be pending. processStream
+   * must consume it before creating a new stream() generator to prevent the
+   * drain's orphaned .next() from stealing a message from the new query.
+   */
+  pendingRawNext?: Promise<IteratorResult<any>> | null;
   /** Whether background drain is actively consuming the stream */
   bgDrainActive?: boolean;
   /** Resolved when bgDrainActive transitions to false — used by stopBackgroundDrain */
@@ -222,8 +239,22 @@ export class SDKSessionManager {
         return freshResult;
       }
 
+      // Detect degraded session: non-first-message returned 0 turns / 0 output.
+      // This typically happens after context compaction failure or CLI process instability.
+      // Proactively destroy the session so the next query starts fresh instead of cascading.
+      if (!hasOutput && managed.messageCount > 1) {
+        logger.warn(
+          { sessionId, sdkSessionId: managed.sdkSessionId, messageCount: managed.messageCount },
+          'V2 persistent session returned empty response (0 turns) — destroying degraded session'
+        );
+        this.destroySession(sessionId);
+        result.sessionDegraded = true;
+      }
+
       // Start background drain — keep pushing any stray messages between queries
-      this.startBackgroundDrain(sessionId, managed);
+      if (this.sessions.has(sessionId)) {
+        this.startBackgroundDrain(sessionId, managed);
+      }
       return result;
     } catch (error) {
       // SDK abort may throw non-Error values like { value: "..." }
@@ -320,9 +351,12 @@ export class SDKSessionManager {
     }
 
     // Thinking config: control extended thinking behavior.
-    // Default to disabled to save tokens unless agent explicitly enables it.
+    // Priority: explicit agent.json setting > Opus adaptive default > SDK default.
+    // Opus 4.6 supports adaptive thinking — let the model decide when/how deep to think.
     if (agent.config.settings?.thinking) {
       sessionOptions.thinking = agent.config.settings.thinking as { type: string };
+    } else if ((agent.config.model ?? '').toLowerCase().includes('opus')) {
+      sessionOptions.thinking = { type: 'adaptive' } as { type: string };
     }
 
     // canUseTool: interactive permission prompt (Telegram/Discord buttons)
@@ -461,6 +495,7 @@ export class SDKSessionManager {
           permissionMode: sessionOptions.permissionMode,
           allowedToolsCount: sessionOptions.allowedTools?.length ?? 0,
           hasMcpServers: sessionOptions.mcpServers ? Object.keys(sessionOptions.mcpServers).length : 0,
+          thinking: sessionOptions.thinking,
         },
       },
       'V2 persistent session created (with cache keepalive)'
@@ -475,11 +510,13 @@ export class SDKSessionManager {
    * Stops when the next query starts or the session is destroyed.
    */
   private startBackgroundDrain(sessionId: string, managed: ManagedSession): void {
-    if (!managed.streamIterator || !managed.onIntermediateMessage) return;
+    // Use rawQueryIterator (bypasses stream()'s return-on-result) if available,
+    // fall back to streamIterator for backwards compatibility.
+    const iterator = managed.rawQueryIterator ?? managed.streamIterator;
+    if (!iterator || !managed.onIntermediateMessage) return;
     if (managed.bgDrainActive) return;
 
     managed.bgDrainActive = true;
-    const iterator = managed.streamIterator;
     const onMsg = managed.onIntermediateMessage;
 
     // Register drain-done signal so stopBackgroundDrain can await instead of blind-sleeping
@@ -499,6 +536,8 @@ export class SDKSessionManager {
           if (!pendingNext) {
             pendingNext = iterator.next();
           }
+          // Also store on managed so stopBackgroundDrain can hand it off to processStream
+          managed.pendingRawNext = pendingNext;
 
           const raceResult = await Promise.race([
             pendingNext,
@@ -509,6 +548,7 @@ export class SDKSessionManager {
 
           if (raceResult === DRAIN_SENTINEL) continue; // Timeout — same pendingNext reused next iteration
           pendingNext = null; // .next() resolved — clear for next iteration
+          managed.pendingRawNext = null;
           const { done, value: msg } = raceResult as IteratorResult<any>;
           if (done) break;
 
@@ -529,6 +569,7 @@ export class SDKSessionManager {
         }
       }
       managed.bgDrainActive = false;
+      // Don't clear pendingRawNext here — processStream needs it for handoff
       managed.bgDrainDone?.();
       logger.debug({ sessionId }, 'Background drain stopped');
     })();
@@ -596,12 +637,52 @@ export class SDKSessionManager {
     // first gap measurement with time elapsed before the stream loop started.
     let lastReplayMsgTime = 0;
 
+    // Consume any pending rawQueryIterator .next() from the previous background drain.
+    // When stopBackgroundDrain runs, the drain may have an in-flight .next() on the raw
+    // iterator. If we don't consume it here, it will "steal" the first message from the
+    // new stream() generator (they share the same underlying async iterator).
+    if (managed.pendingRawNext) {
+      try {
+        // Race with a short timeout — the pending next might resolve immediately
+        // (if a message was already buffered) or never (if CLI is idle).
+        const pending = await Promise.race([
+          managed.pendingRawNext,
+          new Promise<typeof DRAIN_SENTINEL>(r => setTimeout(() => r(DRAIN_SENTINEL), 100)),
+        ]);
+        if (pending !== DRAIN_SENTINEL) {
+          const { done, value: pendingMsg } = pending as IteratorResult<any>;
+          if (!done) {
+            // Between-query message — deliver it immediately
+            const pendingText = extractAssistantText(pendingMsg);
+            if (pendingText.length > 0 && options.onIntermediateMessage) {
+              try {
+                await options.onIntermediateMessage(pendingText);
+              } catch { /* best effort */ }
+            }
+            logger.debug({ sessionId, msgType: pendingMsg.type }, 'Consumed pending drain message before new query');
+          }
+        }
+      } catch { /* ignore errors from abandoned iterator */ }
+      managed.pendingRawNext = null;
+    }
+
     // Manual iteration (not for-await) so that break does NOT call iterator.return().
     // This keeps the iterator alive for the post-result drain phase.
     // Create new iterator for this query (stream() replays conversation + new response)
     const streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
     // Store on managed session so background drain can continue using it after processStream
     managed.streamIterator = streamIterator;
+
+    // Extract the raw query iterator from the SDK session for background drain.
+    // stream() internally uses session.queryIterator (= sdkMessages async generator).
+    // Unlike stream() which returns on 'result', the raw iterator stays alive as long
+    // as the CLI process runs. We use it for the background drain after processStream.
+    if (!managed.rawQueryIterator) {
+      const sessionAny = managed.session as any;
+      if (sessionAny.queryIterator) {
+        managed.rawQueryIterator = sessionAny.queryIterator;
+      }
+    }
     while (true) {
       const __iterResult = await streamIterator.next();
       if (__iterResult.done) break;
@@ -729,6 +810,13 @@ export class SDKSessionManager {
               await options.onToolEvent({
                 type: 'tool_use',
                 toolName: block.name,
+                timestamp: Date.now(),
+              });
+            } else if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.length > 0) {
+              await options.onToolEvent({
+                type: 'thinking',
+                toolName: 'thinking',
+                summary: block.thinking,
                 timestamp: Date.now(),
               });
             }
@@ -924,6 +1012,9 @@ export class SDKSessionManager {
   destroySession(sessionId: string): void {
     const managed = this.sessions.get(sessionId);
     if (managed) {
+      // Stop background drain before closing session
+      managed.bgDrainActive = false;
+      managed.pendingRawNext = null;
       // Clear keepalive timer first
       if (managed.keepaliveTimer) {
         clearInterval(managed.keepaliveTimer);
