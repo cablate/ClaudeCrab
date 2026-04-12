@@ -22,6 +22,7 @@ import {
   ChannelType,
   MessageType,
 } from 'discord.js';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BaseAdapter } from './BaseAdapter.js';
@@ -47,6 +48,12 @@ import {
   type SecurityConfig,
 } from '../utils/security.js';
 import { auditLogger } from '../utils/audit.js';
+import {
+  downloadAttachment,
+  formatAttachmentContext,
+  isAutoConvertedTextFile,
+  type AttachmentInfo,
+} from '../utils/attachmentDownloader.js';
 
 const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   allowedUsers: [],
@@ -231,38 +238,76 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     let userId = message.author.id;
     let text = message.content;
 
-    // If message body is empty but has a .txt attachment, extract text from it.
-    // Discord converts long messages (>2000 chars) into .txt file attachments.
+    // --- Attachment handling ---
+    // 1. Auto-converted .txt (Discord long message) → inline as text (existing behavior)
+    // 2. All other files (PDF, images, docs, etc.) → download to local, insert path reference
     let isFromAttachment = false;
-    if (text.length === 0 && message.attachments.size > 0) {
-      const txtAttachment = message.attachments.find(
-        (a) => a.name?.endsWith('.txt') && a.contentType?.startsWith('text/')
-      );
-      if (txtAttachment?.url) {
-        try {
-          const response = await fetch(txtAttachment.url);
-          if (response.ok) {
-            text = await response.text();
-            isFromAttachment = true;
-            this.log.info(
-              { userId, fileName: txtAttachment.name, size: txtAttachment.size },
-              'Extracted text from .txt attachment'
-            );
+    const downloadedAttachments: AttachmentInfo[] = [];
+
+    if (message.attachments.size > 0) {
+      const agentsDir = path.resolve(process.cwd(), 'agents');
+
+      for (const [, attachment] of message.attachments) {
+        const fileName = attachment.name ?? 'unknown';
+        const mimeType = attachment.contentType ?? undefined;
+
+        // Special case: auto-converted .txt from Discord (long message → file)
+        // Only inline if message body is empty (the auto-convert scenario)
+        if (isAutoConvertedTextFile(fileName, mimeType) && text.trim().length === 0) {
+          try {
+            const response = await fetch(attachment.url);
+            if (response.ok) {
+              text = await response.text();
+              isFromAttachment = true;
+              this.log.info(
+                { userId, fileName, size: attachment.size, extractedLength: text.length },
+                'Extracted text from auto-converted .txt attachment'
+              );
+            }
+          } catch (err) {
+            this.log.warn({ err, url: attachment.url }, 'Failed to fetch .txt attachment');
           }
-        } catch (err) {
-          this.log.warn({ err, url: txtAttachment.url }, 'Failed to fetch .txt attachment');
+          continue;
         }
+
+        // All other files: download to local storage
+        const result = await downloadAttachment(
+          attachment.url,
+          fileName,
+          agentsDir,
+          this.agentId,
+          attachment.size,
+        );
+        if (result.success && result.filePath) {
+          downloadedAttachments.push({
+            fileName,
+            mimeType,
+            fileSize: result.fileSize,
+            localPath: result.filePath,
+          });
+        } else {
+          this.log.warn({ fileName, error: result.error }, 'Failed to download attachment');
+        }
+      }
+
+      // Append attachment context to user message
+      if (downloadedAttachments.length > 0) {
+        const attachmentContext = formatAttachmentContext(downloadedAttachments);
+        text = text.trim().length > 0
+          ? `${text}\n\n${attachmentContext}`
+          : attachmentContext;
       }
     }
 
     // Skip if still empty after attachment check
-    if (text.length === 0) {
+    if (text.trim().length === 0) {
       return;
     }
 
     // Security validation (use main channelId for consistent logging)
-    // Skip maxMessageLength for attachment-extracted text — it's intentionally long.
-    const validation = isFromAttachment
+    // Skip maxMessageLength for attachment-extracted or attachment-referenced text.
+    const hasAttachments = isFromAttachment || downloadedAttachments.length > 0;
+    const validation = hasAttachments
       ? validateMessage('', userId, this.securityConfig)
       : validateMessage(text, userId, this.securityConfig);
 
@@ -287,7 +332,6 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     // For attachment-extracted text, run injection check explicitly
-    // (validateMessage was called with '' so warnings won't include it)
     if (isFromAttachment) {
       const patterns = detectPromptInjection(text, this.securityConfig);
       if (patterns.length > 0) {
@@ -309,14 +353,28 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     } else {
       // Main channel — auto-create a thread from this message
       try {
-        const threadTitle = text.length > 50 ? text.slice(0, 47) + '...' : text;
+        const fallbackTitle = text.length > 50 ? text.slice(0, 47) + '...' : text;
         const thread = await message.startThread({
-          name: threadTitle,
-          autoArchiveDuration: 1440, // 24 hours
+          name: fallbackTitle,
+          autoArchiveDuration: 10080, // 7 days
         });
         chatId = thread.id;
         threadId = thread.id;
-        this.log.info({ threadId: thread.id, title: threadTitle }, 'Auto-created thread for new conversation');
+        this.log.info({ threadId: thread.id, title: fallbackTitle }, 'Auto-created thread for new conversation');
+
+        // Fire-and-forget: generate a better title with Haiku, then rename
+        this.generateThreadTitle(text).then(async (aiTitle) => {
+          if (aiTitle && aiTitle !== fallbackTitle) {
+            try {
+              await thread.setName(aiTitle);
+              this.log.info({ threadId: thread.id, oldTitle: fallbackTitle, newTitle: aiTitle }, 'Thread renamed with AI-generated title');
+            } catch (renameErr) {
+              this.log.warn({ err: renameErr, threadId: thread.id }, 'Failed to rename thread');
+            }
+          }
+        }).catch((err) => {
+          this.log.warn({ err }, 'AI thread title generation failed');
+        });
       } catch (err) {
         // Fallback to main channel if thread creation fails
         this.log.warn({ err }, 'Failed to auto-create thread, using main channel');
@@ -700,9 +758,21 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   }
 
   /**
+   * BaseAdapter createThread implementation for Discord.
+   * Creates a thread in the specified text channel.
+   */
+  override async createThread(
+    chatId: string,
+    threadName: string,
+    initialContent?: string
+  ): Promise<{ success: boolean; threadId?: string; error?: string }> {
+    return this.createThreadInChannel(chatId, threadName, initialContent ?? threadName);
+  }
+
+  /**
    * Archive a thread (for completed/cancelled tasks).
    */
-  async archiveThread(
+  override async archiveThread(
     threadId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
@@ -1264,5 +1334,61 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
 
     return chunks;
+  }
+
+  /**
+   * Generate a short thread title from message content using Haiku.
+   * Returns null if generation fails — caller should keep the fallback title.
+   */
+  private async generateThreadTitle(messageText: string): Promise<string | null> {
+    const input = messageText.length > 200 ? messageText.slice(0, 200) : messageText;
+
+    const prompt = `將使用者訊息濃縮成一個繁體中文 thread 標題。
+
+規則：
+- 必須使用繁體中文
+- 最多 15 個字（中文字），英文專有名詞可保留原文
+- 寫出使用者「要做什麼」，不要抽象概括
+- 不加引號、標點、emoji、「問題」「探討」「分析」等空泛詞
+- 只回覆標題本身
+
+好的標題：
+「幫我看 Discord 訊息堵塞」→ 排查Discord訊息堵塞
+「Can you fix the login bug on mobile?」→ 修復手機端登入bug
+「我想加一個新的 slash command」→ 新增slash command
+
+壞的標題（不要這樣寫）：
+「登入問題探討」「Discord相關問題」「功能需求分析」
+
+使用者訊息：
+${input}`;
+
+    try {
+      const q = query({
+        prompt,
+        options: {
+          model: 'claude-haiku-4-5-20251001',
+          maxTurns: 1,
+          tools: [],
+          persistSession: false,
+          permissionMode: 'dontAsk',
+        },
+      });
+
+      let result = '';
+      for await (const msg of q) {
+        if (msg.type === 'result') {
+          if (msg.subtype === 'success') result = msg.result;
+          break;
+        }
+      }
+
+      const title = result.trim();
+      if (!title || title.length > 30) return null;
+      return title;
+    } catch (err) {
+      this.log.warn({ err }, 'generateThreadTitle failed');
+      return null;
+    }
   }
 }
