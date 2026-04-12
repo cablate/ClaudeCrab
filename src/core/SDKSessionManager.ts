@@ -234,6 +234,9 @@ export class SDKSessionManager {
 
         const freshResult = await this.processStream(sessionId, managed, freshOptions, Date.now());
         freshResult.resumeLost = true;
+        // Extract raw query iterator AFTER processStream (stream()'s generator body
+        // has executed by now, so session.queryIterator is set).
+        this.extractRawQueryIterator(managed);
         // Start background drain — keep pushing any stray messages between queries
         this.startBackgroundDrain(sessionId, managed);
         return freshResult;
@@ -251,6 +254,9 @@ export class SDKSessionManager {
         result.sessionDegraded = true;
       }
 
+      // Extract raw query iterator AFTER processStream (stream()'s generator body
+      // has executed by now, so session.queryIterator is set).
+      this.extractRawQueryIterator(managed);
       // Start background drain — keep pushing any stray messages between queries
       if (this.sessions.has(sessionId)) {
         this.startBackgroundDrain(sessionId, managed);
@@ -505,6 +511,24 @@ export class SDKSessionManager {
   }
 
   /**
+   * Extract the raw query iterator from the SDK session for background drain.
+   *
+   * Must be called AFTER processStream (not before), because stream() is an async
+   * generator — its body (which sets session.queryIterator) only runs on first .next().
+   * Before .next(), session.queryIterator is null.
+   */
+  private extractRawQueryIterator(managed: ManagedSession): void {
+    if (managed.rawQueryIterator) return; // Already extracted
+    const sessionAny = managed.session as any;
+    if (sessionAny.queryIterator) {
+      managed.rawQueryIterator = sessionAny.queryIterator;
+      logger.debug('Extracted rawQueryIterator from SDK session');
+    } else {
+      logger.warn('session.queryIterator not available — background drain will use streamIterator fallback');
+    }
+  }
+
+  /**
    * Start background drain: keep reading the stream between queries.
    * Any assistant messages that arrive (hooks, bg-tasks) are pushed to the user immediately.
    * Stops when the next query starts or the session is destroyed.
@@ -672,17 +696,6 @@ export class SDKSessionManager {
     const streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
     // Store on managed session so background drain can continue using it after processStream
     managed.streamIterator = streamIterator;
-
-    // Extract the raw query iterator from the SDK session for background drain.
-    // stream() internally uses session.queryIterator (= sdkMessages async generator).
-    // Unlike stream() which returns on 'result', the raw iterator stays alive as long
-    // as the CLI process runs. We use it for the background drain after processStream.
-    if (!managed.rawQueryIterator) {
-      const sessionAny = managed.session as any;
-      if (sessionAny.queryIterator) {
-        managed.rawQueryIterator = sessionAny.queryIterator;
-      }
-    }
     while (true) {
       const __iterResult = await streamIterator.next();
       if (__iterResult.done) break;
