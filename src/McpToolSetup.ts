@@ -35,6 +35,8 @@ export interface McpSetupContext {
   subConversationId?: string;
   /** Parent conversation ID (e.g., main channel). Platform-agnostic. */
   parentConversationId?: string;
+  /** Task ID for agent-call tracking. */
+  taskId?: string;
 }
 
 export interface McpSetupResult {
