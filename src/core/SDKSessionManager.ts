@@ -24,6 +24,31 @@ import type { QueryUsage, QueryResult, ExecuteQueryOptions } from './SDKQueryMan
 import { logger } from '../utils/logger.js';
 
 /**
+ * Direct access to the cached `queryIterator` field on a cQ session instance.
+ *
+ * Why: `cQ.stream()` is an async generator that returns immediately on `result`,
+ * but the underlying `queryIterator` (built once on first stream() call and
+ * cached on the cQ instance as a public field) keeps yielding messages from the
+ * CLI process — including post-result hook responses, system messages, and any
+ * content emitted between queries.
+ *
+ * Reading `queryIterator` directly bypasses the "stop at result" limitation of
+ * stream(), letting us:
+ *   - Pre-drain residual messages buffered between queries (prevents stale
+ *     messages from being misinterpreted as the new query's response).
+ *   - Post-drain trailing messages after a result (so they are pushed to the
+ *     user instead of polluting the next query).
+ *
+ * Returns null if stream() hasn't been called yet (queryIterator not built).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getCachedQueryIterator(session: SDKSession): AsyncIterator<any> | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const iter = (session as any).queryIterator;
+  return iter ?? null;
+}
+
+/**
  * Extended V2 session options (matches patched sdk.mjs)
  * The patch adds these fields to SDKSessionOptions which are missing in stock SDK.
  */
@@ -180,6 +205,13 @@ export class SDKSessionManager {
     managed.cancelled = false;
     managed.stopHookFired = false; // Reset per-query — allow Stop hook to block once for checklist
     try {
+      // Pre-drain: discard residual messages buffered in queryIterator from the
+      // previous query. Without this, the new stream() pulls those stale messages
+      // first — if one happens to be a `result` (e.g., from a Stop hook firing
+      // after the previous query), the new query reports numTurns=0 and silently
+      // delivers nothing to the user. Root-cause fix; see preDrainResidualMessages.
+      await this.preDrainResidualMessages(sessionId, managed);
+
       await managed.session.send(prompt);
       managed.lastUsedAt = Date.now();
       managed.messageCount++;
@@ -535,6 +567,65 @@ export class SDKSessionManager {
   }
 
   /**
+   * Pre-drain residual messages buffered in the cached queryIterator before
+   * starting a new query.
+   *
+   * Why this is necessary:
+   *   The CLI process can yield messages AFTER it sends the previous query's
+   *   `result` (e.g., Stop hook responses, system events, additional result
+   *   emissions from hook lifecycle). Because cQ.stream() returns immediately
+   *   on `result`, these trailing messages were never consumed — they sit in
+   *   the cached queryIterator buffer until the next query, where the new
+   *   stream() generator pulls them out as if they belonged to the new query.
+   *
+   *   The previous "post-result drain" attempted to handle this but used the
+   *   stream() generator's iterator, which was already returned (`done:true`)
+   *   the moment it yielded the result. So the drain was a no-op.
+   *
+   *   This pre-drain reads queryIterator DIRECTLY with a short timeout, so any
+   *   buffered residue is consumed and discarded before send().
+   *
+   * Skipped silently when:
+   *   - First query (no previous send → no residue possible)
+   *   - queryIterator not built yet (stream() never called)
+   */
+  private async preDrainResidualMessages(sessionId: string, managed: ManagedSession): Promise<void> {
+    if (managed.messageCount === 0) return;
+    const queryIter = getCachedQueryIterator(managed.session);
+    if (!queryIter) return;
+
+    const PER_NEXT_TIMEOUT_MS = 100;
+    const TOTAL_BUDGET_MS = 1000;
+    const deadline = Date.now() + TOTAL_BUDGET_MS;
+    let drained = 0;
+    const drainedTypes: string[] = [];
+
+    while (Date.now() < deadline) {
+      const remaining = deadline - Date.now();
+      const timeoutMs = Math.min(PER_NEXT_TIMEOUT_MS, remaining);
+      const PRE_DRAIN_TIMEOUT = Symbol('pre-drain-timeout');
+      const raceResult = await Promise.race([
+        queryIter.next(),
+        new Promise<typeof PRE_DRAIN_TIMEOUT>(resolve =>
+          setTimeout(() => resolve(PRE_DRAIN_TIMEOUT), timeoutMs)
+        ),
+      ]);
+      if (raceResult === PRE_DRAIN_TIMEOUT) break; // Buffer empty — done
+      if (raceResult.done) break; // Iterator finished
+      drained++;
+      const msgType = (raceResult.value as { type?: string })?.type ?? 'unknown';
+      if (drainedTypes.length < 10) drainedTypes.push(msgType);
+    }
+
+    if (drained > 0) {
+      logger.warn(
+        { sessionId, sessionMessageCount: managed.messageCount, drained, drainedTypes },
+        'Pre-drain: discarded residual messages from previous query buffer'
+      );
+    }
+  }
+
+  /**
    * Stop background drain before starting a new query.
    */
   private async stopBackgroundDrain(managed: ManagedSession): Promise<void> {
@@ -567,49 +658,34 @@ export class SDKSessionManager {
     const toolIdToName = new Map<string, string>();
 
     let streamMsgIndex = 0;
-    // Stale message filter — two modes:
+    // Stream readiness gating.
     //
-    // 1. Resumed sessions (new CLI process):
-    //    stream() replays ALL buffered JSONL messages before delivering current query's response.
-    //    We wait for system:init (or 3s fallback) to mark the real stream start.
+    // SDK behavior (verified against node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs):
+    // `cQ.stream()` is a thin async generator over a CACHED `queryIterator` on the cQ
+    // instance. It does NOT replay history. Each stream() invocation builds a new
+    // generator that continues reading from where queryIterator was last left off
+    // (which is right after the previous query's result message).
     //
-    // 2. Persistent sessions (CLI process stays alive, messageCount >= 2):
-    //    stream() replays the ENTIRE conversation history (system:init + all user/assistant pairs)
-    //    in rapid bursts before delivering the new query's response.
-    //    We skip replay by counting result messages: each previous query produced exactly one
-    //    result, so we skip until we've seen (messageCount - 1) results. Deterministic, no timing hacks.
-    //
-    // Both modes use streamReady=false to gate message delivery.
-    //
-    // NOTE: messageCount is already incremented before processStream, so >= 2 means
-    // there was at least one prior query with a result to replay.
-    //
-    // CRITICAL: `!options.resume` is intentionally REMOVED from this check. Callers
-    // (MessageProcessor.executeWithRetry) always pass the saved sdkSessionId as resume
-    // on every query, but subsequent queries on an alive V2 session do NOT actually
-    // create a new CLI process — they reuse the existing one. Treating them as "resume"
-    // put them on the 30-second resume fallback path, causing real response messages
-    // to be skipped as "stale replay" for up to 30 seconds. Using messageCount alone
-    // correctly identifies them as persistent follow-ups (5-second fallback).
-    const isPersistentFollowUp = managed.messageCount >= 2;
-    // Fresh sessions (not resume, not persistent follow-up) have no prior history to replay,
-    // so streamReady starts true — all messages are real from the first one.
-    // Fresh-but-resume (first query on a session that was resumed into a new CLI process):
-    // wait for init message to confirm the new CLI is ready.
-    let streamReady = !options.resume && !isPersistentFollowUp;
-    // Result-counting replay detection (fast path): each previous query produced one result,
-    // so we skip until we've seen (messageCount - 1) results. Instant streamReady when it works.
-    const expectedReplayResults = isPersistentFollowUp ? managed.messageCount - 1 : 0;
-    let replayResultCount = 0;
-    // Gap detection fallback: if SDK doesn't replay result messages, fall back to timing heuristics.
-    // Initialized to 0 — set to Date.now() on the first replay message to avoid inflating the
-    // first gap measurement with time elapsed before the stream loop started.
-    let lastReplayMsgTime = 0;
+    // So:
+    //   - Fresh resume (first query on a CLI that just started with --resume):
+    //     CLI replays JSONL state on stdout before the new response. We wait for
+    //     system:init (or fallback timeout) to mark the real stream start.
+    //   - All other queries: streamReady=true from the start — there is no replay
+    //     to skip. Stale residue (e.g., an extra result yielded by a Stop hook
+    //     after the previous query completed) is handled below by the
+    //     stale-residue retry inside the result handler, NOT by skipping early
+    //     messages here (which previously skipped real query responses too).
+    const isFirstQuery = managed.messageCount === 1; // Already incremented before processStream
+    const isFreshResume = isFirstQuery && !!options.resume;
+    let streamReady = !isFreshResume;
+    // Stale-residue retry counter — see result handler for details.
+    let staleRetries = 0;
+    const MAX_STALE_RETRIES = 1;
 
     // Manual iteration (not for-await) so that break does NOT call iterator.return().
     // This keeps the iterator alive for the post-result drain phase.
-    // Create new iterator for this query (stream() replays conversation + new response)
-    const streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
+    // Re-assignable: stale-residue retry replaces this with a fresh stream() iterator.
+    let streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
     // Store on managed session so background drain can continue using it after processStream
     managed.streamIterator = streamIterator;
     while (true) {
@@ -638,16 +714,13 @@ export class SDKSessionManager {
       streamMsgIndex++;
 
       // Extract session_id from init.
-      // For resumed sessions (new CLI process), init = reliable streamReady signal.
-      // For persistent follow-ups, init arrives WITHIN the replay batch (same timestamp
-      // as buffered history messages), so it must NOT set streamReady — persistent
-      // follow-ups use result counting + gap detection, not the init message.
+      // init only appears at CLI startup (first query of a fresh-resume); subsequent
+      // queries on the same CLI process do NOT receive init. So setting streamReady
+      // here is correct — when we see init, the new CLI is up and replay is over.
       if (message.type === 'system' && 'subtype' in message) {
         const systemMsg = message as { subtype?: string; session_id?: string; hook_event?: string; hook_name?: string; outcome?: string; exit_code?: number; stderr?: string };
         if (systemMsg.subtype === 'init') {
-          if (!isPersistentFollowUp) {
-            streamReady = true;
-          }
+          streamReady = true;
           if (systemMsg.session_id) {
             managed.sdkSessionId = systemMsg.session_id;
           }
@@ -660,56 +733,12 @@ export class SDKSessionManager {
         }
       }
 
-      // Persistent follow-up: skip replay messages using a two-tier strategy.
-      //
-      // Fast path (result counting): each previous query produced one result message.
-      // Count replayed results — when we've seen (messageCount - 1), replay is over. Instant.
-      //
-      // Fallback (gap detection): if SDK doesn't replay result messages, detect the
-      // timing gap between rapid-fire replay burst and the real response (model thinking time).
-      if (isPersistentFollowUp && !streamReady) {
-        const now = Date.now();
-        // Initialize lastReplayMsgTime on the first replay message (not before the loop)
-        // to avoid inflating the first gap with time spent before iteration started.
-        if (lastReplayMsgTime === 0) lastReplayMsgTime = now;
-        const gapMs = now - lastReplayMsgTime;
-
-        // Fast path: count replayed results
-        if (message.type === 'result') {
-          replayResultCount++;
-          if (replayResultCount >= expectedReplayResults) {
-            logger.info(
-              { sessionId, replayResultCount, expectedReplayResults, elapsed },
-              'Stream ready via result counting (persistent follow-up)'
-            );
-            streamReady = true;
-          }
-        }
-
-        // Fallback: gap detection (only if result counting hasn't triggered yet)
-        if (!streamReady && ((elapsed >= 2000 && gapMs >= 1000) || elapsed >= 5000)) {
-          logger.info(
-            { sessionId, elapsed, gapMs, replayResultCount, expectedReplayResults, msgType: message.type },
-            'Stream ready via gap detection fallback (persistent follow-up)'
-          );
-          streamReady = true;
-        }
-
-        if (!streamReady) {
-          lastReplayMsgTime = now;
-          continue; // Still replaying — skip
-        }
-        // Both branches fall through here — skip boundary message
-        // (either the replayed result that triggered result-counting, or the gap-trigger message)
-        continue;
-      }
-
-      // Elapsed time fallback: if init never arrives, force streamReady.
-      // Resume sessions need longer timeout (CLI cold start can take 10-30s).
-      // Non-resume, non-persistent-followup sessions use a shorter timeout.
-      const fallbackMs = options.resume ? 30000 : 3000;
+      // Elapsed time fallback: if init never arrives on a fresh-resume, force streamReady.
+      // Fresh-resume needs longer timeout (CLI cold start + JSONL replay can take 10-30s).
+      // For all other queries streamReady is already true at loop entry, so this is a no-op.
+      const fallbackMs = isFreshResume ? 30000 : 3000;
       if (!streamReady && elapsed >= fallbackMs) {
-        logger.info({ sessionId, elapsed, isResume: !!options.resume }, 'Stream ready via elapsed time fallback');
+        logger.info({ sessionId, elapsed, isFreshResume }, 'Stream ready via elapsed time fallback');
         streamReady = true;
       }
 
@@ -827,41 +856,74 @@ export class SDKSessionManager {
           throw new Error(`SDK V2 session error: ${errorMsg}`);
         }
 
+        // Defense-in-depth: stale-residue retry.
+        //
+        // Pre-drain (preDrainResidualMessages) is the primary fix and should
+        // eliminate stale residue before send(). This block remains as a
+        // safety net for unexpected edge cases (e.g., a residual message that
+        // arrives at the CLI between pre-drain and send). When the first
+        // result arrives within 1s carrying 0 turns and no content, treat it
+        // as residue, fetch a fresh stream() generator, and continue reading.
+        const isStaleResidue =
+          numTurns === 0 &&
+          responseChunks.length === 0 &&
+          intermediateCount === 0 &&
+          elapsed < 1000;
+        if (isStaleResidue && staleRetries < MAX_STALE_RETRIES) {
+          staleRetries++;
+          logger.warn(
+            { sessionId, elapsed, msgIndex: streamMsgIndex - 1, sessionMessageCount: managed.messageCount, staleRetries },
+            'Stale residual result reached main loop (pre-drain missed it) — retrying with fresh stream iterator'
+          );
+          numTurns = 0;
+          durationMs = 0;
+          usage = undefined;
+          totalCostUsd = undefined;
+          streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
+          managed.streamIterator = streamIterator;
+          continue;
+        }
+
         break; // Exit main loop — drain phase below will catch trailing messages
       }
     }
 
-    // Post-result drain: keep reading the stream with a timeout to push any trailing
-    // messages (hooks, bg-tasks) to the user immediately instead of letting them
-    // accumulate in the buffer and pollute the next query as stale replay.
+    // Post-result drain: read the underlying queryIterator directly for trailing
+    // messages (Stop hook responses, additional system events) emitted by the CLI
+    // after the result. Pushing assistant text immediately gives the user the
+    // complete reply, while consuming non-text trailing messages prevents them
+    // from polluting the NEXT query's stream as stale residue.
     //
-    // Because we used manual iteration (not for-await), the iterator is still alive
-    // after break — we can continue reading from it.
-    // Promise.race with timeout prevents blocking if no more messages arrive.
+    // CRITICAL: We must NOT use streamIterator (the stream() generator iterator)
+    // here — the generator already returned when it yielded the result, so its
+    // next() returns done:true forever. The bug this fixes is that previously
+    // post-drain was a no-op, letting trailing messages accumulate as residue.
     {
       const DRAIN_TIMEOUT_MS = 3000;
+      const PER_NEXT_TIMEOUT_MS = 500;
       const drainDeadline = Date.now() + DRAIN_TIMEOUT_MS;
+      const queryIter = getCachedQueryIterator(managed.session);
 
-      while (true) {
+      while (queryIter && Date.now() < drainDeadline) {
         const remaining = drainDeadline - Date.now();
-        if (remaining <= 0) break;
+        const timeoutMs = Math.min(PER_NEXT_TIMEOUT_MS, remaining);
 
         const raceResult = await Promise.race([
-          streamIterator.next(),
+          queryIter.next(),
           new Promise<typeof DRAIN_SENTINEL>(resolve =>
-            setTimeout(() => resolve(DRAIN_SENTINEL), remaining)
+            setTimeout(() => resolve(DRAIN_SENTINEL), timeoutMs)
           ),
         ]);
 
         if (raceResult === DRAIN_SENTINEL) {
-          logger.debug({ sessionId }, 'Post-result drain timeout — no more trailing messages');
+          // No more messages within timeout — assume CLI is idle, stop draining.
+          logger.debug({ sessionId }, 'Post-result drain: idle, ending');
           break;
         }
 
         const { done, value: drainMsg } = raceResult as IteratorResult<any>;
         if (done) break;
 
-        // Push assistant text to user immediately (same path as main loop)
         const drainText = extractAssistantText(drainMsg);
         if (drainText.length > 0) {
           if (options.onIntermediateMessage) {
@@ -873,8 +935,8 @@ export class SDKSessionManager {
         }
 
         logger.debug(
-          { sessionId, msgType: drainMsg.type },
-          'Drained post-result stream message'
+          { sessionId, msgType: drainMsg.type, msgSubtype: 'subtype' in drainMsg ? (drainMsg as { subtype?: string }).subtype : undefined },
+          'Post-result drain: consumed trailing message from queryIterator'
         );
       }
     }
