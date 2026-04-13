@@ -21,6 +21,7 @@ import {
 import type { LoadedAgent } from '../types/agent.js';
 import type { ToolEvent } from '../adapters/types.js';
 import type { QueryUsage, QueryResult, ExecuteQueryOptions } from './SDKQueryManager.js';
+import type { SubAgentEvent, SubAgentLifecycle } from '../types/subAgent.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -147,41 +148,65 @@ function extractAssistantText(msg: any): string {
 }
 
 /**
- * Extract user-visible text from `system` messages emitted by the CLI for
- * sub-agent (Task tool) lifecycle events. These appear inline in the main
- * stream while the main session waits for sub-agents to finish.
+ * Normalize a CLI `system task_*` message into a `SubAgentEvent`, or return
+ * null if the message is unrelated. SubAgentMessageManager consumes events
+ * to maintain one persistent chat message per sub-agent (lifecycle: started
+ * → progress → completed/failed) instead of spamming intermediate text.
  *
- * Without this, sub-agent progress / completion messages were silently
- * discarded by extractAssistantText (which only handles `type==='assistant'`),
- * so users saw nothing while sub-agents ran and only got the main session's
- * final reply at the end. PoC verified subtypes and field names against
- * actual CLI output (scripts/poc-v2-bgtask-stream.mjs, removed after merge).
- *
- * Emits empty string for unrecognized system subtypes, so callers can use the
- * same `if (text.length > 0) push(text)` pattern as extractAssistantText.
+ * Field names verified via PoC against real CLI output:
+ *   task_started:      { task_id, description, task_type, prompt }
+ *   task_progress:     { task_id, description, last_tool_name, usage }
+ *   task_notification: { task_id, status, summary, output_file, usage }
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractSystemTaskText(msg: any): string {
-  if (msg?.type !== 'system') return '';
-  const subtype = (msg as { subtype?: string }).subtype;
-  if (subtype === 'task_started') {
-    const desc = (msg as { description?: string }).description ?? '未命名任務';
-    return `[子代理啟動] ${desc}`;
+function extractSubAgentEvent(msg: any): SubAgentEvent | null {
+  if (msg?.type !== 'system') return null;
+  const m = msg as {
+    subtype?: string;
+    task_id?: string;
+    description?: string;
+    last_tool_name?: string;
+    status?: string;
+    summary?: string;
+    output_file?: string;
+    usage?: { total_tokens?: number; tool_uses?: number; duration_ms?: number };
+  };
+  if (!m.task_id) return null;
+
+  if (m.subtype === 'task_started') {
+    return {
+      taskId: m.task_id,
+      lifecycle: 'started',
+      description: m.description ?? '未命名子代理',
+    };
   }
-  if (subtype === 'task_progress') {
-    const desc = (msg as { description?: string }).description ?? '';
-    const tool = (msg as { last_tool_name?: string }).last_tool_name;
-    const tail = tool ? ` · ${tool}` : '';
-    if (!desc && !tail) return '';
-    return `[子代理進度] ${desc}${tail}`;
+  if (m.subtype === 'task_progress') {
+    const event: SubAgentEvent = {
+      taskId: m.task_id,
+      lifecycle: 'progress',
+      description: m.description ?? '',
+    };
+    if (m.last_tool_name) event.toolName = m.last_tool_name;
+    if (m.usage?.total_tokens !== undefined) event.totalTokens = m.usage.total_tokens;
+    if (m.usage?.tool_uses !== undefined) event.toolUses = m.usage.tool_uses;
+    if (m.usage?.duration_ms !== undefined) event.durationMs = m.usage.duration_ms;
+    return event;
   }
-  if (subtype === 'task_notification') {
-    const status = (msg as { status?: string }).status ?? '結束';
-    const summary = (msg as { summary?: string }).summary ?? '';
-    const label = status === 'completed' ? '完成' : status;
-    return summary ? `[子代理${label}] ${summary}` : `[子代理${label}]`;
+  if (m.subtype === 'task_notification') {
+    const lifecycle: SubAgentLifecycle = m.status === 'completed' ? 'completed' : 'failed';
+    const event: SubAgentEvent = {
+      taskId: m.task_id,
+      lifecycle,
+      description: m.summary ?? m.description ?? '',
+    };
+    if (m.summary) event.summary = m.summary;
+    if (m.output_file) event.outputFile = m.output_file;
+    if (m.usage?.total_tokens !== undefined) event.totalTokens = m.usage.total_tokens;
+    if (m.usage?.tool_uses !== undefined) event.toolUses = m.usage.tool_uses;
+    if (m.usage?.duration_ms !== undefined) event.durationMs = m.usage.duration_ms;
+    return event;
   }
-  return '';
+  return null;
 }
 
 export class SDKSessionManager {
@@ -694,16 +719,18 @@ export class SDKSessionManager {
         }
       }
 
-      // Sub-agent (Task tool) lifecycle messages — push directly so the user
-      // sees sub-agent progress in real time. PoC verified the CLI emits these
-      // inline in the main stream while waiting for sub-agents to complete.
-      const taskText = extractSystemTaskText(message);
-      if (taskText.length > 0) {
-        if (options.onIntermediateMessage) {
-          await options.onIntermediateMessage(taskText);
-          intermediateCount++;
-        } else {
-          responseChunks.push(taskText);
+      // Sub-agent (Task tool) lifecycle: emit normalized event so the manager
+      // can maintain one persistent message per sub-agent (Edit pattern) instead
+      // of pushing each progress as a new intermediate message (spam).
+      const subAgentEvent = extractSubAgentEvent(message);
+      if (subAgentEvent && options.onSubAgentEvent) {
+        try {
+          await options.onSubAgentEvent(subAgentEvent);
+        } catch (err) {
+          logger.warn(
+            { sessionId, taskId: subAgentEvent.taskId, lifecycle: subAgentEvent.lifecycle, err: err instanceof Error ? err.message : String(err) },
+            'onSubAgentEvent callback threw, continuing stream'
+          );
         }
       }
 
@@ -881,13 +908,15 @@ export class SDKSessionManager {
           }
         }
 
-        const drainTaskText = extractSystemTaskText(drainMsg);
-        if (drainTaskText.length > 0) {
-          if (options.onIntermediateMessage) {
-            await options.onIntermediateMessage(drainTaskText);
-            intermediateCount++;
-          } else {
-            responseChunks.push(drainTaskText);
+        const drainSubAgentEvent = extractSubAgentEvent(drainMsg);
+        if (drainSubAgentEvent && options.onSubAgentEvent) {
+          try {
+            await options.onSubAgentEvent(drainSubAgentEvent);
+          } catch (err) {
+            logger.warn(
+              { sessionId, taskId: drainSubAgentEvent.taskId, lifecycle: drainSubAgentEvent.lifecycle, err: err instanceof Error ? err.message : String(err) },
+              'onSubAgentEvent (drain) callback threw, continuing'
+            );
           }
         }
 

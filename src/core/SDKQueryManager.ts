@@ -1,6 +1,7 @@
 import { query, type Query, type Options, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import type { LoadedAgent } from '../types/agent.js';
 import type { ToolEvent } from '../adapters/types.js';
+import type { SubAgentEvent } from '../types/subAgent.js';
 import { logger } from '../utils/logger.js';
 import { sanitizeBeforeResume } from './JsonlSanitizer.js';
 
@@ -45,6 +46,9 @@ export interface QueryResult {
 
   /** If true, the session resume failed and a fresh session was created — conversation history is lost. */
   resumeLost?: boolean;
+
+  /** If true, the persistent session returned 0 turns and was proactively destroyed. Caller should notify user. */
+  sessionDegraded?: boolean;
 }
 
 /**
@@ -93,6 +97,14 @@ export interface ExecuteQueryOptions {
   onToolEvent?: (event: ToolEvent) => void | Promise<void>;
 
   /**
+   * Called when a sub-agent (Task tool) lifecycle event arrives in the stream.
+   * Used by SubAgentMessageManager to maintain one editable chat message per
+   * sub-agent (started → progress → completed/failed) instead of pushing
+   * each progress as separate intermediate text. See src/types/subAgent.ts.
+   */
+  onSubAgentEvent?: (event: SubAgentEvent) => void | Promise<void>;
+
+  /**
    * Custom MCP servers to inject into the query.
    * Used for cross-agent notification and other custom tools.
    * Note: When mcpServers is provided, prompt will be wrapped in AsyncIterable format.
@@ -104,6 +116,12 @@ export interface ExecuteQueryOptions {
    * Format: mcp__{server_name}__{tool_name}
    */
   allowedTools?: string[];
+
+  /**
+   * Additional directories to scan for shared skills (.claude/skills/).
+   * Maps to CLI --add-dir flag. Used for cross-agent shared skill directories.
+   */
+  additionalDirectories?: string[];
 }
 
 /**
@@ -330,6 +348,13 @@ export class SDKQueryManager {
                 await options.onToolEvent({
                   type: 'tool_use',
                   toolName: block.name,
+                  timestamp: Date.now(),
+                });
+              } else if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.length > 0) {
+                await options.onToolEvent({
+                  type: 'thinking',
+                  toolName: 'thinking',
+                  summary: block.thinking,
                   timestamp: Date.now(),
                 });
               }

@@ -26,6 +26,7 @@ import { buildPromptContext } from './constants.js';
 import { logger } from '../utils/logger.js';
 import { ProcessingError } from '../types/errors.js';
 
+import path from 'path';
 import {
   isNoiseResponse,
   sendFinalResponse,
@@ -45,6 +46,7 @@ import {
   isStatusCapable,
   type ToolEventEntry,
 } from './StatusMessageManager.js';
+import { SubAgentMessageManager } from './SubAgentMessageManager.js';
 import type { ActivityService } from './ActivityService.js';
 import type { AgentCallService } from '../services/AgentCallService.js';
 import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
@@ -605,6 +607,13 @@ export class MessageProcessor {
         })
       : null;
 
+    // Sub-agent (Task tool) lifecycle: one persistent message per sub-agent,
+    // edited as it progresses. Same chat-status capability as statusManager;
+    // group chats opt out of status messages, so opt out here too.
+    const subAgentManager = isStatusCapable(adapter) && !options?.isGroupChat
+      ? new SubAgentMessageManager(adapter, chatId)
+      : null;
+
     // Set up interaction handler for permission prompts and question prompts
     const interactionHandler = new InteractionHandler(adapter, chatId, 120_000, agentId);
     const canUseTool = interactionHandler.buildCanUseTool();
@@ -612,6 +621,8 @@ export class MessageProcessor {
     try {
       // Track intermediate messages sent via streaming callback
       const intermediateMessages: string[] = [];
+      // Track messages that failed to deliver (for post-query resend)
+      const failedMessages: string[] = [];
       // Track the last sent message ID (for bot:replied event in group chats)
       let lastSentMessageId: string | undefined;
       // v2.0: Only emit one tool_use reaction per query to avoid noise
@@ -626,7 +637,7 @@ export class MessageProcessor {
 
       // Build MCP tool configuration for this query
       const { mcpServers, allowedTools } = this.buildMcpConfig(
-        agentId, chatId, userId, platform, adapter, options?.parentConversationId
+        agentId, chatId, userId, platform, adapter, options?.parentConversationId, options?.taskId
       );
 
       // Helper: execute SDK query with retry for rate limit / transient errors
@@ -650,6 +661,7 @@ export class MessageProcessor {
                   {
                     cwd: agent.path,
                     systemPrompt,
+                    additionalDirectories: [path.resolve(agent.path, '..', '_shared')],
                     ...(agent.config.settings?.maxTurns !== undefined
                       ? { maxTurns: agent.config.settings.maxTurns }
                       : {}),
@@ -673,6 +685,8 @@ export class MessageProcessor {
                       const sendResult = await adapter.sendFormattedMessage(chatId, textToSend, sendOpts);
                       if (sendResult.success && sendResult.messageId) {
                         lastSentMessageId = sendResult.messageId;
+                      } else if (!sendResult.success) {
+                        failedMessages.push(text);
                       }
                       intermediateMessages.push(text);
                       this.activityService?.emitReply(agentId, text);
@@ -695,12 +709,18 @@ export class MessageProcessor {
                       } else if (event.type === 'tool_progress') {
                         statusLine = `⏳ ${event.toolName}`;
                         if (event.elapsedSeconds !== undefined) statusLine += ` (${Math.round(event.elapsedSeconds)}s)`;
+                      } else if (event.type === 'thinking') {
+                        statusLine = '💭 思考中';
+                        if (event.summary) detail = event.summary.replace(/\n/g, ' ').substring(0, 120);
                       } else {
                         statusLine = `• ${event.toolName}`;
                       }
                       const toolEvent: ToolEventEntry = { toolName: event.toolName, status: statusLine };
                       if (detail !== undefined) toolEvent.detail = detail;
                       await statusManager.addToolEvent(toolEvent);
+                    },
+                    onSubAgentEvent: async (event) => {
+                      await subAgentManager?.handle(event);
                     },
                     additionalOptions: { canUseTool },
                   }
@@ -714,7 +734,15 @@ export class MessageProcessor {
                     : String(v2Error);
                 // If query was cancelled by user (/stop), don't fallback — just stop
                 if (errMsg.includes('cancelled by user') || errMsg.includes('aborted by user')) {
-                  logger.info({ sessionId, errMsg }, 'V2 query cancelled by user — not falling back to V1');
+                  // Preserve sdkSessionId for resume on next query
+                  const savedSdkSessionId = (v2Error as { _sdkSessionId?: string })._sdkSessionId;
+                  if (savedSdkSessionId) {
+                    this.sessionManager.setSdkSessionId(platform, agentId, userId, savedSdkSessionId);
+                    logger.info({ sessionId, sdkSessionId: savedSdkSessionId },
+                      'V2 query cancelled — sdkSessionId preserved for resume');
+                  } else {
+                    logger.info({ sessionId, errMsg }, 'V2 query cancelled by user — no sdkSessionId to preserve');
+                  }
                   throw Object.assign(new Error('Query cancelled'), { _cancelled: true });
                 }
                 // V2 failed for other reasons — destroy session and fall through to V1
@@ -734,6 +762,7 @@ export class MessageProcessor {
               {
                 cwd: agent.path,
                 systemPrompt,
+                additionalDirectories: [path.resolve(agent.path, '..', '_shared')],
                 // Only set maxTurns if explicitly configured in agent settings
                 // Otherwise let SDK use its default (unlimited turns)
                 ...(agent.config.settings?.maxTurns !== undefined
@@ -762,12 +791,6 @@ export class MessageProcessor {
                     sendOpts.replyToMessageId = options.replyToMessageId;
                   }
 
-                  // Try MarkdownV2 first, fallback to Markdown on failure
-                  if (isNoiseResponse(text)) {
-                    intermediateMessages.push(text);
-                    return;
-                  }
-
                   // Prepend agent call tag to the first visible message
                   let textToSend = text;
                   if (options?.agentCallFrom && !agentCallPrefixApplied) {
@@ -782,6 +805,7 @@ export class MessageProcessor {
                       { error: sendResult.error, chatId },
                       'Failed to send intermediate message'
                     );
+                    failedMessages.push(text);
                   } else if (sendResult.messageId) {
                     // Track the last sent message ID for bot:replied event
                     lastSentMessageId = sendResult.messageId;
@@ -825,6 +849,11 @@ export class MessageProcessor {
                     if (event.elapsedSeconds !== undefined) {
                       statusLine += ` (${Math.round(event.elapsedSeconds)}s)`;
                     }
+                  } else if (event.type === 'thinking') {
+                    statusLine = '💭 思考中';
+                    if (event.summary) {
+                      detail = event.summary.replace(/\n/g, ' ').substring(0, 120);
+                    }
                   } else {
                     statusLine = `• ${event.toolName}`;
                   }
@@ -837,6 +866,9 @@ export class MessageProcessor {
                     toolEvent.detail = detail;
                   }
                   await statusManager.addToolEvent(toolEvent);
+                },
+                onSubAgentEvent: async (event) => {
+                  await subAgentManager?.handle(event);
                 },
                 additionalOptions: {
                   canUseTool,
@@ -918,7 +950,9 @@ export class MessageProcessor {
           (typeof error === 'object' && error !== null && 'value' in error &&
             String((error as { value: unknown }).value).includes('aborted by user'));
         if (isCancelled) {
-          logger.info({ sessionId }, 'Query cancelled — returning empty response');
+          // sdkSessionId already preserved in the V2 cancel handler above.
+          // For V1 cancels, sdkSessionId was already set from a prior successful query.
+          logger.info({ sessionId, sdkSessionId: internalSession.sdkSessionId }, 'Query cancelled — returning empty response (sdkSessionId preserved)');
           return '';
         }
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -998,6 +1032,44 @@ export class MessageProcessor {
       );
       if (finalMessageId !== undefined) {
         lastSentMessageId = finalMessageId;
+      } else if (finalResponseText.length > 0 && !isNoiseResponse(finalResponseText)) {
+        failedMessages.push(result.response);
+      }
+
+      // Post-query delivery audit: resend any messages that failed to deliver
+      if (failedMessages.length > 0) {
+        logger.info(
+          { chatId, agentId, failedCount: failedMessages.length },
+          'Delivery audit: resending failed messages'
+        );
+        for (const msg of failedMessages) {
+          try {
+            const retryResult = await adapter.sendFormattedMessage(chatId, msg);
+            if (retryResult.success) {
+              if (retryResult.messageId) lastSentMessageId = retryResult.messageId;
+              logger.debug({ chatId, agentId }, 'Delivery audit: message resent successfully');
+            } else {
+              logger.warn({ chatId, agentId, error: retryResult.error }, 'Delivery audit: resend also failed');
+            }
+          } catch (resendError) {
+            logger.warn({ chatId, agentId, error: resendError }, 'Delivery audit: resend threw error');
+          }
+        }
+      }
+
+      // Silent failure detection: query completed but user received nothing.
+      // This happens when the SDK returns 0 turns / empty response (e.g., after context
+      // compaction failure or session degradation). Without this fallback, the user sees
+      // "typing..." and then nothing — no error, no message, no indication of what happened.
+      if (lastSentMessageId === undefined && intermediateMessages.length === 0) {
+        logger.warn(
+          { sessionId, chatId, agentId, numTurns: result.numTurns, responseLength: result.response.length, sessionDegraded: result.sessionDegraded },
+          'Silent failure detected: query completed but no messages delivered to user'
+        );
+        const fallbackMsg = result.sessionDegraded
+          ? '⚠️ 對話 session 異常，已自動重建。請重新發送訊息。'
+          : '⚠️ 模型回應為空，請重新發送訊息。若持續發生，請稍後再試。';
+        await adapter.sendFormattedMessage(chatId, fallbackMsg);
       }
 
       // Activity event: chat responded
@@ -1022,6 +1094,10 @@ export class MessageProcessor {
       // Broadcast to other bots and finalize
       this.emitBotRepliedEvent(fullResponse, chatId, agentId, platform, lastSentMessageId, options);
       await statusManager?.finalizeAll();
+      // Mark any sub-agent records still in started/progress as failed —
+      // happens when main session result fired before the CLI delivered
+      // task_notification (SDK fundamental, see issue #577).
+      await subAgentManager?.finalizeAll();
 
       // Return fullResponse (intermediate + final) instead of just result.response,
       // because streaming sends content via onIntermediateMessage leaving result.response empty.
@@ -1034,6 +1110,9 @@ export class MessageProcessor {
       if (typingInterval !== null) {
         clearInterval(typingInterval);
       }
+
+      // Drop sub-agent in-memory state (records map)
+      subAgentManager?.dispose();
     }
   }
 
@@ -1093,7 +1172,8 @@ export class MessageProcessor {
     userId: string,
     platform: string,
     adapter: BaseAdapter,
-    parentConversationId?: string
+    parentConversationId?: string,
+    taskId?: string
   ): import('../McpToolSetup.js').McpSetupResult {
     const mcpCtx: import('../McpToolSetup.js').McpSetupContext = {
       agentId, chatId, userId, platform,
@@ -1101,6 +1181,9 @@ export class MessageProcessor {
     if (parentConversationId !== undefined) {
       mcpCtx.subConversationId = chatId;
       mcpCtx.parentConversationId = parentConversationId;
+    }
+    if (taskId !== undefined) {
+      mcpCtx.taskId = taskId;
     }
     return buildMcpSetup(
       this.agentCallService,
