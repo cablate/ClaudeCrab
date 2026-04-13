@@ -154,7 +154,7 @@ export type ExitPlanModeResolver = (requestId: string, decision: 'approve' | 're
 // ============================================================
 
 export interface ToolEvent {
-  type: 'tool_use' | 'tool_result' | 'tool_progress';
+  type: 'tool_use' | 'tool_result' | 'tool_progress' | 'thinking';
   toolName: string;
   /** Brief summary or status of the tool operation */
   summary?: string;

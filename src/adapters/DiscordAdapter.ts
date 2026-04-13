@@ -761,7 +761,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
    * BaseAdapter createThread implementation for Discord.
    * Creates a thread in the specified text channel.
    */
-  override async createThread(
+  async createThread(
     chatId: string,
     threadName: string,
     initialContent?: string
@@ -772,7 +772,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   /**
    * Archive a thread (for completed/cancelled tasks).
    */
-  override async archiveThread(
+  async archiveThread(
     threadId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {

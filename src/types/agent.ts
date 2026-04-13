@@ -87,6 +87,8 @@ export const AgentSettingsSchema = z.object({
   social: SocialSettingsSchema.optional(),
   /** Idle mutter (monologue) settings */
   idleMutter: IdleMutterSettingsSchema.optional(),
+  /** Extended thinking config (passed through to SDK V2 session). */
+  thinking: z.object({ type: z.string() }).optional(),
 });
 
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
