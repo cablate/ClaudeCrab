@@ -583,9 +583,19 @@ export class SDKSessionManager {
     //
     // NOTE: messageCount is already incremented before processStream, so >= 2 means
     // there was at least one prior query with a result to replay.
-    const isPersistentFollowUp = !options.resume && managed.messageCount >= 2;
+    //
+    // CRITICAL: `!options.resume` is intentionally REMOVED from this check. Callers
+    // (MessageProcessor.executeWithRetry) always pass the saved sdkSessionId as resume
+    // on every query, but subsequent queries on an alive V2 session do NOT actually
+    // create a new CLI process — they reuse the existing one. Treating them as "resume"
+    // put them on the 30-second resume fallback path, causing real response messages
+    // to be skipped as "stale replay" for up to 30 seconds. Using messageCount alone
+    // correctly identifies them as persistent follow-ups (5-second fallback).
+    const isPersistentFollowUp = managed.messageCount >= 2;
     // Fresh sessions (not resume, not persistent follow-up) have no prior history to replay,
     // so streamReady starts true — all messages are real from the first one.
+    // Fresh-but-resume (first query on a session that was resumed into a new CLI process):
+    // wait for init message to confirm the new CLI is ready.
     let streamReady = !options.resume && !isPersistentFollowUp;
     // Result-counting replay detection (fast path): each previous query produced one result,
     // so we skip until we've seen (messageCount - 1) results. Instant streamReady when it works.
