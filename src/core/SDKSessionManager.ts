@@ -106,14 +106,6 @@ interface ManagedSession {
   keepaliveTimer?: ReturnType<typeof setInterval> | undefined;
   /** Rolling cache efficiency (0-100) for monitoring */
   cacheEfficiencyAvg?: number | undefined;
-  /** Stream iterator preserved across queries for background drain */
-  streamIterator?: AsyncIterator<any>;
-  /** Whether background drain is actively consuming the stream */
-  bgDrainActive?: boolean;
-  /** Resolved when bgDrainActive transitions to false — used by stopBackgroundDrain */
-  bgDrainDone?: () => void;
-  /** Callback to push messages between queries (stored from last processStream) */
-  onIntermediateMessage?: (text: string) => void | Promise<void>;
   /** Our own Stop hook guard — SDK's stop_hook_active resets across Yh() calls, this persists per-session */
   stopHookFired?: boolean;
 }
@@ -154,6 +146,44 @@ function extractAssistantText(msg: any): string {
   return parts.join('');
 }
 
+/**
+ * Extract user-visible text from `system` messages emitted by the CLI for
+ * sub-agent (Task tool) lifecycle events. These appear inline in the main
+ * stream while the main session waits for sub-agents to finish.
+ *
+ * Without this, sub-agent progress / completion messages were silently
+ * discarded by extractAssistantText (which only handles `type==='assistant'`),
+ * so users saw nothing while sub-agents ran and only got the main session's
+ * final reply at the end. PoC verified subtypes and field names against
+ * actual CLI output (scripts/poc-v2-bgtask-stream.mjs, removed after merge).
+ *
+ * Emits empty string for unrecognized system subtypes, so callers can use the
+ * same `if (text.length > 0) push(text)` pattern as extractAssistantText.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractSystemTaskText(msg: any): string {
+  if (msg?.type !== 'system') return '';
+  const subtype = (msg as { subtype?: string }).subtype;
+  if (subtype === 'task_started') {
+    const desc = (msg as { description?: string }).description ?? '未命名任務';
+    return `[子代理啟動] ${desc}`;
+  }
+  if (subtype === 'task_progress') {
+    const desc = (msg as { description?: string }).description ?? '';
+    const tool = (msg as { last_tool_name?: string }).last_tool_name;
+    const tail = tool ? ` · ${tool}` : '';
+    if (!desc && !tail) return '';
+    return `[子代理進度] ${desc}${tail}`;
+  }
+  if (subtype === 'task_notification') {
+    const status = (msg as { status?: string }).status ?? '結束';
+    const summary = (msg as { summary?: string }).summary ?? '';
+    const label = status === 'completed' ? '完成' : status;
+    return summary ? `[子代理${label}] ${summary}` : `[子代理${label}]`;
+  }
+  return '';
+}
+
 export class SDKSessionManager {
   private sessions = new Map<string, ManagedSession>();
   private disposed = false;
@@ -192,14 +222,6 @@ export class SDKSessionManager {
       },
       'Sending message via persistent V2 session'
     );
-
-    // Stop background drain before starting new query
-    await this.stopBackgroundDrain(managed);
-
-    // Store callback for background drain to use between queries
-    if (options.onIntermediateMessage) {
-      managed.onIntermediateMessage = options.onIntermediateMessage;
-    }
 
     managed.isQuerying = true;
     managed.cancelled = false;
@@ -249,13 +271,9 @@ export class SDKSessionManager {
 
         const freshResult = await this.processStream(sessionId, managed, freshOptions, Date.now());
         freshResult.resumeLost = true;
-        // Start background drain — keep pushing any stray messages between queries
-        this.startBackgroundDrain(sessionId, managed);
         return freshResult;
       }
 
-      // Start background drain — keep pushing any stray messages between queries
-      this.startBackgroundDrain(sessionId, managed);
       return result;
     } catch (error) {
       // SDK abort may throw non-Error values like { value: "..." }
@@ -502,71 +520,6 @@ export class SDKSessionManager {
   }
 
   /**
-   * Start background drain: keep reading the stream between queries.
-   * Any assistant messages that arrive (hooks, bg-tasks) are pushed to the user immediately.
-   * Stops when the next query starts or the session is destroyed.
-   */
-  private startBackgroundDrain(sessionId: string, managed: ManagedSession): void {
-    if (!managed.streamIterator || !managed.onIntermediateMessage) return;
-    if (managed.bgDrainActive) return;
-
-    managed.bgDrainActive = true;
-    const iterator = managed.streamIterator;
-    const onMsg = managed.onIntermediateMessage;
-
-    // Register drain-done signal so stopBackgroundDrain can await instead of blind-sleeping
-    const drainDonePromise = new Promise<void>(resolve => {
-      managed.bgDrainDone = resolve;
-    });
-    void drainDonePromise; // suppress unused-variable lint
-
-    (async () => {
-      // Reuse a single pending .next() call to avoid accumulating concurrent calls
-      // on the async iterator (which can trigger repeated CLI hook invocations).
-      let pendingNext: Promise<IteratorResult<any>> | null = null;
-
-      while (managed.bgDrainActive && !managed.isQuerying) {
-        try {
-          // Only create a new .next() if none is pending
-          if (!pendingNext) {
-            pendingNext = iterator.next();
-          }
-
-          const raceResult = await Promise.race([
-            pendingNext,
-            new Promise<typeof DRAIN_SENTINEL>(resolve =>
-              setTimeout(() => resolve(DRAIN_SENTINEL), 5000)
-            ),
-          ]);
-
-          if (raceResult === DRAIN_SENTINEL) continue; // Timeout — same pendingNext reused next iteration
-          pendingNext = null; // .next() resolved — clear for next iteration
-          const { done, value: msg } = raceResult as IteratorResult<any>;
-          if (done) break;
-
-          // Push assistant text to user immediately
-          const text = extractAssistantText(msg);
-          if (text.length > 0) {
-            try {
-              await onMsg(text);
-            } catch (err) {
-              logger.warn({ sessionId, error: err }, 'Background drain: failed to push message');
-            }
-          }
-
-          logger.debug({ sessionId, msgType: msg.type }, 'Background drain: consumed message');
-        } catch (err) {
-          logger.warn({ sessionId, error: err }, 'Background drain: iteration error');
-          break;
-        }
-      }
-      managed.bgDrainActive = false;
-      managed.bgDrainDone?.();
-      logger.debug({ sessionId }, 'Background drain stopped');
-    })();
-  }
-
-  /**
    * Pre-drain residual messages buffered in the cached queryIterator before
    * starting a new query.
    *
@@ -626,21 +579,6 @@ export class SDKSessionManager {
   }
 
   /**
-   * Stop background drain before starting a new query.
-   */
-  private async stopBackgroundDrain(managed: ManagedSession): Promise<void> {
-    if (!managed.bgDrainActive) return;
-    // Signal the loop to stop, then await its completion via the stored resolve callback.
-    // Fall back to a 300ms timeout if bgDrainDone was never set (shouldn't happen).
-    const done = new Promise<void>(resolve => {
-      const prev = managed.bgDrainDone;
-      managed.bgDrainDone = () => { prev?.(); resolve(); };
-    });
-    managed.bgDrainActive = false;
-    await Promise.race([done, new Promise<void>(resolve => setTimeout(resolve, 300))]);
-  }
-
-  /**
    * Process stream messages from a V2 session (same logic as SDKQueryManager)
    */
   private async processStream(
@@ -683,11 +621,8 @@ export class SDKSessionManager {
     const MAX_STALE_RETRIES = 1;
 
     // Manual iteration (not for-await) so that break does NOT call iterator.return().
-    // This keeps the iterator alive for the post-result drain phase.
     // Re-assignable: stale-residue retry replaces this with a fresh stream() iterator.
     let streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
-    // Store on managed session so background drain can continue using it after processStream
-    managed.streamIterator = streamIterator;
     while (true) {
       const __iterResult = await streamIterator.next();
       if (__iterResult.done) break;
@@ -756,6 +691,19 @@ export class SDKSessionManager {
           intermediateCount++;
         } else {
           responseChunks.push(messageText);
+        }
+      }
+
+      // Sub-agent (Task tool) lifecycle messages — push directly so the user
+      // sees sub-agent progress in real time. PoC verified the CLI emits these
+      // inline in the main stream while waiting for sub-agents to complete.
+      const taskText = extractSystemTaskText(message);
+      if (taskText.length > 0) {
+        if (options.onIntermediateMessage) {
+          await options.onIntermediateMessage(taskText);
+          intermediateCount++;
+        } else {
+          responseChunks.push(taskText);
         }
       }
 
@@ -880,7 +828,6 @@ export class SDKSessionManager {
           usage = undefined;
           totalCostUsd = undefined;
           streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
-          managed.streamIterator = streamIterator;
           continue;
         }
 
@@ -931,6 +878,16 @@ export class SDKSessionManager {
             intermediateCount++;
           } else {
             responseChunks.push(drainText);
+          }
+        }
+
+        const drainTaskText = extractSystemTaskText(drainMsg);
+        if (drainTaskText.length > 0) {
+          if (options.onIntermediateMessage) {
+            await options.onIntermediateMessage(drainTaskText);
+            intermediateCount++;
+          } else {
+            responseChunks.push(drainTaskText);
           }
         }
 
