@@ -19,6 +19,9 @@ export interface AppConfig {
     cleanupIntervalMs: number;
     maxSessions: number;
     dbRetentionMs: number;
+    /** Destroy the SDK CLI process after each query to free ~150MB RAM.
+     *  Resume data stays on disk so the next query can restore context via JSONL. */
+    ephemeral: boolean;
   };
   schedule: {
     enabled: boolean;
@@ -144,6 +147,7 @@ export function loadAppConfig(): AppConfig {
       cleanupIntervalMs: parseIntegerEnv('CLEANUP_INTERVAL_MS', 60_000),
       maxSessions: parseIntegerEnv('MAX_SESSIONS', 1000),
       dbRetentionMs: parseIntegerEnv('DB_RETENTION_MS', 2_592_000_000), // 30 days
+      ephemeral: process.env.SESSION_EPHEMERAL === 'true',
     },
     schedule: {
       enabled: process.env.SCHEDULE_ENABLED !== 'false', // Default enabled

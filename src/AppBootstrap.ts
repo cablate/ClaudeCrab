@@ -435,6 +435,7 @@ export class AppBootstrap {
       ...(executionRecordRepository !== undefined ? { executionRecordRepository } : {}),
       ...(rateLimitRepository !== undefined ? { rateLimitRepository } : {}),
       cacheKeepaliveConfig: this.config.cacheKeepalive,
+      ephemeral: this.config.session.ephemeral,
     });
   }
 

@@ -130,6 +130,13 @@ export interface MessageProcessorOptions {
   /** Cache keepalive runtime configuration loaded once from AppConfig. */
   cacheKeepaliveConfig?: CacheKeepaliveConfig;
 
+  /**
+   * When true, the SDK CLI process is destroyed after each query (~150MB RAM freed).
+   * Resume data stays on disk so the next query restores context via JSONL.
+   * Intended for resource-constrained or Q&A-bot deployments.
+   */
+  ephemeral?: boolean;
+
 }
 
 export type { ProcessingResult };
@@ -180,6 +187,7 @@ export class MessageProcessor {
       ...(options.rateLimitRepository !== undefined ? { rateLimitRepository: options.rateLimitRepository } : {}),
       ...(options.queryMetricsRepository !== undefined ? { queryMetricsRepository: options.queryMetricsRepository } : {}),
       ...(options.cacheKeepaliveConfig !== undefined ? { keepaliveConfig: options.cacheKeepaliveConfig } : {}),
+      ephemeral: options.ephemeral ?? false,
     });
     this.conversationRepository = options.conversationRepository;
     this.getSystemPrompt = options.getSystemPrompt;

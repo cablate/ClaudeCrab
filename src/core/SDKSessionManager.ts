@@ -80,16 +80,23 @@ export class SDKSessionManager {
   private rateLimitRepository: RateLimitRepository | undefined;
   private queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly keepaliveConfig: CacheKeepaliveConfig;
+  /** When true, the SDK CLI process is torn down after each successful query. */
+  private ephemeral = false;
 
   constructor(options?: {
     rateLimitRepository?: RateLimitRepository;
     queryMetricsRepository?: IQueryMetricsRepository;
     keepaliveConfig?: CacheKeepaliveConfig;
+    /** Destroy the SDK CLI process after each query to free ~150MB RAM.
+     *  Resume data stays on disk; next query restores context via JSONL. */
+    ephemeral?: boolean;
   }) {
     this.rateLimitRepository = options?.rateLimitRepository;
     this.queryMetricsRepository = options?.queryMetricsRepository;
     this.keepaliveConfig = options?.keepaliveConfig ?? DEFAULT_CACHE_KEEPALIVE_CONFIG;
+    this.ephemeral = options?.ephemeral ?? false;
   }
+
   /**
    * Cooldown between identical keepalive-miss alerts.
    */
@@ -280,6 +287,12 @@ export class SDKSessionManager {
         }).catch(() => {});
       }
 
+      // Ephemeral mode: destroy the SDK CLI process after a successful query.
+      // The JSONL transcript stays on disk so the next query can resume context.
+      if (this.ephemeral) {
+        this.destroySession(sessionId);
+      }
+
       return result;
     } catch (error) {
       const errDetail = error instanceof Error
@@ -370,16 +383,18 @@ export class SDKSessionManager {
       });
     }
 
-    // Start cache keepalive timer
-    startKeepalive(
-      sessionId,
-      this.sessions,
-      () => this.disposed,
-      this.keepaliveMissLastAlertAt,
-      () => this.activityEventService,
-      this.queryMetricsRepository,
-      this.keepaliveConfig,
-    );
+    // Start cache keepalive timer (no-op in ephemeral mode — session dies after one query)
+    if (!this.ephemeral) {
+      startKeepalive(
+        sessionId,
+        this.sessions,
+        () => this.disposed,
+        this.keepaliveMissLastAlertAt,
+        () => this.activityEventService,
+        this.queryMetricsRepository,
+        this.keepaliveConfig,
+      );
+    }
 
     logger.info(
       {
@@ -387,8 +402,11 @@ export class SDKSessionManager {
         keepaliveIntervalMs: this.keepaliveConfig.intervalMs,
         keepaliveSkipRecentMs: this.keepaliveConfig.skipRecentMs,
         keepaliveDetectedTTLRatio: this.keepaliveConfig.detectedTTLRatio,
+        ephemeral: this.ephemeral,
       },
-      'V2 persistent session registered (with cache keepalive)'
+      this.ephemeral
+        ? 'V2 ephemeral session created (will be destroyed after query)'
+        : 'V2 persistent session registered (with cache keepalive)'
     );
 
     return managed;
