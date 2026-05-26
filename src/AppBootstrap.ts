@@ -496,7 +496,6 @@ export class AppBootstrap {
         guildId: this.config.discord.guildId,
         ownerUserId: this.config.discord.ownerUserId,
         channels: this.config.discord.channels,
-        systemLogEnabled: this.config.discord.systemLogEnabled,
         dashboardUpdateMinutes: this.config.discord.dashboardUpdateMinutes,
       },
       persistence: persistence !== null ? {

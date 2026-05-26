@@ -60,8 +60,6 @@ export interface AppConfig {
     dashboardUpdateMinutes: number;
     /** Discord owner user ID for DM notifications */
     ownerUserId?: string;
-    /** When false, suppresses real-time usage/operation push notifications to Discord system-log channel */
-    systemLogEnabled: boolean;
     /** When false, hides in-chat tool status messages ("✓ 已完成 N 個操作") and usage summary card (cache/tokens/cost embed) after each query */
     inChatUsageSummary: boolean;
   };
@@ -183,7 +181,6 @@ export function loadAppConfig(): AppConfig {
         systemLog: process.env.DISCORD_CHANNEL_SYSTEM_LOG ?? '',
       },
       dashboardUpdateMinutes: parseIntegerEnv('DISCORD_DASHBOARD_UPDATE_MINUTES', 15),
-      systemLogEnabled: process.env.DISCORD_SYSTEM_LOG_ENABLED !== 'false',
       inChatUsageSummary: process.env.IN_CHAT_USAGE_SUMMARY_ENABLED !== 'false',
       ...(process.env.DISCORD_OWNER_USER_ID !== undefined ? { ownerUserId: process.env.DISCORD_OWNER_USER_ID } : {}),
     },

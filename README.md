@@ -120,7 +120,6 @@ npm run build && npm start
 | `DISCORD_CHANNEL_ALERTS` | — | 錯誤/警告通知頻道 ID |
 | `DISCORD_CHANNEL_TASK_BOARD` | — | 任務看板頻道 ID |
 | `DISCORD_CHANNEL_SYSTEM_LOG` | — | 系統日誌頻道 ID |
-| `DISCORD_SYSTEM_LOG_ENABLED` | `true` | 設 `false` 關閉即時操作/用量 DC 推播 |
 | `IN_CHAT_USAGE_SUMMARY_ENABLED` | `true` | 設 `false` 隱藏對話內 tool 狀態訊息 & 用量卡片（events、usage card） |
 | `DISCORD_DASHBOARD_UPDATE_MINUTES` | `15` | Dashboard Embed 更新間隔（分鐘） |
 
