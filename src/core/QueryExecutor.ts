@@ -85,6 +85,8 @@ export interface QueryExecutorDeps {
   contextInjector?: ContextInjector;
   eventBus?: EventBus;
   rateLimitRepository?: RateLimitRepository;
+  /** When false, hides in-chat tool status messages and usage summary card */
+  inChatUsageSummary: boolean;
 }
 
 export interface QueryExecuteOptions {
@@ -132,6 +134,7 @@ export async function executeQueryWithSDK(
     eventBus,
     getBotInfo,
     conversationRepository,
+    inChatUsageSummary,
   } = deps;
 
   // Get internal session for agent info
@@ -160,7 +163,7 @@ export async function executeQueryWithSDK(
 
   // Build status/sub-agent/hook managers
   const { statusManager, subAgentManager, hookManager } = buildQueryManagers(
-    adapter, chatId, sessionId, sdkSessionManager, options?.isGroupChat === true
+    adapter, chatId, sessionId, sdkSessionManager, options?.isGroupChat === true, deps.inChatUsageSummary
   );
 
   // Set up interaction handler for permission prompts and question prompts
@@ -496,7 +499,9 @@ export async function executeQueryWithSDK(
     await deliverFinalResponse(state, result, adapter, chatId, agentId, sessionId, streamOpts);
 
     // Send per-turn usage summary for user-initiated queries.
-    await deliverUsageSummary(result, adapter, chatId, usageAnomaly);
+    if (inChatUsageSummary) {
+      await deliverUsageSummary(result, adapter, chatId, usageAnomaly);
+    }
 
     // Build full response from intermediate messages + final response
     const allResponses = [...state.intermediateMessages];

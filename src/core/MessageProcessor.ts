@@ -137,6 +137,12 @@ export interface MessageProcessorOptions {
    */
   ephemeral?: boolean;
 
+  /**
+   * When false, hides in-chat tool status messages and usage summary card.
+   * Set IN_CHAT_USAGE_SUMMARY_ENABLED=false in env.
+   */
+  inChatUsageSummary?: boolean;
+
 }
 
 export type { ProcessingResult };
@@ -176,6 +182,7 @@ export class MessageProcessor {
   private taskService: TaskService | undefined;
   private activityEventService: ActivityEventService | undefined;
   private readonly rateLimitRepository: RateLimitRepository | undefined;
+  private readonly inChatUsageSummary: boolean;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -202,6 +209,7 @@ export class MessageProcessor {
     this.taskService = options.taskService;
     this.activityEventService = options.activityEventService;
     this.rateLimitRepository = options.rateLimitRepository;
+    this.inChatUsageSummary = options.inChatUsageSummary ?? true;
 
     logger.info('MessageProcessor initialized');
   }
@@ -320,6 +328,7 @@ export class MessageProcessor {
       sdkSessionManager: this.sdkSessionManager,
       sendTypingIndicators: this.sendTypingIndicators,
       typingIndicatorIntervalMs: this.typingIndicatorIntervalMs,
+      inChatUsageSummary: this.inChatUsageSummary,
     };
     if (this.activityService !== undefined) deps.activityService = this.activityService;
     if (this.activityEventService !== undefined) deps.activityEventService = this.activityEventService;

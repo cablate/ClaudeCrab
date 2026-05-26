@@ -77,13 +77,14 @@ export function buildQueryManagers(
   chatId: string,
   sessionId: string,
   sdkSessionManager: SDKSessionManager,
-  isGroupChat: boolean
+  isGroupChat: boolean,
+  showStatusMessages = true
 ): {
   statusManager: StatusMessageManager | null;
   subAgentManager: SubAgentMessageManager | null;
   hookManager: HookMessageManager | null;
 } {
-  const statusCapable = isStatusCapable(adapter) && !isGroupChat;
+  const statusCapable = isStatusCapable(adapter) && !isGroupChat && showStatusMessages;
 
   const statusManager = statusCapable
     ? new StatusMessageManager(adapter, chatId, {
