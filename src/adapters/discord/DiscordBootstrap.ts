@@ -53,6 +53,8 @@ export interface DiscordBootstrapDeps {
       taskBoard?: string | undefined;
       costReport?: string | undefined;
     };
+    /** When false, suppresses real-time usage/operation push notifications to system-log */
+    systemLogEnabled?: boolean;
     dashboardUpdateMinutes?: number | undefined;
   };
   persistence: {
@@ -211,8 +213,8 @@ export async function initializeDiscordServices(
     }
   }
 
-  // === ACTIVITY EVENT SERVICE (pure service + Discord notifier) ===
-  if (channels.systemLog || channels.alerts) {
+  // === ACTIVITY EVENT SERVICE (pure service + optional Discord notifier) ===
+  if (discordConfig.systemLogEnabled !== false && (channels.systemLog || channels.alerts)) {
     const discordReporter = new DiscordActivityReporter({
       discordAdapter,
       ...(channels.systemLog ? { systemLogChannelId: channels.systemLog } : {}),
