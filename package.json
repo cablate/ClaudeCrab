@@ -9,34 +9,17 @@
   },
   "scripts": {
     "postinstall": "node scripts/patch-sdk-v2.cjs",
-    "setup": "tsx scripts/setup.ts",
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node --import tsx start.ts",
     "start:direct": "node --import tsx src/index.ts",
-    "prod:start": "schtasks /run /tn ClaudeCab",
-    "prod:stop": "node scripts/claudecab-runtime.mjs stop",
-    "prod:restart": "node scripts/claudecab-runtime.mjs restart",
-    "prod:status": "node scripts/claudecab-runtime.mjs status",
-    "prod:logs": "tail -f logs/supervisor-out.log",
-    "prod:install": "scripts\\install-service.bat",
-    "prod:uninstall": "schtasks /delete /tn ClaudeCab /f",
     "test": "vitest",
     "test:run": "vitest run",
-    "quality-gate": "bash scripts/quality-gate.sh",
-    "validate:agent-workspace": "node scripts/validate-agent-workspace.mjs",
-    "validate:agent-workspace:json": "node scripts/validate-agent-workspace.mjs --json",
-    "validate:external-repos": "node scripts/validate-external-repos.mjs",
-    "scan:general-governance": "node scripts/scan-general-workspace-governance.mjs",
-    "render:general-workspace-map": "npm run scan:general-governance && node scripts/render-general-workspace-map.mjs",
     "lint": "eslint src",
-    "lint:logs": "node scripts/lint-logs.mjs --warn",
-    "lint:logs:strict": "node scripts/lint-logs.mjs",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
-    "typecheck": "tsc --noEmit",
-    "trace:cache": "tsx scripts/trace-cache-anomaly.ts"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "claude",
@@ -86,8 +69,7 @@
     "vitest": "^4.0.18"
   },
   "directories": {
-    "doc": "docs",
-    "test": "tests"
+    "doc": "docs"
   },
   "repository": {
     "type": "git",
