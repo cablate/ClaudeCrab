@@ -1,0 +1,107 @@
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
+
+# Playwright MCP testing
+.playwright-mcp/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# SQLite WAL files
+*.db-wal
+*.db-shm
+
+# Temporary files
+tmp/
+temp/
+
+# Serena MCP
+.serena/
+
+# Windows special files
+nul
+
+# Whole-agent directory — managed externally; see .env AGENTS_DIR
+agents/
+
+# Database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Claude Code plans (temporary)
+.claude/plans/
+
+# Root-level test/verification files
+/*.png
+/*.jpg
+/*.jpeg
+/*.mp3
+/*.wav
+/*.ogg
+/*.m4a
+
+# Mangled path artifacts
+_ProgramOwnProjectClaudeCab*/
+.spectra/
+openspec/.vector-search.db*
+
+# Generated images
+public/images/generated/
+
+# Runtime PID files
+*.pid
+claudecab.runtime.json
+
+# Python compiled bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Upgrade SOP sandboxes (Phase 1 isolated installs, see docs/sop-sdk-cli-upgrade.md)
+/.cache/sandbox-sdk-*/
+/.cache/sandbox-cli-*/
+/.cache/b59-*/
+
+# Root-level Python embeddable (not per-agent; runtime dependency)
+Python/
+
+# Root-level runtime-installed agent skills (Claude Code installs these at runtime)
+.agents/
+
+# Codex sandbox workspaces (contain node_modules, build output, scratch)
+**/pptx-workshop-deck/
+**/pptx-style-previews/
+
+# Codex sandbox workspaces (contain node_modules, build output, scratch)
+**/pptx-workshop-deck/
+**/pptx-style-previews/

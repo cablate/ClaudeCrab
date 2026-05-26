@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  claudecab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: claudecab
+    restart: unless-stopped
+
+    # Environment variables
+    env_file:
+      - .env
+
+    # Mount agents directory as read-only
+    volumes:
+      - ./agents:/app/agents:ro
+      - ./logs:/app/logs
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Development service (optional)
+  claudecab-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: claudecab-dev
+    profiles:
+      - dev
+
+    env_file:
+      - .env
+
+    volumes:
+      - ./src:/app/src
+      - ./agents:/app/agents
+      - ./tests:/app/tests
+      - ./node_modules:/app/node_modules
+
+    # Override command for development
+    command: npm run dev
+
+# Optional: Add a network for multiple services
+networks:
+  default:
+    name: claudecab-network
