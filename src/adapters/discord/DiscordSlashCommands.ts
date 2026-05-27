@@ -12,6 +12,7 @@ import {
   ButtonStyle,
   REST,
   Routes,
+  PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import type { AgentLoader } from '../../core/AgentLoader.js';
@@ -71,15 +72,18 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
   return [
     new SlashCommandBuilder()
       .setName('help')
-      .setDescription('顯示指令說明'),
+      .setDescription('顯示指令說明')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
       .setName('status')
-      .setDescription('顯示所有 Agent 狀態'),
+      .setDescription('顯示所有 Agent 狀態')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
       .setName('reset')
       .setDescription('重置指定 Agent 的對話記錄')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt =>
         opt.setName('agent').setDescription('Agent ID（留空 = 當前頻道的 Agent）').setRequired(false)
       ) as SlashCommandBuilder,
@@ -87,6 +91,7 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
     new SlashCommandBuilder()
       .setName('model')
       .setDescription('查看或切換 Agent 的 AI 模型')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt =>
         opt.setName('agent').setDescription('Agent ID').setRequired(false)
       )
@@ -102,34 +107,41 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
 
     new SlashCommandBuilder()
       .setName('cost')
-      .setDescription('查看今日和月度花費摘要'),
+      .setDescription('查看今日和月度花費摘要')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
       .setName('stop')
       .setDescription('停止指定 Agent 的執行')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addStringOption(opt =>
         opt.setName('agent').setDescription('Agent ID').setRequired(false)
       ) as SlashCommandBuilder,
 
     new SlashCommandBuilder()
       .setName('close')
-      .setDescription('關閉 V2 session（釋放資源，保留對話紀錄）'),
+      .setDescription('關閉 V2 session（釋放資源，保留對話紀錄）')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
       .setName('sync')
-      .setDescription('撈取子代理最新進度（不呼叫模型，只更新訊息）'),
+      .setDescription('撈取子代理最新進度（不呼叫模型，只更新訊息）')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
       .setName('restart')
-      .setDescription('重啟 ClaudeCab（先跑 tsc 檢查，通過才重啟）'),
+      .setDescription('重啟 ClaudeCab（先跑 tsc 檢查，通過才重啟）')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
       .setName('ctx')
-      .setDescription('顯示當前 session 的 context 使用量、cache 狀態、花費'),
+      .setDescription('顯示當前 session 的 context 使用量、cache 狀態、花費')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
       .setName('cache')
       .setDescription('Cache 觀測（全域）')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addSubcommand(sub =>
         sub.setName('status').setDescription('全域 cache 健康快照：所有活 session、平均命中率'))
       .addSubcommand(sub =>
@@ -142,11 +154,13 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
 
     new SlashCommandBuilder()
       .setName('sessions')
-      .setDescription('列出所有 V2 persistent sessions（admin）'),
+      .setDescription('列出所有 V2 persistent sessions（admin）')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
       .setName('task')
       .setDescription('任務管理')
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addSubcommand(sub =>
         sub.setName('create').setDescription('建立新任務')
           .addStringOption(opt => opt.setName('title').setDescription('任務標題').setRequired(true))
