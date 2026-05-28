@@ -18,7 +18,7 @@
  *   query.*       lower-level SDK streaming details
  *   session.*     conversation session state
  *   schedule.*    cron / scheduled job
- *   budget.*      cost / budget enforcement
+ *   (budget.* removed)
  *   governance.*  workspace governance telemetry (metadata only)
  *   persistence.* DB / repo events
  *   error.*       uncategorized errors (prefer a specific category where possible)
@@ -184,19 +184,10 @@ export const EventType = {
   SCHEDULE_NOTIFIER_AUTO_PAUSED: 'schedule.notifier_auto_paused',
   SCHEDULE_NOTIFIER_NO_ADAPTER: 'schedule.notifier_no_adapter',
   SCHEDULE_NOTIFIER_NO_CHAT_ID: 'schedule.notifier_no_chat_id',
-  SCHEDULE_BUDGET_SKIP: 'schedule.budget_skip',
-
-  // budget.*
-  BUDGET_EXCEEDED: 'budget.exceeded',
-  BUDGET_PAUSED_AGENT: 'budget.paused_agent',
-  BUDGET_RESUMED_AGENT: 'budget.resumed_agent',
-  BUDGET_REPORT: 'budget.report',
-
   // governance.* ??passive workspace governance telemetry (metadata only)
   GOVERNANCE_SESSION_SUMMARY: 'governance.session_summary',
   GOVERNANCE_LARGE_READ: 'governance.large_read',
   GOVERNANCE_HIGH_COST_EXPLORATION: 'governance.high_cost_exploration',
-  GOVERNANCE_SCOUT_DELEGATION: 'governance.scout_delegation',
   GOVERNANCE_BROAD_SEARCH: 'governance.broad_search',
   GOVERNANCE_RETIRED_PATH_ACCESS: 'governance.retired_path_access',
   GOVERNANCE_ARCHIVE_PATH_ACCESS: 'governance.archive_path_access',
@@ -211,29 +202,6 @@ export const EventType = {
 
   // prompt.* ??runtime prompt mutation/decoration observability
   PROMPT_DECORATION: 'prompt.decoration',
-
-  // task.* ??task lifecycle events
-  TASK_CREATED: 'task.created',
-  TASK_UPDATED: 'task.updated',
-  TASK_ASSIGNED: 'task.assigned',
-  TASK_STATUS_UPDATED: 'task.status_updated',
-  TASK_REVIEW_REQUESTED: 'task.review_requested',
-  TASK_ERROR: 'task.error',
-  TASK_FORUM_SYNCED: 'task.forum_synced',
-  TASK_FORUM_POST_CREATED: 'task.forum_post_created',
-  TASK_THREAD_POST_FAILED: 'task.thread_post_failed',
-
-  // tts.* ??text-to-speech operations
-  TTS_SYNTHESIS_BEGIN: 'tts.synthesis_begin',
-  TTS_SYNTHESIS_COMPLETE: 'tts.synthesis_complete',
-  TTS_DIR_CREATED: 'tts.dir_created',
-  TTS_ERROR: 'tts.error',
-  TTS_PLAY_ERROR: 'tts.play_error',
-
-
-
-
-
 
   // adapter.discord.* ??Discord service events (reuse adapter.* prefix)
   ADAPTER_DISCORD_DASHBOARD_STARTED: 'adapter.discord_dashboard_started',

@@ -6,7 +6,7 @@
  */
 
 import type { ScheduleSpec } from './schemas.js';
-import type { QueryResult } from '../core/SDKQueryManager.js';
+import type { QueryResult } from '../core/query/SDKQueryManager.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 
 import { logger } from '../utils/logger.js';

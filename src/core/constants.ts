@@ -63,8 +63,6 @@ export const SKILL_REMINDER_CONTEXT = `【Skill 檢查】這輪任務有適用�
 export function buildPromptContext(
   chatId?: string,
   isNewSession?: boolean,
-  /** Group chat ID when in a group chat (ADR-020) */
-  groupChatId?: string,
   /** Platform identifier (defaults to 'discord') */
   platform?: string
 ): string {
@@ -76,28 +74,14 @@ export function buildPromptContext(
   const displayTime = format(now, 'yyyy/MM/dd HH:mm EEEE', { locale: zhTW });
 
   let context = `【當前時間】${displayTime}`;
-
-  if (groupChatId) {
-    // Group chat: point diary path to group memory, not personal
-    context += `\n【群組日誌路徑】groups/${groupChatId}/${todayDate}.md`;
-    context += `\n【群組記憶】groups/${groupChatId}/MEMORY.md`;
-    context += `\n【群組行為規範】你正在群組中回覆。不要回報內部操作過程（如記憶寫入結果、工具呼叫狀態、檔案讀寫紀錄）。只回覆對使用者有實質意義的內容。`;
-    context += `\n【群組回覆長度】群組中回覆保持簡潔，通常不超過 3-5 段。需要詳細回覆時，先給摘要，再問是否要展開。`;
-  } else {
-    context += `\n【日誌路徑】今天: memory/${todayDate}.md | 昨天: memory/${yesterdayDate}.md`;
-  }
+  context += `\n【日誌路徑】今天: memory/${todayDate}.md | 昨天: memory/${yesterdayDate}.md`;
 
   if (isNewSession) {
     context += `\n${STARTUP_PROTOCOL_REMINDER}`;
     context += `\n${CROSS_AGENT_CALL_CONTEXT}`;
   }
 
-  if (groupChatId) {
-    // Group chat: silent memory — do the work but don't talk about it
-    context += `\n【記憶】遵循 memory-system 規範，靜默執行記憶操作。不要在回覆中提及記憶寫入過程或結果。`;
-  } else {
-    context += `\n${MEMORY_CHECKPOINT_CONTEXT}`;
-  }
+  context += `\n${MEMORY_CHECKPOINT_CONTEXT}`;
 
   if (chatId) {
     context += `\n【當前對話】platform: ${platform ?? 'unknown'}, chatId: ${chatId}`;

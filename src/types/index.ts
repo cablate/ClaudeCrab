@@ -52,8 +52,6 @@ export {
   type EventMap,
   type EventHandler,
   type EventName,
-  type GroupMessagePayload,
-  type BotRepliedPayload,
   type InteractionEvent,
 } from './events.js';
 
@@ -70,6 +68,4 @@ export {
 // Service interfaces (for dependency inversion — core depends on these, not concrete classes)
 export {
   type IActivityEventService,
-  type IBudgetService,
-  type ITaskService,
 } from './interfaces.js';

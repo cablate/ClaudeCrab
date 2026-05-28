@@ -19,8 +19,6 @@ checklist, or validator rule is enough.
 |---|---|---|---|---|---|
 | `file-send` | `mcp__file-send__send_file` | `src/tools/sendFileTool.ts` | `src/McpToolSetup.ts` | Always available | Send generated files back to the user. |
 | `validator` | `mcp__validator__run_agent_workspace_validation` | `src/tools/validatorTool.ts` | `src/McpToolSetup.ts` | Always available | Run the reference-trio workspace validator and return JSON schema v1. |
-| `tts` | `mcp__tts__speak` | `src/tools/ttsTool.ts` | `src/McpToolSetup.ts` | When TTS service exists | Generate or play TTS audio. |
-| `task-mgmt` | `mcp__task-mgmt__*` | `src/tools/taskTool.ts` | `src/McpToolSetup.ts` | When TaskService exists | Create, list, update, and review tasks. |
 
 ## Governance Rules
 

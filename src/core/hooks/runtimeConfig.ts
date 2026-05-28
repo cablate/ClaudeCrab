@@ -54,14 +54,14 @@ export interface RuntimeHookConfig {
       readonly tools: readonly string[];
       readonly message: string;
     };
+    readonly subagentModelRestriction: {
+      readonly enabled: boolean;
+    };
     readonly repeatedExplorationThreshold: number;
-    readonly scoutToolMatchers: readonly string[];
     readonly warningMessage: string;
     readonly repeatedExplorationMessage: string;
-    readonly postScoutMainExplorationMessage: string;
     readonly subagentRepeatedExplorationMessage: string;
     readonly largeOutputMessage: string;
-    readonly scoutMessage: string;
   };
   readonly hardBlocks: {
     readonly enabled: boolean;

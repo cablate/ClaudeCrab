@@ -721,6 +721,28 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     }
   }
 
+  /**
+   * Edit a previously sent Discord message.
+   */
+  override async editMessage(
+    chatId: string,
+    messageId: string,
+    text: string,
+  ): Promise<SendResult> {
+    try {
+      const channel = await this.resolveTextOrThread(chatId) ?? this.channel;
+      if (channel === null) return { success: false, error: 'Channel not found' };
+
+      const message = await channel.messages.fetch(messageId);
+      await this.rateLimitedSend(() => message.edit({ content: text, components: [] }));
+      return { success: true, messageId };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.log.warn({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, messageId }, 'Failed to edit Discord message');
+      return { success: false, error: errorMessage };
+    }
+  }
+
   override async updatePermissionPrompt(
     chatId: string,
     messageId: string,

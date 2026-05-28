@@ -24,10 +24,4 @@ export {
   type AuditEventType,
   type AuditEvent,
 } from './audit.js';
-export {
-  buildGroupUserId,
-  isGroupUserId,
-  extractChatIdFromGroupUserId,
-  GROUP_PREFIX,
-} from './groupSession.js';
 export { DedupTracker, type DedupTrackerOptions } from './DedupTracker.js';

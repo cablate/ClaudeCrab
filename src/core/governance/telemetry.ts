@@ -33,16 +33,6 @@ export interface GovernancePathClassification {
   readonly recommendedCheck: GovernanceRecommendedCheck;
 }
 
-export interface GovernanceTelemetryEvent {
-  readonly eventType: string;
-  readonly severity: GovernanceSeverity;
-  readonly category: GovernancePathCategory;
-  readonly count?: number;
-  readonly threshold?: number;
-  readonly path?: string;
-  readonly recommendation?: string;
-}
-
 export interface GovernanceSessionSummary {
   readonly changedCategories: GovernancePathCategory[];
   readonly recommendedChecks: GovernanceRecommendedCheck[];
@@ -60,7 +50,6 @@ export interface GovernanceSessionSummary {
   /** Subagent tool output size telemetry. Informational only. */
   readonly subagentExplorationOutputChars: Record<string, number>;
   readonly largeToolResponseCounts: Record<string, number>;
-  readonly scoutDelegationCount: number;
   readonly archiveAccessCount: number;
   /**
    * True when this turn produced enough durable state/activity signals that
@@ -88,7 +77,6 @@ export interface GovernanceSessionState {
   explorationOutputChars: Record<string, number>;
   subagentExplorationOutputChars: Record<string, number>;
   largeToolResponseCounts: Record<string, number>;
-  scoutDelegationCount: number;
   archiveAccessCount: number;
   memoryObserved: boolean;
   dailyMemoryObserved: boolean;
@@ -220,7 +208,6 @@ export function createGovernanceSessionState(): GovernanceSessionState {
     explorationOutputChars: {},
     subagentExplorationOutputChars: {},
     largeToolResponseCounts: {},
-    scoutDelegationCount: 0,
     archiveAccessCount: 0,
     memoryObserved: false,
     dailyMemoryObserved: false,
@@ -354,11 +341,6 @@ export function recordSubagentExplorationOutputSize(
   return { totalChars };
 }
 
-export function recordScoutDelegation(state: GovernanceSessionState): number {
-  state.scoutDelegationCount++;
-  return state.scoutDelegationCount;
-}
-
 export function recordCommandFailure(state: GovernanceSessionState): void {
   state.commandFailureCount++;
 }
@@ -381,7 +363,6 @@ export function summarizeGovernanceSession(state: GovernanceSessionState): Gover
     state.commandFailureCount > 0 ||
     state.broadSearchCount > 0 ||
     state.archiveAccessCount > 0 ||
-    state.scoutDelegationCount > 0 ||
     totalMainExploration > 0 ||
     totalSubagentExploration > 0 ||
     totalMainOutputChars > 0 ||
@@ -400,7 +381,6 @@ export function summarizeGovernanceSession(state: GovernanceSessionState): Gover
     explorationOutputChars: { ...state.explorationOutputChars },
     subagentExplorationOutputChars: { ...state.subagentExplorationOutputChars },
     largeToolResponseCounts: { ...state.largeToolResponseCounts },
-    scoutDelegationCount: state.scoutDelegationCount,
     archiveAccessCount: state.archiveAccessCount,
     memoryCheckpointNeeded,
     memoryObserved: state.memoryObserved,
@@ -423,49 +403,6 @@ function formatCharCounts(counts: Record<string, number>): string {
     .sort(([left], [right]) => left.localeCompare(right));
   if (entries.length === 0) return 'none';
   return entries.map(([tool, count]) => `${tool}:${count}ch`).join(', ');
-}
-
-export function buildExecutionQualityContext(summary: GovernanceSessionSummary): string {
-  const changedCategories = summary.changedCategories.length > 0
-    ? summary.changedCategories.join(', ')
-    : 'none';
-  const recommendedChecks = summary.recommendedChecks.length > 0
-    ? summary.recommendedChecks.join(', ')
-    : 'none';
-  const validatorStatus = summary.validatorNeeded
-    ? summary.validatorObserved ? 'needed_and_observed' : 'needed_but_not_observed'
-    : 'not_needed';
-  const subagentExplore = formatExplorationCounts(summary.subagentExplorationToolCounts);
-  const subagentOutput = formatCharCounts(summary.subagentExplorationOutputChars);
-
-  return [
-    'Runtime facts:',
-    `changed=${changedCategories}; touched=${summary.touchedPathCount}; checks=${recommendedChecks}; validator=${validatorStatus}; failures=${summary.commandFailureCount}; archive=${summary.archiveAccessCount}; explore=${formatExplorationCounts(summary.explorationToolCounts)}; subExplore=${subagentExplore}; scout=${summary.scoutDelegationCount}; output=${formatCharCounts(summary.explorationOutputChars)}; subOutput=${subagentOutput}; large=${formatExplorationCounts(summary.largeToolResponseCounts)}`,
-    'PASS only if missing validator, failures, archive duties, and high-cost exploration concerns are resolved or reported.',
-  ].join('\n');
-}
-
-export function buildWorkspaceStateContext(summary: GovernanceSessionSummary): string {
-  const hasStateDuty = summary.validatorNeeded || summary.archiveAccessCount > 0 || summary.memoryCheckpointNeeded || summary.memoryObserved;
-  if (!hasStateDuty) return '';
-
-  const recommendedChecks = summary.recommendedChecks.length > 0
-    ? summary.recommendedChecks.join(', ')
-    : 'none';
-  const validatorStatus = summary.validatorNeeded
-    ? summary.validatorObserved ? 'needed_and_observed' : 'needed_but_not_observed'
-    : 'not_needed';
-  const memoryStatus = summary.memoryCheckpointNeeded
-    ? summary.memoryObserved ? 'checkpoint_needed_and_memory_observed' : 'checkpoint_needed_but_not_observed'
-    : summary.memoryObserved ? 'memory_observed' : 'not_needed';
-  const dailyStatus = summary.dailyMemoryObserved ? 'observed' : 'not_observed';
-
-  return [
-    'State facts:',
-    `checks=${recommendedChecks}; validator=${validatorStatus}; memory=${memoryStatus}; daily=${dailyStatus}; archive=${summary.archiveAccessCount}`,
-    'Before PASS: if memory=checkpoint_needed_but_not_observed, write the smallest useful daily/vector/MEMORY/USER note or reply `No memory update needed: <reason>`.',
-    'Before PASS: run/report `npm run validate:agent-workspace -- --warn-only` when validator is needed; archive requires Cab approval + dated reason.',
-  ].join('\n');
 }
 
 export function buildGovernanceTouchMessage(classification: GovernancePathClassification): string {
@@ -511,12 +448,12 @@ export function buildGovernanceVisibilitySummary(summary: GovernanceSessionSumma
 
   const exploration = formatExplorationCounts(summary.explorationToolCounts);
   if (exploration !== 'none') {
-    return `main explore: ${exploration}; scout=${summary.scoutDelegationCount}`;
+    return `main explore: ${exploration}`;
   }
 
   const subagentExploration = formatExplorationCounts(summary.subagentExplorationToolCounts);
   if (subagentExploration !== 'none') {
-    return `subagent explore: ${subagentExploration}; scout=${summary.scoutDelegationCount}`;
+    return `subagent explore: ${subagentExploration}`;
   }
 
   if (summary.broadSearchCount > 0) {

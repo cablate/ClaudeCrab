@@ -47,9 +47,6 @@ export interface MessageMetadata {
   /** Reply to message ID if this is a reply */
   replyToMessageId?: string;
 
-  /** Whether the message is from a group chat */
-  isGroupChat?: boolean;
-
   /** Group/chat title if applicable */
   chatTitle?: string;
 

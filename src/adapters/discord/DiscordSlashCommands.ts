@@ -15,17 +15,15 @@ import {
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
 } from 'discord.js';
-import type { AgentLoader } from '../../core/AgentLoader.js';
-import type { SessionManager } from '../../core/SessionManager.js';
-import type { MessageProcessor } from '../../core/MessageProcessor.js';
-import type { SDKSessionManager } from '../../core/SDKSessionManager.js';
-import type { BudgetService } from '../../services/BudgetService.js';
-import type { TaskService } from '../../services/TaskService.js';
+import type { AgentLoader } from '../../core/orchestrator/AgentLoader.js';
+import type { SessionManager } from '../../core/session/SessionManager.js';
+import type { MessageProcessor } from '../../core/orchestrator/MessageProcessor.js';
+import type { SDKSessionManager } from '../../core/session/SDKSessionManager.js';
 import type { IQueryMetricsRepository, QueryMetricRow } from '../../persistence/types.js';
 import { parseSessionKey } from '../../types/session.js';
 import { buildDiscordChannelUrl, buildDiscordMessageUrl } from '../../types/runtimeContext.js';
-import { getJsonlPath } from '../../core/SDKTranscriptDiagnostics.js';
-import { diagnoseQueryUsage } from '../../core/UsageAnomalyDiagnostics.js';
+import { getJsonlPath } from '../../core/keepalive/SDKTranscriptDiagnostics.js';
+import { diagnoseQueryUsage } from '../../core/keepalive/UsageAnomalyDiagnostics.js';
 import { logger } from '../../utils/logger.js';
 
 const log = logger.child({ module: 'DiscordSlashCommands' });
@@ -37,33 +35,23 @@ export interface SlashCommandDependencies {
   agentLoader: AgentLoader;
   sessionManager: SessionManager;
   messageProcessor: MessageProcessor;
-  budgetService?: BudgetService;
-  taskService?: TaskService | undefined;
   queryMetricsRepository?: IQueryMetricsRepository;
   sdkSessionManager?: SDKSessionManager;
   getBotStatus?: (agentId: string) => 'running' | 'stopped' | 'error' | 'no-token';
-  /** Resolve a Discord thread ID to a task ID (for task thread session key matching) */
-  resolveTaskThread?: ((threadId: string) => { taskId: string } | undefined) | undefined;
 }
 
 /**
  * Compute the effective userId for a Discord slash command interaction.
- * Handles three session key patterns:
+ * Handles two session key patterns:
  * - Main channel: userId
- * - Normal thread: userId::thread::threadId
- * - Task thread: task:${taskId}
+ * - Thread: userId::thread::threadId
  */
 function resolveEffectiveUserId(
   userId: string,
   channelId: string,
   isThread: boolean,
-  deps: SlashCommandDependencies,
 ): string {
   if (!isThread) return userId;
-  // Check if this thread is a task thread first
-  const taskResolved = deps.resolveTaskThread?.(channelId);
-  if (taskResolved) return `task:${taskResolved.taskId}`;
-  // Normal thread
   return `${userId}::thread::${channelId}`;
 }
 
@@ -157,35 +145,6 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
       .setDescription('列出所有 V2 persistent sessions（admin）')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    new SlashCommandBuilder()
-      .setName('task')
-      .setDescription('任務管理')
-      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-      .addSubcommand(sub =>
-        sub.setName('create').setDescription('建立新任務')
-          .addStringOption(opt => opt.setName('title').setDescription('任務標題').setRequired(true))
-          .addStringOption(opt => opt.setName('priority').setDescription('優先級')
-            .addChoices(
-              { name: '🔴 緊急', value: 'urgent' },
-              { name: '🟡 一般', value: 'medium' },
-              { name: '🟢 低', value: 'low' },
-            ).setRequired(false))
-          .addStringOption(opt => opt.setName('assignee').setDescription('指派 Agent ID').setRequired(false))
-          .addStringOption(opt => opt.setName('description').setDescription('任務描述').setRequired(false))
-      )
-      .addSubcommand(sub =>
-        sub.setName('list').setDescription('列出任務')
-          .addStringOption(opt => opt.setName('status').setDescription('篩選狀態')
-            .addChoices(
-              { name: '📋 待辦', value: 'backlog' },
-              { name: '🔄 進行中', value: 'in_progress' },
-              { name: '✅ 完成', value: 'done' },
-            ).setRequired(false))
-      )
-      .addSubcommand(sub =>
-        sub.setName('complete').setDescription('完成任務')
-          .addStringOption(opt => opt.setName('id').setDescription('任務 ID（前 8 碼）').setRequired(true))
-      ) as SlashCommandBuilder,
   ];
 }
 
@@ -219,7 +178,7 @@ async function handleClose(
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
-  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread);
 
   // Find agent for this channel (check parent for threads)
   const parentChannelId = isThread && interaction.channel?.isThread()
@@ -256,7 +215,7 @@ async function handleSync(
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
-  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread);
 
   const parentChannelId = isThread && interaction.channel?.isThread()
     ? interaction.channel.parentId
@@ -343,9 +302,6 @@ export async function handleSlashCommand(
       case 'sessions':
         await handleSessions(interaction, deps);
         break;
-      case 'task':
-        await handleTask(interaction, deps);
-        break;
       default:
         await interaction.reply({ content: `未知指令：/${commandName}`, ephemeral: true });
     }
@@ -399,15 +355,10 @@ async function handleStatus(
     const model = agent.config.model ?? 'sonnet';
 
     const dcStatus = deps.getBotStatus?.(agentId) ?? 'no-token';
-    const paused = deps.budgetService?.isAgentPaused(agentId) ?? false;
 
     const statusParts: string[] = [];
-    if (paused) {
-      statusParts.push('⏸️ 預算暫停');
-    } else {
-      const dcIcon = dcStatus === 'running' ? '🟢' : dcStatus === 'no-token' ? '⚫' : '🔴';
-      statusParts.push(`DC ${dcIcon}`);
-    }
+    const dcIcon = dcStatus === 'running' ? '🟢' : dcStatus === 'no-token' ? '⚫' : '🔴';
+    statusParts.push(`DC ${dcIcon}`);
 
     lines.push(`${emoji} **${name}** (${model}) — ${statusParts.join(' ')}`);
   }
@@ -431,7 +382,7 @@ async function handleReset(
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
-  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread);
 
   if (agentId !== null) {
     if (!deps.agentLoader.has(agentId)) {
@@ -519,31 +470,23 @@ async function handleCost(
 ): Promise<void> {
   const agents = deps.agentLoader.list();
   const lines: string[] = [];
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   for (const agentId of agents) {
     const agent = deps.agentLoader.get(agentId);
     if (agent === undefined) continue;
 
-    const budgetStatus = deps.budgetService?.checkBudget(agentId);
-    if (budgetStatus === null || budgetStatus === undefined) continue;
-
     const name = (agent.config.name || agentId).slice(0, 10);
-    const monthUsd = (budgetStatus.monthCents / 100).toFixed(2);
-    const todayUsd = (budgetStatus.todayCents / 100).toFixed(2);
+    const todayCost = deps.queryMetricsRepository?.getAgentStatsSince(agentId, todayStart)?.totalCostUsd ?? 0;
+    const monthCost = deps.queryMetricsRepository?.getAgentStatsSince(agentId, monthStart)?.totalCostUsd ?? 0;
 
-    let bar = '';
-    if (budgetStatus.monthlyLimitCents > 0) {
-      const pct = Math.min(Math.round(budgetStatus.monthCents / budgetStatus.monthlyLimitCents * 100), 100);
-      const filled = Math.round(pct / 10);
-      const ch = pct >= 80 ? '🟥' : pct >= 50 ? '🟨' : '🟩';
-      bar = ` ${ch.repeat(filled)}${'⬜'.repeat(10 - filled)} ${pct}%`;
-    }
-
-    lines.push(`**${name}**　$${todayUsd} 今日 · $${monthUsd} 月${bar}`);
+    lines.push(`**${name}**　$${todayCost.toFixed(2)} 今日 · $${monthCost.toFixed(2)} 月`);
   }
 
   if (lines.length === 0) {
-    await interaction.reply({ content: '尚無花費紀錄或未設定預算', ephemeral: true });
+    await interaction.reply({ content: '尚無花費紀錄', ephemeral: true });
     return;
   }
 
@@ -564,7 +507,7 @@ async function handleStop(
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
-  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread);
 
   const targetAgents = agentId !== null
     ? [agentId]
@@ -629,7 +572,7 @@ async function handleCtx(
   };
   const ctxLimit = ctxLimits[model] ?? CLAUDE_CONTEXT_WINDOW_TOKENS;
 
-  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread, deps);
+  const effectiveUserId = resolveEffectiveUserId(userId, channelId, isThread);
 
   // Get the actual SessionManager session to find the real sessionId
   const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
@@ -705,7 +648,7 @@ async function handleCtx(
     estimatedCtx = liveCtx;
   } else if (session?.sdkSessionId) {
     try {
-      const { restoreContextFromJsonl } = await import('../../core/SDKContextRestore.js');
+      const { restoreContextFromJsonl } = await import('../../core/session/SDKContextRestore.js');
       const jsonlCtx = await restoreContextFromJsonl(session.sdkSessionId, agent.path);
       if (jsonlCtx !== null) estimatedCtx = jsonlCtx;
     } catch { /* JSONL not available */ }
@@ -1263,90 +1206,3 @@ async function handleRestart(
   }, 1000);
 }
 
-async function handleTask(
-  interaction: ChatInputCommandInteraction,
-  deps: SlashCommandDependencies,
-): Promise<void> {
-  if (deps.taskService === undefined) {
-    await interaction.reply({ content: '❌ TaskService 未啟用', ephemeral: true });
-    return;
-  }
-
-  const sub = interaction.options.getSubcommand();
-
-  switch (sub) {
-    case 'create': {
-      await interaction.deferReply();
-      const title = interaction.options.getString('title', true);
-      const priority = (interaction.options.getString('priority') ?? 'medium') as 'urgent' | 'medium' | 'low';
-      const assignee = interaction.options.getString('assignee');
-      const description = interaction.options.getString('description');
-
-      const taskId = await deps.taskService.createTask({
-        title,
-        priority,
-        ...(assignee !== null ? { assigneeAgentId: assignee } : {}),
-        ...(description !== null ? { description } : {}),
-        createdByUserId: interaction.user.id,
-      });
-
-      const emoji = priority === 'urgent' ? '🔴' : priority === 'low' ? '🟢' : '🟡';
-      await interaction.editReply(
-        `✅ 任務已建立\n${emoji} **${title}**\nID: \`${taskId.slice(0, 8)}\`${assignee !== null ? `\n指派: ${assignee}` : ''}`
-      );
-      break;
-    }
-
-    case 'list': {
-      const status = interaction.options.getString('status') as 'backlog' | 'in_progress' | 'done' | undefined;
-      const tasks = deps.taskService.list(status ?? undefined, 15);
-
-      if (tasks.length === 0) {
-        await interaction.reply({ content: '目前沒有任務', ephemeral: true });
-        return;
-      }
-
-      const statusEmoji: Record<string, string> = {
-        backlog: '📋', in_progress: '🔄', in_review: '👀', done: '✅', cancelled: '❌',
-      };
-      const priorityEmoji: Record<string, string> = { urgent: '🔴', medium: '🟡', low: '🟢' };
-
-      const lines = tasks.map(t => {
-        const s = statusEmoji[t.status] ?? '?';
-        const p = priorityEmoji[t.priority] ?? '⚪';
-        const assignee = t.assignee_agent_id ? ` → ${t.assignee_agent_id}` : '';
-        return `${s}${p} **${t.title}**${assignee} \`${t.id.slice(0, 8)}\``;
-      });
-
-      const embed = new EmbedBuilder()
-        .setTitle('📋 任務清單')
-        .setDescription(lines.join('\n'))
-        .setColor(0x5865F2)
-        .setFooter({ text: `共 ${tasks.length} 筆` });
-
-      await interaction.reply({ embeds: [embed] });
-      break;
-    }
-
-    case 'complete': {
-      await interaction.deferReply({ ephemeral: true });
-      const taskId = interaction.options.getString('id', true);
-
-      // Find task by prefix match
-      const allTasks = deps.taskService.list(undefined, 500);
-      const match = allTasks.find(t => t.id.startsWith(taskId));
-
-      if (match === undefined) {
-        await interaction.editReply(`❌ 找不到 ID 開頭為 \`${taskId}\` 的任務`);
-        return;
-      }
-
-      await deps.taskService.completeTask(match.id);
-      await interaction.editReply(`✅ 任務「${match.title}」已完成`);
-      break;
-    }
-
-    default:
-      await interaction.reply({ content: `未知子指令：${sub}`, ephemeral: true });
-  }
-}

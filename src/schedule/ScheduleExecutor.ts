@@ -18,8 +18,8 @@ import type { IBudgetService, IActivityEventService } from '../types/interfaces.
 // Concrete types kept for wirePostInit/constructor compatibility
 import type { BudgetService } from '../services/BudgetService.js';
 import type { ActivityEventService } from '../services/ActivityEventService.js';
-import type { AgentLoader } from '../core/AgentLoader.js';
-import type { SDKQueryManager, QueryResult } from '../core/SDKQueryManager.js';
+import type { AgentLoader } from '../core/orchestrator/AgentLoader.js';
+import type { SDKQueryManager, QueryResult } from '../core/query/SDKQueryManager.js';
 import { buildPromptContext } from '../core/constants.js';
 import { retryAsync } from '../utils/retry.js';
 import type { RetryOptions } from '../utils/retry.js';
@@ -214,7 +214,6 @@ export class ScheduleExecutor {
                               additionalContext: buildPromptContext(
                                 spec.notification?.chatId ?? '',
                                 true, // always new session
-                                undefined, // no group chat
                                 spec.notification?.platform ?? 'discord'
                               ),
                             },
@@ -321,7 +320,7 @@ export class ScheduleExecutor {
 
         // Budget post-check
         if (this.budgetService !== undefined) {
-          this.budgetService.postQueryCheck(agentId);
+          this.budgetService.postQueryCheck(agentId, result);
         }
 
         // --- Output delivery ---

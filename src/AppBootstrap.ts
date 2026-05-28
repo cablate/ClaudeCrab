@@ -4,43 +4,30 @@
 
 import { hostname } from 'node:os';
 import { logger, INSTANCE_ID, INSTANCE_STARTED_AT } from './utils/logger.js';
-import { HeartbeatService } from './services/HeartbeatService.js';
-import { AgentLoader } from './core/AgentLoader.js';
-import { SessionManager } from './core/SessionManager.js';
-import { MessageProcessor } from './core/MessageProcessor.js';
-import { PlatformOrchestrator } from './core/PlatformOrchestrator.js';
-import { getEventBus } from './core/EventBus.js';
-import { ContextInjector, type GroupMemberInfo } from './core/ContextInjector.js';
+import { AgentLoader } from './core/orchestrator/AgentLoader.js';
+import { SessionManager } from './core/session/SessionManager.js';
+import { MessageProcessor } from './core/orchestrator/MessageProcessor.js';
+import { PlatformOrchestrator } from './core/orchestrator/PlatformOrchestrator.js';
+import { getEventBus } from './core/lib/EventBus.js';
 import { loadSecurityConfig } from './utils/security.js';
 import { auditLogger } from './utils/audit.js';
 import { DatabaseManager } from './persistence/DatabaseManager.js';
 import { SessionRepository } from './persistence/SessionRepository.js';
 import { ConversationRepository } from './persistence/ConversationRepository.js';
-import { GroupMessageRepository } from './persistence/GroupMessageRepository.js';
-import { InjectionStateRepository } from './persistence/InjectionStateRepository.js';
-import { GroupMemberRepository } from './persistence/GroupMemberRepository.js';
 import { QueryMetricsRepository } from './persistence/QueryMetricsRepository.js';
 import { RateLimitRepository } from './persistence/RateLimitRepository.js';
 import { ScheduleThreadMap, type ScheduleManager, type ScheduleExecutor } from './schedule/index.js';
 import { initializeScheduleSystem } from './schedule/ScheduleBootstrap.js';
-import { ActivityService } from './core/ActivityService.js';
-import { ActivityRepository } from './persistence/ActivityRepository.js';
 import type { AppConfig } from './config.js';
 import { createSTTProvider, type STTProvider } from './core/stt/index.js';
-import { createTTSProvider, type TTSProvider } from './core/tts/index.js';
-import { TTSService } from './services/TTSService.js';
 import type { IQueryMetricsRepository } from './persistence/types.js';
 import { ExecutionRecordRepository } from './persistence/ExecutionRecordRepository.js';
-import { TaskRecordRepository } from './persistence/TaskRecordRepository.js';
-import { BudgetService } from './services/BudgetService.js';
-import { TaskService } from './services/TaskService.js';
 import { ActivityEventService } from './services/ActivityEventService.js';
 import { DiscordAdapter } from './adapters/DiscordAdapter.js';
 import { DiscordDashboard } from './adapters/discord/services/DiscordDashboard.js';
 import { initializeDiscordServices, notifyCrashRecovery } from './adapters/discord/DiscordBootstrap.js';
 
 const TYPING_INDICATOR_INTERVAL_MS = 5000;
-const ACTIVITY_BUFFER_SIZE = 200;
 
 export class AppBootstrap {
   private readonly config: AppConfig;
@@ -50,16 +37,12 @@ export class AppBootstrap {
   private messageProcessor: MessageProcessor | null = null;
   private databaseManager: DatabaseManager | null = null;
   private scheduleManager: ScheduleManager | null = null;
-  private activityService: ActivityService | null = null;
   private dashboardService: DiscordDashboard | null = null;
-  private budgetService: BudgetService | null = null;
   private activityEventService: ActivityEventService | null = null;
-  private taskService: TaskService | null = null;
   private costReportTimer: ReturnType<typeof setInterval> | null = null;
   private discordSystemAdapter: DiscordAdapter | null = null;
   private scheduleExecutor: ScheduleExecutor | null = null;
   private scheduleThreadMap: ScheduleThreadMap | null = null;
-  private heartbeatService: HeartbeatService | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -83,9 +66,6 @@ export class AppBootstrap {
       `ClaudeCab starting - instance ${INSTANCE_ID}`
     );
 
-    this.heartbeatService = new HeartbeatService();
-    this.heartbeatService.start();
-
     const securityConfig = loadSecurityConfig(this.config.security);
     auditLogger.configure(this.config.audit?.enabled ?? true);
 
@@ -98,45 +78,19 @@ export class AppBootstrap {
       logger.info({ restoredSessions }, 'Session restoration complete');
     }
 
-    this.activityService = this.createActivityService(agentLoader, persistence);
-    const activityService = this.activityService;
-
     const sttProvider = this.config.stt.enabled && this.config.stt.apiKey
       ? createSTTProvider(this.config.stt)
       : undefined;
-
-    const ttsProvider = this.config.tts.enabled && this.config.tts.apiToken
-      ? createTTSProvider(this.config.tts)
-      : undefined;
-
-    this.budgetService = new BudgetService({
-      agentLoader,
-      ...(persistence?.executionRecordRepository !== undefined
-        ? { executionRecordRepository: persistence.executionRecordRepository }
-        : {}),
-      ...(persistence?.queryMetricsRepository !== undefined
-        ? { queryMetricsRepository: persistence.queryMetricsRepository }
-        : {}),
-    });
 
     const messageProcessor = this.createMessageProcessor(
       sessionManager,
       agentLoader,
       persistence?.conversationRepository,
-      persistence?.contextInjector,
       persistence?.queryMetricsRepository,
-      activityService,
-      ttsProvider,
-      this.budgetService,
       persistence?.executionRecordRepository,
       persistence?.rateLimitRepository,
     );
     this.messageProcessor = messageProcessor;
-
-    this.heartbeatService.setCacheStatsProvider(() => ({
-      ...messageProcessor.sdkSession.getCacheStats(),
-      session_manager_count: sessionManager.getSessionCount(),
-    }));
 
     if (this.config.schedule.enabled) {
       this.scheduleThreadMap = new ScheduleThreadMap();
@@ -148,9 +102,7 @@ export class AppBootstrap {
       messageProcessor,
       securityConfig,
       persistence,
-      activityService,
-      sttProvider,
-      ttsProvider
+      sttProvider
     );
 
     await this.orchestrator.startAll();
@@ -163,7 +115,6 @@ export class AppBootstrap {
         scheduleThreadMap: this.scheduleThreadMap,
         queryMetricsRepository: persistence?.queryMetricsRepository,
         executionRecordRepository: persistence?.executionRecordRepository,
-        budgetService: this.budgetService ?? undefined,
         sessionRepository: persistence?.sessionRepository,
       });
       this.scheduleManager = schedule.scheduleManager;
@@ -171,14 +122,9 @@ export class AppBootstrap {
       this.scheduleThreadMap = schedule.scheduleThreadMap;
     }
 
-    for (const agentId of agentLoader.list()) {
-      activityService.trackActivity(agentId);
-    }
-
     await this.initializeDiscordServices(agentLoader, persistence, messageProcessor, sessionManager);
 
     messageProcessor.wirePostInit({
-      ...(this.taskService !== null ? { taskService: this.taskService } : {}),
       ...(this.activityEventService !== null ? { activityEventService: this.activityEventService } : {}),
     });
 
@@ -209,11 +155,6 @@ export class AppBootstrap {
     );
 
     try {
-      if (this.heartbeatService !== null) {
-        this.heartbeatService.stop();
-        this.heartbeatService = null;
-      }
-
       if (this.costReportTimer !== null) {
         clearInterval(this.costReportTimer);
         this.costReportTimer = null;
@@ -248,7 +189,6 @@ export class AppBootstrap {
       }
 
       this.sessionManager?.dispose();
-      this.activityService?.dispose();
 
       if (this.databaseManager !== null) {
         this.databaseManager.close();
@@ -305,9 +245,6 @@ export class AppBootstrap {
     const db = databaseManager.getDatabase();
     const sessionRepository = new SessionRepository(db);
     const conversationRepository = new ConversationRepository(db);
-    const groupMessageRepository = new GroupMessageRepository(db);
-    const injectionStateRepository = new InjectionStateRepository(db);
-    const groupMemberRepository = new GroupMemberRepository(db);
     const queryMetricsRepository = new QueryMetricsRepository(db);
     const rateLimitRepository = new RateLimitRepository(db);
 
@@ -323,33 +260,6 @@ export class AppBootstrap {
     }).catch(() => {});
 
     const executionRecordRepository = new ExecutionRecordRepository(db);
-    const taskRecordRepository = new TaskRecordRepository(db);
-
-    const getGroupMembersInfo = (chatId: string, platform: string) => {
-      const memberRows = groupMemberRepository.getMembers(platform, chatId);
-      return memberRows.map((row) => {
-        const agent = agentLoader.get(row.agent_id);
-        const info: GroupMemberInfo = {
-          agentId: row.agent_id,
-          name: agent?.config.name ?? row.agent_id,
-        };
-        if (agent?.config.description) {
-          info.description = agent.config.description;
-        }
-        const adapter = this.orchestrator?.getRegistry().get(row.agent_id);
-        const botInfo = adapter?.getBotInfo();
-        if (botInfo) {
-          info.username = botInfo.username;
-        }
-        return info;
-      });
-    };
-
-    const contextInjector = new ContextInjector(
-      groupMessageRepository,
-      injectionStateRepository,
-      getGroupMembersInfo
-    );
 
     logger.info('Persistence enabled');
 
@@ -357,14 +267,9 @@ export class AppBootstrap {
       databaseManager,
       sessionRepository,
       conversationRepository,
-      groupMessageRepository,
-      injectionStateRepository,
-      groupMemberRepository,
       queryMetricsRepository,
       rateLimitRepository,
-      contextInjector,
       executionRecordRepository,
-      taskRecordRepository,
     };
   }
 
@@ -391,22 +296,10 @@ export class AppBootstrap {
     sessionManager: SessionManager,
     agentLoader: AgentLoader,
     conversationRepository: ConversationRepository | undefined,
-    contextInjector: ContextInjector | undefined,
     queryMetricsRepository: QueryMetricsRepository | undefined,
-    activityService?: ActivityService,
-    ttsProvider?: TTSProvider,
-    budgetService?: BudgetService,
     executionRecordRepository?: ExecutionRecordRepository,
     rateLimitRepository?: RateLimitRepository,
   ): MessageProcessor {
-    const ttsService = ttsProvider
-      ? new TTSService({
-          provider: ttsProvider,
-          defaultVoiceId: this.config.tts.defaultVoiceId,
-          defaultLanguage: 'Chinese',
-        })
-      : undefined;
-
     return new MessageProcessor({
       sessionManager,
       getAdapter: (platform, agentId) =>
@@ -416,27 +309,12 @@ export class AppBootstrap {
       typingIndicatorIntervalMs: TYPING_INDICATOR_INTERVAL_MS,
       ...(conversationRepository !== undefined ? { conversationRepository } : {}),
       ...(queryMetricsRepository !== undefined ? { queryMetricsRepository } : {}),
-      getBotInfo: (agentId) => {
-        const registry = this.orchestrator?.getRegistry();
-        if (registry === undefined) return null;
-        for (const adapter of registry.getAll()) {
-          if (adapter.agentId === agentId) {
-            const info = adapter.getBotInfo();
-            if (info !== null) return info;
-          }
-        }
-        return null;
-      },
       eventBus: getEventBus(),
-      ...(contextInjector !== undefined ? { contextInjector } : {}),
-      ...(activityService !== undefined ? { activityService } : {}),
-      ...(ttsService !== undefined ? { ttsService } : {}),
-      ...(budgetService !== undefined ? { budgetService } : {}),
       ...(executionRecordRepository !== undefined ? { executionRecordRepository } : {}),
       ...(rateLimitRepository !== undefined ? { rateLimitRepository } : {}),
       cacheKeepaliveConfig: this.config.cacheKeepalive,
       ephemeral: this.config.session.ephemeral,
-      inChatUsageSummary: this.config.discord.inChatUsageSummary,
+      usageCardEnabled: this.config.discord.usageCardEnabled,
     });
   }
 
@@ -446,9 +324,7 @@ export class AppBootstrap {
     messageProcessor: MessageProcessor,
     securityConfig: ReturnType<typeof loadSecurityConfig>,
     persistence: PersistenceLayer | null,
-    activityService?: ActivityService,
-    sttProvider?: STTProvider,
-    ttsProvider?: TTSProvider
+    sttProvider?: STTProvider
   ): PlatformOrchestrator {
     logger.info('Initializing PlatformOrchestrator...');
 
@@ -457,11 +333,8 @@ export class AppBootstrap {
       sessionManager,
       messageProcessor,
       securityConfig,
-      ...(activityService !== undefined ? { activityService } : {}),
       ...(this.scheduleManager !== null ? { scheduleManager: this.scheduleManager } : {}),
       ...(sttProvider !== undefined ? { sttProvider } : {}),
-      ...(ttsProvider !== undefined ? { ttsProvider } : {}),
-      ...(persistence?.taskRecordRepository !== undefined ? { taskRecordRepository: persistence.taskRecordRepository } : {}),
       ...(this.scheduleThreadMap !== null ? { scheduleThreadMap: this.scheduleThreadMap } : {}),
       ...(persistence?.sessionRepository !== undefined ? { sessionRepository: persistence.sessionRepository } : {}),
       createDiscordAdapter: (config) => new DiscordAdapter(config as ConstructorParameters<typeof DiscordAdapter>[0]),
@@ -489,7 +362,6 @@ export class AppBootstrap {
       messageProcessor,
       sessionManager,
       orchestrator: this.orchestrator,
-      budgetService: this.budgetService,
       discordConfig: {
         mainBotToken,
         mainBotClientId: this.config.discord.mainBotClientId,
@@ -501,7 +373,6 @@ export class AppBootstrap {
       persistence: persistence !== null ? {
         queryMetricsRepository: persistence.queryMetricsRepository,
         rateLimitRepository: persistence.rateLimitRepository,
-        taskRecordRepository: persistence.taskRecordRepository,
         executionRecordRepository: persistence.executionRecordRepository,
       } : null,
     });
@@ -513,7 +384,6 @@ export class AppBootstrap {
     this.discordSystemAdapter = services.systemAdapter;
     if (services.dashboardService !== undefined) this.dashboardService = services.dashboardService;
     if (services.activityEventService !== undefined) this.activityEventService = services.activityEventService;
-    if (services.taskService !== undefined) this.taskService = services.taskService;
     if (services.costReportTimer !== undefined) this.costReportTimer = services.costReportTimer;
   }
 
@@ -532,33 +402,13 @@ export class AppBootstrap {
     logger.info('Bot is now running. Press Ctrl+C to stop.');
   }
 
-  private createActivityService(agentLoader: AgentLoader, persistence: PersistenceLayer | null): ActivityService {
-    const getAgentName = (agentId: string) => agentLoader.get(agentId)?.config.name ?? agentId;
-
-    let activityRepository: ActivityRepository | undefined;
-    if (persistence) {
-      activityRepository = new ActivityRepository(persistence.databaseManager.getDatabase());
-      logger.info('ActivityRepository enabled (events will be persisted)');
-    }
-
-    return new ActivityService({
-      getAgentName,
-      activityRepository,
-      bufferSize: ACTIVITY_BUFFER_SIZE,
-    });
-  }
 }
 
 interface PersistenceLayer {
   databaseManager: DatabaseManager;
   sessionRepository: SessionRepository;
   conversationRepository: ConversationRepository;
-  groupMessageRepository: GroupMessageRepository;
-  injectionStateRepository: InjectionStateRepository;
-  groupMemberRepository: GroupMemberRepository;
   queryMetricsRepository: QueryMetricsRepository;
   rateLimitRepository: RateLimitRepository;
-  contextInjector: ContextInjector;
   executionRecordRepository: ExecutionRecordRepository;
-  taskRecordRepository: TaskRecordRepository;
 }

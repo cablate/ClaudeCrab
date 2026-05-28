@@ -2,10 +2,8 @@
  * ActivityEventService — operational event logging with pluggable notification.
  *
  * Logs structured events and sends formatted messages via an injected notifier.
- * The notifier is platform-agnostic — Discord implementation lives in
- * adapters/discord/services/DiscordActivityReporter.ts.
+ * The notifier is platform-agnostic — no Discord-specific implementation.
  *
- * NOT the same as ActivityService (workflow state and reactions).
  * This is for operational visibility: schedule results, budget alerts, errors.
  */
 

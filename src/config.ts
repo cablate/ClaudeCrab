@@ -32,13 +32,6 @@ export interface AppConfig {
     apiKey: string;
     model: string;
   };
-  tts: {
-    enabled: boolean;
-    provider: 'replicate';
-    apiToken: string;
-    model: string;
-    defaultVoiceId: string;
-  };
   discord: {
     enabled: boolean;
     /** Main Bot token (handles slash commands, system embeds, interactions) */
@@ -60,8 +53,10 @@ export interface AppConfig {
     dashboardUpdateMinutes: number;
     /** Discord owner user ID for DM notifications */
     ownerUserId?: string;
-    /** When false, hides in-chat tool status messages ("✓ 已完成 N 個操作") and usage summary card (cache/tokens/cost embed) after each query */
+    /** When false, hides in-chat tool status messages ("✓ 已完成 N 個操作") */
     inChatUsageSummary: boolean;
+    /** When false, hides the per-turn usage summary card (cache/tokens/cost embed) at the end of each query */
+    usageCardEnabled: boolean;
   };
   security?: {
     /** Comma-separated list of allowed user IDs (empty = allow all) */
@@ -160,13 +155,6 @@ export function loadAppConfig(): AppConfig {
       apiKey: process.env.STT_API_KEY ?? '',
       model: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
     },
-    tts: {
-      enabled: process.env.TTS_ENABLED === 'true',
-      provider: (process.env.TTS_PROVIDER ?? 'replicate') as 'replicate',
-      apiToken: process.env.REPLICATE_API_TOKEN ?? '',
-      model: process.env.TTS_MODEL ?? 'minimax/speech-2.8-turbo',
-      defaultVoiceId: process.env.TTS_DEFAULT_VOICE_ID ?? '',
-    },
     discord: {
       enabled: process.env.DISCORD_ENABLED === 'true',
       mainBotToken: process.env.DISCORD_MAIN_BOT_TOKEN ?? '',
@@ -182,6 +170,7 @@ export function loadAppConfig(): AppConfig {
       },
       dashboardUpdateMinutes: parseIntegerEnv('DISCORD_DASHBOARD_UPDATE_MINUTES', 15),
       inChatUsageSummary: process.env.IN_CHAT_USAGE_SUMMARY_ENABLED !== 'false',
+      usageCardEnabled: process.env.USAGE_CARD_ENABLED !== 'false',
       ...(process.env.DISCORD_OWNER_USER_ID !== undefined ? { ownerUserId: process.env.DISCORD_OWNER_USER_ID } : {}),
     },
     security: {

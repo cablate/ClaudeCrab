@@ -6,8 +6,7 @@
  * - Slash command registration
  * - InteractionHandler for button/command routing
  * - DiscordDashboard
- * - DiscordActivityReporter + ActivityEventService
- * - DiscordTaskSync + TaskService
+ * - ActivityEventService (operational logging, no Discord notifier)
  * - DiscordCostReport (daily cron)
  * - DiscordCacheAnomalyReport (daily cron)
  */
@@ -18,20 +17,15 @@ import { registerSlashCommands } from './DiscordSlashCommands.js';
 import { DiscordDashboard } from './services/DiscordDashboard.js';
 import { DiscordCostReport } from './services/DiscordCostReport.js';
 import { DiscordCacheAnomalyReport } from './services/DiscordCacheAnomalyReport.js';
-import { DiscordActivityReporter } from './services/DiscordActivityReporter.js';
-import { DiscordTaskSync } from './services/DiscordTaskSync.js';
-import { ActivityEventService } from '../../services/ActivityEventService.js';
-import { TaskService } from '../../services/TaskService.js';
+import type { ActivityEventService } from '../../services/ActivityEventService.js';
 import { logger } from '../../utils/logger.js';
 
-import type { AgentLoader } from '../../core/AgentLoader.js';
-import type { MessageProcessor } from '../../core/MessageProcessor.js';
-import type { SessionManager } from '../../core/SessionManager.js';
-import type { PlatformOrchestrator } from '../../core/PlatformOrchestrator.js';
-import type { BudgetService } from '../../services/BudgetService.js';
+import type { AgentLoader } from '../../core/orchestrator/AgentLoader.js';
+import type { MessageProcessor } from '../../core/orchestrator/MessageProcessor.js';
+import type { SessionManager } from '../../core/session/SessionManager.js';
+import type { PlatformOrchestrator } from '../../core/orchestrator/PlatformOrchestrator.js';
 import type { QueryMetricsRepository } from '../../persistence/QueryMetricsRepository.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
-import type { TaskRecordRepository } from '../../persistence/TaskRecordRepository.js';
 import type { ExecutionRecordRepository } from '../../persistence/ExecutionRecordRepository.js';
 
 /** Dependencies required by Discord bootstrap */
@@ -40,7 +34,6 @@ export interface DiscordBootstrapDeps {
   messageProcessor: MessageProcessor;
   sessionManager: SessionManager;
   orchestrator: PlatformOrchestrator | null;
-  budgetService: BudgetService | null;
   discordConfig: {
     mainBotToken: string;
     mainBotClientId?: string | undefined;
@@ -58,7 +51,6 @@ export interface DiscordBootstrapDeps {
   persistence: {
     queryMetricsRepository?: QueryMetricsRepository;
     rateLimitRepository?: RateLimitRepository;
-    taskRecordRepository?: TaskRecordRepository;
     executionRecordRepository?: ExecutionRecordRepository;
   } | null;
 }
@@ -68,7 +60,6 @@ export interface DiscordServices {
   systemAdapter: DiscordAdapter;
   dashboardService?: DiscordDashboard;
   activityEventService?: ActivityEventService;
-  taskService?: TaskService;
   costReportTimer?: ReturnType<typeof setInterval>;
   cacheAnomalyReportTimer?: ReturnType<typeof setInterval>;
 }
@@ -86,7 +77,7 @@ export async function initializeDiscordServices(
 ): Promise<DiscordServices | null> {
   const {
     agentLoader, messageProcessor, sessionManager, orchestrator,
-    budgetService, discordConfig, persistence,
+    discordConfig, persistence,
   } = deps;
   const { mainBotToken, channels, dashboardUpdateMinutes } = discordConfig;
 
@@ -124,9 +115,6 @@ export async function initializeDiscordServices(
         agentLoader,
         sessionManager,
         messageProcessor,
-        ...(budgetService !== null ? { budgetService } : {}),
-        // taskService is created later — use getter for lazy resolution
-        get taskService() { return result.taskService; },
         ...(persistence?.queryMetricsRepository !== undefined
           ? { queryMetricsRepository: persistence.queryMetricsRepository }
           : {}),
@@ -138,13 +126,6 @@ export async function initializeDiscordServices(
         ...(orchestrator !== null ? {
           reloadAgent: (agentId: string) => orchestrator!.reloadAgent(agentId),
         } : {}),
-        // Task thread resolver: maps Discord thread ID → task ID for session key matching.
-        // Uses lazy getter because taskService is created after this object.
-        get resolveTaskThread() {
-          const taskSvc = result.taskService;
-          if (!taskSvc) return undefined;
-          return (threadId: string) => taskSvc.getTaskByThreadId(threadId);
-        },
       },
     });
 
@@ -180,14 +161,8 @@ export async function initializeDiscordServices(
             ...(persistence?.rateLimitRepository !== undefined
               ? { rateLimitRepository: persistence.rateLimitRepository }
               : {}),
-            ...(persistence?.taskRecordRepository !== undefined
-              ? { taskRecordRepository: persistence.taskRecordRepository }
-              : {}),
             ...(persistence?.executionRecordRepository !== undefined
               ? { executionRecordRepository: persistence.executionRecordRepository }
-              : {}),
-            ...(budgetService !== null
-              ? { budgetService }
               : {}),
             ...(dashboardUpdateMinutes !== undefined
               ? { updateIntervalMinutes: dashboardUpdateMinutes }
@@ -211,42 +186,6 @@ export async function initializeDiscordServices(
     }
   }
 
-  // === ACTIVITY EVENT SERVICE (pure service + Discord notifier) ===
-  if (channels.systemLog || channels.alerts) {
-    const discordReporter = new DiscordActivityReporter({
-      discordAdapter,
-      ...(channels.systemLog ? { systemLogChannelId: channels.systemLog } : {}),
-      ...(channels.alerts ? { alertsChannelId: channels.alerts } : {}),
-    });
-    result.activityEventService = new ActivityEventService({
-      notifier: discordReporter,
-      ...(discordConfig.ownerUserId ? { ownerUserId: discordConfig.ownerUserId } : {}),
-    });
-    logger.info('ActivityEventService started (with Discord notifier)');
-  }
-
-  // === TASK SERVICE (SQLite + optional Discord Forum sync) ===
-  if (persistence?.taskRecordRepository !== undefined) {
-    let threadNotifier: DiscordTaskSync | undefined;
-    if (channels.taskBoard) {
-      threadNotifier = new DiscordTaskSync({
-        discordAdapter,
-        forumChannelId: channels.taskBoard,
-        taskRecordRepository: persistence.taskRecordRepository,
-      });
-    }
-
-    result.taskService = new TaskService({
-      taskRecordRepository: persistence.taskRecordRepository,
-      ...(threadNotifier !== undefined ? { threadNotifier } : {}),
-    });
-
-    if (threadNotifier !== undefined) {
-      threadNotifier.startForumListener();
-    }
-    logger.info('TaskService started (Forum listener active)');
-  }
-
   // === COST REPORT (daily cron) ===
   if (channels.costReport && persistence?.queryMetricsRepository !== undefined) {
     const costReportService = new DiscordCostReport({
@@ -254,7 +193,6 @@ export async function initializeDiscordServices(
       channelId: channels.costReport,
       agentLoader,
       queryMetricsRepository: persistence.queryMetricsRepository,
-      ...(budgetService !== null ? { budgetService } : {}),
     });
 
     let lastCostReportDate = '';

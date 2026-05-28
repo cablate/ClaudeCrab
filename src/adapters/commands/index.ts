@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { AgentLoader } from '../../core/AgentLoader.js';
+import type { AgentLoader } from '../../core/orchestrator/AgentLoader.js';
 
 export async function applyModelChange(
   agentId: string,

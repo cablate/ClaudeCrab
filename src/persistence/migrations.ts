@@ -98,58 +98,6 @@ CREATE TABLE IF NOT EXISTS schedule_executions (
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_schedule ON schedule_executions(schedule_id);
 CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_executions(started_at);
 
--- Group messages table (shared across bots for context injection)
-CREATE TABLE IF NOT EXISTS group_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    platform TEXT NOT NULL,
-    chat_id TEXT NOT NULL,
-    platform_msg_id TEXT NOT NULL,
-    sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'bot')),
-    sender_id TEXT NOT NULL,
-    sender_label TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    UNIQUE(platform, chat_id, platform_msg_id)
-);
-
--- Group messages indexes
-CREATE INDEX IF NOT EXISTS idx_group_messages_chat ON group_messages(platform, chat_id);
-CREATE INDEX IF NOT EXISTS idx_group_messages_lookup ON group_messages(platform, chat_id, platform_msg_id);
-
--- Group injection state table (tracks injection cursor per bot per group)
-CREATE TABLE IF NOT EXISTS group_injection_state (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id TEXT NOT NULL,
-    chat_id TEXT NOT NULL,
-    platform TEXT NOT NULL,
-    joined_at TEXT NOT NULL,
-    joined_msg_id TEXT,
-    last_injected_msg_id TEXT,
-    last_injected_at TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE(platform, agent_id, chat_id)
-);
-
--- Group injection state indexes
-CREATE INDEX IF NOT EXISTS idx_injection_state_lookup ON group_injection_state(platform, agent_id, chat_id);
-
--- Group members table (persistent group membership for bots, ADR-020)
-CREATE TABLE IF NOT EXISTS group_members (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    platform TEXT NOT NULL,
-    chat_id TEXT NOT NULL,
-    agent_id TEXT NOT NULL,
-    joined_at TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE(platform, chat_id, agent_id)
-);
-
--- Group members indexes
-CREATE INDEX IF NOT EXISTS idx_group_members_chat ON group_members(platform, chat_id);
-CREATE INDEX IF NOT EXISTS idx_group_members_agent ON group_members(agent_id);
-
 -- Query metrics table (ADR-020 Phase 2: token usage tracking)
 CREATE TABLE IF NOT EXISTS query_metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -213,31 +161,6 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_agent ON activity_events(agent_id
 CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
 CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
 
--- Task records table (Discord Forum + SQLite dual-layer)
-CREATE TABLE IF NOT EXISTS task_records (
-    id TEXT PRIMARY KEY,
-    discord_thread_id TEXT UNIQUE,
-    title TEXT NOT NULL,
-    description TEXT,
-    status TEXT NOT NULL DEFAULT 'backlog'
-        CHECK (status IN ('backlog', 'in_progress', 'in_review', 'done', 'cancelled')),
-    priority TEXT NOT NULL DEFAULT 'medium'
-        CHECK (priority IN ('urgent', 'medium', 'low')),
-    assignee_agent_id TEXT,
-    created_by_agent_id TEXT,
-    created_by_user_id TEXT,
-    parent_task_id TEXT REFERENCES task_records(id),
-    cost_cents INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    completed_at TEXT,
-    review_count INTEGER NOT NULL DEFAULT 0,
-    agent_thread_ids TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE INDEX IF NOT EXISTS idx_task_status ON task_records(status);
-CREATE INDEX IF NOT EXISTS idx_task_assignee ON task_records(assignee_agent_id, status);
-
 -- Execution records table (per SDK query audit trail)
 CREATE TABLE IF NOT EXISTS execution_records (
     id TEXT PRIMARY KEY,
@@ -245,7 +168,6 @@ CREATE TABLE IF NOT EXISTS execution_records (
     trigger_type TEXT NOT NULL
         CHECK (trigger_type IN ('chat', 'schedule', 'agent_call')),
     trigger_source TEXT,
-    task_id TEXT REFERENCES task_records(id),
     prompt_summary TEXT,
     response_summary TEXT,
     input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -260,10 +182,9 @@ CREATE TABLE IF NOT EXISTS execution_records (
 
 CREATE INDEX IF NOT EXISTS idx_exec_agent ON execution_records(agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, created_at);
-CREATE INDEX IF NOT EXISTS idx_exec_task ON execution_records(task_id);
 `;
 
-export const SCHEMA_VERSION = '17';
+export const SCHEMA_VERSION = '14';
 
 /**
  * Migration SQL from v1 to v2:
@@ -369,70 +290,6 @@ CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_execution
 `;
 
 /**
- * Migration SQL from v4 to v5:
- * Adds group_messages and group_injection_state tables for multi-bot context injection
- */
-const MIGRATION_V4_TO_V5 = `
--- Group messages table (shared across bots for context injection)
-CREATE TABLE IF NOT EXISTS group_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    platform TEXT NOT NULL,
-    chat_id TEXT NOT NULL,
-    platform_msg_id TEXT NOT NULL,
-    sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'bot')),
-    sender_id TEXT NOT NULL,
-    sender_label TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    UNIQUE(platform, chat_id, platform_msg_id)
-);
-
--- Group messages indexes
-CREATE INDEX IF NOT EXISTS idx_group_messages_chat ON group_messages(platform, chat_id);
-CREATE INDEX IF NOT EXISTS idx_group_messages_lookup ON group_messages(platform, chat_id, platform_msg_id);
-
--- Group injection state table (tracks injection cursor per bot per group)
-CREATE TABLE IF NOT EXISTS group_injection_state (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id TEXT NOT NULL,
-    chat_id TEXT NOT NULL,
-    platform TEXT NOT NULL,
-    joined_at TEXT NOT NULL,
-    joined_msg_id TEXT,
-    last_injected_msg_id TEXT,
-    last_injected_at TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE(platform, agent_id, chat_id)
-);
-
--- Group injection state indexes
-CREATE INDEX IF NOT EXISTS idx_injection_state_lookup ON group_injection_state(platform, agent_id, chat_id);
-`;
-
-/**
- * Migration SQL from v5 to v6:
- * Adds group_members table for persistent group membership (ADR-020)
- */
-const MIGRATION_V5_TO_V6 = `
--- Group members table (persistent group membership for bots, ADR-020)
-CREATE TABLE IF NOT EXISTS group_members (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    platform TEXT NOT NULL,
-    chat_id TEXT NOT NULL,
-    agent_id TEXT NOT NULL,
-    joined_at TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE(platform, chat_id, agent_id)
-);
-
--- Group members indexes
-CREATE INDEX IF NOT EXISTS idx_group_members_chat ON group_members(platform, chat_id);
-CREATE INDEX IF NOT EXISTS idx_group_members_agent ON group_members(agent_id);
-`;
-
-/**
  * Migration SQL from v6 to v7:
  * Adds query_metrics table for token usage tracking (ADR-020 Phase 2)
  */
@@ -479,31 +336,6 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(create
 `;
 
 const MIGRATION_V8_TO_V9 = `
--- Task records table (Discord Forum + SQLite dual-layer)
-CREATE TABLE IF NOT EXISTS task_records (
-    id TEXT PRIMARY KEY,
-    discord_thread_id TEXT UNIQUE,
-    title TEXT NOT NULL,
-    description TEXT,
-    status TEXT NOT NULL DEFAULT 'backlog'
-        CHECK (status IN ('backlog', 'in_progress', 'in_review', 'done', 'cancelled')),
-    priority TEXT NOT NULL DEFAULT 'medium'
-        CHECK (priority IN ('urgent', 'medium', 'low')),
-    assignee_agent_id TEXT,
-    created_by_agent_id TEXT,
-    created_by_user_id TEXT,
-    parent_task_id TEXT REFERENCES task_records(id),
-    cost_cents INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    completed_at TEXT,
-    review_count INTEGER NOT NULL DEFAULT 0,
-    agent_thread_ids TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE INDEX IF NOT EXISTS idx_task_status ON task_records(status);
-CREATE INDEX IF NOT EXISTS idx_task_assignee ON task_records(assignee_agent_id, status);
-
 -- Execution records table (per SDK query audit trail)
 CREATE TABLE IF NOT EXISTS execution_records (
     id TEXT PRIMARY KEY,
@@ -511,7 +343,6 @@ CREATE TABLE IF NOT EXISTS execution_records (
     trigger_type TEXT NOT NULL
         CHECK (trigger_type IN ('chat', 'schedule', 'agent_call')),
     trigger_source TEXT,
-    task_id TEXT REFERENCES task_records(id),
     prompt_summary TEXT,
     response_summary TEXT,
     input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -526,7 +357,6 @@ CREATE TABLE IF NOT EXISTS execution_records (
 
 CREATE INDEX IF NOT EXISTS idx_exec_agent ON execution_records(agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, created_at);
-CREATE INDEX IF NOT EXISTS idx_exec_task ON execution_records(task_id);
 `;
 
 const MIGRATION_V9_TO_V10 = `
@@ -538,12 +368,6 @@ UPDATE query_metrics SET total_cost_cents = ROUND(total_cost_usd * 100) WHERE to
 `;
 
 const MIGRATION_V10_TO_V11 = `
--- Add review_count and agent_thread_ids to task_records
-ALTER TABLE task_records ADD COLUMN review_count INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE task_records ADD COLUMN agent_thread_ids TEXT NOT NULL DEFAULT '{}';
-`;
-
-const MIGRATION_V11_TO_V12 = `
 -- Add is_active column for soft-delete on /reset (survives process restart)
 ALTER TABLE sessions ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;
 `;
@@ -649,80 +473,63 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   }
 
   if (currentVersion === '4') {
-    db.exec(MIGRATION_V4_TO_V5);
+    db.exec(MIGRATION_V6_TO_V7);
     logger.info('Migration v4 → v5 completed');
     currentVersion = '5';
   }
 
   if (currentVersion === '5') {
-    db.exec(MIGRATION_V5_TO_V6);
+    db.exec(MIGRATION_V7_TO_V8);
     logger.info('Migration v5 → v6 completed');
     currentVersion = '6';
   }
 
   if (currentVersion === '6') {
-    db.exec(MIGRATION_V6_TO_V7);
+    db.exec(MIGRATION_V8_TO_V9);
     logger.info('Migration v6 → v7 completed');
     currentVersion = '7';
   }
 
   if (currentVersion === '7') {
-    db.exec(MIGRATION_V7_TO_V8);
+    db.exec(MIGRATION_V9_TO_V10);
     logger.info('Migration v7 → v8 completed');
     currentVersion = '8';
   }
 
   if (currentVersion === '8') {
-    db.exec(MIGRATION_V8_TO_V9);
+    db.exec(MIGRATION_V10_TO_V11);
     logger.info('Migration v8 → v9 completed');
     currentVersion = '9';
   }
 
   if (currentVersion === '9') {
-    db.exec(MIGRATION_V9_TO_V10);
+    db.exec(MIGRATION_V12_TO_V13);
     logger.info('Migration v9 → v10 completed');
     currentVersion = '10';
   }
 
   if (currentVersion === '10') {
-    db.exec(MIGRATION_V10_TO_V11);
+    db.exec(MIGRATION_V13_TO_V14);
     logger.info('Migration v10 → v11 completed');
     currentVersion = '11';
   }
 
   if (currentVersion === '11') {
-    db.exec(MIGRATION_V11_TO_V12);
+    db.exec(MIGRATION_V14_TO_V15);
     logger.info('Migration v11 → v12 completed');
     currentVersion = '12';
   }
 
   if (currentVersion === '12') {
-    db.exec(MIGRATION_V12_TO_V13);
+    db.exec(`ALTER TABLE sessions ADD COLUMN continuation_state TEXT DEFAULT NULL;`);
     logger.info('Migration v12 → v13 completed');
     currentVersion = '13';
   }
 
   if (currentVersion === '13') {
-    db.exec(MIGRATION_V13_TO_V14);
+    db.exec(MIGRATION_V16_TO_V17);
     logger.info('Migration v13 → v14 completed');
     currentVersion = '14';
-  }
-
-  if (currentVersion === '14') {
-    db.exec(MIGRATION_V14_TO_V15);
-    logger.info('Migration v14 → v15 completed');
-    currentVersion = '15';
-  }
-
-  if (currentVersion === '15') {
-    db.exec(`ALTER TABLE sessions ADD COLUMN continuation_state TEXT DEFAULT NULL;`);
-    logger.info('Migration v15 → v16 completed');
-    currentVersion = '16';
-  }
-
-  if (currentVersion === '16') {
-    db.exec(MIGRATION_V16_TO_V17);
-    logger.info('Migration v16 → v17 completed');
   }
 
   // Update schema version

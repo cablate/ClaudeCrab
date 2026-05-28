@@ -12,10 +12,8 @@ import { EmbedBuilder } from 'discord.js';
 import type { DiscordAdapter } from '../../DiscordAdapter.js';
 import type { IQueryMetricsRepository } from '../../../persistence/types.js';
 import type { RateLimitRepository } from '../../../persistence/RateLimitRepository.js';
-import type { TaskRecordRepository } from '../../../persistence/TaskRecordRepository.js';
 import type { ExecutionRecordRepository } from '../../../persistence/ExecutionRecordRepository.js';
-import type { AgentLoader } from '../../../core/AgentLoader.js';
-import type { BudgetService } from '../../../services/BudgetService.js';
+import type { AgentLoader } from '../../../core/orchestrator/AgentLoader.js';
 import { logger } from '../../../utils/logger.js';
 import { EventType } from '../../../utils/events.js';
 
@@ -32,12 +30,8 @@ export interface DiscordDashboardOptions {
   queryMetricsRepository?: IQueryMetricsRepository;
   /** Rate limit repository for quota utilization */
   rateLimitRepository?: RateLimitRepository;
-  /** Task records for task summary */
-  taskRecordRepository?: TaskRecordRepository;
   /** Execution records for recent activity */
   executionRecordRepository?: ExecutionRecordRepository;
-  /** Budget service for budget status */
-  budgetService?: BudgetService;
   /** Update interval in minutes (default 15) */
   updateIntervalMinutes?: number;
 }
@@ -48,9 +42,7 @@ export class DiscordDashboard {
   private readonly agentLoader: AgentLoader;
   private readonly queryMetrics: IQueryMetricsRepository | undefined;
   private readonly rateLimitRepo: RateLimitRepository | undefined;
-  private readonly taskRepo: TaskRecordRepository | undefined;
   private readonly execRepo: ExecutionRecordRepository | undefined;
-  private readonly budgetService: BudgetService | undefined;
   private readonly updateIntervalMs: number;
 
   private dashboardMessageId: string | null = null;
@@ -62,9 +54,7 @@ export class DiscordDashboard {
     this.agentLoader = options.agentLoader;
     this.queryMetrics = options.queryMetricsRepository;
     this.rateLimitRepo = options.rateLimitRepository;
-    this.taskRepo = options.taskRecordRepository;
     this.execRepo = options.executionRecordRepository;
-    this.budgetService = options.budgetService;
     this.updateIntervalMs = (options.updateIntervalMinutes ?? 15) * 60 * 1000;
   }
 
@@ -191,15 +181,6 @@ export class DiscordDashboard {
     }
 
     // ── \u4EFB\u52D9 ──
-    if (this.taskRepo !== undefined) {
-      const taskBlock = this.buildTaskBlock();
-      embed.addFields({ name: '\u200b', value: '\u200b' }); // spacer
-      embed.addFields(
-        { name: '\u{1F4CB} \u5F85\u8FA6', value: `**${taskBlock.backlog}**`, inline: true },
-        { name: '\u{1F504} \u9032\u884C\u4E2D', value: `**${taskBlock.inProgress}**`, inline: true },
-        { name: '\u2705 \u5B8C\u6210', value: `**${taskBlock.done}**`, inline: true },
-      );
-    }
 
     // ── Rate Limit 利用率 ──
     const quotaBlock = this.buildQuotaBlock();
@@ -222,21 +203,10 @@ export class DiscordDashboard {
       const agent = this.agentLoader.get(agentId);
       if (agent === undefined) continue;
 
-      const isPaused = this.budgetService?.isAgentPaused(agentId) ?? false;
       const name = agent.config.name || agentId;
       const emoji = agent.config.display?.avatar ?? '\u{1F916}';
 
-      let statusIcon: string;
-      let statusText: string;
-      if (isPaused) {
-        statusIcon = '\u23F8\uFE0F';
-        statusText = '\u9810\u7B97\u66AB\u505C';
-      } else {
-        statusIcon = '\u{1F7E2}';
-        statusText = '\u5F85\u547D';
-      }
-
-      lines.push(`${emoji} **${name}** ${statusIcon} ${statusText}`);
+      lines.push(`${emoji} **${name}** \u{1F7E2} \u5F85\u547D`);
     }
 
     return lines.join('\n');
@@ -272,18 +242,7 @@ export class DiscordDashboard {
       const name = (agent.config.name || agentId).slice(0, 8);
       const todayQueries = todayMap.get(agentId)?.totalQueries ?? 0;
 
-      // Budget bar
-      const budgetStatus = this.budgetService?.checkBudget(agentId);
-      let bar = '';
-      if (budgetStatus !== null && budgetStatus !== undefined && budgetStatus.monthlyLimitCents > 0) {
-        const limitUsd = budgetStatus.monthlyLimitCents / 100;
-        const pct = Math.min(Math.round((monthCost / limitUsd) * 100), 100);
-        const filled = Math.round(pct / 10);
-        const barChar = pct >= 80 ? '\u{1F7E5}' : pct >= 50 ? '\u{1F7E8}' : '\u{1F7E9}';
-        bar = ` ${barChar.repeat(filled)}${'\u2B1C'.repeat(10 - filled)} ${pct}%`;
-      }
-
-      rows.push(`**${name}**\u3000$${todayCost.toFixed(2)} \u4ECA\u65E5\uFF08${todayQueries}\u6B21\uFF09\u00B7 $${monthCost.toFixed(2)} \u6708${bar}`);
+      rows.push(`**${name}**\u3000$${todayCost.toFixed(2)} \u4ECA\u65E5\uFF08${todayQueries}\u6B21\uFF09\u00B7 $${monthCost.toFixed(2)} \u6708`);
     }
 
     if (rows.length === 0) {
@@ -294,15 +253,6 @@ export class DiscordDashboard {
     rows.push(`**\u5408\u8A08**\u3000$${totalTodayUsd.toFixed(2)} \u4ECA\u65E5 \u00B7 $${totalMonthUsd.toFixed(2)} \u6708`);
 
     return { text: rows.join('\n'), totalMonthUsd };
-  }
-
-  private buildTaskBlock(): { backlog: number; inProgress: number; done: number } {
-    const summary = this.taskRepo!.getSummary();
-    return {
-      backlog: summary.backlog,
-      inProgress: summary.in_progress + summary.in_review,
-      done: summary.done,
-    };
   }
 
   /**

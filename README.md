@@ -14,7 +14,6 @@ Single-agent Discord bot with persistent V2 SDK sessions, schedule system, and o
 - **Schedule System**: Agent 排程任務，cron 驅動，結果發送到 Discord thread
 - **Security**: 使用者白名單、訊息驗證、Prompt injection 偵測
 - **Observability**: Dashboard Embed、Cost Report、OAuth Rate-Limit 監控
-- **Cloud Ready**: Docker 容器化、OAuth 認證支援、resource limits
 
 ---
 
@@ -118,9 +117,9 @@ npm run build && npm start
 | `DISCORD_CHANNEL_APPROVALS` | — | 審核頻道 ID |
 | `DISCORD_CHANNEL_COST_REPORT` | — | 每日成本報告頻道 ID |
 | `DISCORD_CHANNEL_ALERTS` | — | 錯誤/警告通知頻道 ID |
-| `DISCORD_CHANNEL_TASK_BOARD` | — | 任務看板頻道 ID |
 | `DISCORD_CHANNEL_SYSTEM_LOG` | — | 系統日誌頻道 ID |
-| `IN_CHAT_USAGE_SUMMARY_ENABLED` | `true` | 設 `false` 隱藏對話內 tool 狀態訊息 & 用量卡片（events、usage card） |
+| `IN_CHAT_USAGE_SUMMARY_ENABLED` | `true` | 設 `false` 隱藏對話內 tool 狀態訊息（events、usage card） |
+| `USAGE_CARD_ENABLED` | `true` | 設 `false` 隱藏對話結束後的用量卡片（cache/tokens/cost embed） |
 | `DISCORD_DASHBOARD_UPDATE_MINUTES` | `15` | Dashboard Embed 更新間隔（分鐘） |
 
 ### Session Management
@@ -169,16 +168,6 @@ npm run build && npm start
 | `STT_PROVIDER` | `groq` | 目前僅支援 Groq |
 | `STT_API_KEY` | — | Groq API 金鑰 |
 | `STT_MODEL` | `whisper-large-v3-turbo` | Whisper 模型 |
-
-### TTS（語音合成）
-
-| 變數 | 預設 | 說明 |
-|------|------|------|
-| `TTS_ENABLED` | `false` | 啟用語音合成 |
-| `TTS_PROVIDER` | `replicate` | 目前僅支援 Replicate |
-| `REPLICATE_API_TOKEN` | — | Replicate API Token |
-| `TTS_MODEL` | `minimax/speech-2.8-turbo` | TTS 模型 |
-| `TTS_DEFAULT_VOICE_ID` | — | 預設語音 ID |
 
 ### 安全性
 
@@ -270,12 +259,6 @@ ANTHROPIC_BASE_URL=https://your-proxy.com/v1
 - Agent 層級也可在 `.claude/settings.local.json` 設定 `ANTHROPIC_API_KEY`，實現不同 agent 用不同 key/proxy
 
 ### STT（語音轉文字）
-
-目前僅支援 **Groq Whisper**。填入 `STT_API_KEY` 即可啟用，支援 OGG、MP3、WAV、FLAC、M4A、WebM、MPEG 格式。
-
-### TTS（文字轉語音）
-
-目前僅支援 **Replicate**（MiniMax 模型）。填入 `REPLICATE_API_TOKEN` 即可啟用。
 
 ---
 
@@ -375,7 +358,7 @@ claudecab/
 │   ├── core/            # SessionManager, MessageProcessor, SDK integration
 │   ├── persistence/     # SQLite repositories
 │   ├── schedule/        # Cron schedule system
-│   ├── services/        # Budget, Activity, TTS, Task services
+│   ├── services/        # Budget, Activity services
 │   ├── types/           # TypeScript types
 │   └── utils/           # Logging, events, security, formatting
 ├── public/              # Web UI assets (dashboard)

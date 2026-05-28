@@ -106,11 +106,6 @@ export function extractHookReadInput(input: unknown): HookReadInputSummary {
   };
 }
 
-export function extractHookAgentToolSubagentType(input: unknown): string {
-  const toolInput = asRecord(asRecord(input)?.tool_input);
-  return asString(toolInput?.subagent_type);
-}
-
 export function extractHookAgentContext(input: unknown): HookAgentContext {
   const payload = asRecord(input);
   const agentId = asString(payload?.agent_id);

@@ -15,7 +15,7 @@ import type {
   ExitPlanModePromptResult,
   ExitPlanModeResolver,
 } from './types.js';
-import { getEventBus } from '../core/EventBus.js';
+import { getEventBus } from '../core/lib/EventBus.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -192,6 +192,18 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
     options?: SendOptions
   ): Promise<SendResult> {
     return this.sendMessage(chatId, text, options);
+  }
+
+  /**
+   * Edit a previously sent message. Default implementation sends a new message
+   * (since not all platforms support editing). Subclasses override for true edit support.
+   */
+  async editMessage(
+    _chatId: string,
+    _messageId: string,
+    _text: string,
+  ): Promise<SendResult> {
+    return { success: false, error: 'editMessage not implemented' };
   }
 
   /**

@@ -1,8 +1,7 @@
-import type { AgentLoader } from '../core/AgentLoader.js';
-import type { PlatformOrchestrator } from '../core/PlatformOrchestrator.js';
+import type { AgentLoader } from '../core/orchestrator/AgentLoader.js';
+import type { PlatformOrchestrator } from '../core/orchestrator/PlatformOrchestrator.js';
 import type { IQueryMetricsRepository, ISessionRepository } from '../persistence/types.js';
 import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
-import type { BudgetService } from '../services/BudgetService.js';
 import type { DatabaseManager } from '../persistence/DatabaseManager.js';
 import { ScheduleLoader } from './ScheduleLoader.js';
 import { ScheduleNotifier } from './ScheduleNotifier.js';
@@ -11,8 +10,8 @@ import { CronScheduler } from './CronScheduler.js';
 import { ScheduleManager } from './ScheduleManager.js';
 import { ScheduleThreadMap } from './ScheduleThreadMap.js';
 import { ScheduleRepository } from '../persistence/ScheduleRepository.js';
-import { SDKQueryManager } from '../core/SDKQueryManager.js';
-import { getEventBus } from '../core/EventBus.js';
+import { SDKQueryManager } from '../core/query/SDKQueryManager.js';
+import { getEventBus } from '../core/lib/EventBus.js';
 import { logger } from '../utils/logger.js';
 
 export interface ScheduleBootstrapResult {
@@ -28,7 +27,6 @@ export async function initializeScheduleSystem(opts: {
   scheduleThreadMap: ScheduleThreadMap | null;
   queryMetricsRepository: IQueryMetricsRepository | undefined;
   executionRecordRepository: ExecutionRecordRepository | undefined;
-  budgetService: BudgetService | undefined;
   sessionRepository: ISessionRepository | undefined;
 }): Promise<ScheduleBootstrapResult> {
   logger.info('Initializing Schedule System...');
@@ -49,8 +47,8 @@ export async function initializeScheduleSystem(opts: {
     scheduleRepository,
     opts.queryMetricsRepository,
     opts.executionRecordRepository,
-    opts.budgetService,
-    undefined, // activityEventService — injected via wirePostInit
+    undefined, // budgetService ??injected via wirePostInit
+    undefined, // activityEventService ??injected via wirePostInit
     opts.sessionRepository,
   );
 

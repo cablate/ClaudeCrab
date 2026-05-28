@@ -165,20 +165,6 @@ export class STTError extends ClaudeCabError {
   }
 }
 
-export class TTSError extends ClaudeCabError {
-  constructor(message: string, cause?: Error) {
-    super(
-      message,
-      'TTS_SYNTHESIS_FAILED',
-      true,
-      '語音合成失敗，請重新嘗試。',
-      cause
-    );
-    this.name = 'TTSError';
-  }
-}
-
-
 /**
  * Error thrown for validation failures
  */

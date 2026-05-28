@@ -1,49 +1,44 @@
-export { EventBus, getEventBus, resetEventBus } from './EventBus.js';
-export { AgentLoader, type AgentLoaderOptions } from './AgentLoader.js';
-export { ConfigTransformer, type SDKOptions } from './ConfigTransformer.js';
-export { SessionManager, type SessionManagerOptions } from './SessionManager.js';
+export { EventBus, getEventBus, resetEventBus } from './lib/EventBus.js';
+export { AgentLoader, type AgentLoaderOptions } from './orchestrator/AgentLoader.js';
+export { ConfigTransformer, type SDKOptions } from './lib/ConfigTransformer.js';
+export { SessionManager, type SessionManagerOptions } from './session/SessionManager.js';
 export {
   AdapterRegistry,
   getAdapterRegistry,
   resetAdapterRegistry,
-} from './AdapterRegistry.js';
+} from './orchestrator/AdapterRegistry.js';
 export {
   MessageProcessor,
   type MessageProcessorOptions,
   type ProcessingResult,
-} from './MessageProcessor.js';
+} from './orchestrator/MessageProcessor.js';
 export {
   PlatformOrchestrator,
   type PlatformOrchestratorOptions,
   type RunningAdapterInfo,
-} from './PlatformOrchestrator.js';
+} from './orchestrator/PlatformOrchestrator.js';
 export {
   PermissionBridge,
   type PermissionDecision,
   type PermissionRequestInfo,
-} from './PermissionBridge.js';
-export {
-  ContextInjector,
-  type InjectionContext,
-  type InjectionOptions,
-} from './ContextInjector.js';
+} from './interaction/PermissionBridge.js';
 export {
   QuestionBridge,
   type QuestionAnswer,
   type QuestionRequestInfo,
-} from './QuestionBridge.js';
+} from './interaction/QuestionBridge.js';
 export {
   ExitPlanModeBridge,
   type PlanReviewDecision,
   type PlanReviewRequestInfo,
-} from './ExitPlanModeBridge.js';
+} from './interaction/ExitPlanModeBridge.js';
 export {
   SDKQueryManager,
   type QueryResult,
   type ExecuteQueryOptions,
-} from './SDKQueryManager.js';
+} from './query/SDKQueryManager.js';
 export {
   PathValidator,
   type PathValidatorOptions,
   type PathValidationResult,
-} from './PathValidator.js';
+} from './lib/PathValidator.js';

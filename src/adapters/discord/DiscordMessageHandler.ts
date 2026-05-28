@@ -245,7 +245,6 @@ export async function handleDiscordMessage(
       sourceMessageChannelId: message.channelId,
       displayName,
       username: message.author.username,
-      isGroupChat: false,
       ...(taskId !== undefined ? { taskId } : {}),
       ...(inheritedSdkSessionId !== undefined ? { inheritedSdkSessionId } : {}),
       ...(threadId !== undefined && taskId === undefined && inheritedSdkSessionId === undefined ? {

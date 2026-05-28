@@ -37,12 +37,6 @@ export interface EventMap {
   /** Fired when a system error occurs */
   error: ClaudeCabError;
 
-  /** Fired when a group message is received (for multi-bot broadcast) */
-  'group:message': GroupMessagePayload;
-
-  /** Fired when a bot replies in a group chat (for broadcasting to other bots) */
-  'bot:replied': BotRepliedPayload;
-
   /** Fired when an agent activity occurs (v2.0 Characters Come Alive) */
   'activity': import('./activity.js').ActivityEvent;
 
@@ -56,43 +50,6 @@ export interface EventMap {
     newState: ConnectionState;
     details: { consecutiveFailures: number; recentP95Ms: number };
   };
-}
-
-/**
- * Payload for group:message event (multi-bot broadcast)
- */
-export interface GroupMessagePayload {
-  /** The unified message */
-  message: UnifiedMessage;
-
-  /** Agent ID that received this message from Discord */
-  sourceAgentId: string;
-
-  /** Bot username mentioned in the message (without @), or null */
-  mentionedBot: string | null;
-
-  /** Whether this message is a reply to the source bot */
-  isReplyToBot: boolean;
-}
-
-/**
- * Payload for bot:replied event (for broadcasting bot replies to other bots)
- */
-export interface BotRepliedPayload {
-  /** Chat ID where the reply was sent */
-  chatId: string;
-
-  /** Agent ID of the bot that replied */
-  agentId: string;
-
-  /** The response text (already labeled with [@bot_username]) */
-  response: string;
-
-  /** Platform, currently 'discord' */
-  platform: string;
-
-  /** Platform-specific message ID of the reply (for context injection tracking) */
-  replyMessageId?: string;
 }
 
 /**
@@ -180,8 +137,6 @@ const EVENT_NAMES: EventName[] = [
   'agent:loaded',
   'agent:reloaded',
   'error',
-  'group:message',
-  'bot:replied',
   'interaction',
   'connection:healthChanged',
 ];

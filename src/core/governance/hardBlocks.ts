@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export interface HardBlockConfig {
+interface HardBlockConfig {
   readonly enabled: boolean;
   readonly protectedWriteTools: readonly string[];
   readonly retiredPathMarkers: readonly string[];
@@ -12,7 +12,7 @@ export interface HardBlockConfig {
   };
 }
 
-export interface HardBlockDecision {
+interface HardBlockDecision {
   readonly ruleId: 'retired_path_write' | 'output_repo_marker';
   readonly reason: string;
   readonly target?: string;
