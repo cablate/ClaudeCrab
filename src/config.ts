@@ -43,10 +43,8 @@ export interface AppConfig {
     /** System channel IDs */
     channels: {
       dashboard: string;
-      approvals: string;
       costReport: string;
       alerts: string;
-      taskBoard: string;
       systemLog: string;
     };
     /** Dashboard update interval in minutes */
@@ -162,10 +160,8 @@ export function loadAppConfig(): AppConfig {
       guildId: process.env.DISCORD_GUILD_ID ?? '',
       channels: {
         dashboard: process.env.DISCORD_CHANNEL_DASHBOARD ?? '',
-        approvals: process.env.DISCORD_CHANNEL_APPROVALS ?? '',
         costReport: process.env.DISCORD_CHANNEL_COST_REPORT ?? '',
         alerts: process.env.DISCORD_CHANNEL_ALERTS ?? '',
-        taskBoard: process.env.DISCORD_CHANNEL_TASK_BOARD ?? '',
         systemLog: process.env.DISCORD_CHANNEL_SYSTEM_LOG ?? '',
       },
       dashboardUpdateMinutes: parseIntegerEnv('DISCORD_DASHBOARD_UPDATE_MINUTES', 15),

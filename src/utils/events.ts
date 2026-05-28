@@ -242,5 +242,3 @@ export const EventType = {
   ERROR_UNHANDLED_REJECTION: 'error.unhandled_rejection',
   ERROR_UNCAUGHT_EXCEPTION: 'error.uncaught_exception',
 } as const;
-
-export type EventTypeValue = typeof EventType[keyof typeof EventType];

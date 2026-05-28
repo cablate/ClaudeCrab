@@ -15,7 +15,6 @@
 import path from 'path';
 import { EmbedBuilder } from 'discord.js';
 import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
-import type { ActivityService } from '../../types/interfaces.js';
 import type { IConversationRepository, IQueryMetricsRepository } from '../../persistence/types.js';
 import type { ExecutionRecordRepository } from '../../persistence/ExecutionRecordRepository.js';
 import type { ActivityEventService } from '../../services/ActivityEventService.js';
@@ -57,7 +56,6 @@ const qeLogger = logger.child({ module: 'QueryExecutor' });
  */
 export interface QueryExecutorDeps {
   sessionManager: SessionManager;
-  activityService?: ActivityService;
   sdkQueryManager: SDKQueryManager;
   sdkSessionManager: SDKSessionManager;
   activityEventService?: ActivityEventService;
@@ -101,7 +99,6 @@ export async function executeQueryWithSDK(
   const {
     sessionManager,
     sdkSessionManager,
-    activityService,
     activityEventService,
     executionRecordRepository,
     queryMetricsRepository,
@@ -192,9 +189,9 @@ export async function executeQueryWithSDK(
 
     // Build callbacks via StreamResponseRouter
     const onIntermediateMessageV2 = buildV2IntermediateMessageCallback(
-      state, adapter, chatId, agentId, statusManager, activityService, streamOpts
+      state, adapter, chatId, agentId, statusManager, streamOpts
     );
-    const onToolEvent = buildToolEventCallback(state, agentId, statusManager, activityService, hookManager);
+    const onToolEvent = buildToolEventCallback(state, agentId, statusManager, hookManager);
 
     // Helper: execute SDK query with retry for rate limit / transient errors
     const executeWithRetry = async (resumeId: string | undefined) => {
@@ -480,17 +477,6 @@ export async function executeQueryWithSDK(
       agentId,
       message: `回覆完成（in ${result.usage?.inputTokens ?? 0} + out ${result.usage?.outputTokens ?? 0} tokens, $${((result.totalCostUsd ?? 0)).toFixed(3)}）`,
     });
-
-    // v2.0: Workflow log (factual, sync)
-    activityService?.emitWorkflow(agentId, 'completed', '回覆完成');
-
-    // v2.0: Emit reply event for Live backlog
-    if (result.response.length > 0) {
-      activityService?.emitReply(agentId, result.response);
-    }
-
-    // v2.0: Status change only for completed (no Haiku)
-    activityService?.emitStatusChange(agentId, 'completed', 'neutral');
 
     await statusManager?.finalizeAll();
 

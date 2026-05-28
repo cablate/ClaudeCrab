@@ -6,7 +6,6 @@
  * ROI is the ratio of savings to actual ping cost.
  */
 
-import type { IQueryMetricsRepository } from '../persistence/types.js';
 import { logger } from '../utils/logger.js';
 
 const log = logger.child({ module: 'KeepaliveROIService' });
@@ -28,17 +27,14 @@ const MODEL_PRICING: Record<string, {
   'deepseek': { inputPerM: 0.27, outputPerM: 1.10, cacheReadPerM: 0.07, cacheCreationPerM: 0.27 },
 };
 
-export interface ModelPricing {
+interface ModelPricing {
   inputPerM: number;
   outputPerM: number;
   cacheReadPerM: number;
   cacheCreationPerM: number;
 }
 
-/**
- * Usage breakdown for a single keepalive ping (or session aggregate).
- */
-export interface KeepaliveUsage {
+interface KeepaliveUsage {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -46,39 +42,18 @@ export interface KeepaliveUsage {
   totalCostUsd: number;
 }
 
-/**
- * ROI result for a keepalive ping.
- */
-export interface PingROIResult {
-  /** Actual cost of the keepalive ping in USD */
+interface PingROIResult {
   actualCost: number;
-  /** Hypothetical cost if cache had expired and had to be rebuilt (full cache_creation) */
   hypotheticalNoCacheCost: number;
-  /** Savings = hypotheticalNoCacheCost - actualCost */
   savings: number;
-  /**
-   * ROI = savings / actualCost.
-   * null when actualCost === 0 (division-by-zero guard).
-   */
   roiRatio: number | null;
-}
-
-/**
- * Session-level keepalive summary.
- */
-export interface SessionKeepaliveSummary {
-  sdkSessionId: string;
-  totalPings: number;
-  totalActualCost: number;
-  totalSavings: number;
-  avgRoiRatio: number | null;
 }
 
 /**
  * Resolve pricing for a model ID using prefix matching.
  * Falls back to claude-opus-4 pricing + logs a warning.
  */
-export function resolvePricing(modelId: string): ModelPricing {
+function resolvePricing(modelId: string): ModelPricing {
   const lc = (modelId ?? '').toLowerCase();
   for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
     if (lc.includes(key)) return pricing;
@@ -117,32 +92,5 @@ export function calculatePingROI(usage: KeepaliveUsage, modelId: string): PingRO
     hypotheticalNoCacheCost,
     savings,
     roiRatio,
-  };
-}
-
-/**
- * Aggregate keepalive stats for a session from the metrics repository.
- */
-export async function getSessionSummary(
-  sdkSessionId: string,
-  queryMetricsRepo: IQueryMetricsRepository
-): Promise<SessionKeepaliveSummary> {
-  const stats = queryMetricsRepo.getKeepaliveStats(sdkSessionId);
-
-  const totalActualCost = stats.totalCostUsd;
-  // Hypothetical cost: all cache_read tokens would have been re-created
-  const cacheReadM = stats.totalCacheReadTokens / 1_000_000;
-  // Use sonnet-4 as default since we don't track per-keepalive model
-  const pricing = MODEL_PRICING['claude-sonnet-4']!;
-  const totalHypotheticalNoCacheCost = cacheReadM * pricing.cacheCreationPerM;
-  const totalSavings = totalHypotheticalNoCacheCost - totalActualCost;
-  const avgRoiRatio = totalActualCost === 0 ? null : totalSavings / totalActualCost;
-
-  return {
-    sdkSessionId,
-    totalPings: stats.totalPings,
-    totalActualCost,
-    totalSavings,
-    avgRoiRatio,
   };
 }

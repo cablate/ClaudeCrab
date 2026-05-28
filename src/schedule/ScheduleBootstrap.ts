@@ -47,7 +47,6 @@ export async function initializeScheduleSystem(opts: {
     scheduleRepository,
     opts.queryMetricsRepository,
     opts.executionRecordRepository,
-    undefined, // budgetService ??injected via wirePostInit
     undefined, // activityEventService ??injected via wirePostInit
     opts.sessionRepository,
   );

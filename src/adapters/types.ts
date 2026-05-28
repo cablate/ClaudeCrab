@@ -172,15 +172,6 @@ export interface RateLimitConfig {
 }
 
 /**
- * Default rate limit configuration
- */
-export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
-  maxRequestsPerSecond: 30,
-  minIntervalMs: 35,
-  maxQueueSize: 100,
-};
-
-/**
  * Security configuration for adapters
  */
 export interface AdapterSecurityConfig {

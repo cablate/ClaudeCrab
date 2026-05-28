@@ -23,13 +23,7 @@ import { EventType } from '../../utils/events.js';
 
 const log = logger.child({ module: 'DiscordInteractionHandler' });
 
-/**
- * Registry of adapters by agentId, used to route button clicks
- * to the correct adapter's resolver.
- */
-export type AdapterLookup = (agentId: string) => DiscordAdapter | undefined;
-
-export interface DiscordInteractionHandlerOptions {
+interface DiscordInteractionHandlerOptions {
   /** The discord.js Client to listen on */
   client: Client;
 

@@ -1,5 +1,3 @@
-export type GovernanceSeverity = 'info' | 'warn' | 'action_required';
-
 export type GovernancePathCategory =
   | 'project_card'
   | 'project_plan'
@@ -389,22 +387,6 @@ export function summarizeGovernanceSession(state: GovernanceSessionState): Gover
   };
 }
 
-function formatExplorationCounts(counts: Record<string, number>): string {
-  const entries = Object.entries(counts)
-    .filter(([, count]) => count > 0)
-    .sort(([left], [right]) => left.localeCompare(right));
-  if (entries.length === 0) return 'none';
-  return entries.map(([tool, count]) => `${tool}:${count}`).join(', ');
-}
-
-function formatCharCounts(counts: Record<string, number>): string {
-  const entries = Object.entries(counts)
-    .filter(([, count]) => count > 0)
-    .sort(([left], [right]) => left.localeCompare(right));
-  if (entries.length === 0) return 'none';
-  return entries.map(([tool, count]) => `${tool}:${count}ch`).join(', ');
-}
-
 export function buildGovernanceTouchMessage(classification: GovernancePathClassification): string {
   if (classification.category === 'archive') {
     return `archive touched -> Cab approval required: ${classification.normalizedPath}`;
@@ -425,48 +407,3 @@ export function buildGovernanceTouchMessage(classification: GovernancePathClassi
   return `touched ${classification.category}`;
 }
 
-export function buildGovernanceVisibilitySummary(summary: GovernanceSessionSummary): string {
-  const changedCategories = summary.changedCategories.length > 0
-    ? summary.changedCategories.join(', ')
-    : 'none';
-
-  if (summary.actionRequired) {
-    return `validator required but not observed: ${changedCategories}`;
-  }
-
-  if (summary.validatorNeeded && summary.validatorObserved) {
-    return `validator observed: ${changedCategories}`;
-  }
-
-  if (summary.archiveAccessCount > 0) {
-    return `archive touched -> Cab approval record needed`;
-  }
-
-  if (summary.commandFailureCount > 0) {
-    return `command failures observed: ${summary.commandFailureCount}`;
-  }
-
-  const exploration = formatExplorationCounts(summary.explorationToolCounts);
-  if (exploration !== 'none') {
-    return `main explore: ${exploration}`;
-  }
-
-  const subagentExploration = formatExplorationCounts(summary.subagentExplorationToolCounts);
-  if (subagentExploration !== 'none') {
-    return `subagent explore: ${subagentExploration}`;
-  }
-
-  if (summary.broadSearchCount > 0) {
-    return `broad search observed: ${summary.broadSearchCount}`;
-  }
-
-  if (summary.memoryCheckpointNeeded && !summary.memoryObserved) {
-    return 'memory checkpoint needed but not observed';
-  }
-
-  if (summary.touchedPathCount > 0) {
-    return `governed changes not required; touched=${summary.touchedPathCount}`;
-  }
-
-  return 'no governed changes';
-}

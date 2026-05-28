@@ -14,9 +14,7 @@ import type { ScheduleThreadMap } from './ScheduleThreadMap.js';
 import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import type { IQueryMetricsRepository, ISessionRepository } from '../persistence/types.js';
 import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
-import type { IBudgetService, IActivityEventService } from '../types/interfaces.js';
 // Concrete types kept for wirePostInit/constructor compatibility
-import type { BudgetService } from '../services/BudgetService.js';
 import type { ActivityEventService } from '../services/ActivityEventService.js';
 import type { AgentLoader } from '../core/orchestrator/AgentLoader.js';
 import type { SDKQueryManager, QueryResult } from '../core/query/SDKQueryManager.js';
@@ -45,7 +43,6 @@ export class ScheduleExecutor {
     private repository?: ScheduleRepository,
     private queryMetricsRepository?: IQueryMetricsRepository,
     private executionRecordRepository?: ExecutionRecordRepository,
-    private budgetService?: BudgetService,
     private activityEventService?: ActivityEventService,
     private sessionRepository?: ISessionRepository
   ) {}
@@ -105,15 +102,6 @@ export class ScheduleExecutor {
    * Execute a scheduled task
    */
   async execute(agentId: string, spec: ScheduleSpec): Promise<ExecutionResult> {
-    // Budget pre-check: skip execution if agent exceeded budget
-    if (this.budgetService !== undefined && !this.budgetService.canQuery(agentId)) {
-      logger.warn(
-        { agentId, scheduleId: spec.id },
-        '[ScheduleExecutor] Agent paused due to budget — skipping scheduled execution'
-      );
-      return { success: false, duration: 0, error: 'Agent paused: budget exceeded' };
-    }
-
     const executionId = randomUUID();
     const startTime = Date.now();
     const outputMode = spec.output?.mode ?? 'message';
@@ -316,11 +304,6 @@ export class ScheduleExecutor {
           } catch (err) {
             logger.warn({ err, agentId }, '[ScheduleExecutor] Failed to record execution audit');
           }
-        }
-
-        // Budget post-check
-        if (this.budgetService !== undefined) {
-          this.budgetService.postQueryCheck(agentId, result);
         }
 
         // --- Output delivery ---

@@ -43,7 +43,6 @@ export interface DiscordBootstrapDeps {
       dashboard?: string | undefined;
       systemLog?: string | undefined;
       alerts?: string | undefined;
-      taskBoard?: string | undefined;
       costReport?: string | undefined;
     };
     dashboardUpdateMinutes?: number | undefined;

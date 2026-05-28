@@ -14,4 +14,3 @@ export type {
   PermissionPromptResult,
   PermissionResolver,
 } from './types.js';
-export { DEFAULT_RATE_LIMIT } from './types.js';

@@ -2,19 +2,19 @@ interface HookInputRecord {
   readonly [key: string]: unknown;
 }
 
-export interface BashToolResponseText {
+interface BashToolResponseText {
   readonly stdout: string;
   readonly stderr: string;
   readonly combined: string;
   readonly hasToolResponse: boolean;
 }
 
-export interface ToolResponseTextStats {
+interface ToolResponseTextStats {
   readonly charCount: number;
   readonly hasToolResponse: boolean;
 }
 
-export interface HookAgentContext {
+interface HookAgentContext {
   /** SDK subagent identifier. Present only when the hook fires inside a subagent. */
   readonly agentId?: string;
   /** Agent type/name. Can appear on main-thread --agent sessions, so do not use alone. */
@@ -22,7 +22,7 @@ export interface HookAgentContext {
   readonly isSubagent: boolean;
 }
 
-export interface HookReadInputSummary {
+interface HookReadInputSummary {
   readonly filePath?: string;
   readonly bounded: boolean;
 }

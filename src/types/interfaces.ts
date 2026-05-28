@@ -15,14 +15,3 @@ export interface IActivityEventService {
   dispose(): Promise<void>;
 }
 
-export type IBudgetService = any;
-
-/**
- * Activity service interface for emitting operational events.
- */
-export interface ActivityService {
-  emitReply(agentId: string, text: string): void;
-  emitWorkflow(agentId: string, status: string, detail: string): void;
-  emitStatusChange(agentId: string, status: string, severity: string): void;
-}
-

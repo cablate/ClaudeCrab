@@ -114,7 +114,6 @@ npm run build && npm start
 | `DISCORD_GUILD_ID` | — | **必填**。Discord Server ID |
 | `DISCORD_OWNER_USER_ID` | — | 你的 Discord User ID（接收 DM 通知） |
 | `DISCORD_CHANNEL_DASHBOARD` | — | 系統儀表板頻道 ID |
-| `DISCORD_CHANNEL_APPROVALS` | — | 審核頻道 ID |
 | `DISCORD_CHANNEL_COST_REPORT` | — | 每日成本報告頻道 ID |
 | `DISCORD_CHANNEL_ALERTS` | — | 錯誤/警告通知頻道 ID |
 | `DISCORD_CHANNEL_SYSTEM_LOG` | — | 系統日誌頻道 ID |

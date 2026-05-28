@@ -28,8 +28,6 @@ import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
 
 export const CACHE_KEEPALIVE_INTERVAL_MS = DEFAULT_CACHE_KEEPALIVE_CONFIG.intervalMs;
-/** Skip keepalive if session was used recently (within this window) */
-export const CACHE_KEEPALIVE_SKIP_IF_RECENT_MS = DEFAULT_CACHE_KEEPALIVE_CONFIG.skipRecentMs;
 /** Cache efficiency threshold ??warn if rolling average drops below this */
 export const CACHE_EFFICIENCY_WARN_THRESHOLD = DEFAULT_CACHE_KEEPALIVE_CONFIG.efficiencyWarnThreshold;
 /** Cooldown between identical keepalive-miss alerts (1 hour) */

@@ -11,7 +11,6 @@
  */
 
 import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
-import type { ActivityService } from '../../types/interfaces.js';
 import { HookMessageManager } from '../interaction/HookMessageManager.js';
 import {
   StatusMessageManager,
@@ -108,7 +107,6 @@ export function buildV2IntermediateMessageCallback(
   chatId: string,
   agentId: string,
   statusManager: StatusMessageManager | null,
-  activityService: ActivityService | undefined,
   options: StreamRouterOptions
 ): (text: string) => Promise<void> {
   return async (text: string): Promise<void> => {
@@ -130,7 +128,6 @@ export function buildV2IntermediateMessageCallback(
       state.failedMessages.push(text);
     }
     state.intermediateMessages.push(text);
-    activityService?.emitReply(agentId, text);
     statusManager?.markNeedNewMessage();
   };
 }
@@ -144,7 +141,6 @@ export function buildV1IntermediateMessageCallback(
   chatId: string,
   agentId: string,
   statusManager: StatusMessageManager | null,
-  activityService: ActivityService | undefined,
   options: StreamRouterOptions
 ): (text: string) => Promise<void> {
   return async (text: string): Promise<void> => {
@@ -182,9 +178,6 @@ export function buildV1IntermediateMessageCallback(
     }
     state.intermediateMessages.push(text);
 
-    // Stream reply to Web UI in real-time (not just at the end)
-    activityService?.emitReply(agentId, text);
-
     // Mark that next tool event should create new status message
     statusManager?.markNeedNewMessage();
   };
@@ -197,16 +190,13 @@ export function buildToolEventCallback(
   state: StreamState,
   agentId: string,
   statusManager: StatusMessageManager | null,
-  activityService: ActivityService | undefined,
   hookManager?: HookMessageManager | null
 ): (event: ToolEvent) => Promise<void> {
   return async (event): Promise<void> => {
     if (event.type === 'tool_result' && event.toolName === 'tool') return;
 
-    // v2.0: Status change only for tool_use (no Haiku, just update phase)
     if (event.type === 'tool_use' && !state.toolUseReacted) {
       state.toolUseReacted = true;
-      activityService?.emitStatusChange(agentId, 'tool_use', 'focused');
     }
 
     if (statusManager === null) return;
