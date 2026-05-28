@@ -12,7 +12,6 @@ import { EmbedBuilder } from 'discord.js';
 import type { DiscordAdapter } from '../../DiscordAdapter.js';
 import type { IQueryMetricsRepository } from '../../../persistence/types.js';
 import type { RateLimitRepository } from '../../../persistence/RateLimitRepository.js';
-import type { ExecutionRecordRepository } from '../../../persistence/ExecutionRecordRepository.js';
 import type { AgentLoader } from '../../../core/orchestrator/AgentLoader.js';
 import { logger } from '../../../utils/logger.js';
 import { EventType } from '../../../utils/events.js';
@@ -30,8 +29,6 @@ export interface DiscordDashboardOptions {
   queryMetricsRepository?: IQueryMetricsRepository;
   /** Rate limit repository for quota utilization */
   rateLimitRepository?: RateLimitRepository;
-  /** Execution records for recent activity */
-  executionRecordRepository?: ExecutionRecordRepository;
   /** Update interval in minutes (default 15) */
   updateIntervalMinutes?: number;
 }
@@ -42,7 +39,6 @@ export class DiscordDashboard {
   private readonly agentLoader: AgentLoader;
   private readonly queryMetrics: IQueryMetricsRepository | undefined;
   private readonly rateLimitRepo: RateLimitRepository | undefined;
-  private readonly execRepo: ExecutionRecordRepository | undefined;
   private readonly updateIntervalMs: number;
 
   private dashboardMessageId: string | null = null;
@@ -54,7 +50,6 @@ export class DiscordDashboard {
     this.agentLoader = options.agentLoader;
     this.queryMetrics = options.queryMetricsRepository;
     this.rateLimitRepo = options.rateLimitRepository;
-    this.execRepo = options.executionRecordRepository;
     this.updateIntervalMs = (options.updateIntervalMinutes ?? 15) * 60 * 1000;
   }
 

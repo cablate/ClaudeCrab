@@ -13,9 +13,6 @@ import type { ScheduleNotifier } from './ScheduleNotifier.js';
 import type { ScheduleThreadMap } from './ScheduleThreadMap.js';
 import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import type { IQueryMetricsRepository, ISessionRepository } from '../persistence/types.js';
-import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
-// Concrete types kept for wirePostInit/constructor compatibility
-import type { ActivityEventService } from '../services/ActivityEventService.js';
 import type { AgentLoader } from '../core/orchestrator/AgentLoader.js';
 import type { SDKQueryManager, QueryResult } from '../core/query/SDKQueryManager.js';
 import { buildPromptContext } from '../core/constants.js';
@@ -42,8 +39,6 @@ export class ScheduleExecutor {
     private notifier: ScheduleNotifier,
     private repository?: ScheduleRepository,
     private queryMetricsRepository?: IQueryMetricsRepository,
-    private executionRecordRepository?: ExecutionRecordRepository,
-    private activityEventService?: ActivityEventService,
     private sessionRepository?: ISessionRepository
   ) {}
 
@@ -55,10 +50,8 @@ export class ScheduleExecutor {
    * All usage sites have null guards (optional chaining) to handle this gracefully.
    */
   wirePostInit(deps: {
-    activityEventService?: ActivityEventService;
     threadMap?: ScheduleThreadMap;
   }): void {
-    if (deps.activityEventService !== undefined) this.activityEventService = deps.activityEventService;
     if (deps.threadMap !== undefined) this.threadMap = deps.threadMap;
   }
 
@@ -107,13 +100,6 @@ export class ScheduleExecutor {
     const outputMode = spec.output?.mode ?? 'message';
     const deliveryMode = spec.output?.delivery ?? 'last-only';
     const isThreadMode = outputMode === 'thread';
-
-    // Activity event: schedule started
-    void this.activityEventService?.log({
-      type: 'schedule.started',
-      agentId,
-      message: `排程「${spec.name ?? spec.id}」開始執行`,
-    });
 
     logger.info(
       { scheduleId: spec.id, executionId, agentId, scheduleName: spec.name, outputMode, deliveryMode },
@@ -286,26 +272,6 @@ export class ScheduleExecutor {
           });
         }
 
-        // Execution audit log
-        if (this.executionRecordRepository && result.usage) {
-          try {
-            const costUsd = result.totalCostUsd ?? result.usage.costUsd ?? 0;
-            this.executionRecordRepository.insert({
-              agentId,
-              triggerType: 'schedule',
-              triggerSource: spec.id,
-              responseSummary: finalResponse.slice(0, 200),
-              inputTokens: result.usage.inputTokens,
-              outputTokens: result.usage.outputTokens,
-              costCents: Math.round(costUsd * 100),
-              durationMs: result.durationMs ?? duration,
-              status: 'success',
-            });
-          } catch (err) {
-            logger.warn({ err, agentId }, '[ScheduleExecutor] Failed to record execution audit');
-          }
-        }
-
         // --- Output delivery ---
 
         if (outputMode === 'thread') {
@@ -386,13 +352,6 @@ export class ScheduleExecutor {
           await this.notifier.notifyComplete(spec, notificationResult);
         }
 
-        // Activity event: schedule completed
-        void this.activityEventService?.log({
-          type: 'schedule.completed',
-          agentId,
-          message: `排程「${spec.name ?? spec.id}」完成（${Math.round(duration / 1000)}s, $${((result.totalCostUsd ?? 0)).toFixed(3)}）`,
-        });
-
         logger.info(
           { scheduleId: spec.id, executionId, duration, success: true,
             threadsCreated: createdThreads.length, outputMode, deliveryMode },
@@ -429,15 +388,6 @@ export class ScheduleExecutor {
       } else if (spec.notification?.onError) {
         await this.notifier.notifyError(spec, error);
       }
-
-      // Activity event: schedule failed
-      void this.activityEventService?.log({
-        type: 'schedule.failed',
-        agentId,
-        message: `排程「${spec.name ?? spec.id}」失敗`,
-        details: errorMessage.slice(0, 200),
-        level: 'error',
-      });
 
       logger.error(
         { scheduleId: spec.id, executionId, duration, error: errorMessage },

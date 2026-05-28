@@ -8,10 +8,3 @@
  * - AppBootstrap wires concrete classes together
  */
 
-import type { OperationalEvent } from './activity.js';
-
-export interface IActivityEventService {
-  log(event: OperationalEvent): Promise<void>;
-  dispose(): Promise<void>;
-}
-

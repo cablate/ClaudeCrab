@@ -219,10 +219,6 @@ export const EventType = {
   ADAPTER_DISCORD_MSG_LISTENER_STARTED: 'adapter.discord_msg_listener_started',
 
 
-  // activity.* ??ActivityEventService
-  ACTIVITY_FLUSH_ERROR: 'activity.flush_error',
-  ACTIVITY_ALERT_ERROR: 'activity.alert_error',
-
   // persistence.*
   PERSISTENCE_MIGRATION: 'persistence.migration',
   PERSISTENCE_ERROR: 'persistence.error',

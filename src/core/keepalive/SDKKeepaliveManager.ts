@@ -16,7 +16,6 @@
 
 import type { QueryUsage } from '../query/SDKQueryManager.js';
 import type { ManagedSession } from '../session/SDKSessionTypes.js';
-import type { IActivityEventService } from '../../types/interfaces.js';
 import type { IQueryMetricsRepository } from '../../persistence/types.js';
 import type { CacheKeepaliveConfig } from '../../config.js';
 import { DEFAULT_CACHE_KEEPALIVE_CONFIG } from '../../config.js';
@@ -44,8 +43,6 @@ interface KeepaliveContext {
   sessionId: string;
   sessions: Map<string, ManagedSession>;
   isDisposed: () => boolean;
-  keepaliveMissLastAlertAt: Map<string, number>;
-  getActivityEventService: () => IActivityEventService | undefined;
   queryMetricsRepository: IQueryMetricsRepository | undefined;
   intervalMs: number;
   skipIfRecentMs: number;
@@ -165,13 +162,6 @@ async function executeKeepalivePing(ctx: KeepaliveContext): Promise<void> {
       },
       'Cache keepalive skipped because prompt cache is already past detected TTL'
     );
-    void ctx.getActivityEventService()?.log({
-      type: 'error.occurred',
-      level: 'warn',
-      agentId: 'system',
-      message: `Prompt cache likely expired before keepalive could run (session ${ctx.sessionId.slice(0, 8)})`,
-      details: `cacheAgeMs=${cacheAgeMs} detectedTTLMs=${detectedTTLMs} intervalMs=${ctx.intervalMs} baseSource=${cacheBaseSource}. Next user query must pass cache TTL guard; keepalive will not silently rebuild.`,
-    });
     current.keepaliveTimer = undefined;
     return;
   }
@@ -273,8 +263,6 @@ async function executeKeepalivePing(ctx: KeepaliveContext): Promise<void> {
       const audit = auditKeepaliveCacheHit(
         ctx.sessionId,
         keepaliveUsage,
-        ctx.keepaliveMissLastAlertAt,
-        ctx.getActivityEventService,
         ctx.intervalMs,
         ctx.config,
         {
@@ -423,8 +411,6 @@ export function startKeepalive(
   sessionId: string,
   sessions: Map<string, ManagedSession>,
   isDisposed: () => boolean,
-  keepaliveMissLastAlertAt: Map<string, number>,
-  getActivityEventService: () => IActivityEventService | undefined,
   queryMetricsRepository?: IQueryMetricsRepository,
   config: CacheKeepaliveConfig = DEFAULT_CACHE_KEEPALIVE_CONFIG,
 ): void {
@@ -449,8 +435,6 @@ export function startKeepalive(
     sessionId,
     sessions,
     isDisposed,
-    keepaliveMissLastAlertAt,
-    getActivityEventService,
     queryMetricsRepository,
     intervalMs: config.intervalMs,
     skipIfRecentMs: config.skipRecentMs,
@@ -470,8 +454,6 @@ export function adjustKeepaliveInterval(
   sessions: Map<string, ManagedSession>,
   detectedTTLMs: number,
   isDisposed: () => boolean,
-  keepaliveMissLastAlertAt: Map<string, number>,
-  getActivityEventService: () => IActivityEventService | undefined,
   queryMetricsRepository?: IQueryMetricsRepository,
   config: CacheKeepaliveConfig = DEFAULT_CACHE_KEEPALIVE_CONFIG,
 ): void {
@@ -489,8 +471,6 @@ export function adjustKeepaliveInterval(
         sessionId,
         sessions,
         isDisposed,
-        keepaliveMissLastAlertAt,
-        getActivityEventService,
         queryMetricsRepository,
         intervalMs: currentInterval,
         skipIfRecentMs: Math.round(currentInterval * 0.5),
@@ -514,8 +494,6 @@ export function adjustKeepaliveInterval(
     sessionId,
     sessions,
     isDisposed,
-    keepaliveMissLastAlertAt,
-    getActivityEventService,
     queryMetricsRepository,
     intervalMs: targetInterval,
     skipIfRecentMs: Math.round(targetInterval * 0.5),
@@ -532,8 +510,6 @@ export function adjustKeepaliveInterval(
 export function auditKeepaliveCacheHit(
   sessionId: string,
   usage: { inputTokens?: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number },
-  keepaliveMissLastAlertAt: Map<string, number>,
-  getActivityEventService: () => IActivityEventService | undefined,
   intervalMs: number = CACHE_KEEPALIVE_INTERVAL_MS,
   config: CacheKeepaliveConfig = DEFAULT_CACHE_KEEPALIVE_CONFIG,
   diagnostics: KeepaliveAuditDiagnostics = {},
@@ -586,8 +562,7 @@ export function auditKeepaliveCacheHit(
     isAnomaly ? `V2 keepalive cache anomaly (hit ${hitPct ?? 0}% < ${config.efficiencyWarnThreshold}%)` : 'V2 keepalive cache hit'
   );
 
-  const activityEventService = getActivityEventService();
-  const result: KeepaliveAuditResult = {
+  return {
     isAnomaly,
     hitPct,
     message,
@@ -595,22 +570,6 @@ export function auditKeepaliveCacheHit(
     ...(likelyCause !== undefined ? { likelyCause } : {}),
     ...(links.length > 0 ? { links } : {}),
   };
-  if (!isAnomaly || !activityEventService || diagnostics.isWarmup) return result;
-  const lastAlertAt = keepaliveMissLastAlertAt.get(sessionId) ?? 0;
-  const now = Date.now();
-  if (now - lastAlertAt < config.alertCooldownMs) return result;
-  keepaliveMissLastAlertAt.set(sessionId, now);
-
-  void activityEventService.log({
-    type: 'error.occurred',
-    level: 'warn',
-    agentId: 'system',
-    message,
-    details,
-    ...(links.length > 0 ? { links } : {}),
-  });
-
-  return result;
 }
 
 function buildKeepaliveDiagnosticDetails(

@@ -21,8 +21,6 @@ import { initializeScheduleSystem } from './schedule/ScheduleBootstrap.js';
 import type { AppConfig } from './config.js';
 import { createSTTProvider, type STTProvider } from './core/stt/index.js';
 import type { IQueryMetricsRepository } from './persistence/types.js';
-import { ExecutionRecordRepository } from './persistence/ExecutionRecordRepository.js';
-import { ActivityEventService } from './services/ActivityEventService.js';
 import { DiscordAdapter } from './adapters/DiscordAdapter.js';
 import { DiscordDashboard } from './adapters/discord/services/DiscordDashboard.js';
 import { initializeDiscordServices, notifyCrashRecovery } from './adapters/discord/DiscordBootstrap.js';
@@ -38,7 +36,6 @@ export class AppBootstrap {
   private databaseManager: DatabaseManager | null = null;
   private scheduleManager: ScheduleManager | null = null;
   private dashboardService: DiscordDashboard | null = null;
-  private activityEventService: ActivityEventService | null = null;
   private costReportTimer: ReturnType<typeof setInterval> | null = null;
   private discordSystemAdapter: DiscordAdapter | null = null;
   private scheduleExecutor: ScheduleExecutor | null = null;
@@ -87,7 +84,6 @@ export class AppBootstrap {
       agentLoader,
       persistence?.conversationRepository,
       persistence?.queryMetricsRepository,
-      persistence?.executionRecordRepository,
       persistence?.rateLimitRepository,
     );
     this.messageProcessor = messageProcessor;
@@ -114,7 +110,6 @@ export class AppBootstrap {
         databaseManager: persistence?.databaseManager ?? null,
         scheduleThreadMap: this.scheduleThreadMap,
         queryMetricsRepository: persistence?.queryMetricsRepository,
-        executionRecordRepository: persistence?.executionRecordRepository,
         sessionRepository: persistence?.sessionRepository,
       });
       this.scheduleManager = schedule.scheduleManager;
@@ -124,13 +119,10 @@ export class AppBootstrap {
 
     await this.initializeDiscordServices(agentLoader, persistence, messageProcessor, sessionManager);
 
-    messageProcessor.wirePostInit({
-      ...(this.activityEventService !== null ? { activityEventService: this.activityEventService } : {}),
-    });
+    messageProcessor.wirePostInit({});
 
-    if (this.activityEventService !== null && this.scheduleExecutor !== null) {
+    if (this.scheduleExecutor !== null) {
       this.scheduleExecutor.wirePostInit({
-        activityEventService: this.activityEventService,
         ...(this.scheduleThreadMap !== null ? { threadMap: this.scheduleThreadMap } : {}),
       });
     }
@@ -158,10 +150,6 @@ export class AppBootstrap {
       if (this.costReportTimer !== null) {
         clearInterval(this.costReportTimer);
         this.costReportTimer = null;
-      }
-
-      if (this.activityEventService !== null) {
-        await this.activityEventService.dispose();
       }
 
       if (this.dashboardService !== null) {
@@ -259,8 +247,6 @@ export class AppBootstrap {
       });
     }).catch(() => {});
 
-    const executionRecordRepository = new ExecutionRecordRepository(db);
-
     logger.info('Persistence enabled');
 
     return {
@@ -269,7 +255,6 @@ export class AppBootstrap {
       conversationRepository,
       queryMetricsRepository,
       rateLimitRepository,
-      executionRecordRepository,
     };
   }
 
@@ -297,7 +282,6 @@ export class AppBootstrap {
     agentLoader: AgentLoader,
     conversationRepository: ConversationRepository | undefined,
     queryMetricsRepository: QueryMetricsRepository | undefined,
-    executionRecordRepository?: ExecutionRecordRepository,
     rateLimitRepository?: RateLimitRepository,
   ): MessageProcessor {
     return new MessageProcessor({
@@ -310,7 +294,6 @@ export class AppBootstrap {
       ...(conversationRepository !== undefined ? { conversationRepository } : {}),
       ...(queryMetricsRepository !== undefined ? { queryMetricsRepository } : {}),
       eventBus: getEventBus(),
-      ...(executionRecordRepository !== undefined ? { executionRecordRepository } : {}),
       ...(rateLimitRepository !== undefined ? { rateLimitRepository } : {}),
       cacheKeepaliveConfig: this.config.cacheKeepalive,
       ephemeral: this.config.session.ephemeral,
@@ -373,7 +356,6 @@ export class AppBootstrap {
       persistence: persistence !== null ? {
         queryMetricsRepository: persistence.queryMetricsRepository,
         rateLimitRepository: persistence.rateLimitRepository,
-        executionRecordRepository: persistence.executionRecordRepository,
       } : null,
     });
 
@@ -383,7 +365,6 @@ export class AppBootstrap {
 
     this.discordSystemAdapter = services.systemAdapter;
     if (services.dashboardService !== undefined) this.dashboardService = services.dashboardService;
-    if (services.activityEventService !== undefined) this.activityEventService = services.activityEventService;
     if (services.costReportTimer !== undefined) this.costReportTimer = services.costReportTimer;
   }
 
@@ -410,5 +391,4 @@ interface PersistenceLayer {
   conversationRepository: ConversationRepository;
   queryMetricsRepository: QueryMetricsRepository;
   rateLimitRepository: RateLimitRepository;
-  executionRecordRepository: ExecutionRecordRepository;
 }

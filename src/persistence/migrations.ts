@@ -160,28 +160,6 @@ CREATE TABLE IF NOT EXISTS activity_events (
 CREATE INDEX IF NOT EXISTS idx_activity_events_agent ON activity_events(agent_id);
 CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
 CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
-
--- Execution records table (per SDK query audit trail)
-CREATE TABLE IF NOT EXISTS execution_records (
-    id TEXT PRIMARY KEY,
-    agent_id TEXT NOT NULL,
-    trigger_type TEXT NOT NULL
-        CHECK (trigger_type IN ('chat', 'schedule', 'agent_call')),
-    trigger_source TEXT,
-    prompt_summary TEXT,
-    response_summary TEXT,
-    input_tokens INTEGER NOT NULL DEFAULT 0,
-    output_tokens INTEGER NOT NULL DEFAULT 0,
-    cost_cents INTEGER NOT NULL DEFAULT 0,
-    duration_ms INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL
-        CHECK (status IN ('success', 'error', 'timeout', 'budget_exceeded')),
-    error_message TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_exec_agent ON execution_records(agent_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, created_at);
 `;
 
 export const SCHEMA_VERSION = '14';
@@ -335,29 +313,6 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
 CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
 `;
 
-const MIGRATION_V8_TO_V9 = `
--- Execution records table (per SDK query audit trail)
-CREATE TABLE IF NOT EXISTS execution_records (
-    id TEXT PRIMARY KEY,
-    agent_id TEXT NOT NULL,
-    trigger_type TEXT NOT NULL
-        CHECK (trigger_type IN ('chat', 'schedule', 'agent_call')),
-    trigger_source TEXT,
-    prompt_summary TEXT,
-    response_summary TEXT,
-    input_tokens INTEGER NOT NULL DEFAULT 0,
-    output_tokens INTEGER NOT NULL DEFAULT 0,
-    cost_cents INTEGER NOT NULL DEFAULT 0,
-    duration_ms INTEGER NOT NULL DEFAULT 0,
-    status TEXT NOT NULL
-        CHECK (status IN ('success', 'error', 'timeout', 'budget_exceeded')),
-    error_message TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_exec_agent ON execution_records(agent_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_exec_trigger ON execution_records(trigger_type, created_at);
-`;
 
 const MIGRATION_V9_TO_V10 = `
 -- Add integer cents column to query_metrics (coexists with total_cost_usd for backward compat)
@@ -485,7 +440,7 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   }
 
   if (currentVersion === '6') {
-    db.exec(MIGRATION_V8_TO_V9);
+    // execution_records table removed — no-op migration
     logger.info('Migration v6 → v7 completed');
     currentVersion = '7';
   }

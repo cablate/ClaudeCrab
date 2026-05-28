@@ -6,7 +6,6 @@
  * - Slash command registration
  * - InteractionHandler for button/command routing
  * - DiscordDashboard
- * - ActivityEventService (operational logging, no Discord notifier)
  * - DiscordCostReport (daily cron)
  * - DiscordCacheAnomalyReport (daily cron)
  */
@@ -17,7 +16,6 @@ import { registerSlashCommands } from './DiscordSlashCommands.js';
 import { DiscordDashboard } from './services/DiscordDashboard.js';
 import { DiscordCostReport } from './services/DiscordCostReport.js';
 import { DiscordCacheAnomalyReport } from './services/DiscordCacheAnomalyReport.js';
-import type { ActivityEventService } from '../../services/ActivityEventService.js';
 import { logger } from '../../utils/logger.js';
 
 import type { AgentLoader } from '../../core/orchestrator/AgentLoader.js';
@@ -26,7 +24,6 @@ import type { SessionManager } from '../../core/session/SessionManager.js';
 import type { PlatformOrchestrator } from '../../core/orchestrator/PlatformOrchestrator.js';
 import type { QueryMetricsRepository } from '../../persistence/QueryMetricsRepository.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
-import type { ExecutionRecordRepository } from '../../persistence/ExecutionRecordRepository.js';
 
 /** Dependencies required by Discord bootstrap */
 export interface DiscordBootstrapDeps {
@@ -50,7 +47,6 @@ export interface DiscordBootstrapDeps {
   persistence: {
     queryMetricsRepository?: QueryMetricsRepository;
     rateLimitRepository?: RateLimitRepository;
-    executionRecordRepository?: ExecutionRecordRepository;
   } | null;
 }
 
@@ -58,7 +54,6 @@ export interface DiscordBootstrapDeps {
 export interface DiscordServices {
   systemAdapter: DiscordAdapter;
   dashboardService?: DiscordDashboard;
-  activityEventService?: ActivityEventService;
   costReportTimer?: ReturnType<typeof setInterval>;
   cacheAnomalyReportTimer?: ReturnType<typeof setInterval>;
 }
@@ -159,9 +154,6 @@ export async function initializeDiscordServices(
               : {}),
             ...(persistence?.rateLimitRepository !== undefined
               ? { rateLimitRepository: persistence.rateLimitRepository }
-              : {}),
-            ...(persistence?.executionRecordRepository !== undefined
-              ? { executionRecordRepository: persistence.executionRecordRepository }
               : {}),
             ...(dashboardUpdateMinutes !== undefined
               ? { updateIntervalMinutes: dashboardUpdateMinutes }

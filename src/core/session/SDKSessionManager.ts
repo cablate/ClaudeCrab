@@ -18,7 +18,6 @@
 
 import type { LoadedAgent } from '../../types/agent.js';
 import type { ExecuteQueryOptions, QueryResult } from '../query/SDKQueryManager.js';
-import type { IActivityEventService } from '../../types/interfaces.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
 import type { IQueryMetricsRepository } from '../../persistence/types.js';
 import type { CacheKeepaliveConfig } from '../../config.js';
@@ -76,7 +75,6 @@ export interface SessionCacheActivityState {
 export class SDKSessionManager {
   private sessions = new Map<string, ManagedSession>();
   private disposed = false;
-  private activityEventService: IActivityEventService | undefined;
   private rateLimitRepository: RateLimitRepository | undefined;
   private queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly keepaliveConfig: CacheKeepaliveConfig;
@@ -97,19 +95,6 @@ export class SDKSessionManager {
     this.ephemeral = options?.ephemeral ?? false;
   }
 
-  /**
-   * Cooldown between identical keepalive-miss alerts.
-   */
-  private keepaliveMissLastAlertAt = new Map<string, number>();
-
-  /**
-   * Late injection from AppBootstrap ??lets the keepalive ping escalate a
-   * cache-miss to the Discord alerts channel via the operational event
-   * pipeline, rather than importing DiscordAdapter directly.
-   */
-  setActivityEventService(svc: IActivityEventService): void {
-    this.activityEventService = svc;
-  }
 
   /**
    * Send a message within a persistent session.
@@ -199,12 +184,6 @@ export class SDKSessionManager {
           { sessionId, sdkSessionId: managed.sdkSessionId, wallClockMs, messageCount: managed.messageCount },
           'V2 empty stream detected: no turns, no usage, no output; closing process and requiring resend'
         );
-        void this.activityEventService?.log({
-          type: 'session.empty_stream_retry_disabled',
-          agentId: agent.id,
-          message: `V2 empty stream; process closed and automatic retry disabled (sdk: ${managed.sdkSessionId?.slice(0, 8)}, ${wallClockMs}ms)`,
-          level: 'warn',
-        });
         this.destroySession(sessionId);
 
         if (queryOptions.requireResume) {
@@ -229,12 +208,6 @@ export class SDKSessionManager {
           { sessionId, sdkSessionId: managed.sdkSessionId, requireResume: queryOptions.requireResume },
           'V2 resumed session returned empty response'
         );
-        void this.activityEventService?.log({
-          type: 'session.resume_empty',
-          agentId: agent.id,
-          message: `Resume returned empty response; automatic retry disabled (sdk: ${managed.sdkSessionId?.slice(0, 8)})`,
-          level: 'warn',
-        });
         this.destroySession(sessionId);
 
         if (queryOptions.requireResume) {
@@ -256,12 +229,6 @@ export class SDKSessionManager {
           { sessionId, sdkSessionId: managed.sdkSessionId, wallClockMs, messageCount: managed.messageCount },
           'Zombie session detected: stream completed instantly with no output; automatic retry disabled'
         );
-        void this.activityEventService?.log({
-          type: 'session.zombie_retry_disabled',
-          agentId: agent.id,
-          message: `Zombie session detected; automatic retry disabled (sdk: ${managed.sdkSessionId?.slice(0, 8)}, ${wallClockMs}ms, msgs: ${managed.messageCount})`,
-          level: 'warn',
-        });
         this.destroySession(sessionId);
         const err = new Error('Zombie session detected; automatic retry disabled');
         (err as Error & { _zombieRetryDisabled: boolean })._zombieRetryDisabled = true;
@@ -280,8 +247,8 @@ export class SDKSessionManager {
         import('../keepalive/SDKKeepaliveManager.js').then(({ adjustKeepaliveInterval }) => {
           adjustKeepaliveInterval(
             sessionId, this.sessions, managed!.detectedCacheTTLMs!,
-            () => this.disposed, this.keepaliveMissLastAlertAt,
-            () => this.activityEventService, this.queryMetricsRepository,
+            () => this.disposed,
+            this.queryMetricsRepository,
             this.keepaliveConfig,
           );
         }).catch(() => {});
@@ -309,15 +276,6 @@ export class SDKSessionManager {
         { sessionId, error: errDetail, sdkSessionId: preservedSdkSessionId, wasCancelled, wasInterrupted },
         'V2 session error, cleaning up'
       );
-      if (!wasCancelled && !wasInterrupted) {
-        void this.activityEventService?.log({
-          type: 'session.error',
-          agentId: agent.id,
-          message: `V2 session error: ${errDetail.slice(0, 200)}`,
-          details: `sdk: ${preservedSdkSessionId?.slice(0, 8) ?? 'n/a'}`,
-          level: 'error',
-        });
-      }
       // Interrupted sessions (graceful /stop) keep the managed session alive.
       // The JSONL is consistent after interrupt; destroying would force a cold resume.
       if (!wasInterrupted) {
@@ -389,8 +347,6 @@ export class SDKSessionManager {
         sessionId,
         this.sessions,
         () => this.disposed,
-        this.keepaliveMissLastAlertAt,
-        () => this.activityEventService,
         this.queryMetricsRepository,
         this.keepaliveConfig,
       );

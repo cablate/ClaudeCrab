@@ -65,7 +65,3 @@ export {
   type SessionErrorCode,
 } from './errors.js';
 
-// Service interfaces (for dependency inversion — core depends on these, not concrete classes)
-export {
-  type IActivityEventService,
-} from './interfaces.js';

@@ -23,9 +23,6 @@ import { EventBus } from '../lib/EventBus.js';
 import { logger } from '../../utils/logger.js';
 import { logContext, newCorrelationId, type LogContext } from '../../utils/logContext.js';
 import { ProcessingError } from '../../types/errors.js';
-import type { ExecutionRecordRepository } from '../../persistence/ExecutionRecordRepository.js';
-// Concrete types kept for wirePostInit compatibility ??consumers pass concrete instances
-import type { ActivityEventService } from '../../services/ActivityEventService.js';
 import type { CacheKeepaliveConfig } from '../../config.js';
 import type { ConversationRequest, ConversationResult } from '../../conversation/types.js';
 import {
@@ -70,18 +67,6 @@ export interface MessageProcessorOptions {
    * Query metrics repository for token usage tracking (ADR-020 Phase 2).
    */
   queryMetricsRepository?: IQueryMetricsRepository;
-
-  /**
-   * Execution record repository for audit trail.
-   * When provided, every SDK query is logged with trigger info, cost, status.
-   */
-  executionRecordRepository?: ExecutionRecordRepository;
-
-  /**
-   * Activity event service for operational event dual-write.
-   * When provided, events are sent to Discord #system-log/#alerts.
-   */
-  activityEventService?: ActivityEventService;
 
   /**
    * Rate limit repository for persisting rate_limit_event snapshots.
@@ -138,8 +123,6 @@ export class MessageProcessor {
     | undefined;
   private readonly eventBus: EventBus | undefined;
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
-  private readonly executionRecordRepository: ExecutionRecordRepository | undefined;
-  private activityEventService: ActivityEventService | undefined;
   private readonly usageCardEnabled: boolean;
 
   constructor(options: MessageProcessorOptions) {
@@ -158,8 +141,6 @@ export class MessageProcessor {
     this.getSystemPrompt = options.getSystemPrompt;
     this.eventBus = options.eventBus;
     this.queryMetricsRepository = options.queryMetricsRepository;
-    this.executionRecordRepository = options.executionRecordRepository;
-    this.activityEventService = options.activityEventService;
     this.usageCardEnabled = options.usageCardEnabled ?? true;
 
     logger.info('MessageProcessor initialized');
@@ -168,19 +149,9 @@ export class MessageProcessor {
   /**
    * Late dependency injection for services that depend on Discord adapters.
    * Called by AppBootstrap after Discord initialization completes.
-   *
-   * Race window: between construction and wirePostInit(), these services are undefined.
-   * All usage sites have null guards (optional chaining) to handle this gracefully.
    */
-  wirePostInit(deps: {
-    activityEventService?: ActivityEventService;
-  }): void {
-    if (deps.activityEventService !== undefined) {
-      this.activityEventService = deps.activityEventService;
-      // Propagate to SDKSessionManager so keepalive cache-miss warnings
-      // reach the Discord alerts channel via the operational event pipeline.
-      this.sdkSessionManager.setActivityEventService(deps.activityEventService);
-    }
+  wirePostInit(_deps: Record<string, never>): void {
+    // no-op: all late-injected services removed
   }
 
   /** Expose SDKSessionManager for operational consumers. */
@@ -261,7 +232,6 @@ export class MessageProcessor {
       getAdapter: (platform, requestedAgentId) => this.getAdapter(platform, requestedAgentId),
       buildQueryExecutorDeps: () => this._buildQueryExecutorDeps(),
       getAgentCwd: (id) => this.sessionManager.getAgentPath(id),
-      ...(this.activityEventService !== undefined ? { activityEventService: this.activityEventService } : {}),
     }).run(message, agentId, options);
   }
 
@@ -277,8 +247,6 @@ export class MessageProcessor {
       typingIndicatorIntervalMs: this.typingIndicatorIntervalMs,
       usageCardEnabled: this.usageCardEnabled,
     };
-    if (this.activityEventService !== undefined) deps.activityEventService = this.activityEventService;
-    if (this.executionRecordRepository !== undefined) deps.executionRecordRepository = this.executionRecordRepository;
     if (this.queryMetricsRepository !== undefined) deps.queryMetricsRepository = this.queryMetricsRepository;
     if (this.conversationRepository !== undefined) deps.conversationRepository = this.conversationRepository;
     if (this.getSystemPrompt !== undefined) deps.getSystemPrompt = this.getSystemPrompt;

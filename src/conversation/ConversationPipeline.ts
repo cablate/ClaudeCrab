@@ -1,7 +1,6 @@
 import type { UnifiedMessage } from '../types/message.js';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import type { UserSession } from '../types/session.js';
-import type { ActivityEventService } from '../services/ActivityEventService.js';
 import type { SessionManager } from '../core/session/SessionManager.js';
 import type { SDKSessionManager } from '../core/session/SDKSessionManager.js';
 import type { QueryExecutorDeps, QueryExecuteOptions } from '../core/query/QueryExecutor.js';
@@ -31,7 +30,6 @@ export interface ConversationPipelineDeps {
   getAdapter: (platform: 'discord', agentId: string) => BaseAdapter | undefined;
   buildQueryExecutorDeps: () => QueryExecutorDeps;
   getAgentCwd?: (agentId: string) => string | undefined;
-  activityEventService?: ActivityEventService;
 }
 
 /**
@@ -63,12 +61,6 @@ export class ConversationPipeline {
       logger.debug({ event_type: EventType.MESSAGE_DUPLICATE_SKIPPED, messageId }, 'Skipping duplicate message');
       return { success: true, skipped: true };
     }
-
-    void this.deps.activityEventService?.log({
-      type: 'chat.received',
-      agentId,
-      message: `?�到訊息??{text.slice(0, 50)}${text.length > 50 ? '...' : ''}?�`,
-    });
 
     const taskPreview = text.length > 40 ? text.substring(0, 40) + '...' : text;
 
@@ -158,12 +150,6 @@ export class ConversationPipeline {
         appConfig.sessionGuard
       );
       if (guardResult === 'switch') {
-        void this.deps.activityEventService?.log({
-          type: 'session.guard_switch',
-          agentId,
-          message: `使用?�選?��???session (user: ${effectiveUserId})`,
-          level: 'warn',
-        });
         this.deps.sdkSessionManager.destroySession(session.sessionId);
         this.deps.sessionManager.setSdkSessionId(platform, agentId, effectiveUserId, undefined);
         await adapter.sendFormattedMessage(
@@ -173,12 +159,6 @@ export class ConversationPipeline {
         return { success: true, skipped: true, response: '' };
       }
       if (guardResult === 'timeout') {
-        void this.deps.activityEventService?.log({
-          type: 'session.guard_timeout',
-          agentId,
-          message: `Guard ?��??��?，�??�未?��? (user: ${effectiveUserId})`,
-          level: 'warn',
-        });
         return { success: true, skipped: true, response: '' };
       }
     }
@@ -265,13 +245,6 @@ export class ConversationPipeline {
       { event_type: EventType.MESSAGE_ERROR, err: errorDetails, platform: 'discord', userId: effectiveUserId, agentId },
       'Failed to process message'
     );
-    void this.deps.activityEventService?.log({
-      type: 'system.message_error',
-      agentId,
-      message: `訊息?��?失�?: ${err.message.slice(0, 200)}`,
-      level: 'error',
-    });
-
     const errorPreview = err.message.length > 60 ? err.message.substring(0, 60) + '...' : err.message;
 
     await sendErrorToUser(adapter, message.chatId, err);

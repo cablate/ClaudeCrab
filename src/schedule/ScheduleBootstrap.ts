@@ -1,7 +1,6 @@
 import type { AgentLoader } from '../core/orchestrator/AgentLoader.js';
 import type { PlatformOrchestrator } from '../core/orchestrator/PlatformOrchestrator.js';
 import type { IQueryMetricsRepository, ISessionRepository } from '../persistence/types.js';
-import type { ExecutionRecordRepository } from '../persistence/ExecutionRecordRepository.js';
 import type { DatabaseManager } from '../persistence/DatabaseManager.js';
 import { ScheduleLoader } from './ScheduleLoader.js';
 import { ScheduleNotifier } from './ScheduleNotifier.js';
@@ -11,7 +10,6 @@ import { ScheduleManager } from './ScheduleManager.js';
 import { ScheduleThreadMap } from './ScheduleThreadMap.js';
 import { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import { SDKQueryManager } from '../core/query/SDKQueryManager.js';
-import { getEventBus } from '../core/lib/EventBus.js';
 import { logger } from '../utils/logger.js';
 
 export interface ScheduleBootstrapResult {
@@ -26,7 +24,6 @@ export async function initializeScheduleSystem(opts: {
   databaseManager: DatabaseManager | null;
   scheduleThreadMap: ScheduleThreadMap | null;
   queryMetricsRepository: IQueryMetricsRepository | undefined;
-  executionRecordRepository: ExecutionRecordRepository | undefined;
   sessionRepository: ISessionRepository | undefined;
 }): Promise<ScheduleBootstrapResult> {
   logger.info('Initializing Schedule System...');
@@ -46,8 +43,6 @@ export async function initializeScheduleSystem(opts: {
     scheduleNotifier,
     scheduleRepository,
     opts.queryMetricsRepository,
-    opts.executionRecordRepository,
-    undefined, // activityEventService ??injected via wirePostInit
     opts.sessionRepository,
   );
 
@@ -73,12 +68,6 @@ export async function initializeScheduleSystem(opts: {
   for (const adapter of opts.orchestrator.getRegistry().getAll()) {
     scheduleNotifier.addAdapter(adapter.agentId, adapter);
   }
-
-  getEventBus().on('message:sent', (payload) => {
-    if (payload.agentId) {
-      void scheduleManager.syncSchedulesForAgent(payload.agentId);
-    }
-  });
 
   logger.info('Schedule System initialized');
 

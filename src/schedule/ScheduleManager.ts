@@ -407,10 +407,10 @@ export class ScheduleManager {
 
         logger.info({ event_type: EventType.SCHEDULE_WATCHER_STARTED }, `[ScheduleManager] File watcher started on: ${agentsDir}`);
       }).catch((err: unknown) => {
-        logger.warn({ event_type: EventType.SCHEDULE_WATCHER_ERROR, err }, '[ScheduleManager] Failed to start file watcher (chokidar not available), falling back to message:sent sync');
+        logger.warn({ event_type: EventType.SCHEDULE_WATCHER_ERROR, err }, '[ScheduleManager] Failed to start file watcher (chokidar not available); schedules will only sync on adapter start');
       });
     } catch (err) {
-      logger.warn({ event_type: EventType.SCHEDULE_WATCHER_ERROR, err }, '[ScheduleManager] Failed to start file watcher, falling back to message:sent sync');
+      logger.warn({ event_type: EventType.SCHEDULE_WATCHER_ERROR, err }, '[ScheduleManager] Failed to start file watcher; schedules will only sync on adapter start');
     }
   }
 

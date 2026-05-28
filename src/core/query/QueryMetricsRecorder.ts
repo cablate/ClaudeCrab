@@ -9,8 +9,6 @@
  */
 
 import type { IQueryMetricsRepository } from '../../persistence/types.js';
-import type { ExecutionRecordRepository } from '../../persistence/ExecutionRecordRepository.js';
-import type { ActivityEventService } from '../../services/ActivityEventService.js';
 import { SessionManager } from '../session/SessionManager.js';
 import type { QueryResult } from './SDKQueryManager.js';
 import { serializeContextUsageSnapshot } from '../keepalive/ContextUsageTelemetry.js';
@@ -21,8 +19,6 @@ const qmrLogger = logger.child({ module: 'QueryMetricsRecorder' });
 export interface QueryMetricsRecorderDeps {
   sessionManager: SessionManager;
   queryMetricsRepository?: IQueryMetricsRepository;
-  executionRecordRepository?: ExecutionRecordRepository;
-  activityEventService?: ActivityEventService;
 }
 
 /**
@@ -101,36 +97,3 @@ export function recordQueryMetrics(
   }
 }
 
-/**
- * Record execution audit entry for every SDK query.
- */
-export function recordExecutionAudit(
-  result: QueryResult,
-  agentId: string,
-  triggerType: 'chat' | 'schedule' | 'agent_call',
-  triggerSource: string,
-  _chatId: string | undefined,
-  taskId: string | undefined,
-  executionRecordRepository: ExecutionRecordRepository | undefined
-): void {
-  if (executionRecordRepository === undefined || result.usage === undefined) return;
-
-  try {
-    const costUsd = result.totalCostUsd ?? result.usage.costUsd ?? 0;
-    executionRecordRepository.insert({
-      agentId,
-      triggerType,
-      triggerSource,
-      ...(taskId !== undefined ? { taskId } : {}),
-      // promptSummary omitted ??optional field
-      responseSummary: result.response?.slice(0, 200),
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-      costCents: Math.round(costUsd * 100),
-      durationMs: result.durationMs ?? 0,
-      status: 'success',
-    });
-  } catch (error) {
-    qmrLogger.warn({ error, agentId }, 'Failed to record execution audit');
-  }
-}

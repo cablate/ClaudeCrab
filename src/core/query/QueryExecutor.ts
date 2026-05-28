@@ -16,8 +16,6 @@ import path from 'path';
 import { EmbedBuilder } from 'discord.js';
 import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
 import type { IConversationRepository, IQueryMetricsRepository } from '../../persistence/types.js';
-import type { ExecutionRecordRepository } from '../../persistence/ExecutionRecordRepository.js';
-import type { ActivityEventService } from '../../services/ActivityEventService.js';
 import { SessionManager } from '../session/SessionManager.js';
 import type { QueryResult, SDKQueryManager } from './SDKQueryManager.js';
 import { SDKSessionManager } from '../session/SDKSessionManager.js';
@@ -46,7 +44,6 @@ import {
 } from './StreamResponseRouter.js';
 import {
   recordQueryMetrics,
-  recordExecutionAudit,
 } from './QueryMetricsRecorder.js';
 
 const qeLogger = logger.child({ module: 'QueryExecutor' });
@@ -58,8 +55,6 @@ export interface QueryExecutorDeps {
   sessionManager: SessionManager;
   sdkQueryManager: SDKQueryManager;
   sdkSessionManager: SDKSessionManager;
-  activityEventService?: ActivityEventService;
-  executionRecordRepository?: ExecutionRecordRepository;
   queryMetricsRepository?: IQueryMetricsRepository;
   conversationRepository?: IConversationRepository;
   getSystemPrompt?: (agentId: string) => Promise<string>;
@@ -99,8 +94,6 @@ export async function executeQueryWithSDK(
   const {
     sessionManager,
     sdkSessionManager,
-    activityEventService,
-    executionRecordRepository,
     queryMetricsRepository,
     getSystemPrompt,
     sendTypingIndicators,
@@ -436,7 +429,6 @@ export async function executeQueryWithSDK(
 
     // Record query metrics, execution audit, budget check
     const queryMetricId = recordQueryMetrics(result, agentId, platform, chatId, userId, queryMetricsRepository, sessionManager);
-    recordExecutionAudit(result, agentId, 'chat', userId, chatId, options?.taskId, executionRecordRepository);
     const usageAnomaly = reportQueryUsageAnomaly({
       result,
       sessionId,
@@ -446,7 +438,6 @@ export async function executeQueryWithSDK(
       agentCwd: agent.path,
       sdkSessionManager,
       hasResume: queryStartedWithResume,
-      ...(activityEventService !== undefined ? { activityEventService } : {}),
       ...(queryMetricId !== undefined ? { queryMetricId } : {}),
       ...(options !== undefined ? { options } : {}),
     });
@@ -470,13 +461,6 @@ export async function executeQueryWithSDK(
       allResponses.push(result.response);
     }
     const fullResponse = allResponses.join('\n\n');
-
-    // Activity event: chat responded
-    void activityEventService?.log({
-      type: 'chat.responded',
-      agentId,
-      message: `回覆完成（in ${result.usage?.inputTokens ?? 0} + out ${result.usage?.outputTokens ?? 0} tokens, $${((result.totalCostUsd ?? 0)).toFixed(3)}）`,
-    });
 
     await statusManager?.finalizeAll();
 
@@ -536,7 +520,6 @@ interface UsageAnomalyReportContext {
   agentCwd: string;
   sdkSessionManager: SDKSessionManager;
   hasResume?: boolean;
-  activityEventService?: ActivityEventService;
   queryMetricId?: number;
   options?: QueryExecuteOptions;
 }
@@ -618,43 +601,6 @@ function reportQueryUsageAnomaly(ctx: UsageAnomalyReportContext): UsageAnomalyRe
   };
   if (report.shouldAlert) {
     qeLogger.warn(logPayload, 'Query usage anomaly detected');
-    void ctx.activityEventService?.log({
-      type: report.activityType,
-      level: 'warn',
-      agentId: ctx.agentId,
-      message: report.message,
-      details: report.details,
-      ...(report.links !== undefined ? { links: report.links } : {}),
-      metadata: {
-        sessionId: ctx.sessionId,
-        sdkSessionId,
-        queryMetricId: ctx.queryMetricId,
-        chatId: targetChatId,
-        userId: ctx.userId,
-        jsonlPath,
-        discordUrl,
-        sourceMessageUrl,
-        hasResume: ctx.hasResume,
-        sessionMessageCount: sessionSummary?.messageCount,
-        severity: report.severity,
-        likelyCause: report.likelyCause,
-        findings: report.findings.map((f) => f.code),
-        metrics: report.metrics,
-        modelBreakdown: report.modelBreakdown,
-        split: splitMainSubagentUsage(ctx.result.modelUsage, ctx.result.mainModel),
-        jsonlFinding: jsonlPath !== undefined && ctx.result.usage !== undefined
-          ? analyzeCurrentTurn(
-              {
-                input_tokens: ctx.result.usage.inputTokens ?? 0,
-                cache_read_input_tokens: ctx.result.usage.cacheReadInputTokens ?? 0,
-                cache_creation_input_tokens: ctx.result.usage.cacheCreationInputTokens ?? 0,
-                output_tokens: ctx.result.usage.outputTokens ?? 0,
-              },
-              jsonlPath,
-            )
-          : null,
-      },
-    });
   } else {
     qeLogger.info(logPayload, 'Query usage diagnostic note');
   }

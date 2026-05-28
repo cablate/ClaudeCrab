@@ -21,47 +21,6 @@ export type ActivityMood =
   | 'focused'
   | 'bored';
 
-/** Operational event types for system-level visibility (schedule, budget, errors) */
-export type OperationalEventType =
-  | 'chat.received'
-  | 'chat.responded'
-  | 'schedule.started'
-  | 'schedule.completed'
-  | 'schedule.failed'
-  | 'budget.warning'
-  | 'budget.exceeded'
-  | 'task.created'
-  | 'task.completed'
-  | 'error.occurred'
-  | 'session.silent_failure'
-  | 'session.delivery_failed'
-  | 'session.zombie_recovered'
-  | 'session.zombie_retry_disabled'
-  | 'session.empty_stream_retry_disabled'
-  | 'session.resume_empty'
-  | 'session.resume_lost'
-  | 'session.error'
-  | 'session.guard_timeout'
-  | 'session.guard_switch'
-  | 'session.cache_bust'
-  | 'session.high_cost'
-  | 'session.rate_limit'
-  | 'session.keepalive_failed'
-  | 'schedule.auto_paused'
-  | 'system.adapter_failed'
-  | 'system.message_error';
-
-/** Structured operational event for logging and notification */
-export interface OperationalEvent {
-  type: OperationalEventType;
-  agentId: string;
-  message: string;
-  details?: string;
-  links?: Array<{ label: string; url: string }>;
-  level?: 'info' | 'warn' | 'error';
-  metadata?: Record<string, unknown> | undefined;
-}
-
 /** Structured activity event emitted by all agent behaviors */
 export interface ActivityEvent {
   /** Unique event ID */
