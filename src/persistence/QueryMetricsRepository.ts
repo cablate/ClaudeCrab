@@ -212,14 +212,52 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     }));
   }
 
-  getRecentQueries(limit: number, offset = 0, agentId?: string): QueryMetricRow[] {
-    const sql = agentId
-      ? `SELECT * FROM query_metrics WHERE agent_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`
-      : `SELECT * FROM query_metrics ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+  getRecentQueries(limit: number, offset = 0, agentId?: string, since?: string): QueryMetricRow[] {
+    const conditions: string[] = [];
+    const params: (string | number)[] = [];
+    if (agentId !== undefined) { conditions.push('agent_id = ?'); params.push(agentId); }
+    if (since !== undefined) { conditions.push('created_at >= ?'); params.push(since); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const sql = `SELECT * FROM query_metrics ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
     const stmt = this.db.prepare(sql);
-    const rows = agentId
-      ? (stmt.all(agentId, limit, offset) as RawQueryRow[])
-      : (stmt.all(limit, offset) as RawQueryRow[]);
+    const rows = stmt.all(...params) as RawQueryRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      agentId: row.agent_id,
+      platform: row.platform,
+      chatId: row.chat_id,
+      userId: row.user_id,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      cacheReadTokens: row.cache_read_tokens,
+      cacheCreationTokens: row.cache_creation_tokens,
+      totalCostUsd: row.total_cost_usd,
+      numTurns: row.num_turns,
+      durationMs: row.duration_ms,
+      createdAt: row.created_at,
+      ...(row.turn_type !== null ? { turnType: row.turn_type } : {}),
+      ...(row.sdk_session_id !== null ? { sdkSessionId: row.sdk_session_id } : {}),
+      ...(row.context_total_tokens !== null ? { contextTotalTokens: row.context_total_tokens } : {}),
+      ...(row.context_max_tokens !== null ? { contextMaxTokens: row.context_max_tokens } : {}),
+      ...(row.context_percentage !== null ? { contextPercentage: row.context_percentage } : {}),
+      ...(row.context_model !== null ? { contextModel: row.context_model } : {}),
+    }));
+  }
+
+  /**
+   * Get recent queries for a specific channel, filtered in SQL.
+   * Avoids pulling unneeded rows and filtering in JS.
+   */
+  getRecentChannelQueries(channelId: string, agentId?: string, since?: string, limit = 100): QueryMetricRow[] {
+    const conditions: string[] = ['chat_id = ?'];
+    const params: (string | number)[] = [channelId];
+    if (agentId !== undefined) { conditions.push('agent_id = ?'); params.push(agentId); }
+    if (since !== undefined) { conditions.push('created_at >= ?'); params.push(since); }
+    const sql = `SELECT * FROM query_metrics WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC LIMIT ?`;
+    params.push(limit);
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as RawQueryRow[];
     return rows.map((row) => ({
       id: row.id,
       agentId: row.agent_id,

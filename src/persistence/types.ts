@@ -243,7 +243,10 @@ export interface IQueryMetricsRepository {
   getDailyStatsAll(days: number): DailyUsageStats[];
 
   /** Get recent individual query records */
-  getRecentQueries(limit: number, offset?: number, agentId?: string): QueryMetricRow[];
+  getRecentQueries(limit: number, offset?: number, agentId?: string, since?: string): QueryMetricRow[];
+
+  /** Get recent queries for a channel, filtered in SQL */
+  getRecentChannelQueries(channelId: string, agentId?: string, since?: string, limit?: number): QueryMetricRow[];
 
   /** Get keepalive ping stats, optionally filtered by SDK session ID */
   getKeepaliveStats(sdkSessionId?: string): KeepaliveStats;

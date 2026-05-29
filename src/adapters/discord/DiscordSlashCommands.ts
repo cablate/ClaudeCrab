@@ -612,13 +612,8 @@ async function handleCtx(
   const matchedQueries: QueryInfo[] = [];
 
   if (deps.queryMetricsRepository !== undefined) {
-    const recent = deps.queryMetricsRepository.getRecentQueries(100, 0, agentId);
+    const recent = deps.queryMetricsRepository.getRecentChannelQueries(channelId, agentId, sessionCreatedAt?.toISOString(), 100);
     for (const q of recent) {
-      if (q.platform !== 'discord') continue;
-      if (q.chatId !== channelId) continue;
-      // Only include queries from the current session (after last reset)
-      if (sessionCreatedAt !== undefined && new Date(q.createdAt) < sessionCreatedAt) continue;
-
       sessionQueryCount++;
       sessionTotalCost += q.totalCostUsd;
       sessionTotalOutput += q.outputTokens;
