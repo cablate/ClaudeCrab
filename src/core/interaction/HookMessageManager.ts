@@ -62,7 +62,9 @@ export class HookMessageManager {
 
   private enqueue(work: () => Promise<void>): Promise<void> {
     const run = this.queue.then(work, work);
-    this.queue = run.catch(() => {});
+    this.queue = run.catch((err) => {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'HookMessageManager: queue task failed');
+    });
     return run;
   }
 

@@ -37,6 +37,7 @@ export class AppBootstrap {
   private scheduleManager: ScheduleManager | null = null;
   private dashboardService: DiscordDashboard | null = null;
   private costReportTimer: ReturnType<typeof setInterval> | null = null;
+  private cacheAnomalyReportTimer: ReturnType<typeof setInterval> | null = null;
   private discordSystemAdapter: DiscordAdapter | null = null;
   private scheduleExecutor: ScheduleExecutor | null = null;
   private scheduleThreadMap: ScheduleThreadMap | null = null;
@@ -151,6 +152,10 @@ export class AppBootstrap {
         clearInterval(this.costReportTimer);
         this.costReportTimer = null;
       }
+      if (this.cacheAnomalyReportTimer !== null) {
+        clearInterval(this.cacheAnomalyReportTimer);
+        this.cacheAnomalyReportTimer = null;
+      }
 
       if (this.dashboardService !== null) {
         this.dashboardService.stop();
@@ -245,7 +250,12 @@ export class AppBootstrap {
           rateLimitRepository.record({ rateLimitType: 'seven_day', utilizationPct: data.seven_day.utilization, status: 'oauth' });
         }
       });
-    }).catch(() => {});
+    }).catch((err) => {
+      logger.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        'OAuthUsageService dynamic import failed — rate limit persist disabled'
+      );
+    });
 
     logger.info('Persistence enabled');
 
@@ -366,6 +376,7 @@ export class AppBootstrap {
     this.discordSystemAdapter = services.systemAdapter;
     if (services.dashboardService !== undefined) this.dashboardService = services.dashboardService;
     if (services.costReportTimer !== undefined) this.costReportTimer = services.costReportTimer;
+    if (services.cacheAnomalyReportTimer !== undefined) this.cacheAnomalyReportTimer = services.cacheAnomalyReportTimer;
   }
 
   private logStartupSummary(agentLoader: AgentLoader): void {

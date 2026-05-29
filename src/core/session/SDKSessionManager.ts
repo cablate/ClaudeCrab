@@ -398,7 +398,7 @@ export class SDKSessionManager {
     const managed = this.sessions.get(sessionId);
     if (managed) {
       if (managed.keepaliveTimer) {
-        clearInterval(managed.keepaliveTimer);
+        clearTimeout(managed.keepaliveTimer);
         managed.keepaliveTimer = undefined;
       }
       if (managed.subAgentManager) {
