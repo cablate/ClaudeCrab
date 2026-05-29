@@ -1015,13 +1015,10 @@ async function handleSessions(
 
   const userSessions = deps.sessionManager.getAllSessions();
   const userSessionMap = new Map(userSessions.map(s => [s.sessionId, s]));
-  const recentQueries = deps.queryMetricsRepository?.getRecentQueries(2000) ?? [];
-  const latestQueryBySdkSession = new Map<string, (typeof recentQueries)[number]>();
-  for (const query of recentQueries) {
-    if (query.sdkSessionId === undefined || query.turnType === 'keepalive') continue;
-    if (!latestQueryBySdkSession.has(query.sdkSessionId)) {
-      latestQueryBySdkSession.set(query.sdkSessionId, query);
-    }
+  const latestQueryBySdkSession = new Map<string, QueryMetricRow>();
+  for (const q of deps.queryMetricsRepository?.getLatestQueryPerSession() ?? []) {
+    if (q.sdkSessionId === undefined) continue;
+    latestQueryBySdkSession.set(q.sdkSessionId, q);
   }
   const now = Date.now();
 

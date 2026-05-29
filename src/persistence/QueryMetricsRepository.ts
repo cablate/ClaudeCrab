@@ -222,27 +222,25 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     params.push(limit, offset);
     const stmt = this.db.prepare(sql);
     const rows = stmt.all(...params) as RawQueryRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      agentId: row.agent_id,
-      platform: row.platform,
-      chatId: row.chat_id,
-      userId: row.user_id,
-      inputTokens: row.input_tokens,
-      outputTokens: row.output_tokens,
-      cacheReadTokens: row.cache_read_tokens,
-      cacheCreationTokens: row.cache_creation_tokens,
-      totalCostUsd: row.total_cost_usd,
-      numTurns: row.num_turns,
-      durationMs: row.duration_ms,
-      createdAt: row.created_at,
-      ...(row.turn_type !== null ? { turnType: row.turn_type } : {}),
-      ...(row.sdk_session_id !== null ? { sdkSessionId: row.sdk_session_id } : {}),
-      ...(row.context_total_tokens !== null ? { contextTotalTokens: row.context_total_tokens } : {}),
-      ...(row.context_max_tokens !== null ? { contextMaxTokens: row.context_max_tokens } : {}),
-      ...(row.context_percentage !== null ? { contextPercentage: row.context_percentage } : {}),
-      ...(row.context_model !== null ? { contextModel: row.context_model } : {}),
-    }));
+    return rows.map(rowToMetricRow);
+  }
+
+  /**
+   * Get the latest non-keepalive query per SDK session.
+   * Uses SQL aggregation to avoid pulling ALL rows into JS.
+   */
+  getLatestQueryPerSession(): QueryMetricRow[] {
+    const sql = `SELECT q.*
+      FROM query_metrics q
+      INNER JOIN (
+        SELECT MAX(id) AS max_id FROM query_metrics
+        WHERE sdk_session_id IS NOT NULL
+          AND (turn_type IS NULL OR turn_type != 'keepalive')
+        GROUP BY sdk_session_id
+      ) latest ON q.id = latest.max_id`;
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all() as RawQueryRow[];
+    return rows.map(rowToMetricRow);
   }
 
   /**
@@ -258,27 +256,7 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     params.push(limit);
     const stmt = this.db.prepare(sql);
     const rows = stmt.all(...params) as RawQueryRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      agentId: row.agent_id,
-      platform: row.platform,
-      chatId: row.chat_id,
-      userId: row.user_id,
-      inputTokens: row.input_tokens,
-      outputTokens: row.output_tokens,
-      cacheReadTokens: row.cache_read_tokens,
-      cacheCreationTokens: row.cache_creation_tokens,
-      totalCostUsd: row.total_cost_usd,
-      numTurns: row.num_turns,
-      durationMs: row.duration_ms,
-      createdAt: row.created_at,
-      ...(row.turn_type !== null ? { turnType: row.turn_type } : {}),
-      ...(row.sdk_session_id !== null ? { sdkSessionId: row.sdk_session_id } : {}),
-      ...(row.context_total_tokens !== null ? { contextTotalTokens: row.context_total_tokens } : {}),
-      ...(row.context_max_tokens !== null ? { contextMaxTokens: row.context_max_tokens } : {}),
-      ...(row.context_percentage !== null ? { contextPercentage: row.context_percentage } : {}),
-      ...(row.context_model !== null ? { contextModel: row.context_model } : {}),
-    }));
+    return rows.map(rowToMetricRow);
   }
 
   /**
@@ -372,6 +350,31 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
       avgDurationMs: Math.round(row.avg_duration_ms),
     };
   }
+}
+
+/** Map a raw DB row to QueryMetricRow. Extracted to avoid duplication across query methods. */
+function rowToMetricRow(row: RawQueryRow): QueryMetricRow {
+  return {
+    id: row.id,
+    agentId: row.agent_id,
+    platform: row.platform,
+    chatId: row.chat_id,
+    userId: row.user_id,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    cacheReadTokens: row.cache_read_tokens,
+    cacheCreationTokens: row.cache_creation_tokens,
+    totalCostUsd: row.total_cost_usd,
+    numTurns: row.num_turns,
+    durationMs: row.duration_ms,
+    createdAt: row.created_at,
+    ...(row.turn_type !== null ? { turnType: row.turn_type } : {}),
+    ...(row.sdk_session_id !== null ? { sdkSessionId: row.sdk_session_id } : {}),
+    ...(row.context_total_tokens !== null ? { contextTotalTokens: row.context_total_tokens } : {}),
+    ...(row.context_max_tokens !== null ? { contextMaxTokens: row.context_max_tokens } : {}),
+    ...(row.context_percentage !== null ? { contextPercentage: row.context_percentage } : {}),
+    ...(row.context_model !== null ? { contextModel: row.context_model } : {}),
+  };
 }
 
 /** Raw row from aggregation query */

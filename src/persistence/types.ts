@@ -248,6 +248,9 @@ export interface IQueryMetricsRepository {
   /** Get recent queries for a channel, filtered in SQL */
   getRecentChannelQueries(channelId: string, agentId?: string, since?: string, limit?: number): QueryMetricRow[];
 
+  /** Get latest non-keepalive query per SDK session (avoids pulling 2000 rows into JS) */
+  getLatestQueryPerSession(): QueryMetricRow[];
+
   /** Get keepalive ping stats, optionally filtered by SDK session ID */
   getKeepaliveStats(sdkSessionId?: string): KeepaliveStats;
 
