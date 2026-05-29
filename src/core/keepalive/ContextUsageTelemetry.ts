@@ -201,7 +201,3 @@ export async function collectContextUsageSnapshot(
     return undefined;
   }
 }
-
-export function serializeContextUsageSnapshot(snapshot: ContextUsageSnapshot): string {
-  return JSON.stringify(snapshot);
-}

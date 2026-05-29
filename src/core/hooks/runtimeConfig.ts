@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 export const HOOK_PROMPT_IDS = [
   'userPromptSubmit',
-  'postToolUseBashError',
 ] as const;
 
 export type HookPromptId = typeof HOOK_PROMPT_IDS[number];
@@ -37,13 +36,7 @@ export interface RuntimeHookConfig {
     readonly tagName: string;
     readonly promptFile: string;
   }>;
-  readonly postToolUseBash: {
-    readonly errorPatterns: readonly RuntimeHookPattern[];
-    readonly promptId: HookPromptId;
-  };
   readonly contextEconomy: {
-    readonly explorationToolThresholds: Record<string, number>;
-    readonly outputCharThresholds: Record<string, number>;
     readonly largeReadPreflight: {
       readonly enabled: boolean;
       readonly maxUnboundedBytes: number;
@@ -53,24 +46,6 @@ export interface RuntimeHookConfig {
       readonly enabled: boolean;
       readonly tools: readonly string[];
       readonly message: string;
-    };
-    readonly subagentModelRestriction: {
-      readonly enabled: boolean;
-    };
-    readonly repeatedExplorationThreshold: number;
-    readonly warningMessage: string;
-    readonly repeatedExplorationMessage: string;
-    readonly subagentRepeatedExplorationMessage: string;
-    readonly largeOutputMessage: string;
-  };
-  readonly hardBlocks: {
-    readonly enabled: boolean;
-    readonly protectedWriteTools: readonly string[];
-    readonly retiredPathMarkers: readonly string[];
-    readonly outputRepoMarkerSegments: readonly string[];
-    readonly messages: {
-      readonly retiredPath: string;
-      readonly outputRepoMarker: string;
     };
   };
 }

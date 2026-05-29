@@ -12,11 +12,7 @@
  * session-scoped mutable state.
  */
 
-import {
-  compileHookPatterns,
-  HOOK_RUNTIME_CONFIG,
-  type HookPromptId,
-} from './runtimeConfig.js';
+import { HOOK_RUNTIME_CONFIG } from './runtimeConfig.js';
 
 const config = HOOK_RUNTIME_CONFIG;
 
@@ -25,20 +21,8 @@ export const HOOK_DEFS = {
     displayName: config.preCompact.displayName,
     message: config.preCompact.message,
   },
-  postToolUseBash: {
-    errorPatterns: compileHookPatterns(config.postToolUseBash.errorPatterns),
-    promptId: config.postToolUseBash.promptId,
-  },
   contextEconomy: {
-    explorationToolThresholds: config.contextEconomy.explorationToolThresholds,
-    outputCharThresholds: config.contextEconomy.outputCharThresholds,
     largeReadPreflight: config.contextEconomy.largeReadPreflight,
     mainContextBlockedTools: config.contextEconomy.mainContextBlockedTools,
-    subagentModelRestriction: config.contextEconomy.subagentModelRestriction,
-    repeatedExplorationThreshold: config.contextEconomy.repeatedExplorationThreshold,
-    warningMessage: config.contextEconomy.warningMessage,
-    repeatedExplorationMessage: config.contextEconomy.repeatedExplorationMessage,
-    subagentRepeatedExplorationMessage: config.contextEconomy.subagentRepeatedExplorationMessage,
-    largeOutputMessage: config.contextEconomy.largeOutputMessage,
   },
 } as const;

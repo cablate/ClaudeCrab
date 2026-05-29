@@ -11,7 +11,6 @@
 import type { IQueryMetricsRepository } from '../../persistence/types.js';
 import { SessionManager } from '../session/SessionManager.js';
 import type { QueryResult } from './SDKQueryManager.js';
-import { serializeContextUsageSnapshot } from '../keepalive/ContextUsageTelemetry.js';
 import { logger } from '../../utils/logger.js';
 
 const qmrLogger = logger.child({ module: 'QueryMetricsRecorder' });
@@ -88,7 +87,6 @@ export function recordQueryMetrics(
         contextMaxTokens: result.contextUsage.maxTokens,
         contextPercentage: result.contextUsage.percentage,
         contextModel: result.contextUsage.model,
-        contextUsageJson: serializeContextUsageSnapshot(result.contextUsage),
       } : {}),
     });
   } catch (error) {

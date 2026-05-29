@@ -222,7 +222,6 @@ export interface IQueryMetricsRepository {
     contextMaxTokens?: number;
     contextPercentage?: number;
     contextModel?: string;
-    contextUsageJson?: string;
   }): number;
 
   /** Get aggregated stats for a specific agent (all time) */
@@ -279,7 +278,6 @@ export interface QueryMetricRow {
   contextMaxTokens?: number;
   contextPercentage?: number;
   contextModel?: string;
-  contextUsageJson?: string;
 }
 
 /**

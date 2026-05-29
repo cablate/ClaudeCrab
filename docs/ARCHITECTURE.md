@@ -51,10 +51,8 @@ ClaudeCab 是一個 Discord-only 的 AI 對話工作台，透過 Anthropic Claud
 ├─────────────────────────────────────────────┤
 │  services/          應用服務                  │
 │  ├─ BudgetService         預算控制           │
-│  ├─ HeartbeatService      心跳診斷           │
 │  ├─ OAuthUsageService     配額利用率         │
-│  ├─ KeepaliveROIService   cache ROI 計算     │
-│  └─ ActivityEventService  事件日誌+通知      │
+│  └─ KeepaliveROIService   cache ROI 計算     │
 ├─────────────────────────────────────────────┤
 │  persistence/       資料層                    │
 │  ├─ DatabaseManager       SQLite 連線/遷移   │
@@ -145,11 +143,8 @@ ClaudeCab 是一個 Discord-only 的 AI 對話工作台，透過 Anthropic Claud
 
 | 檔案 | 行數 | 職責 |
 |------|------|------|
-| `ContextInjector.ts` | 271 | 群組聊天歷史注入（ADR-019） |
 | `JsonlSanitizer.ts` | 224 | 防止 JSONL resume 時 readFileState diff 注入 |
 | `QueryMetricsRecorder.ts` | 164 | 查詢後指標記錄 |
-| `PathValidator.ts` | 269 | agent 工作區隔離驗證 |
-| `ActivityService.ts` | 319 | agent 活動事件（phase / mood / ring buffer） |
 | `hooks/definitions.ts` | 150 | Hook 定義集中管理（§7 詳述） |
 
 ### 3.4 schedule/ — 排程系統
@@ -170,10 +165,8 @@ ClaudeCab 是一個 Discord-only 的 AI 對話工作台，透過 Anthropic Claud
 | 檔案 | 行數 | 職責 |
 |------|------|------|
 | `BudgetService.ts` | 193 | 按 agent 每月預算、80% 警告、超額暫停 |
-| `HeartbeatService.ts` | 88 | 60s 心跳（uptime / memory / cache stats） |
 | `OAuthUsageService.ts` | 82 | Anthropic OAuth API 5h/7d 配額利用率、60s cache |
 | `KeepaliveROIService.ts` | 145 | keepalive ping ROI = actual cost vs hypothetical no-cache |
-| `ActivityEventService.ts` | 167 | 批次事件日誌（3s / 10 events flush） |
 | `TaskService.ts` | 256 | 任務 CRUD + Discord Forum sync |
 | `TTSService.ts` | 198 | TTS 生成、檔案管理、播放 |
 
@@ -269,7 +262,6 @@ QueryExecutor.executeQueryWithSDK()
   │
   ├─ 啟動 typing indicator
   ├─ 構建 StatusMessageManager / SubAgentMessageManager / HookMessageManager
-  ├─ 準備群組 context 注入（ContextInjector）
   ├─ 構建 MCP server 配置（McpToolSetup）
   │
   ▼
@@ -532,18 +524,6 @@ ScheduleExecutor.execute()
 - `budget.*` — exceeded / paused / resumed / report
 - `cache.*` — efficiency_snapshot / keepalive / session_evicted
 
-### 10.7 Operational Alerts（Phase 0 + A1）
-
-`OperationalEventType` 擴充了 15 個新事件類型。`ActivityEventService` 對以下情境發出告警：zombie session 恢復、resume empty、resume lost、session error、guard timeout、guard switch、message processing error。所有 `warn` / `error` 等級的操作事件自動路由到 #alerts channel（透過 `DiscordActivityReporter`），不需個別呼叫點處理。
-
-### 10.8 Heartbeat
-
-`HeartbeatService`（60s 間隔）發出 `lifecycle.heartbeat`，包含：
-- uptime_s / memory_rss_mb / memory_heap_used_mb
-- 可選 cache stats 注入
-
-用途：重複實例偵測。
-
 ---
 
 ## 11. 持久化層
@@ -641,10 +621,10 @@ ScheduleExecutor.execute()
 | 使用者白名單 | `ALLOWED_USERS` env | 逗號分隔的允許 user ID |
 | 訊息長度限制 | `MAX_MESSAGE_LENGTH` env | 超過長度拒絕 |
 | Prompt injection 偵測 | `utils/security.ts` | `PROMPT_INJECTION_DETECTION` 啟用時掃描 |
-| 工作區隔離 | `PathValidator` | agent 只能存取自己的目錄 + `agents/_shared` |
+| 工作區隔離 | agent `.claude/settings.local.json` + `_foundation/workspace-policy.md` | `permissions.allow` 白名單 + `defaultMode` + workspace 政策 prompt 規則 + workspace validator MCP 工具 |
 | Audit trail | `utils/audit.ts` | 所有使用者操作、授權事件、tool 呼叫記錄 |
 | Secret redaction | `logger.ts` | token / apiKey / password / authorization 自動遮蔽 |
-| Agent deny rules | `PathValidator` | 禁止 `taskkill` 等危險指令 |
+| 危險操作約束 | prompt 規則（`_example/.claude/rules/permissions.md`） | 「不可殺廣義 process（如全部 node）」等行為約束（prompt-level，非硬性 deny） |
 
 ---
 
@@ -667,19 +647,18 @@ AppBootstrap.start()
   ├─ 1. AgentLoader.scanAgents() + loadAllAgents()
   ├─ 2. DatabaseManager + 各 Repository 初始化
   ├─ 3. SessionManager 初始化 + 歷史 session 恢復
-  ├─ 4. ActivityService 建立
-  ├─ 5. STT / TTS providers 初始化
-  ├─ 6. BudgetService 建立
-  ├─ 7. MessageProcessor 建立（注入所有依賴）
-  ├─ 8. PlatformOrchestrator.startAll()（啟動 Discord adapters）
-  ├─ 9. initializeScheduleSystem()（ScheduleLoader → CronScheduler → ScheduleExecutor）
-  ├─ 10. DiscordBootstrap.initializeDiscordServices()
-  │      （TaskService / ActivityEventService / Dashboard / CostReport）
-  ├─ 11. MessageProcessor.wirePostInit()（注入 Discord-dependent 服務）
-  └─ 12. ScheduleExecutor.wirePostInit()（注入 ActivityEventService / ThreadMap）
+  ├─ 4. STT / TTS providers 初始化
+  ├─ 5. BudgetService 建立
+  ├─ 6. MessageProcessor 建立（注入所有依賴）
+  ├─ 7. PlatformOrchestrator.startAll()（啟動 Discord adapters）
+  ├─ 8. initializeScheduleSystem()（ScheduleLoader → CronScheduler → ScheduleExecutor）
+  ├─ 9. DiscordBootstrap.initializeDiscordServices()
+  │      （TaskService / Dashboard / CostReport）
+  ├─ 10. MessageProcessor.wirePostInit()（注入 Discord-dependent 服務）
+  └─ 11. ScheduleExecutor.wirePostInit()（注入 ThreadMap）
 ```
 
-**Late Dependency Injection**：部分服務（TaskService、ActivityEventService）依賴 Discord adapter 初始化完成，因此在 `wirePostInit()` 階段注入，所有存取點有 null-check 保護。
+**Late Dependency Injection**：部分服務（TaskService）依賴 Discord adapter 初始化完成，因此在 `wirePostInit()` 階段注入，所有存取點有 null-check 保護。
 
 ---
 

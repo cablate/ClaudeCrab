@@ -191,7 +191,6 @@ export function buildToolEventCallback(
       toolEvent.detail = detail;
     }
     await statusManager.addToolEvent(toolEvent);
-    await hookManager?.flushPendingGovernance();
   };
 }
 

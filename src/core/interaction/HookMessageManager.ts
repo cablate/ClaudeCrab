@@ -4,7 +4,6 @@
  * Pure view layer: renders every `HookEvent` as
  *
  *   `-# 🪝 Hook - <name>: <message>`
- *   `-# 🛡 Governance: <message>`
  *
  * (or `-# 🪝 Hook - <name>` when `message` is empty). `name` and `message`
  * are decided by the emit site — this class never inspects `kind` or
@@ -20,9 +19,7 @@ import type { HookEvent } from '../../types/hookEvent.js';
 import type { StatusCapableAdapter } from '../query/StatusMessageManager.js';
 
 const HOOK_EMOJI = '🪝';
-const GOVERNANCE_EMOJI = '🛡';
 const MAX_MESSAGE_LEN = 50;
-const MAX_GOVERNANCE_MESSAGE_LEN = 140;
 
 function truncate(raw: string, max: number): string {
   const cleaned = raw.replace(/\s+/g, ' ').trim();
@@ -31,13 +28,7 @@ function truncate(raw: string, max: number): string {
 
 function formatLine(evt: HookEvent, maxMessageLen: number): string {
   const name = evt.name.trim();
-  const messageLimit = evt.kind === 'governance'
-    ? MAX_GOVERNANCE_MESSAGE_LEN
-    : maxMessageLen;
-  const message = truncate(evt.message ?? '', messageLimit);
-  if (evt.kind === 'governance') {
-    return message ? `-# ${GOVERNANCE_EMOJI} Governance: ${message}` : `-# ${GOVERNANCE_EMOJI} Governance`;
-  }
+  const message = truncate(evt.message ?? '', maxMessageLen);
   return message ? `-# ${HOOK_EMOJI} Hook - ${name}: ${message}` : `-# ${HOOK_EMOJI} Hook - ${name}`;
 }
 
@@ -48,7 +39,6 @@ export interface HookMessageManagerOptions {
 
 export class HookMessageManager {
   private readonly maxMessageLen: number;
-  private readonly pendingGovernanceEvents: HookEvent[] = [];
   private queue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -60,46 +50,20 @@ export class HookMessageManager {
   }
 
   async handle(event: HookEvent): Promise<void> {
-    if (event.kind === 'governance') {
-      return;
-    }
     return this.enqueue(async () => {
-      await this.handleLocked(event);
+      await this.sendEvent(event);
     });
   }
 
-  async flushPendingGovernance(): Promise<void> {
-    return this.enqueue(async () => {
-      await this.flushPendingGovernanceLocked();
-    });
-  }
-
+  /** Drain queued hook sends — ordering barrier before final response. */
   async flushPending(): Promise<void> {
-    return this.enqueue(async () => {
-      await this.flushPendingGovernanceLocked();
-    });
+    return this.enqueue(async () => {});
   }
 
   private enqueue(work: () => Promise<void>): Promise<void> {
     const run = this.queue.then(work, work);
     this.queue = run.catch(() => {});
     return run;
-  }
-
-  private async handleLocked(event: HookEvent): Promise<void> {
-    if (event.kind === 'governance') {
-      this.pendingGovernanceEvents.push(event);
-      return;
-    }
-
-    await this.sendEvent(event);
-  }
-
-  private async flushPendingGovernanceLocked(): Promise<void> {
-    while (this.pendingGovernanceEvents.length > 0) {
-      const event = this.pendingGovernanceEvents.shift()!;
-      await this.sendEvent(event);
-    }
   }
 
   private async sendEvent(event: HookEvent): Promise<void> {
@@ -116,9 +80,5 @@ export class HookMessageManager {
         'HookMessageManager: send failed'
       );
     }
-  }
-
-  dispose(): void {
-    this.pendingGovernanceEvents.length = 0;
   }
 }

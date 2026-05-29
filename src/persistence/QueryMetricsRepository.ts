@@ -42,7 +42,6 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     contextMaxTokens?: number;
     contextPercentage?: number;
     contextModel?: string;
-    contextUsageJson?: string;
   }): number {
     const now = dateToString(new Date());
     const costCents = Math.round(params.totalCostUsd * 100);
@@ -52,8 +51,8 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
         input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
         total_cost_usd, total_cost_cents, num_turns, duration_ms, created_at,
         turn_type, sdk_session_id,
-        context_total_tokens, context_max_tokens, context_percentage, context_model, context_usage_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        context_total_tokens, context_max_tokens, context_percentage, context_model
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       params.agentId,
@@ -74,8 +73,7 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
       params.contextTotalTokens ?? null,
       params.contextMaxTokens ?? null,
       params.contextPercentage ?? null,
-      params.contextModel ?? null,
-      params.contextUsageJson ?? null
+      params.contextModel ?? null
     );
     this.log.debug(
       {
@@ -242,7 +240,6 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
       ...(row.context_max_tokens !== null ? { contextMaxTokens: row.context_max_tokens } : {}),
       ...(row.context_percentage !== null ? { contextPercentage: row.context_percentage } : {}),
       ...(row.context_model !== null ? { contextModel: row.context_model } : {}),
-      ...(row.context_usage_json !== null ? { contextUsageJson: row.context_usage_json } : {}),
     }));
   }
 
@@ -381,7 +378,6 @@ interface RawQueryRow {
   context_max_tokens: number | null;
   context_percentage: number | null;
   context_model: string | null;
-  context_usage_json: string | null;
 }
 
 /** Raw row from keepalive aggregation */
