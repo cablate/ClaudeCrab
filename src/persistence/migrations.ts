@@ -268,10 +268,10 @@ CREATE INDEX IF NOT EXISTS idx_schedule_executions_started ON schedule_execution
 `;
 
 /**
- * Migration SQL from v6 to v7:
+ * Migration SQL from v4 to v5:
  * Adds query_metrics table for token usage tracking (ADR-020 Phase 2)
  */
-const MIGRATION_V6_TO_V7 = `
+const MIGRATION_V4_TO_V5 = `
 -- Query metrics table (ADR-020 Phase 2: token usage tracking)
 CREATE TABLE IF NOT EXISTS query_metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -294,7 +294,7 @@ CREATE INDEX IF NOT EXISTS idx_query_metrics_agent ON query_metrics(agent_id);
 CREATE INDEX IF NOT EXISTS idx_query_metrics_created ON query_metrics(created_at);
 `;
 
-const MIGRATION_V7_TO_V8 = `
+const MIGRATION_V5_TO_V6 = `
 -- Activity events table (v2.0: workflow visibility + personality reactions)
 CREATE TABLE IF NOT EXISTS activity_events (
     id TEXT PRIMARY KEY,
@@ -314,7 +314,7 @@ CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(create
 `;
 
 
-const MIGRATION_V9_TO_V10 = `
+const MIGRATION_V7_TO_V8 = `
 -- Add integer cents column to query_metrics (coexists with total_cost_usd for backward compat)
 ALTER TABLE query_metrics ADD COLUMN total_cost_cents INTEGER NOT NULL DEFAULT 0;
 
@@ -322,12 +322,12 @@ ALTER TABLE query_metrics ADD COLUMN total_cost_cents INTEGER NOT NULL DEFAULT 0
 UPDATE query_metrics SET total_cost_cents = ROUND(total_cost_usd * 100) WHERE total_cost_cents = 0 AND total_cost_usd > 0;
 `;
 
-const MIGRATION_V10_TO_V11 = `
+const MIGRATION_V8_TO_V9 = `
 -- Add is_active column for soft-delete on /reset (survives process restart)
 ALTER TABLE sessions ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;
 `;
 
-const MIGRATION_V12_TO_V13 = `
+const MIGRATION_V9_TO_V10 = `
 -- Add turn-level fields to query_metrics for keepalive tracking
 ALTER TABLE query_metrics ADD COLUMN turn_type TEXT DEFAULT 'query';
 ALTER TABLE query_metrics ADD COLUMN sdk_session_id TEXT;
@@ -349,7 +349,7 @@ CREATE INDEX IF NOT EXISTS idx_rls_type_created ON rate_limit_snapshots(rate_lim
 CREATE INDEX IF NOT EXISTS idx_rls_session ON rate_limit_snapshots(sdk_session_id);
 `;
 
-const MIGRATION_V13_TO_V14 = `
+const MIGRATION_V10_TO_V11 = `
 -- Allow rate-limit snapshots without a known SDK session id.
 CREATE TABLE IF NOT EXISTS rate_limit_snapshots_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -379,12 +379,12 @@ CREATE INDEX IF NOT EXISTS idx_rls_session ON rate_limit_snapshots(sdk_session_i
  * 'schedule' = pre-created by schedule thread, awaiting user handoff.
  * NULL = normal chat session.
  */
-const MIGRATION_V14_TO_V15 = `
+const MIGRATION_V11_TO_V12 = `
 ALTER TABLE sessions ADD COLUMN continuation_source TEXT DEFAULT NULL;
 CREATE INDEX IF NOT EXISTS idx_sessions_continuation ON sessions(continuation_source);
 `;
 
-const MIGRATION_V16_TO_V17 = `
+const MIGRATION_V13_TO_V14 = `
 -- Store SDK getContextUsage() snapshots alongside query metrics.
 ALTER TABLE query_metrics ADD COLUMN context_total_tokens INTEGER;
 ALTER TABLE query_metrics ADD COLUMN context_max_tokens INTEGER;
@@ -428,13 +428,13 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   }
 
   if (currentVersion === '4') {
-    db.exec(MIGRATION_V6_TO_V7);
+    db.exec(MIGRATION_V4_TO_V5);
     logger.info('Migration v4 → v5 completed');
     currentVersion = '5';
   }
 
   if (currentVersion === '5') {
-    db.exec(MIGRATION_V7_TO_V8);
+    db.exec(MIGRATION_V5_TO_V6);
     logger.info('Migration v5 → v6 completed');
     currentVersion = '6';
   }
@@ -446,31 +446,31 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   }
 
   if (currentVersion === '7') {
-    db.exec(MIGRATION_V9_TO_V10);
+    db.exec(MIGRATION_V7_TO_V8);
     logger.info('Migration v7 → v8 completed');
     currentVersion = '8';
   }
 
   if (currentVersion === '8') {
-    db.exec(MIGRATION_V10_TO_V11);
+    db.exec(MIGRATION_V8_TO_V9);
     logger.info('Migration v8 → v9 completed');
     currentVersion = '9';
   }
 
   if (currentVersion === '9') {
-    db.exec(MIGRATION_V12_TO_V13);
+    db.exec(MIGRATION_V9_TO_V10);
     logger.info('Migration v9 → v10 completed');
     currentVersion = '10';
   }
 
   if (currentVersion === '10') {
-    db.exec(MIGRATION_V13_TO_V14);
+    db.exec(MIGRATION_V10_TO_V11);
     logger.info('Migration v10 → v11 completed');
     currentVersion = '11';
   }
 
   if (currentVersion === '11') {
-    db.exec(MIGRATION_V14_TO_V15);
+    db.exec(MIGRATION_V11_TO_V12);
     logger.info('Migration v11 → v12 completed');
     currentVersion = '12';
   }
@@ -482,7 +482,7 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   }
 
   if (currentVersion === '13') {
-    db.exec(MIGRATION_V16_TO_V17);
+    db.exec(MIGRATION_V13_TO_V14);
     logger.info('Migration v13 → v14 completed');
     currentVersion = '14';
   }

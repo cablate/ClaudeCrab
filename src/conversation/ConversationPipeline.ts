@@ -194,6 +194,10 @@ export class ConversationPipeline {
       };
     } catch (error) {
       this.deps.sessionManager.updateState(platform, agentId, effectiveUserId, 'error');
+      logger.error(
+        { err: error instanceof Error ? error.message : String(error), platform, agentId, effectiveUserId },
+        'ConversationPipeline: message processing failed'
+      );
       throw error;
     }
   }
