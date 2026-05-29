@@ -79,6 +79,8 @@ export class SDKSessionManager {
   private readonly keepaliveConfig: CacheKeepaliveConfig;
   /** When true, the SDK CLI process is torn down after each successful query. */
   private ephemeral = false;
+  /** Max concurrent V2 sessions. Each holds an SDK CLI process (~150MB). */
+  private readonly maxSessions: number;
 
   constructor(options?: {
     rateLimitRepository?: RateLimitRepository;
@@ -87,11 +89,14 @@ export class SDKSessionManager {
     /** Destroy the SDK CLI process after each query to free ~150MB RAM.
      *  Resume data stays on disk; next query restores context via JSONL. */
     ephemeral?: boolean;
+    /** Maximum concurrent sessions (default 20). LRU evicted when exceeded. */
+    maxSessions?: number;
   }) {
     this.rateLimitRepository = options?.rateLimitRepository;
     this.queryMetricsRepository = options?.queryMetricsRepository;
     this.keepaliveConfig = options?.keepaliveConfig ?? DEFAULT_CACHE_KEEPALIVE_CONFIG;
     this.ephemeral = options?.ephemeral ?? false;
+    this.maxSessions = options?.maxSessions ?? 20;
   }
 
 
@@ -122,6 +127,8 @@ export class SDKSessionManager {
     // Get or create persistent session
     let managed = this.sessions.get(sessionId);
     if (!managed) {
+      // Evict LRU idle session if over cap (each holds ~150MB SDK CLI process).
+      this.evictIdleSessions();
       managed = await this._createSession(sessionId, agent, queryOptions);
     }
     managed.agentId = agent.id;
@@ -389,6 +396,32 @@ export class SDKSessionManager {
   /** Get the session's subAgentManager if attached (for MessageProcessor to reuse). */
   getSubAgentManager(sessionId: string): SubAgentMessageManager | undefined {
     return this.sessions.get(sessionId)?.subAgentManager;
+  }
+
+  /**
+   * Evict the least recently used idle session when over capacity.
+   * Only targets sessions that are not currently querying, protecting
+   * active conversations and schedule-resumed sessions.
+   */
+  private evictIdleSessions(): void {
+    if (this.sessions.size < this.maxSessions) return;
+
+    let oldestId: string | undefined;
+    let oldestUsed = Infinity;
+    for (const [id, s] of this.sessions) {
+      if (s.isQuerying) continue; // never evict an active query
+      if (s.lastUsedAt < oldestUsed) {
+        oldestUsed = s.lastUsedAt;
+        oldestId = id;
+      }
+    }
+    if (oldestId !== undefined) {
+      logger.info(
+        { sessionId: oldestId, event_type: 'session.evicted_lru', totalSessions: this.sessions.size, maxSessions: this.maxSessions },
+        `Evicting LRU idle session (${this.sessions.size} >= ${this.maxSessions})`
+      );
+      this.destroySession(oldestId);
+    }
   }
 
   /**
