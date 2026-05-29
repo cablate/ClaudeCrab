@@ -19,7 +19,6 @@ import type { RateLimitRepository } from '../../persistence/RateLimitRepository.
 import { SessionManager } from '../session/SessionManager.js';
 import { SDKQueryManager } from '../query/SDKQueryManager.js';
 import { SDKSessionManager } from '../session/SDKSessionManager.js';
-import { EventBus } from '../lib/EventBus.js';
 import { logger } from '../../utils/logger.js';
 import { logContext, newCorrelationId, type LogContext } from '../../utils/logContext.js';
 import { ProcessingError } from '../../types/errors.js';
@@ -60,8 +59,9 @@ export interface MessageProcessorOptions {
 
   /**
    * Event bus for broadcasting events (e.g., bot:replied for group chats).
+   * Field retained to accept the option; EventBus class was removed (no subscribers).
    */
-  eventBus?: EventBus;
+  eventBus?: unknown;
 
   /**
    * Query metrics repository for token usage tracking (ADR-020 Phase 2).
@@ -121,7 +121,7 @@ export class MessageProcessor {
   private readonly getSystemPrompt:
     | ((agentId: string) => Promise<string>)
     | undefined;
-  private readonly eventBus: EventBus | undefined;
+  private readonly eventBus: unknown;
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly usageCardEnabled: boolean;
 

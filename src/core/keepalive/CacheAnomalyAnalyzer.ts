@@ -94,7 +94,8 @@ export interface ScanResult {
 // ─── JSONL Parsing ──────────────────────────────────────────────────────────
 
 export function parseJsonl(filePath: string): JsonlEntry[] {
-  const content = fs.readFileSync(filePath, 'utf8');
+  let content: string;
+  try { content = fs.readFileSync(filePath, 'utf8'); } catch { return []; }
   const lines = content.split(/\r?\n/).filter(Boolean);
   const entries: JsonlEntry[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -407,7 +408,8 @@ export function analyzeCurrentTurn(
  * Avoids reading the entire file for realtime checks.
  */
 function parseJsonlTail(filePath: string, tailLines: number): JsonlEntry[] {
-  const content = fs.readFileSync(filePath, 'utf8');
+  let content: string;
+  try { content = fs.readFileSync(filePath, 'utf8'); } catch { return []; }
   const allLines = content.split(/\r?\n/).filter(Boolean);
   const startIdx = Math.max(0, allLines.length - tailLines);
   const entries: JsonlEntry[] = [];

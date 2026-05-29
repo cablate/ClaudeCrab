@@ -200,9 +200,11 @@ export async function createManagedSession(
             ? (parsed as Record<string, unknown>).version
             : undefined;
           if (typeof version === 'string' && version.length > 0) { cliVersion = version; break; }
-        } catch { /* try next */ }
+        } catch {
+          logger.debug('CLI package.json version read failed — trying next candidate');
+        }
       }
-    } catch { /* non-critical */ }
+    } catch { /* non-critical — best-effort version detection */ }
     if (resolved.fallback) {
       logger.warn(
         { sessionId, configured: customCliPath, resolved: resolved.path, cliVersion, event_type: EventType.SDK_CLI_RESOLVED },
@@ -347,7 +349,9 @@ export async function createManagedSession(
               name: def.displayName,
               message: def.message,
             });
-          } catch { /* non-fatal */ }
+          } catch {
+            logger.debug({ sessionId }, 'pre_compact onHookEvent failed — non-fatal');
+          }
         }
         return { continue: true };
       }],

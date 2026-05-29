@@ -1,4 +1,3 @@
-export { EventBus, getEventBus } from './lib/EventBus.js';
 export { AgentLoader, type AgentLoaderOptions } from './orchestrator/AgentLoader.js';
 export { ConfigTransformer, type SDKOptions } from './lib/ConfigTransformer.js';
 export { SessionManager, type SessionManagerOptions } from './session/SessionManager.js';

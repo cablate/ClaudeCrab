@@ -12,7 +12,6 @@ import type { LoadedAgent } from '../../types/agent.js';
 import { SessionError } from '../../types/errors.js';
 import { AgentLoader } from '../orchestrator/AgentLoader.js';
 import { ConfigTransformer, type SDKOptions } from '../lib/ConfigTransformer.js';
-import { getEventBus } from '../lib/EventBus.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
 import type { ISessionRepository, SessionRow } from '../../persistence/types.js';
@@ -269,7 +268,7 @@ export class SessionManager {
     );
 
     // Emit event
-    getEventBus().emitSync('session:created', this.toPublicSession(session));
+    // (EventBus removed — no subscribers)
 
     return this.toPublicSession(session);
   }
@@ -323,11 +322,7 @@ export class SessionManager {
       'Session state updated'
     );
 
-    getEventBus().emitSync('session:stateChanged', {
-      sessionId: session.sessionId,
-      previousState,
-      newState: state,
-    });
+    // (EventBus removed — no subscribers)
   }
 
   /**
@@ -358,12 +353,7 @@ export class SessionManager {
       'Session closed'
     );
 
-    getEventBus().emitSync('session:closed', {
-      sessionId: session.sessionId,
-      reason,
-      platform,
-      userId,
-    });
+    // (EventBus removed — no subscribers)
 
     return true;
   }
@@ -586,12 +576,7 @@ export class SessionManager {
         // NOTE: Do NOT delete from database ??DB row preserves sdkSessionId
         // for conversation continuity when the user returns.
 
-        getEventBus().emitSync('session:closed', {
-          sessionId: session.sessionId,
-          reason: 'timeout',
-          platform: session.platform,
-          userId: session.userId,
-        });
+        // (EventBus removed — no subscribers)
       }
     }
 

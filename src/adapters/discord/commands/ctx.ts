@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
-import { log, CLAUDE_CONTEXT_WINDOW_TOKENS, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
+import { CLAUDE_CONTEXT_WINDOW_TOKENS, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
 import { restoreContextFromJsonl } from '../../../core/session/SDKContextRestore.js';
 
 export async function handleCtx(

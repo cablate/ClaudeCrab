@@ -15,7 +15,6 @@ import type {
   ExitPlanModePromptResult,
   ExitPlanModeResolver,
 } from './types.js';
-import { getEventBus } from '../core/lib/EventBus.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -463,9 +462,6 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
       'Message received'
     );
 
-    // Emit to EventBus
-    getEventBus().emitSync('message:received', message);
-
     // Call all registered handlers
     const handlers = Array.from(this.messageHandlers);
     await Promise.all(
@@ -486,16 +482,10 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * Log and emit sent message event
    */
   protected emitMessageSent(
-    chatId: string,
-    text: string,
-    userId: string
+    _chatId: string,
+    _text: string,
+    _userId: string
   ): void {
-    getEventBus().emitSync('message:sent', {
-      chatId,
-      text,
-      platform: this.platform,
-      userId,
-      agentId: this.agentId,
-    });
+    // (previously emitted to EventBus — removed, no subscribers)
   }
 }

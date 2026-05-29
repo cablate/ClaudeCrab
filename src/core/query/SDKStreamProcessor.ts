@@ -36,7 +36,8 @@ const POST_RESULT_DRAIN_POLL_MS = 250;
  * Returns null if stream() hasn't been called yet.
  */
 export function getCachedQueryIterator(session: ManagedSession['session']): AsyncIterator<SDKMessage> | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any — SDK doesn't expose queryIterator publicly
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Reason: SDK doesn't expose queryIterator publicly
   const iter = (session as any).queryIterator;
   return iter ?? null;
 }
@@ -47,7 +48,8 @@ export function getCachedQueryIterator(session: ManagedSession['session']): Asyn
  */
 /** @returns the internal Query object for interrupt(), or null if not available. */
 export function getSessionQuery(session: ManagedSession['session']): { interrupt(): Promise<void> } | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any — SDK doesn't expose Query publicly
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Reason: SDK doesn't expose Query publicly
   const query = (session as any).query;
   if (query && typeof query.interrupt === 'function') return query;
   return null;
@@ -213,7 +215,8 @@ export async function processStream(
     streamMsgIndex++;
 
     if (message.type === 'system' && 'subtype' in message) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any — system subtypes have disjoint property shapes
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // Reason: system subtypes have disjoint property shapes
       const systemMsg = message as any;
       if (systemMsg.subtype === 'init') {
         streamReady = true;
@@ -421,7 +424,7 @@ export async function processStream(
 
     // Tool events
     if (options.onToolEvent) {
-      const toolScope: 'main' = 'main';
+      const toolScope = 'main' as const;
       if (message.type === 'assistant' && message.message?.content) {
         for (const block of message.message.content) {
           if (block.type === 'tool_use') {

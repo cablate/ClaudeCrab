@@ -1,22 +1,10 @@
-import {
-  EmbedBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ActionRowBuilder,
-  SlashCommandBuilder,
-  REST,
-  Routes,
-  PermissionFlagsBits,
-  type ChatInputCommandInteraction,
-} from 'discord.js';
+import { SlashCommandBuilder, REST, Routes, PermissionFlagsBits } from 'discord.js';
 import type { AgentLoader } from '../../../core/orchestrator/AgentLoader.js';
 import type { SessionManager } from '../../../core/session/SessionManager.js';
 import type { MessageProcessor } from '../../../core/orchestrator/MessageProcessor.js';
 import type { SDKSessionManager } from '../../../core/session/SDKSessionManager.js';
 import type { IQueryMetricsRepository, QueryMetricRow } from '../../../persistence/types.js';
 export type { QueryMetricRow };
-import { parseSessionKey } from '../../../types/session.js';
-import { buildDiscordChannelUrl, buildDiscordMessageUrl } from '../../../types/runtimeContext.js';
 import { diagnoseQueryUsage } from '../../../core/keepalive/UsageAnomalyDiagnostics.js';
 import { logger } from '../../../utils/logger.js';
 

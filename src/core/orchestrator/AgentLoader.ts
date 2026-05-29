@@ -12,7 +12,6 @@ import {
 import { type AgentHooks, HOOK_EVENT_NAMES } from '../../types/hooks.js';
 import { AgentLoadError, AgentConfigError } from '../../types/errors.js';
 import { logger } from '../../utils/logger.js';
-import { getEventBus } from '../lib/EventBus.js';
 
 /**
  * Default agent configuration file name
@@ -173,7 +172,7 @@ export class AgentLoader implements IAgentRepository {
       logger.info({ agentId, name: config.name }, 'Agent loaded');
 
       // Emit event
-      getEventBus().emitSync('agent:loaded', loadedAgent);
+      // (EventBus removed — no subscribers)
 
       return loadedAgent;
     } catch (error) {
@@ -582,7 +581,7 @@ export class AgentLoader implements IAgentRepository {
   async reloadAgent(agentId: string): Promise<LoadedAgent> {
     this.clearCache(agentId);
     const agent = await this.loadAgent(agentId);
-    getEventBus().emitSync('agent:reloaded', agent);
+    // (EventBus removed — no subscribers)
     return agent;
   }
 

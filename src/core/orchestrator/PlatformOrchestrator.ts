@@ -317,7 +317,8 @@ export class PlatformOrchestrator {
 
     await adapter.initialize();
     await adapter.start();
-    this.registry.register(adapter as unknown as BaseAdapter);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.registry.register(adapter as any);
 
     void this.scheduleManager?.syncSchedulesForAgent(agentId);
 

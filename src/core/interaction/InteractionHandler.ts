@@ -10,7 +10,6 @@ import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
 import { PermissionBridge } from './PermissionBridge.js';
 import { QuestionBridge } from './QuestionBridge.js';
 import { ExitPlanModeBridge } from './ExitPlanModeBridge.js';
-import { getEventBus } from '../lib/EventBus.js';
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -250,15 +249,7 @@ export class InteractionHandler {
       InteractionHandler.questionRegistry.set(requestId, this.questionBridge);
       void promise.finally(() => InteractionHandler.questionRegistry.delete(requestId));
 
-      getEventBus().emitSync('interaction', {
-        type: 'question_request',
-        requestId,
-        agentId: this.agentId,
-        question: question.question,
-        header: question.header,
-        options: question.options,
-        multiSelect: question.multiSelect,
-      });
+        // (EventBus removed — no subscribers)
 
       // Add question number indicator for multi-question flows
       const questionIndicator = questions.length > 1 ? `(${i + 1}/${questions.length}) ` : '';
@@ -338,13 +329,7 @@ export class InteractionHandler {
     InteractionHandler.permissionRegistry.set(requestId, this.permissionBridge);
     void promise.finally(() => InteractionHandler.permissionRegistry.delete(requestId));
 
-    getEventBus().emitSync('interaction', {
-      type: 'permission_request' as const,
-      requestId,
-      agentId: this.agentId,
-      toolName,
-      ...(options.decisionReason !== undefined ? { decisionReason: options.decisionReason } : {}),
-    });
+      // (EventBus removed — no subscribers)
 
     const promptOptions: {
       requestId: string;
@@ -453,12 +438,7 @@ export class InteractionHandler {
     InteractionHandler.exitPlanModeRegistry.set(requestId, this.exitPlanModeBridge);
     void promise.finally(() => InteractionHandler.exitPlanModeRegistry.delete(requestId));
 
-    getEventBus().emitSync('interaction', {
-      type: 'plan_review_request' as const,
-      requestId,
-      agentId: this.agentId,
-      allowedPrompts,
-    });
+      // (EventBus removed — no subscribers)
 
     const promptResult = await this.adapter.sendExitPlanModePrompt(this.chatId, {
       requestId,

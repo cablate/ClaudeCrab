@@ -97,16 +97,10 @@ export async function handleCache(
       return;
     }
     const sidInput = interaction.options.getString('session', true);
-    const stats = deps.sdkSessionManager.getCacheStats();
-    let matched: string | undefined;
-    const rawSessions = (deps.sdkSessionManager as unknown as { sessions: Map<string, unknown> }).sessions;
-    if (rawSessions instanceof Map) {
-      for (const key of rawSessions.keys()) {
-        if (key === sidInput || key.startsWith(sidInput)) { matched = key; break; }
-      }
-    }
+    const cacheStats = deps.sdkSessionManager.getCacheStats();
+    const matched = deps.sdkSessionManager.findSessionKeyByPrefix(sidInput);
     if (matched === undefined) {
-      await interaction.reply({ content: `❌ 找不到符合 \`${sidInput}\` 的 session（共 ${stats.active_sessions} 個活 session）`, ephemeral: true });
+      await interaction.reply({ content: `❌ 找不到符合 \`${sidInput}\` 的 session（共 ${cacheStats.active_sessions} 個活 session）`, ephemeral: true });
       return;
     }
     deps.sdkSessionManager.destroySession(matched);

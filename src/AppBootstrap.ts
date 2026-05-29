@@ -8,7 +8,6 @@ import { AgentLoader } from './core/orchestrator/AgentLoader.js';
 import { SessionManager } from './core/session/SessionManager.js';
 import { MessageProcessor } from './core/orchestrator/MessageProcessor.js';
 import { PlatformOrchestrator } from './core/orchestrator/PlatformOrchestrator.js';
-import { getEventBus } from './core/lib/EventBus.js';
 import { loadSecurityConfig } from './utils/security.js';
 import { auditLogger } from './utils/audit.js';
 import { DatabaseManager } from './persistence/DatabaseManager.js';
@@ -188,7 +187,7 @@ export class AppBootstrap {
         logger.info('Database connection closed');
       }
 
-      getEventBus().removeAllListeners();
+      // EventBus removed — no subscribers
 
       logger.info(
         { event_type: 'lifecycle.shutdown_complete', signal, uptime_s: Math.floor((Date.now() - INSTANCE_STARTED_AT) / 1000) },
@@ -303,7 +302,7 @@ export class AppBootstrap {
       typingIndicatorIntervalMs: TYPING_INDICATOR_INTERVAL_MS,
       ...(conversationRepository !== undefined ? { conversationRepository } : {}),
       ...(queryMetricsRepository !== undefined ? { queryMetricsRepository } : {}),
-      eventBus: getEventBus(),
+      // eventBus removed — no subscribers
       ...(rateLimitRepository !== undefined ? { rateLimitRepository } : {}),
       cacheKeepaliveConfig: this.config.cacheKeepalive,
       ephemeral: this.config.session.ephemeral,

@@ -296,6 +296,7 @@ export class SDKSessionManager {
       }
       throw error;
     } finally {
+      delete managed.currentOptions;
       managed.isQuerying = false;
       managed.interruptedAt = undefined;
       const current = this.sessions.get(sessionId);
@@ -450,6 +451,17 @@ export class SDKSessionManager {
       this.sessions.delete(sessionId);
       logger.info({ sessionId }, 'V2 session destroyed');
     }
+  }
+
+  /**
+   * Find a session key by prefix match (for /cache flush auto-complete).
+   * Returns the first matching key, or undefined.
+   */
+  findSessionKeyByPrefix(prefix: string): string | undefined {
+    for (const key of this.sessions.keys()) {
+      if (key === prefix || key.startsWith(prefix)) return key;
+    }
+    return undefined;
   }
 
   /**
