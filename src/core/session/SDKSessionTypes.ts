@@ -8,7 +8,7 @@
  *   - SDKSessionManager (owns the sessions Map)
  */
 
-import type { SDKSession, McpSdkServerConfigWithInstance, AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKSession, McpSdkServerConfigWithInstance, AgentDefinition, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ExecuteQueryOptions, QueryModelUsage } from '../query/SDKQueryManager.js';
 import type { ConversationRuntimeContext } from '../../types/runtimeContext.js';
 import type { SubAgentMessageManager } from '../query/SubAgentMessageManager.js';
@@ -123,8 +123,7 @@ export interface ManagedSession {
    * Pre-drain orphan carry-over. When preDrainResidualMessages times out with a
    * pending promise, it is preserved here so processStream can consume it first.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  pendingDrainPromise?: Promise<IteratorResult<any>> | undefined;
+  pendingDrainPromise?: Promise<IteratorResult<SDKMessage>> | undefined;
   /**
    * Timestamp (ms) of the last real user query completion.
    * Updated by SDKStreamProcessor on normal query completion.

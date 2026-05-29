@@ -9,6 +9,13 @@
  *   - Result/error handling and usage delta computation
  */
 
+import type {
+  SDKMessage,
+  SDKAssistantMessage,
+  SDKResultMessage,
+  SDKRateLimitEvent,
+  SDKSystemMessage as SDKSystemInitMessage,
+} from '../../types/sdk.js';
 import type { QueryUsage, QueryResult, ExecuteQueryOptions, QueryModelUsage } from './SDKQueryManager.js';
 import type { ToolEvent } from '../../types/message.js';
 import type { ManagedSession } from '../session/SDKSessionTypes.js';
@@ -28,9 +35,8 @@ const POST_RESULT_DRAIN_POLL_MS = 250;
  * Direct access to the cached `queryIterator` field on a cQ session instance.
  * Returns null if stream() hasn't been called yet.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getCachedQueryIterator(session: ManagedSession['session']): AsyncIterator<any> | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getCachedQueryIterator(session: ManagedSession['session']): AsyncIterator<SDKMessage> | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any — SDK doesn't expose queryIterator publicly
   const iter = (session as any).queryIterator;
   return iter ?? null;
 }
@@ -39,18 +45,16 @@ export function getCachedQueryIterator(session: ManagedSession['session']): Asyn
  * Direct access to the internal Query object on a cQ session instance.
  * The Query has interrupt() for graceful cancellation.
  */
+/** @returns the internal Query object for interrupt(), or null if not available. */
 export function getSessionQuery(session: ManagedSession['session']): { interrupt(): Promise<void> } | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any — SDK doesn't expose Query publicly
   const query = (session as any).query;
   if (query && typeof query.interrupt === 'function') return query;
   return null;
 }
 
-/**
- * Extract assistant text from a stream message.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractAssistantText(msg: any): string {
+/** Extract text content from an assistant stream message. */
+function extractAssistantText(msg: SDKMessage): string {
   if (msg.type !== 'assistant' || !msg.message?.content) return '';
   const parts: string[] = [];
   for (const block of msg.message.content) {
@@ -170,12 +174,10 @@ export async function processStream(
   let staleRetries = 0;
   const MAX_STALE_RETRIES = 1;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
+  let streamIterator: AsyncIterator<SDKMessage> = (managed.session.stream() as AsyncIterable<SDKMessage>)[Symbol.asyncIterator]();
   while (true) {
     // Orphan handoff from pre-drain
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let __iterResult: IteratorResult<any>;
+    let __iterResult: IteratorResult<SDKMessage>;
     if (managed.pendingDrainPromise) {
       const carry = managed.pendingDrainPromise;
       managed.pendingDrainPromise = undefined;
@@ -211,21 +213,8 @@ export async function processStream(
     streamMsgIndex++;
 
     if (message.type === 'system' && 'subtype' in message) {
-      const systemMsg = message as {
-        subtype?: string;
-        session_id?: string;
-        hook_event?: string;
-        hook_name?: string;
-        outcome?: string;
-        exit_code?: number;
-        stderr?: string;
-        attempt?: number;
-        max_retries?: number;
-        delay_ms?: number;
-        status?: number | string;
-        memory_paths?: string[];
-        error?: string;
-      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any — system subtypes have disjoint property shapes
+      const systemMsg = message as any;
       if (systemMsg.subtype === 'init') {
         streamReady = true;
         if (systemMsg.session_id) {
@@ -307,8 +296,7 @@ export async function processStream(
 
     // DIAG: per-assistant-message block type audit + per-turn context tracking
     if (message.type === 'assistant' && message.message?.content) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const blockTypes = (message.message.content as any[]).map((b) => b?.type ?? 'unknown');
+      const blockTypes = message.message.content.map((b) => b?.type ?? 'unknown');
       const textLen = messageText.length;
       logger.info(
         { sessionId, msgIndex: streamMsgIndex - 1, blockTypes, textLen, event_type: 'sdk.assistant_block_audit' },
@@ -577,8 +565,7 @@ export async function processStream(
         totalCostUsd = undefined;
         modelUsage = undefined;
         actualModels = undefined;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        streamIterator = (managed.session.stream() as AsyncIterable<any>)[Symbol.asyncIterator]();
+        streamIterator = (managed.session.stream() as AsyncIterable<SDKMessage>)[Symbol.asyncIterator]();
         continue;
       }
 
@@ -593,8 +580,7 @@ export async function processStream(
     let quietDeadline = Date.now() + POST_RESULT_DRAIN_QUIET_MS;
     let drained = 0;
     const drainedTypes: string[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let pending: Promise<IteratorResult<any>> | undefined = queryIter?.next();
+    let pending: Promise<IteratorResult<SDKMessage>> | undefined = queryIter?.next();
 
     while (queryIter && pending && Date.now() < drainDeadline) {
       const remaining = drainDeadline - Date.now();
@@ -620,8 +606,7 @@ export async function processStream(
         continue;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { done, value: drainMsg } = raceResult as IteratorResult<any>;
+      const { done, value: drainMsg } = raceResult as IteratorResult<SDKMessage>;
       pending = undefined;
       if (done) break;
 
@@ -754,16 +739,14 @@ interface DrainResult {
   drained: number;
   routed: number;
   drainedTypes: string[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  pending?: Promise<IteratorResult<any>>;
+  pending?: Promise<IteratorResult<SDKMessage>>;
 }
 
 async function drainIterator(
   sessionId: string,
   managed: ManagedSession,
   opts: { perNextTimeoutMs: number; totalBudgetMs: number },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  initialPending?: Promise<IteratorResult<any>> | null
+  initialPending?: Promise<IteratorResult<SDKMessage>> | null
 ): Promise<DrainResult> {
   const queryIter = getCachedQueryIterator(managed.session);
   if (!queryIter) return { drained: 0, routed: 0, drainedTypes: [] };
@@ -773,8 +756,7 @@ async function drainIterator(
   let routed = 0;
   const drainedTypes: string[] = [];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let pending: Promise<IteratorResult<any>> | null = initialPending ?? queryIter.next();
+  let pending: Promise<IteratorResult<SDKMessage>> | null = initialPending ?? queryIter.next();
 
   while (Date.now() < deadline) {
     const remaining = deadline - Date.now();
