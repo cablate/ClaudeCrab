@@ -37,9 +37,6 @@ export interface EventMap {
   /** Fired when a system error occurs */
   error: ClaudeCabError;
 
-  /** Fired when an agent activity occurs (v2.0 Characters Come Alive) */
-  'activity': import('./activity.js').ActivityEvent;
-
   /** Fired when an interactive prompt needs user response (ADR-033) */
   'interaction': InteractionEvent;
 
