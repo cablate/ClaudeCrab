@@ -74,12 +74,15 @@
 - 與 `hardBlocks` 關係:概念上是 hardBlocks 的「完整版」,但因為太嚴(會擋 `_foundation`/`_example` additionalDirectories)被擱置。**目前唯一活的 path 寫入防線是 hardBlocks**。
 - **建議**:當死碼刪掉(整檔 + barrel export)。除非要復活它取代 hardBlocks(需先放寬規則,較大工程)。
 
-### C2. `ContextUsageTelemetry` + `query_metrics.contextUsageJson` 欄位
-- `collectContextUsageSnapshot` 算出超細的 context token 拆帳 → 只 `logger.info()` + 序列化進 `query_metrics.contextUsageJson` 欄位,**該欄位沒有任何 SELECT 讀回**。`/ctx` 顯示的是即時簡化版,不是這份。
-- **選項**:(a) 整個拆掉(telemetry-no-consumer);或 (b) 把明細接到 `/ctx` 之類有出口的地方讓它變有用。**待 user 決定**。
+### C2. `query_metrics.context_usage_json` 欄位 — ✅ 已移除寫入鏈（98fa61e）
+- **更正原分析**:原本說 `ContextUsageTelemetry`「只 logger.info + 序列化」是錯的。`collectContextUsageSnapshot` 產出的 `result.contextUsage` 是 **live**——`QueryExecutor` 的 usage embed 讀它、`DiscordSlashCommands.queryMetricToDiagnosticResult` 從 context_* 欄位重建它。**真正 write-only 的只有 `context_usage_json`**:每 query 把整包 snapshot `JSON.stringify` 寫進 DB,無任何 consumer 讀回。
+- **處置**:刪 `serializeContextUsageSnapshot` + QueryMetricsRecorder 寫入 + TS 型別/INSERT/rowmap。DB 實體欄位**休眠保留**(軟刪除優先,不做破壞性 DROP COLUMN migration);`ContextUsageTelemetry` 模組保留(live)。
 
-### C3. `query_metrics` 其他 write-only 欄位
-- `context_total_tokens`、`context_percentage`、`turn_type`(恆 'query')、per-row `sdk_session_id` 等欄位寫進去但沒人聚合/SELECT。低風險(留著無害),schema 可瘦身,但要 DB migration。**待評估**。
+### C3. `query_metrics` 其他 write-only 欄位 — ✅ 查核後 no-op（無可刪）
+- **更正原分析**:原本點名的欄位**全部有 live reader**,並非 write-only:
+  - `context_total_tokens`/`context_max_tokens`/`context_percentage`/`context_model` → `DiscordSlashCommands.queryMetricToDiagnosticResult` 重建 contextUsage 供異常診斷。
+  - `turn_type`(非恆 'query';另有 'keepalive') 與 `sdk_session_id` → `getAgentStats`/`getKeepaliveStats` 的 WHERE 子句 + `/sessions` 指令讀。
+- 結論:無 write-only 欄位可刪;schema 維持不動。
 
 ---
 
