@@ -141,7 +141,7 @@ export function splitMainSubagentUsage(
 }
 
 export function diagnoseQueryUsage(
-  result: Pick<QueryResult, 'usage' | 'totalCostUsd' | 'numTurns' | 'sdkSessionId' | 'modelUsage' | 'governanceSummary' | 'mainModel'>,
+  result: Pick<QueryResult, 'usage' | 'totalCostUsd' | 'numTurns' | 'sdkSessionId' | 'modelUsage' | 'mainModel'>,
   context: UsageAnomalyContext = {},
 ): UsageAnomalyReport | null {
   if (result.usage === undefined) return null;
@@ -214,7 +214,7 @@ export function diagnoseQueryUsage(
 
   const severity = findings.some((finding) => finding.severity === 'warn') ? 'warn' : 'info';
   const shouldAlert = findings.some((finding) => finding.alert);
-  const likelyCause = inferLikelyCause(metrics, context, isKnownFirstSessionTurn, modelBreakdown, result.governanceSummary);
+  const likelyCause = inferLikelyCause(metrics, context, isKnownFirstSessionTurn, modelBreakdown);
   const links = buildLinks(context);
   const title = findings[0]?.title ?? 'usage anomaly';
   const mainLabel = split !== null ? ' (main)' : '';
@@ -291,7 +291,6 @@ function inferLikelyCause(
   context: UsageAnomalyContext,
   isKnownFirstSessionTurn: boolean,
   modelBreakdown: UsageAnomalyModelMetrics[],
-  governanceSummary: QueryResult['governanceSummary'],
 ): string {
   if (context.promptCacheMutation?.reason !== undefined) {
     return `transcript tail mutation (${context.promptCacheMutation.reason})`;
@@ -316,9 +315,7 @@ function inferLikelyCause(
   const topModel = modelBreakdown[0];
   if (topModel !== undefined && metrics.cacheCreationTokens > 0) {
     const topShare = topModel.cacheCreationTokens / metrics.cacheCreationTokens;
-    const hasSubagentSignals =
-      Object.keys(governanceSummary?.subagentExplorationToolCounts ?? {}).length > 0;
-    if (topShare >= 0.5 && (hasSubagentSignals || topModel.webSearchRequests > 0)) {
+    if (topShare >= 0.5 && topModel.webSearchRequests > 0) {
       const searchText = topModel.webSearchRequests > 0
         ? ` with ${topModel.webSearchRequests} web searches`
         : '';

@@ -27,7 +27,6 @@ import { logger } from '../../utils/logger.js';
 import type { ManagedSession } from './SDKSessionTypes.js';
 import type { SubAgentMessageManager } from '../query/SubAgentMessageManager.js';
 import { createManagedSession } from './SDKSessionFactory.js';
-import { createGovernanceSessionState } from '../governance/telemetry.js';
 import { processStream, preDrainResidualMessages, getSessionQuery } from '../query/SDKStreamProcessor.js';
 import {
   startKeepalive,
@@ -159,7 +158,6 @@ export class SDKSessionManager {
 
       // Reset turn-scoped state only after pre-draining the previous query's tail.
       managed.currentOptions = queryOptions;
-      managed.governance = createGovernanceSessionState();
 
       await managed.session.send(prompt);
       managed.lastUsedAt = Date.now();

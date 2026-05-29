@@ -634,15 +634,6 @@ function uniqueActualModels(result: import('./SDKQueryManager.js').QueryResult):
   return [...new Set(result.actualModels ?? [])];
 }
 
-function formatCounts(counts: Record<string, number> | undefined, suffix = ''): string | undefined {
-  if (counts === undefined) return undefined;
-  const entries = Object.entries(counts)
-    .filter(([, count]) => count > 0)
-    .sort(([left], [right]) => left.localeCompare(right));
-  if (entries.length === 0) return undefined;
-  return entries.map(([name, count]) => `${name}:${suffix === 'ch' ? formatTokenShort(count) : count}${suffix}`).join(', ');
-}
-
 function compactContextCategoryName(name: string): string {
   const lower = name.toLowerCase();
   if (lower.includes('free')) return 'free';
@@ -735,20 +726,6 @@ function buildContextBreakdownLines(ctx: UsageContext): string[] {
     .join(' · ')];
 }
 
-function buildGovernanceLine(result: QueryResult): string | undefined {
-  const governance = result.governanceSummary;
-  if (governance === undefined) return undefined;
-
-  const govParts: string[] = [];
-  const explore = formatCounts(governance.explorationToolCounts);
-  const subExplore = formatCounts(governance.subagentExplorationToolCounts);
-  const output = formatCounts(governance.explorationOutputChars, 'ch');
-  if (explore !== undefined) govParts.push(`main ${explore}`);
-  if (subExplore !== undefined) govParts.push(`sub ${subExplore}`);
-  if (output !== undefined) govParts.push(`toolOut ${output}`);
-  return govParts.length > 0 ? govParts.join(' · ') : undefined;
-}
-
 function getUsageSummaryColor(hitPct: number, quota: UsageQuotaSummary): number {
   void quota;
   if (hitPct < 50) return 0xD83A34;
@@ -767,7 +744,6 @@ function getUsageSummaryParts(
   anomaly?: string;
   context?: string;
   quota?: string;
-  governance?: string;
   color: number;
 } | null {
   if (!result.usage) return null;
@@ -815,7 +791,6 @@ function getUsageSummaryParts(
   const quotaParts: string[] = [];
   if (quota.fiveHourPct !== undefined) quotaParts.push(`5h ${quota.fiveHourPct.toFixed(0)}% ${formatProgressBar(quota.fiveHourPct, 6)}`);
   if (quota.sevenDayPct !== undefined) quotaParts.push(`7d ${quota.sevenDayPct.toFixed(0)}% ${formatProgressBar(quota.sevenDayPct, 6)}`);
-  const governance = buildGovernanceLine(result);
   const anomalyReport = providedAnomaly ?? diagnoseQueryUsage(result);
   const anomaly = anomalyReport !== null ? formatUsageAnomalySummary(anomalyReport).slice(0, 1000) : undefined;
 
@@ -826,7 +801,6 @@ function getUsageSummaryParts(
     ...(anomaly !== undefined ? { anomaly } : {}),
     ...(context !== undefined ? { context } : {}),
     ...(quotaParts.length > 0 ? { quota: quotaParts.join('\n') } : {}),
-    ...(governance !== undefined ? { governance } : {}),
     color: anomalyReport?.shouldAlert === true
       ? 0xD83A34
       : getUsageSummaryColor(hitPct, quota),
@@ -852,7 +826,6 @@ function buildUsageSummaryCardText(
   if (parts.anomaly !== undefined) lines.push('', '⚠ Anomaly', parts.anomaly);
   if (parts.context !== undefined) lines.push('', '🧱 Context', parts.context);
   if (parts.quota !== undefined) lines.push('', '⏳ Quota', parts.quota);
-  if (parts.governance !== undefined) lines.push('', '🛡 Governance', parts.governance);
 
   return lines.join('\n');
 }
@@ -874,7 +847,6 @@ export function buildUsageSummaryEmbed(
   if (parts.context !== undefined) embed.addFields({ name: '🧱 Context', value: parts.context, inline: true });
   if (parts.quota !== undefined) embed.addFields({ name: '⏳ Quota', value: parts.quota, inline: true });
   if (parts.anomaly !== undefined) embed.addFields({ name: '⚠ Anomaly', value: parts.anomaly, inline: false });
-  if (parts.governance !== undefined) embed.addFields({ name: '🛡 Governance', value: parts.governance, inline: false });
 
   return embed;
 }

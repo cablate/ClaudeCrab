@@ -85,7 +85,15 @@
 
 ## D. 設計決策待拍板(非死碼,勿當死碼刪)
 
-### D1. hardBlocks / governance telemetry / contextEconomy 三系統糾纏
+### D1. ✅ 已執行 — hardBlocks + governance telemetry 移除,保留 contextEconomy 護欄
+
+> 使用者拍板:砍 hardBlocks + governance telemetry,保留 contextEconomy；後續決定 command-failure reminder 一起砍、contextEconomy UI（🛡 Governance subtext/embed）刪除。
+> 終態:contextEconomy 只剩兩個**無狀態 deny block**（大 unbounded Read、main-context web tool），其餘探索計數/警告/Discord/embed/summary/state 全移除。`governance/hardBlocks.ts` + `governance/telemetry.ts` 整檔刪、`governance/` 目錄移除。`managed.governance` state、`GovernanceSessionState/Summary`、`GOVERNANCE_*` 與 `SDK_HOOK_CB_POST_TOOL_USE/_FAILURE` EventTypes 一併刪,新增 `CONTEXT_ECONOMY_BLOCK`。typecheck 綠。
+> **Residual（留待後續，本次未動以控風險）**:HookMessageManager 的 `🛡 Governance` 格式器（'governance' HookEvent kind 已無 emitter）、`HOOK_DEFS.postToolUseBash` + runtime-config 的 postToolUseBash/hardBlocks/governance 區塊、contextEconomy 未用 config 欄位、ARCHITECTURE.md doc-sync（PathValidator/ContextInjector/ActivityService/governance）。
+
+（以下為移除前的原始分析,保留供查。）
+
+### D1（原始分析）. hardBlocks / governance telemetry / contextEconomy 三系統糾纏
 `SDKSessionFactory` 的 PreToolUse/PostToolUse hook 裡三者共用 `managed.governance` state:
 - **hardBlocks**:真 enforcement,擋寫入 `_shared/` 退役路徑 + 擋 `output/` 變成 repo/build tree(`.git`/`package.json`/`npm install`)。`createPreToolDeny` 真的 deny。**唯一活的 path 寫入防線。**
 - **governance telemetry**:純軟性觀察 — 路徑分類、validator/broad-search/archive/指令失敗追蹤 → 推 Discord「X observed」+ 回合末 summary 卡片。不 enforce。

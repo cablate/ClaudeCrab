@@ -15,7 +15,6 @@ import type { ManagedSession } from '../session/SDKSessionTypes.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
-import { summarizeGovernanceSession } from '../governance/telemetry.js';
 import { collectContextUsageSnapshot } from '../keepalive/ContextUsageTelemetry.js';
 import { analyzeCurrentTurn, getJsonlPathForAgent, type TurnMetrics } from '../keepalive/CacheAnomalyAnalyzer.js';
 
@@ -743,7 +742,6 @@ export async function processStream(
   if (modelUsage !== undefined) queryResult.modelUsage = modelUsage;
   queryResult.mainModel = managed.model;
   if (contextUsage !== undefined) queryResult.contextUsage = contextUsage;
-  queryResult.governanceSummary = summarizeGovernanceSession(managed.governance);
 
   return queryResult;
 }

@@ -10,7 +10,6 @@
 
 import type { SDKSession, McpSdkServerConfigWithInstance, AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 import type { ExecuteQueryOptions, QueryModelUsage } from '../query/SDKQueryManager.js';
-import type { GovernanceSessionState } from '../governance/telemetry.js';
 import type { ConversationRuntimeContext } from '../../types/runtimeContext.js';
 import type { SubAgentMessageManager } from '../query/SubAgentMessageManager.js';
 
@@ -83,8 +82,6 @@ export interface ManagedSession {
   prevModelUsage?: Record<string, QueryModelUsage>;
   /** True while executeQuery is running (send + processStream in progress) */
   isQuerying: boolean;
-  /** Passive workspace governance telemetry for the current user query. */
-  governance: GovernanceSessionState;
   /**
    * Per-query callbacks/options for persistent V2 hook closures.
    * Hooks are registered once when the SDK session is created, so they must read

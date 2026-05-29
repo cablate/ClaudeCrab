@@ -1,7 +1,6 @@
 import { query, type Query, type Options, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import type { LoadedAgent } from '../../types/agent.js';
 import type { ToolEvent } from '../../types/message.js';
-import type { GovernanceSessionSummary } from '../governance/telemetry.js';
 import type { ContextUsageSnapshot } from '../keepalive/ContextUsageTelemetry.js';
 import type { ConversationRuntimeContext } from '../../types/runtimeContext.js';
 import type { SubAgentEvent } from './SubAgentMessageManager.js';
@@ -71,9 +70,6 @@ export interface QueryResult {
 
   /** Per-model usage reported by SDK result.modelUsage. V2 fills per-query deltas. */
   modelUsage?: Record<string, QueryModelUsage>;
-
-  /** Passive governance/runtime summary for this query. V2 only. */
-  governanceSummary?: GovernanceSessionSummary;
 
   /** SDK getContextUsage() breakdown. V2 only. */
   contextUsage?: ContextUsageSnapshot;

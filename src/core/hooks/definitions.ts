@@ -41,5 +41,4 @@ export const HOOK_DEFS = {
     subagentRepeatedExplorationMessage: config.contextEconomy.subagentRepeatedExplorationMessage,
     largeOutputMessage: config.contextEconomy.largeOutputMessage,
   },
-  hardBlocks: config.hardBlocks,
 } as const;

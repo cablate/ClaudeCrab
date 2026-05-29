@@ -70,8 +70,6 @@ export const EventType = {
   // Callback hook entry markers - SDK programmatic hooks don't emit
   // hook_started/hook_response stream events (those are only for CLI-registered
   // settings.json / plugin hooks). These tell us our JS callbacks actually ran.
-  SDK_HOOK_CB_POST_TOOL_USE: 'sdk.hook_cb.post_tool_use',
-  SDK_HOOK_CB_POST_TOOL_USE_FAILURE: 'sdk.hook_cb.post_tool_use_failure',
   SDK_HOOK_CB_PRE_COMPACT: 'sdk.hook_cb.pre_compact',
 
   // session.guard.* - session-length-handoff-guard events
@@ -125,16 +123,8 @@ export const EventType = {
   SCHEDULE_WATCHER_STARTED: 'schedule.watcher_started',
   SCHEDULE_WATCHER_ERROR: 'schedule.watcher_error',
 
-  // governance.* - workspace governance (hard blocks + passive telemetry)
-  GOVERNANCE_LARGE_READ: 'governance.large_read',
-  GOVERNANCE_HIGH_COST_EXPLORATION: 'governance.high_cost_exploration',
-  GOVERNANCE_BROAD_SEARCH: 'governance.broad_search',
-  GOVERNANCE_ARCHIVE_PATH_ACCESS: 'governance.archive_path_access',
-  GOVERNANCE_COMMAND_FAILURE: 'governance.command_failure',
-  GOVERNANCE_GOVERNED_FILE_CHANGED: 'governance.governed_file_changed',
-  GOVERNANCE_VALIDATOR_NEEDED: 'governance.validator_needed',
-  GOVERNANCE_VALIDATOR_OBSERVED: 'governance.validator_observed',
-  GOVERNANCE_HARD_BLOCK: 'governance.hard_block',
+  // context_economy.* - main-context tool guardrails (deny blocks)
+  CONTEXT_ECONOMY_BLOCK: 'context_economy.block',
 
   // prompt.* - runtime prompt mutation/decoration observability
   PROMPT_DECORATION: 'prompt.decoration',

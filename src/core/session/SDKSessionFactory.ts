@@ -23,24 +23,8 @@ import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
 import { resolveCliPath } from '../../utils/cliPath.js';
 import { HOOK_DEFS } from '../hooks/definitions.js';
-import { readHookPrompt } from '../hooks/promptLoader.js';
 import { loadFoundationSubagents } from '../subagents/foundationSubagents.js';
-import { extractBashToolResponseText, extractHookAgentContext, extractHookErrorText, extractHookReadInput, extractHookToolInput, extractToolResponseTextStats, isHookInterrupt } from '../hooks/payload.js';
-import { evaluateHardBlockToolUse } from '../governance/hardBlocks.js';
-import {
-  buildGovernanceTouchMessage,
-  createGovernanceSessionState,
-  extractToolTargetPaths,
-  getTotalExplorationToolCount,
-  getTotalSubagentExplorationToolCount,
-  recordBashCommand,
-  recordCommandFailure,
-  recordExplorationOutputSize,
-  recordExplorationTool,
-  recordPathTouch,
-  recordSubagentExplorationOutputSize,
-  recordSubagentExplorationTool,
-} from '../governance/telemetry.js';
+import { extractHookAgentContext, extractHookReadInput } from '../hooks/payload.js';
 import type { ManagedSession, ExtendedSessionOptions } from './SDKSessionTypes.js';
 
 export type { ManagedSession, ExtendedSessionOptions };
@@ -62,16 +46,6 @@ async function loadAgentSettingsEnv(agentPath: string): Promise<Record<string, s
     // file missing or invalid JSON ??fall through to empty env
   }
   return {};
-}
-
-function createPreToolAdditionalContext(additionalContext: string) {
-  return {
-    continue: true,
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse' as const,
-      additionalContext,
-    },
-  };
 }
 
 function createPreToolDeny(permissionDecisionReason: string, additionalContext?: string) {
@@ -304,428 +278,53 @@ export async function createManagedSession(
     prevUsage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUsd: 0, totalCostUsd: 0 },
     prevModelUsage: {},
     isQuerying: false,
-    governance: createGovernanceSessionState(),
   };
 
   // Hooks ??closures over `managed` (session-scoped mutable state)
-  const emitGovernanceVisibility = async (message: string, key?: string): Promise<void> => {
-    if (managed.isKeepalivePing === true) return;
-    if (key) {
-      if (managed.governance.visibleEventKeys.has(key)) return;
-      managed.governance.visibleEventKeys.add(key);
-    }
-
-    const currentOptions = managed.currentOptions ?? options;
-    if (!currentOptions.onHookEvent) return;
-
-    try {
-      await currentOptions.onHookEvent({
-        kind: 'governance',
-        lifecycle: 'fired',
-        correlationKey: `${sessionId}:gov:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
-        name: 'Governance',
-        message,
-      });
-    } catch { /* non-fatal */ }
-  };
-
-  const emitPreToolUseVisibility = async (toolName: string, message: string): Promise<void> => {
-    if (managed.isKeepalivePing === true) return;
-
-    const currentOptions = managed.currentOptions ?? options;
-    if (!currentOptions.onHookEvent) return;
-
-    try {
-      await currentOptions.onHookEvent({
-        kind: 'pre_tool_use',
-        lifecycle: 'fired',
-        correlationKey: `${sessionId}:ptu:${toolName}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
-        name: `PreToolUse/${toolName}`,
-        message,
-      });
-    } catch { /* non-fatal */ }
-  };
-
-  const maybeDenyHardBlock = async (
-    toolName: string,
-    toolInput: Record<string, unknown> | undefined,
-  ): Promise<ReturnType<typeof createPreToolDeny> | undefined> => {
-    const decision = evaluateHardBlockToolUse(
-      toolName,
-      toolInput,
-      options.cwd,
-      HOOK_DEFS.hardBlocks,
-    );
-    if (decision === undefined) return undefined;
-
-    await emitGovernanceVisibility(
-      `hard block: ${decision.reason}`,
-      `hard-block:${decision.ruleId}:${decision.target ?? 'command'}`,
-    );
-    logger.warn(
-      {
-        sessionId,
-        event_type: EventType.GOVERNANCE_HARD_BLOCK,
-        toolName,
-        ruleId: decision.ruleId,
-        target: decision.target,
-      },
-      'Governance hard block denied tool use'
-    );
-    return createPreToolDeny(decision.reason);
-  };
-
   sessionOptions.hooks = {
     PreToolUse: [
       {
-        matcher: 'Bash',
+        matcher: 'Read',
         hooks: [async (input: unknown) => {
-          const toolInput = extractHookToolInput(input);
-          const hardBlock = await maybeDenyHardBlock('Bash', toolInput);
-          if (hardBlock !== undefined) return hardBlock;
-
-          const command = typeof toolInput?.command === 'string' ? toolInput.command : '';
-          const result = command.length > 0
-            ? recordBashCommand(managed.governance, command)
-            : { validatorObserved: false, broadSearch: false };
-          if (result.validatorObserved) {
-            await emitGovernanceVisibility('validator observed', 'validator-observed');
-            logger.info(
+          const agentContext = extractHookAgentContext(input);
+          if (agentContext.isSubagent) return { continue: true };
+          const largeReadPreflight = await evaluateLargeReadPreflight(input, options.cwd);
+          if (largeReadPreflight !== undefined) {
+            logger.warn(
               {
                 sessionId,
-                event_type: EventType.GOVERNANCE_VALIDATOR_OBSERVED,
+                event_type: EventType.CONTEXT_ECONOMY_BLOCK,
+                toolName: 'Read',
+                reason: largeReadPreflight.reason,
               },
-              'Governance telemetry: validator command observed'
+              'Context economy denied large unbounded Read'
             );
-          }
-          if (result.broadSearch) {
-            await emitGovernanceVisibility('broad search observed', 'broad-search');
-            logger.info(
-              {
-                sessionId,
-                event_type: EventType.GOVERNANCE_BROAD_SEARCH,
-                count: managed.governance.broadSearchCount,
-              },
-              'Governance telemetry: broad search observed'
-            );
+            return createPreToolDeny(largeReadPreflight.reason);
           }
           return { continue: true };
         }],
       },
-      ...Object.keys(HOOK_DEFS.contextEconomy.explorationToolThresholds).map((toolName) => ({
-        matcher: toolName,
-        hooks: [async (input: unknown) => {
-          const agentContext = extractHookAgentContext(input);
-          if (agentContext.isSubagent) {
-            const count = recordSubagentExplorationTool(managed.governance, toolName);
-            const totalSubagentExplorationCount = getTotalSubagentExplorationToolCount(managed.governance);
-            let aiReminder: string | undefined;
-            if (totalSubagentExplorationCount === HOOK_DEFS.contextEconomy.repeatedExplorationThreshold) {
-              const message = `${HOOK_DEFS.contextEconomy.subagentRepeatedExplorationMessage}: tools=${totalSubagentExplorationCount}`;
-              await emitGovernanceVisibility(
-                message,
-                'context-economy:subagent-repeated-exploration',
-              );
-              aiReminder = `subagent exploration exceeded budget: ${totalSubagentExplorationCount}`;
-            }
-            logger.info(
-              {
-                sessionId,
-                event_type: EventType.GOVERNANCE_HIGH_COST_EXPLORATION,
-                scope: 'subagent',
-                toolName,
-                count,
-                agentId: agentContext.agentId,
-                agentType: agentContext.agentType,
-              },
-              'Governance telemetry: subagent exploration observed'
-            );
-            if (aiReminder !== undefined) {
-              return createPreToolAdditionalContext(aiReminder);
-            }
-            return { continue: true };
-          }
-
-          if (toolName === 'Read') {
-            const largeReadPreflight = await evaluateLargeReadPreflight(input, options.cwd);
-            if (largeReadPreflight !== undefined) {
-              await emitGovernanceVisibility(
-                largeReadPreflight.message,
-                'context-economy:large-read-preflight',
-              );
+      ...(HOOK_DEFS.contextEconomy.mainContextBlockedTools.enabled
+        ? HOOK_DEFS.contextEconomy.mainContextBlockedTools.tools.map((toolName) => ({
+            matcher: toolName,
+            hooks: [async (input: unknown) => {
+              const agentContext = extractHookAgentContext(input);
+              if (agentContext.isSubagent) return { continue: true };
               logger.warn(
                 {
                   sessionId,
-                  event_type: EventType.GOVERNANCE_HARD_BLOCK,
+                  event_type: EventType.CONTEXT_ECONOMY_BLOCK,
                   toolName,
-                  reason: largeReadPreflight.reason,
                 },
-                'Governance context-economy denied large unbounded Read'
+                'Context economy denied main-context web tool'
               );
-              return createPreToolDeny(largeReadPreflight.reason);
-            }
-          }
-
-          const mainContextBlockedTools = HOOK_DEFS.contextEconomy.mainContextBlockedTools;
-          if (mainContextBlockedTools.enabled && mainContextBlockedTools.tools.includes(toolName)) {
-            const count = recordExplorationTool(managed.governance, toolName);
-            const message = `${mainContextBlockedTools.message}: ${toolName}=${count}`;
-            await emitGovernanceVisibility(
-              message,
-              `context-economy:block-main-tool:${toolName}`,
-            );
-            logger.warn(
-              {
-                sessionId,
-                event_type: EventType.GOVERNANCE_HARD_BLOCK,
-                toolName,
-                count,
-              },
-              'Governance context-economy denied main-context web tool'
-            );
-            return createPreToolDeny(
-              `Main-context ${toolName} is blocked by Context Economy. Delegate broad web/source discovery to Agent with subagent_type="scout".`,
-            );
-          }
-
-          const count = recordExplorationTool(managed.governance, toolName);
-          const threshold = HOOK_DEFS.contextEconomy.explorationToolThresholds[toolName] ?? Number.POSITIVE_INFINITY;
-          if (count === threshold) {
-            const message = `${HOOK_DEFS.contextEconomy.warningMessage}: ${toolName}=${count}`;
-            await emitGovernanceVisibility(
-              message,
-              `context-economy:${toolName}`,
-            );
-            logger.info(
-              {
-                sessionId,
-                event_type: EventType.GOVERNANCE_HIGH_COST_EXPLORATION,
-                toolName,
-                count,
-                threshold,
-              },
-              'Governance telemetry: high-cost main-context exploration observed'
-            );
-          }
-          const totalExplorationCount = getTotalExplorationToolCount(managed.governance);
-          if (totalExplorationCount === HOOK_DEFS.contextEconomy.repeatedExplorationThreshold) {
-            const message = `${HOOK_DEFS.contextEconomy.repeatedExplorationMessage}: tools=${totalExplorationCount}`;
-            await emitGovernanceVisibility(
-              message,
-              'context-economy:repeated-exploration',
-            );
-            logger.info(
-              {
-                sessionId,
-                event_type: EventType.GOVERNANCE_HIGH_COST_EXPLORATION,
-                toolName,
-                totalExplorationCount,
-                threshold: HOOK_DEFS.contextEconomy.repeatedExplorationThreshold,
-              },
-              'Governance telemetry: repeated main-context exploration observed'
-            );
-          }
-          return { continue: true };
-        }],
-      })),
-      ...['Write', 'Edit', 'MultiEdit'].map((toolName) => ({
-        matcher: toolName,
-        hooks: [async (input: unknown) => {
-          const toolInput = extractHookToolInput(input);
-          const hardBlock = await maybeDenyHardBlock(toolName, toolInput);
-          if (hardBlock !== undefined) return hardBlock;
-
-          if (toolInput !== undefined) {
-            for (const targetPath of extractToolTargetPaths(toolName, toolInput)) {
-              const classification = recordPathTouch(managed.governance, targetPath);
-              if (classification.governed) {
-                await emitGovernanceVisibility(
-                  buildGovernanceTouchMessage(classification),
-                  `touch:${classification.category}`,
-                );
-                logger.info(
-                  {
-                    sessionId,
-                    event_type: EventType.GOVERNANCE_GOVERNED_FILE_CHANGED,
-                    category: classification.category,
-                    path: classification.normalizedPath,
-                    recommendedCheck: classification.recommendedCheck,
-                  },
-                  'Governance telemetry: governed file touch observed'
-                );
-              }
-              if (classification.validatorRelevant) {
-                logger.info(
-                  {
-                    sessionId,
-                    event_type: EventType.GOVERNANCE_VALIDATOR_NEEDED,
-                    category: classification.category,
-                    path: classification.normalizedPath,
-                  },
-                  'Governance telemetry: validator needed'
-                );
-              }
-              if (classification.category === 'archive') {
-                logger.info(
-                  {
-                    sessionId,
-                    event_type: EventType.GOVERNANCE_ARCHIVE_PATH_ACCESS,
-                    path: classification.normalizedPath,
-                    count: managed.governance.archiveAccessCount,
-                  },
-                  'Governance telemetry: archive path accessed'
-                );
-              }
-            }
-          }
-          return { continue: true };
-        }],
-      })),
+              return createPreToolDeny(
+                `Main-context ${toolName} is blocked by Context Economy. Delegate broad web/source discovery to Agent with subagent_type="scout".`,
+              );
+            }],
+          }))
+        : []),
     ],
-    PostToolUse: [{
-      matcher: 'Bash',
-      hooks: [async (input: unknown) => {
-        const toolOutput = extractBashToolResponseText(input);
-        logger.debug(
-          {
-            sessionId,
-            event_type: EventType.SDK_HOOK_CB_POST_TOOL_USE,
-            hasToolResponse: toolOutput.hasToolResponse,
-            stdoutLen: toolOutput.stdout.length,
-            stderrLen: toolOutput.stderr.length,
-            outputLen: toolOutput.combined.length,
-          },
-          'V2 callback hook fired: PostToolUse/Bash'
-        );
-        try {
-          if (!toolOutput.combined) return { continue: true };
-
-          const def = HOOK_DEFS.postToolUseBash;
-          const hasError = def.errorPatterns.some(p => p.test(toolOutput.combined));
-          if (hasError) {
-          recordCommandFailure(managed.governance);
-          await emitGovernanceVisibility('command failure observed -> resolve before PASS', 'command-failure');
-          logger.info(
-              {
-                sessionId,
-                event_type: EventType.GOVERNANCE_COMMAND_FAILURE,
-                count: managed.governance.commandFailureCount,
-              },
-              'Governance telemetry: command failure observed'
-            );
-            return {
-              continue: true,
-              hookSpecificOutput: {
-                additionalContext: readHookPrompt(def.promptId),
-              },
-            };
-          }
-          return { continue: true };
-        } catch (err) {
-          logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'PostToolUse hook failed');
-          return { continue: true };
-        }
-      }],
-    },
-    ...Object.keys(HOOK_DEFS.contextEconomy.outputCharThresholds).map((toolName) => ({
-      matcher: toolName,
-      hooks: [async (input: unknown) => {
-        const stats = extractToolResponseTextStats(input);
-        const agentContext = extractHookAgentContext(input);
-        logger.debug(
-          {
-            sessionId,
-            event_type: EventType.SDK_HOOK_CB_POST_TOOL_USE,
-            toolName,
-            scope: agentContext.isSubagent ? 'subagent' : 'main',
-            hasToolResponse: stats.hasToolResponse,
-            charCount: stats.charCount,
-          },
-          'V2 callback hook fired: PostToolUse/context-economy'
-        );
-        if (!stats.hasToolResponse || stats.charCount <= 0) return { continue: true };
-
-        if (agentContext.isSubagent) {
-          const result = recordSubagentExplorationOutputSize(managed.governance, toolName, stats.charCount);
-          logger.info(
-            {
-              sessionId,
-              event_type: EventType.GOVERNANCE_LARGE_READ,
-              scope: 'subagent',
-              toolName,
-              charCount: stats.charCount,
-              totalChars: result.totalChars,
-              agentId: agentContext.agentId,
-              agentType: agentContext.agentType,
-            },
-            'Governance telemetry: subagent exploration output observed'
-          );
-          return { continue: true };
-        }
-
-        const threshold = HOOK_DEFS.contextEconomy.outputCharThresholds[toolName] ?? Number.POSITIVE_INFINITY;
-        const result = recordExplorationOutputSize(managed.governance, toolName, stats.charCount, threshold);
-        if (result.large) {
-          await emitGovernanceVisibility(
-            `${HOOK_DEFS.contextEconomy.largeOutputMessage}: ${toolName}=${stats.charCount}ch`,
-            `context-economy:large-output:${toolName}:${result.largeCount}`,
-          );
-          logger.info(
-            {
-              sessionId,
-              event_type: EventType.GOVERNANCE_LARGE_READ,
-              toolName,
-              charCount: stats.charCount,
-              totalChars: result.totalChars,
-              threshold,
-            },
-            'Governance telemetry: large exploration output observed'
-          );
-        }
-        return { continue: true };
-      }],
-    }))],
-    PostToolUseFailure: [{
-      matcher: 'Bash',
-      hooks: [async (input: unknown) => {
-        const errorText = extractHookErrorText(input);
-        const interrupted = isHookInterrupt(input);
-        logger.debug(
-          {
-            sessionId,
-            event_type: EventType.SDK_HOOK_CB_POST_TOOL_USE_FAILURE,
-            errorLen: errorText.length,
-            interrupted,
-          },
-          'V2 callback hook fired: PostToolUseFailure/Bash'
-        );
-        try {
-          if (interrupted) return { continue: true };
-
-          recordCommandFailure(managed.governance);
-          await emitGovernanceVisibility('command failure observed -> resolve before PASS', 'command-failure');
-          logger.info(
-            {
-              sessionId,
-              event_type: EventType.GOVERNANCE_COMMAND_FAILURE,
-              count: managed.governance.commandFailureCount,
-            },
-            'Governance telemetry: command failure observed'
-          );
-
-          const def = HOOK_DEFS.postToolUseBash;
-          return {
-            continue: true,
-            hookSpecificOutput: {
-              additionalContext: readHookPrompt(def.promptId),
-            },
-          };
-        } catch (err) {
-          logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'PostToolUseFailure hook failed');
-          return { continue: true };
-        }
-      }],
-    }],
     PreCompact: [{
       matcher: '',
       hooks: [async (input: unknown) => {
