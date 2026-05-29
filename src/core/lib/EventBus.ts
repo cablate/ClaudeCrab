@@ -191,12 +191,3 @@ export function getEventBus(): EventBus {
   return globalEventBus;
 }
 
-/**
- * Reset the global event bus (for testing)
- */
-export function resetEventBus(): void {
-  if (globalEventBus !== undefined) {
-    globalEventBus.removeAllListeners();
-    globalEventBus = undefined;
-  }
-}

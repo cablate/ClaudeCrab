@@ -1,11 +1,10 @@
-export { EventBus, getEventBus, resetEventBus } from './lib/EventBus.js';
+export { EventBus, getEventBus } from './lib/EventBus.js';
 export { AgentLoader, type AgentLoaderOptions } from './orchestrator/AgentLoader.js';
 export { ConfigTransformer, type SDKOptions } from './lib/ConfigTransformer.js';
 export { SessionManager, type SessionManagerOptions } from './session/SessionManager.js';
 export {
   AdapterRegistry,
   getAdapterRegistry,
-  resetAdapterRegistry,
 } from './orchestrator/AdapterRegistry.js';
 export {
   MessageProcessor,
@@ -37,8 +36,3 @@ export {
   type QueryResult,
   type ExecuteQueryOptions,
 } from './query/SDKQueryManager.js';
-export {
-  PathValidator,
-  type PathValidatorOptions,
-  type PathValidationResult,
-} from './lib/PathValidator.js';

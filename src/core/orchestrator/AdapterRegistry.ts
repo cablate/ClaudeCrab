@@ -176,9 +176,3 @@ export function getAdapterRegistry(): AdapterRegistry {
   return globalRegistry;
 }
 
-/**
- * Reset the global adapter registry (for testing)
- */
-export function resetAdapterRegistry(): void {
-  globalRegistry = null;
-}

@@ -133,57 +133,6 @@ export function buildV2IntermediateMessageCallback(
 }
 
 /**
- * Build the onIntermediateMessage callback for V1 path (SDKQueryManager).
- */
-export function buildV1IntermediateMessageCallback(
-  state: StreamState,
-  adapter: BaseAdapter,
-  chatId: string,
-  agentId: string,
-  statusManager: StatusMessageManager | null,
-  options: StreamRouterOptions
-): (text: string) => Promise<void> {
-  return async (text: string): Promise<void> => {
-    // Filter noise responses (SDK placeholders, stop-hook outputs)
-    if (isNoiseResponse(text)) {
-      srrLogger.debug({ chatId, agentId, text: text.substring(0, 80) }, 'Suppressed noise intermediate message');
-      return;
-    }
-    if (shouldSkipDuplicateAssistantText(state, text)) {
-      srrLogger.debug({ chatId, agentId, text: text.substring(0, 80) }, 'Suppressed duplicate intermediate assistant message');
-      return;
-    }
-
-    // Finalize current status message before sending assistant message
-    await statusManager?.finalizeCurrentBatch();
-
-    await adapter.sendTypingIndicator(chatId);
-
-    // Build send options
-    const sendOpts: SendOptions = {};
-    if (options.replyToMessageId) {
-      sendOpts.replyToMessageId = options.replyToMessageId;
-    }
-
-    const sendResult = await adapter.sendFormattedMessage(chatId, text, sendOpts);
-
-    if (!sendResult.success) {
-      srrLogger.warn(
-        { error: sendResult.error, chatId },
-        'Failed to send intermediate message'
-      );
-      state.failedMessages.push(text);
-    } else if (sendResult.messageId) {
-      state.lastSentMessageId = sendResult.messageId;
-    }
-    state.intermediateMessages.push(text);
-
-    // Mark that next tool event should create new status message
-    statusManager?.markNeedNewMessage();
-  };
-}
-
-/**
  * Build the onToolEvent callback shared by both V2 and V1 paths.
  */
 export function buildToolEventCallback(

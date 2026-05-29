@@ -138,12 +138,6 @@ function deltaModelUsage(
   return result;
 }
 
-/** @deprecated sub-agent events are no longer processed */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractSubAgentEvent(_msg: any): null {
-  return null;
-}
-
 /**
  * Process stream messages from a V2 session.
  *

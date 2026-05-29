@@ -335,26 +335,6 @@ export function scanRecentJsonlFiles(options?: { since?: string; top?: number })
 
 // ─── Session ID → JSONL Path ────────────────────────────────────────────────
 
-export function findJsonlBySessionId(sessionId: string): string | null {
-  const claudeDir = path.join(os.homedir(), '.claude', 'projects');
-  if (!fs.existsSync(claudeDir)) return null;
-
-  const projectDirs = fs.readdirSync(claudeDir, { withFileTypes: true })
-    .filter(d => d.isDirectory())
-    .map(d => path.join(claudeDir, d.name));
-
-  for (const dir of projectDirs) {
-    const candidate = path.join(dir, `${sessionId}.jsonl`);
-    if (fs.existsSync(candidate)) return candidate;
-    const subDir = path.join(dir, 'subagents');
-    if (fs.existsSync(subDir)) {
-      const subCandidate = path.join(subDir, `agent-${sessionId}.jsonl`);
-      if (fs.existsSync(subCandidate)) return subCandidate;
-    }
-  }
-  return null;
-}
-
 export function getJsonlPathForAgent(sdkSessionId: string, agentCwd: string): string {
   return path.join(os.homedir(), '.claude', 'projects', projectHash(agentCwd), `${sdkSessionId}.jsonl`);
 }
