@@ -19,12 +19,11 @@ export const TriggerSchema = z.object({
   at: z.string().optional(),       // ISO datetime for 'once'
   datetime: z.string().optional(), // Alias for 'at' (common agent mistake)
   timezone: z.string().default('Asia/Taipei'),
-}).transform((val) => {
+}).transform(({ datetime, ...rest }) => {
   // Normalize: merge 'datetime' into 'at'
-  if (val.datetime && !val.at) {
-    val.at = val.datetime;
+  if (datetime && !rest.at) {
+    rest.at = datetime;
   }
-  const { datetime: _, ...rest } = val;
   return rest;
 });
 

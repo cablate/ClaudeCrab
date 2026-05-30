@@ -139,7 +139,7 @@ export function buildToolEventCallback(
   state: StreamState,
   agentId: string,
   statusManager: StatusMessageManager | null,
-  hookManager?: HookMessageManager | null
+  _hookManager?: HookMessageManager | null
 ): (event: ToolEvent) => Promise<void> {
   return async (event): Promise<void> => {
     if (event.type === 'tool_result' && event.toolName === 'tool') return;

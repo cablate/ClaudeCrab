@@ -102,6 +102,8 @@ Python/
 **/pptx-workshop-deck/
 **/pptx-style-previews/
 
-# Codex sandbox workspaces (contain node_modules, build output, scratch)
-**/pptx-workshop-deck/
-**/pptx-style-previews/
+# Codegraph — exclude minified SDK snapshots from indexing
+docs/upgrades/snapshots/
+
+# Codegraph index database (local, regeneratable)
+.codegraph/

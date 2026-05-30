@@ -1,4 +1,4 @@
-import type { LoadedAgent, AgentConfig, Model } from '../../types/agent.js';
+import type { LoadedAgent, Model } from '../../types/agent.js';
 import { logger } from '../../utils/logger.js';
 
 /**

@@ -376,13 +376,6 @@ function buildLinks(context: UsageAnomalyContext): Array<{ label: string; url: s
   return links;
 }
 
-function formatTopModelLine(modelBreakdown: UsageAnomalyModelMetrics[] | undefined): string {
-  const top = modelBreakdown?.[0];
-  if (top === undefined || top.cacheCreationTokens <= 0) return '';
-  const web = top.webSearchRequests > 0 ? ` | webSearch ${top.webSearchRequests}` : '';
-  return `topWrite ${top.model}: write ${formatTokenShort(top.cacheCreationTokens)} | read ${formatTokenShort(top.cacheReadTokens)} | fresh ${formatTokenShort(top.freshInputTokens)}${web}`;
-}
-
 function formatModelBreakdownLine(entry: UsageAnomalyModelMetrics): string {
   const web = entry.webSearchRequests > 0 ? ` webSearch=${entry.webSearchRequests}` : '';
   return `model[${entry.model}] fresh=${entry.freshInputTokens} output=${entry.outputTokens} cacheRead=${entry.cacheReadTokens} cacheCreation=${entry.cacheCreationTokens} hitPct=${entry.cacheHitPct} writePct=${entry.cacheWritePct} costUsd=${entry.costUsd.toFixed(6)}${web}`;

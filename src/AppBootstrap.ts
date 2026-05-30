@@ -19,7 +19,6 @@ import { ScheduleThreadMap, type ScheduleManager, type ScheduleExecutor } from '
 import { initializeScheduleSystem } from './schedule/ScheduleBootstrap.js';
 import type { AppConfig } from './config.js';
 import { createSTTProvider, type STTProvider } from './core/stt/index.js';
-import type { IQueryMetricsRepository } from './persistence/types.js';
 import { DiscordAdapter } from './adapters/DiscordAdapter.js';
 import { DiscordDashboard } from './adapters/discord/services/DiscordDashboard.js';
 import { initializeDiscordServices, notifyCrashRecovery } from './adapters/discord/DiscordBootstrap.js';
@@ -67,7 +66,7 @@ export class AppBootstrap {
     auditLogger.configure(this.config.audit?.enabled ?? true);
 
     const agentLoader = await this.initializeAgents();
-    const persistence = this.initializePersistence(agentLoader);
+    const persistence = this.initializePersistence();
     const sessionManager = this.initializeSessionManager(agentLoader, persistence);
 
     if (persistence?.sessionRepository !== undefined) {
@@ -222,7 +221,7 @@ export class AppBootstrap {
     return agentLoader;
   }
 
-  private initializePersistence(agentLoader: AgentLoader): PersistenceLayer | null {
+  private initializePersistence(): PersistenceLayer | null {
     if (!this.config.persistence.enabled) {
       return null;
     }

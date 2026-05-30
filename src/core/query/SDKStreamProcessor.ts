@@ -9,13 +9,7 @@
  *   - Result/error handling and usage delta computation
  */
 
-import type {
-  SDKMessage,
-  SDKAssistantMessage,
-  SDKResultMessage,
-  SDKRateLimitEvent,
-  SDKSystemMessage as SDKSystemInitMessage,
-} from '../../types/sdk.js';
+import type { SDKMessage } from '../../types/sdk.js';
 import type { QueryUsage, QueryResult, ExecuteQueryOptions, QueryModelUsage } from './SDKQueryManager.js';
 import type { ToolEvent } from '../../types/message.js';
 import type { ManagedSession } from '../session/SDKSessionTypes.js';
@@ -23,7 +17,7 @@ import type { RateLimitRepository } from '../../persistence/RateLimitRepository.
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
 import { collectContextUsageSnapshot } from '../keepalive/ContextUsageTelemetry.js';
-import { analyzeCurrentTurn, getJsonlPathForAgent, type TurnMetrics } from '../keepalive/CacheAnomalyAnalyzer.js';
+import { analyzeCurrentTurn, getJsonlPathForAgent } from '../keepalive/CacheAnomalyAnalyzer.js';
 
 /** Sentinel used by Promise.race to distinguish a timeout from a real stream message */
 const DRAIN_SENTINEL = Symbol('drain-timeout');
@@ -36,8 +30,7 @@ const POST_RESULT_DRAIN_POLL_MS = 250;
  * Returns null if stream() hasn't been called yet.
  */
 export function getCachedQueryIterator(session: ManagedSession['session']): AsyncIterator<SDKMessage> | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // Reason: SDK doesn't expose queryIterator publicly
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK doesn't expose queryIterator publicly
   const iter = (session as any).queryIterator;
   return iter ?? null;
 }
@@ -48,8 +41,7 @@ export function getCachedQueryIterator(session: ManagedSession['session']): Asyn
  */
 /** @returns the internal Query object for interrupt(), or null if not available. */
 export function getSessionQuery(session: ManagedSession['session']): { interrupt(): Promise<void> } | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // Reason: SDK doesn't expose Query publicly
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK doesn't expose Query publicly
   const query = (session as any).query;
   if (query && typeof query.interrupt === 'function') return query;
   return null;
@@ -71,16 +63,6 @@ function extractAssistantModel(msg: unknown): string | undefined {
   return typeof message.message?.model === 'string' && message.message.model.length > 0
     ? message.message.model
     : undefined;
-}
-
-function extractParentToolUseId(msg: unknown): string | undefined {
-  const value = (msg as { parent_tool_use_id?: unknown }).parent_tool_use_id;
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function extractTaskToolUseId(msg: unknown): string | undefined {
-  const value = (msg as { tool_use_id?: unknown }).tool_use_id;
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function normalizeModelUsage(
@@ -215,8 +197,7 @@ export async function processStream(
     streamMsgIndex++;
 
     if (message.type === 'system' && 'subtype' in message) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      // Reason: system subtypes have disjoint property shapes
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- system subtypes have disjoint property shapes
       const systemMsg = message as any;
       if (systemMsg.subtype === 'init') {
         streamReady = true;
@@ -756,7 +737,7 @@ async function drainIterator(
 
   const deadline = Date.now() + opts.totalBudgetMs;
   let drained = 0;
-  let routed = 0;
+  const routed = 0;
   const drainedTypes: string[] = [];
 
   let pending: Promise<IteratorResult<SDKMessage>> | null = initialPending ?? queryIter.next();
@@ -798,7 +779,7 @@ export async function preDrainResidualMessages(
   const initialPending = managed.pendingDrainPromise ?? undefined;
   managed.pendingDrainPromise = undefined;
 
-  const { drained, routed, drainedTypes, pending } = await drainIterator(
+  const { drained, drainedTypes, pending } = await drainIterator(
     sessionId, managed,
     { perNextTimeoutMs: 100, totalBudgetMs: 1000 },
     initialPending

@@ -5,7 +5,6 @@
  */
 
 import type { Database as DatabaseType } from 'better-sqlite3';
-import { randomUUID } from 'node:crypto';
 import type { ScheduledTask, ScheduleExecution } from '../schedule/types.js';
 import { logger } from '../utils/logger.js';
 

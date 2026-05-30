@@ -1,10 +1,8 @@
 import {
-  ChannelType,
   MessageFlags,
   MessageType,
   type Client,
   type Message as DiscordMessage,
-  type TextChannel,
 } from 'discord.js';
 import type { UnifiedMessage } from '../../types/message.js';
 import type { SecurityConfig } from '../../utils/security.js';

@@ -6,8 +6,6 @@
  * managing status message lifecycle in Discord.
  */
 
-import { logger } from '../../utils/logger.js';
-
 /**
  * A single tool event entry for display in the status message.
  */

@@ -18,7 +18,6 @@ import {
   type ThreadChannel,
   type Message as DiscordMessage,
   type MessageEditOptions,
-  type APIEmbed,
   ChannelType,
 } from 'discord.js';
 import * as fs from 'node:fs';
@@ -27,7 +26,6 @@ import { splitDiscordMessage, generateThreadTitle } from './discord/discordUtils
 import { BaseAdapter } from './BaseAdapter.js';
 import type {
   DiscordAdapterConfig,
-  UnifiedMessage,
   SendOptions,
   SendResult,
   PermissionPromptOptions,

@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
-import { log, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
+import { resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
 import { applyModelChange } from '../../commands/index.js';
 
 export async function handleHelp(interaction: ChatInputCommandInteraction): Promise<void> {

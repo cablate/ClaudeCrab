@@ -7,7 +7,6 @@ import type {
   DiscordAdapterFactory,
   PlatformAdapter,
 } from '../../types/platform.js';
-import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
 import type { ScheduleManager } from '../../schedule/ScheduleManager.js';
 import type { ConversationRequest } from '../../conversation/types.js';
 import { AdapterRegistry } from './AdapterRegistry.js';

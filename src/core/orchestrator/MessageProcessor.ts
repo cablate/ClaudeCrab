@@ -58,12 +58,6 @@ export interface MessageProcessorOptions {
   getSystemPrompt?: (agentId: string) => Promise<string>;
 
   /**
-   * Event bus for broadcasting events (e.g., bot:replied for group chats).
-   * Field retained to accept the option; EventBus class was removed (no subscribers).
-   */
-  eventBus?: unknown;
-
-  /**
    * Query metrics repository for token usage tracking (ADR-020 Phase 2).
    */
   queryMetricsRepository?: IQueryMetricsRepository;
@@ -121,7 +115,6 @@ export class MessageProcessor {
   private readonly getSystemPrompt:
     | ((agentId: string) => Promise<string>)
     | undefined;
-  private readonly eventBus: unknown;
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly usageCardEnabled: boolean;
 
@@ -139,7 +132,6 @@ export class MessageProcessor {
     });
     this.conversationRepository = options.conversationRepository;
     this.getSystemPrompt = options.getSystemPrompt;
-    this.eventBus = options.eventBus;
     this.queryMetricsRepository = options.queryMetricsRepository;
     this.usageCardEnabled = options.usageCardEnabled ?? true;
 

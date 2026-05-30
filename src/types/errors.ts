@@ -77,21 +77,6 @@ export class AgentConfigError extends ClaudeCabError {
 }
 
 /**
- * Error thrown when agent is not found
- */
-class AgentNotFoundError extends ClaudeCabError {
-  constructor(public readonly agentId: string) {
-    super(
-      `Agent "${agentId}" not found`,
-      'AGENT_NOT_FOUND',
-      true,
-      `找不到代理 "${agentId}"`
-    );
-    this.name = 'AgentNotFoundError';
-  }
-}
-
-/**
  * Session error codes
  */
 export type SessionErrorCode = 'NOT_FOUND' | 'SDK_ERROR' | 'TIMEOUT' | 'LOCKED';
@@ -111,44 +96,6 @@ export class SessionError extends ClaudeCabError {
       '對話處理失敗'
     );
     this.name = 'SessionError';
-  }
-}
-
-/**
- * Error thrown when rate limited
- */
-class RateLimitError extends ClaudeCabError {
-  constructor(
-    /** Time to wait before retrying in milliseconds */
-    public readonly retryAfter: number
-  ) {
-    super(
-      `Rate limited, retry after ${retryAfter}ms`,
-      'RATE_LIMITED',
-      true,
-      '請求過於頻繁，請稍後再試'
-    );
-    this.name = 'RateLimitError';
-  }
-}
-
-/**
- * Error thrown when adapter operations fail
- */
-class AdapterError extends ClaudeCabError {
-  constructor(
-    public readonly platform: string,
-    message: string,
-    cause?: Error
-  ) {
-    super(
-      `[${platform}] ${message}`,
-      'ADAPTER_ERROR',
-      true,
-      '訊息傳送失敗',
-      cause
-    );
-    this.name = 'AdapterError';
   }
 }
 
@@ -205,12 +152,5 @@ export class ProcessingError extends ClaudeCabError {
     );
     this.name = 'ProcessingError';
   }
-}
-
-/**
- * Check if an error is a ClaudeCabError
- */
-function isClaudeCabError(error: unknown): error is ClaudeCabError {
-  return error instanceof ClaudeCabError;
 }
 

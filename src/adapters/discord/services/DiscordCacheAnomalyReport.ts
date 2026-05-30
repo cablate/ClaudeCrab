@@ -7,7 +7,7 @@
 
 import { EmbedBuilder } from 'discord.js';
 import type { DiscordAdapter } from '../../DiscordAdapter.js';
-import { scanRecentJsonlFiles, type ScanResult, type TurnMetrics, type CauseLabel } from '../../../core/keepalive/CacheAnomalyAnalyzer.js';
+import { scanRecentJsonlFiles, type ScanResult, type CauseLabel } from '../../../core/keepalive/CacheAnomalyAnalyzer.js';
 import { logger } from '../../../utils/logger.js';
 import { EventType } from '../../../utils/events.js';
 

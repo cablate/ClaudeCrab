@@ -49,7 +49,7 @@ export class ConversationPipeline {
       return { success: false, error: `Unsupported platform: ${message.platform}` };
     }
 
-    const { userId, chatId, text, id: messageId } = message;
+    const { userId, text, id: messageId } = message;
     const effectiveUserId = message.metadata?.sessionUserId ?? userId;
 
     logger.info(
@@ -61,8 +61,6 @@ export class ConversationPipeline {
       logger.debug({ event_type: EventType.MESSAGE_DUPLICATE_SKIPPED, messageId }, 'Skipping duplicate message');
       return { success: true, skipped: true };
     }
-
-    const taskPreview = text.length > 40 ? text.substring(0, 40) + '...' : text;
 
     let session: UserSession;
     try {
@@ -249,7 +247,6 @@ export class ConversationPipeline {
       { event_type: EventType.MESSAGE_ERROR, err: errorDetails, platform: 'discord', userId: effectiveUserId, agentId },
       'Failed to process message'
     );
-    const errorPreview = err.message.length > 60 ? err.message.substring(0, 60) + '...' : err.message;
 
     await sendErrorToUser(adapter, message.chatId, err);
 

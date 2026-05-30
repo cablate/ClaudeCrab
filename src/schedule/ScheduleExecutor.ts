@@ -6,7 +6,6 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 import type { ScheduleSpec } from './schemas.js';
 import type { ExecutionResult } from './types.js';
 import type { ScheduleNotifier } from './ScheduleNotifier.js';

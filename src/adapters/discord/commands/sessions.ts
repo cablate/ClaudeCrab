@@ -6,8 +6,8 @@ import {
 } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import {
-  log, CLAUDE_CONTEXT_WINDOW_TOKENS, formatDuration, formatTokenShort, formatQueryMetricAnomaly,
-  fitSessionDescription, queryMetricToDiagnosticResult,
+  CLAUDE_CONTEXT_WINDOW_TOKENS, formatDuration, formatQueryMetricAnomaly,
+  fitSessionDescription,
   type SlashCommandDependencies, type QueryMetricRow,
 } from './_shared.js';
 import { parseSessionKey } from '../../../types/session.js';

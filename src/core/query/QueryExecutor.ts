@@ -634,22 +634,6 @@ function uniqueActualModels(result: import('./SDKQueryManager.js').QueryResult):
   return [...new Set(result.actualModels ?? [])];
 }
 
-function compactContextCategoryName(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.includes('free')) return 'free';
-  if (lower.includes('autocompact')) return 'autocompact';
-  if (lower.includes('message')) return 'conversation';
-  if (lower.includes('mcp')) return lower.includes('deferred') ? 'mcp(deferred)' : 'mcp';
-  if (lower.includes('system prompt')) return 'system';
-  if (lower.includes('tool')) return lower.includes('deferred') ? 'tools(deferred)' : 'tools';
-  if (lower.includes('skill')) return 'skills';
-  if (lower.includes('memory')) return 'memory';
-  if (lower.includes('agent')) return 'agents';
-  return name
-    .replace(/\s+/g, '')
-    .slice(0, 14);
-}
-
 function formatModelUsageLines(result: QueryResult, totalCost: number): string[] {
   const modelUsage = result.modelUsage;
   if (modelUsage !== undefined) {
@@ -687,36 +671,6 @@ interface UsageQuotaSummary {
 }
 
 type UsageContext = NonNullable<QueryResult['contextUsage']>;
-
-function sumContextCategories(ctx: UsageContext, predicate: (lowerName: string) => boolean): number | undefined {
-  const total = ctx.categories
-    .filter((entry) => entry.tokens > 0 && predicate(entry.name.toLowerCase()))
-    .reduce((sum, entry) => sum + entry.tokens, 0);
-  return total > 0 ? total : undefined;
-}
-
-function sumTokenItems(items: Array<{ tokens: number }> | undefined): number | undefined {
-  const total = (items ?? []).reduce((sum, item) => sum + Math.max(0, item.tokens), 0);
-  return total > 0 ? total : undefined;
-}
-
-function sumConversationBreakdown(ctx: UsageContext): number | undefined {
-  const breakdown = ctx.messageBreakdown;
-  if (breakdown === undefined) return undefined;
-  const total =
-    breakdown.userMessageTokens +
-    breakdown.assistantMessageTokens +
-    breakdown.toolCallTokens +
-    breakdown.toolResultTokens +
-    breakdown.attachmentTokens +
-    breakdown.redirectedContextTokens +
-    breakdown.unattributedTokens;
-  return total > 0 ? total : undefined;
-}
-
-function formatContextMetric(value: number | undefined): string {
-  return value === undefined ? '?K' : formatTokenShort(value);
-}
 
 function buildContextBreakdownLines(ctx: UsageContext): string[] {
   if (ctx.categories.length === 0) return [];

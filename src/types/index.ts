@@ -49,9 +49,6 @@ export {
 
 // Event types
 export {
-  type EventMap,
-  type EventHandler,
-  type EventName,
   type InteractionEvent,
 } from './events.js';
 

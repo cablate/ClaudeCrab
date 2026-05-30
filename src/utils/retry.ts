@@ -259,14 +259,3 @@ export const API_RETRY_OPTIONS: RetryOptions = {
   isRetryable: shouldRetryError,
 };
 
-/**
- * Rate limit specific retry options (longer delays)
- */
-const RATE_LIMIT_RETRY_OPTIONS: RetryOptions = {
-  maxAttempts: 5,
-  initialDelayMs: 5000,
-  maxDelayMs: 60000,
-  backoffMultiplier: 2,
-  jitterFactor: 0.2,
-  isRetryable: isRateLimitError,
-};

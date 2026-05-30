@@ -5,7 +5,6 @@
  * Coordinates between ScheduleLoader, CronScheduler, ScheduleRepository.
  */
 
-import path from 'node:path';
 import type { FSWatcher } from 'chokidar';
 import type { ScheduleSpec } from './schemas.js';
 import type { ScheduleInfo, ScheduleExecution, CreateScheduleOptions } from './types.js';
