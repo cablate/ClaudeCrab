@@ -62,6 +62,7 @@ function resolvePricing(modelId: string): ModelPricing {
     { modelId },
     'KeepaliveROIService: unknown model, falling back to claude-opus-4 pricing'
   );
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- fallback guaranteed in map
   return MODEL_PRICING['claude-opus-4']!;
 }
 

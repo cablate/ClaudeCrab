@@ -181,11 +181,13 @@ interface ActiveQuery {
 }
 
 /**
- * Manages SDK query execution for MessageProcessor.
+ * V1 SDK query manager — one-shot query() per call (spawns CLI process each turn).
  *
- * This class encapsulates the Claude Agent SDK query() function,
- * providing a simpler interface for request-response style conversations
- * used by the Discord bot runtime.
+ * Prefer V2 (SDKSessionManager.executeQuery) for persistent sessions that avoid
+ * CLI process overhead and preserve prompt cache across turns.
+ *
+ * @deprecated Use SDKSessionManager for new code. Retained for ScheduleExecutor
+ *             which runs isolated one-shot queries without session overhead.
  *
  * Key features:
  * - Uses `resume` option to restore conversation history

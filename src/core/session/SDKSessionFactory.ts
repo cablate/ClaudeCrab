@@ -364,7 +364,7 @@ export async function createManagedSession(
     // Layer 2: detect incomplete JSONL tail before resume
     try {
       const { inspectJsonlTailIntegrity } = await import('../keepalive/SDKTranscriptDiagnostics.js');
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion — cwd is guaranteed in resume path
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- cwd is guaranteed in resume path
       const tail = inspectJsonlTailIntegrity(resumeSessionId, sessionOptions.cwd!);
       if (!tail.isComplete && !tail.error) {
         logger.warn(

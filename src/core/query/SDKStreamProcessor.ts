@@ -11,6 +11,7 @@
 
 import type { SDKMessage } from '../../types/sdk.js';
 import type { QueryUsage, QueryResult, ExecuteQueryOptions, QueryModelUsage } from './SDKQueryManager.js';
+import { extractAssistantText, extractAssistantModel, normalizeModelUsage, deltaModelUsage } from './StreamHelpers.js';
 import type { ToolEvent } from '../../types/message.js';
 import type { ManagedSession } from '../session/SDKSessionTypes.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
@@ -45,84 +46,6 @@ export function getSessionQuery(session: ManagedSession['session']): { interrupt
   const query = (session as any).query;
   if (query && typeof query.interrupt === 'function') return query;
   return null;
-}
-
-/** Extract text content from an assistant stream message. */
-function extractAssistantText(msg: SDKMessage): string {
-  if (msg.type !== 'assistant' || !msg.message?.content) return '';
-  const parts: string[] = [];
-  for (const block of msg.message.content) {
-    if (block.type === 'text') parts.push(block.text);
-  }
-  return parts.join('');
-}
-
-function extractAssistantModel(msg: unknown): string | undefined {
-  const message = msg as { type?: unknown; message?: { model?: unknown } };
-  if (message.type !== 'assistant') return undefined;
-  return typeof message.message?.model === 'string' && message.message.model.length > 0
-    ? message.message.model
-    : undefined;
-}
-
-function normalizeModelUsage(
-  modelUsage: Record<string, {
-    inputTokens?: number;
-    outputTokens?: number;
-    cacheReadInputTokens?: number;
-    cacheCreationInputTokens?: number;
-    webSearchRequests?: number;
-    costUSD?: number;
-    contextWindow?: number;
-    maxOutputTokens?: number;
-  }>,
-): Record<string, QueryModelUsage> {
-  return Object.fromEntries(
-    Object.entries(modelUsage).map(([model, usage]) => [
-      model,
-      {
-        inputTokens: usage.inputTokens ?? 0,
-        outputTokens: usage.outputTokens ?? 0,
-        cacheReadInputTokens: usage.cacheReadInputTokens ?? 0,
-        cacheCreationInputTokens: usage.cacheCreationInputTokens ?? 0,
-        costUsd: usage.costUSD ?? 0,
-        ...(usage.webSearchRequests !== undefined ? { webSearchRequests: usage.webSearchRequests } : {}),
-        ...(usage.contextWindow !== undefined ? { contextWindow: usage.contextWindow } : {}),
-        ...(usage.maxOutputTokens !== undefined ? { maxOutputTokens: usage.maxOutputTokens } : {}),
-      },
-    ]),
-  );
-}
-
-function deltaModelUsage(
-  current: Record<string, QueryModelUsage>,
-  previous: Record<string, QueryModelUsage> | undefined,
-): Record<string, QueryModelUsage> {
-  const result: Record<string, QueryModelUsage> = {};
-  for (const [model, usage] of Object.entries(current)) {
-    const prev = previous?.[model];
-    const delta: QueryModelUsage = {
-      inputTokens: Math.max(0, usage.inputTokens - (prev?.inputTokens ?? 0)),
-      outputTokens: Math.max(0, usage.outputTokens - (prev?.outputTokens ?? 0)),
-      cacheReadInputTokens: Math.max(0, usage.cacheReadInputTokens - (prev?.cacheReadInputTokens ?? 0)),
-      cacheCreationInputTokens: Math.max(0, usage.cacheCreationInputTokens - (prev?.cacheCreationInputTokens ?? 0)),
-      costUsd: Math.max(0, usage.costUsd - (prev?.costUsd ?? 0)),
-      ...(usage.webSearchRequests !== undefined
-        ? { webSearchRequests: Math.max(0, usage.webSearchRequests - (prev?.webSearchRequests ?? 0)) }
-        : {}),
-      ...(usage.contextWindow !== undefined ? { contextWindow: usage.contextWindow } : {}),
-      ...(usage.maxOutputTokens !== undefined ? { maxOutputTokens: usage.maxOutputTokens } : {}),
-    };
-    const used =
-      delta.inputTokens > 0 ||
-      delta.outputTokens > 0 ||
-      delta.cacheReadInputTokens > 0 ||
-      delta.cacheCreationInputTokens > 0 ||
-      delta.costUsd > 0 ||
-      (delta.webSearchRequests ?? 0) > 0;
-    if (used) result[model] = delta;
-  }
-  return result;
 }
 
 /**

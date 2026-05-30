@@ -51,7 +51,7 @@ export async function checkSessionGuard(
       // Use JSONL file mtime as proxy for last activity — only trigger cache guard if actually idle past TTL
       try {
         const { getJsonlMtimeMs } = await import('./SDKContextRestore.js');
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion — guarded by outer resume condition
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by outer resume condition
         lastActivityAt = getJsonlMtimeMs(session.sdkSessionId!, deps.agentCwd!) ?? 0;
       } catch {
         lastActivityAt = 0;
