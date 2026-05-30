@@ -69,7 +69,7 @@ export class CronScheduler {
 
     // If not enabled, stop immediately
     if (!spec.metadata.enabled) {
-      task.stop();
+      void task.stop();
     }
 
     this.jobs.set(spec.id, { task, spec, agentId });
@@ -206,7 +206,7 @@ export class CronScheduler {
   unregister(scheduleId: string): void {
     const job = this.jobs.get(scheduleId);
     if (job) {
-      job.task.stop();
+      void job.task.stop();
       this.jobs.delete(scheduleId);
       logger.info({ event_type: EventType.SCHEDULE_UNREGISTERED }, `[CronScheduler] Unregistered schedule: ${scheduleId}`);
     }
@@ -218,7 +218,7 @@ export class CronScheduler {
   pause(scheduleId: string): boolean {
     const job = this.jobs.get(scheduleId);
     if (job) {
-      job.task.stop();
+      void job.task.stop();
       logger.info({ event_type: EventType.SCHEDULE_PAUSED }, `[CronScheduler] Paused schedule: ${scheduleId}`);
       return true;
     }
@@ -231,7 +231,7 @@ export class CronScheduler {
   resume(scheduleId: string): boolean {
     const job = this.jobs.get(scheduleId);
     if (job) {
-      job.task.start();
+      void job.task.start();
       logger.info({ event_type: EventType.SCHEDULE_RESUMED }, `[CronScheduler] Resumed schedule: ${scheduleId}`);
       return true;
     }
@@ -286,7 +286,7 @@ export class CronScheduler {
    */
   stopAll(): void {
     for (const [id, job] of this.jobs) {
-      job.task.stop();
+      void job.task.stop();
       logger.debug(`[CronScheduler] Stopped schedule: ${id}`);
     }
     logger.info({ event_type: EventType.SCHEDULE_MANAGER_DISPOSED }, `[CronScheduler] Stopped all ${this.jobs.size} schedules`);

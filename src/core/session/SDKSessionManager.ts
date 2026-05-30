@@ -374,7 +374,7 @@ export class SDKSessionManager {
     return managed;
   }
 
-  async syncSubAgentUpdates(sessionId: string): Promise<{ routed: number; drained: number; active: number } | null> {
+  syncSubAgentUpdates(sessionId: string): { routed: number; drained: number; active: number } | null {
     const managed = this.sessions.get(sessionId);
     if (!managed) return null;
     if (managed.isQuerying) {
@@ -696,7 +696,7 @@ export class SDKSessionManager {
   /**
    * Dispose all sessions
    */
-  async dispose(): Promise<void> {
+  dispose(): void {
     this.disposed = true;
     for (const [sessionId] of this.sessions) {
       this.destroySession(sessionId);

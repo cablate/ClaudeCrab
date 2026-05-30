@@ -328,6 +328,7 @@ export class SDKQueryManager {
 
     // Create async generator for prompt when MCP servers are used
     // SDKUserMessage requires parent_tool_use_id and session_id fields
+    // eslint-disable-next-line @typescript-eslint/require-await -- SDK expects AsyncIterable
     async function* generatePromptMessages() {
       yield {
         type: 'user' as const,

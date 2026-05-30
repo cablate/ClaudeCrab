@@ -286,10 +286,10 @@ export class AgentLoader implements IAgentRepository {
   /**
    * Load system prompt from file or config
    */
-  private async loadSystemPrompt(
+  private loadSystemPrompt(
     _agentPath: string,
     _config: AgentConfig
-  ): Promise<string> {
+  ): string {
     // CLAUDE.md is NOT read here ??SDK's WL8 memory loader handles it
     // automatically via settingSources: ['project']. Manual reading would
     // duplicate the content AND add the file to readFileState, triggering
