@@ -59,7 +59,16 @@ export interface SessionManagerOptions {
 }
 
 /**
- * Manages user sessions across multiple platforms
+ * UserSession lifecycle manager — tracks conversation sessions per (platform, agentId, userId).
+ *
+ * Responsibilities:
+ * - CRUD of UserSession records with state tracking (idle/processing/error)
+ * - Message dedup (isMessageProcessed / markMessageProcessed)
+ * - Session key mapping and DB persistence (optional)
+ * - Idle cleanup via configurable interval
+ *
+ * Boundary: manages app-level session metadata only. Does NOT manage SDK CLI
+ * processes, cache keepalive, or query execution — use SDKSessionManager for those.
  */
 export class SessionManager {
   private readonly sessions: Map<string, InternalSession> = new Map();

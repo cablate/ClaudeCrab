@@ -1,19 +1,18 @@
 /**
- * SDKSessionManager ??Persistent Session wrapper for SDK V2 API
+ * SDK CLI process manager — wraps V2 SDK createSession for persistent connections.
  *
- * Solves the token consumption problem: SDK V1 query() spawns a new CLI process
- * per call, causing prompt cache bust (~25% efficiency). V2 createSession keeps
- * the process alive, so prompt cache naturally persists across messages (~95%+ efficiency).
+ * Responsibilities:
+ * - ManagedSession lifecycle (SDK CLI process ~150MB each)
+ * - Query execution via executeQuery (send → processStream → result)
+ * - Cache keepalive scheduling (SDKKeepaliveManager coordination)
+ * - LRU eviction when maxSessions cap reached
+ * - SubAgentMessageManager coordination
  *
- * Requires: patched sdk.mjs (scripts/patch-sdk-v2.cjs) to support
- * settingSources, systemPrompt, mcpServers in V2 SDKSessionOptions.
+ * Boundary: manages the SDK CLI process and query pipeline only. Does NOT manage
+ * app-level UserSession metadata, state tracking, or dedup — use SessionManager for those.
  *
+ * Requires patched sdk.mjs (scripts/patch-sdk-v2.cjs) for settingSources support.
  * See: docs/upgrades/research/sdk-reverse-engineering-v0.2.76.md
- *
- * Architecture: orchestrator that delegates to focused sub-modules:
- *   - SDKSessionFactory    ??createManagedSession()
- *   - SDKStreamProcessor   ??processStream()
- *   - SDKKeepaliveManager  ??startKeepalive(), updateCacheEfficiency()
  */
 
 import type { LoadedAgent } from '../../types/agent.js';
