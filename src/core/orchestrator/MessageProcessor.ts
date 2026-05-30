@@ -89,6 +89,12 @@ export interface MessageProcessorOptions {
    */
   usageCardEnabled?: boolean;
 
+  /**
+   * When false, hides in-chat tool status messages ("已完成 N 個操作").
+   * Set IN_CHAT_USAGE_SUMMARY_ENABLED=false in env.
+   */
+  inChatUsageSummary?: boolean;
+
 }
 
 export type { ProcessingResult };
@@ -117,6 +123,7 @@ export class MessageProcessor {
     | undefined;
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly usageCardEnabled: boolean;
+  private readonly inChatUsageSummary: boolean;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -134,6 +141,7 @@ export class MessageProcessor {
     this.getSystemPrompt = options.getSystemPrompt;
     this.queryMetricsRepository = options.queryMetricsRepository;
     this.usageCardEnabled = options.usageCardEnabled ?? true;
+    this.inChatUsageSummary = options.inChatUsageSummary ?? true;
 
     logger.info('MessageProcessor initialized');
   }
@@ -238,6 +246,7 @@ export class MessageProcessor {
       sendTypingIndicators: this.sendTypingIndicators,
       typingIndicatorIntervalMs: this.typingIndicatorIntervalMs,
       usageCardEnabled: this.usageCardEnabled,
+      inChatUsageSummary: this.inChatUsageSummary,
     };
     if (this.queryMetricsRepository !== undefined) deps.queryMetricsRepository = this.queryMetricsRepository;
     if (this.conversationRepository !== undefined) deps.conversationRepository = this.conversationRepository;

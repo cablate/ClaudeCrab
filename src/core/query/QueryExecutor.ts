@@ -62,6 +62,8 @@ export interface QueryExecutorDeps {
   typingIndicatorIntervalMs: number;
   /** When false, hides the per-turn usage summary card */
   usageCardEnabled: boolean;
+  /** When false, hides in-chat tool status messages */
+  inChatUsageSummary: boolean;
 }
 
 export interface QueryExecuteOptions {
@@ -100,6 +102,7 @@ export async function executeQueryWithSDK(
     typingIndicatorIntervalMs,
     conversationRepository,
     usageCardEnabled,
+    inChatUsageSummary,
   } = deps;
 
   // Get internal session for agent info
@@ -128,7 +131,7 @@ export async function executeQueryWithSDK(
 
   // Build status/sub-agent/hook managers
   const { statusManager, subAgentManager, hookManager } = buildQueryManagers(
-    adapter, chatId, sessionId, sdkSessionManager, deps.usageCardEnabled
+    adapter, chatId, sessionId, sdkSessionManager, inChatUsageSummary
   );
 
   // Set up interaction handler for permission prompts and question prompts

@@ -306,6 +306,7 @@ export class AppBootstrap {
       cacheKeepaliveConfig: this.config.cacheKeepalive,
       ephemeral: this.config.session.ephemeral,
       usageCardEnabled: this.config.discord.usageCardEnabled,
+      inChatUsageSummary: this.config.discord.inChatUsageSummary,
     });
   }
 
