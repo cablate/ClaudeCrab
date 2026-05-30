@@ -381,7 +381,7 @@ function formatModelBreakdownLine(entry: UsageAnomalyModelMetrics): string {
   return `model[${entry.model}] fresh=${entry.freshInputTokens} output=${entry.outputTokens} cacheRead=${entry.cacheReadTokens} cacheCreation=${entry.cacheCreationTokens} hitPct=${entry.cacheHitPct} writePct=${entry.cacheWritePct} costUsd=${entry.costUsd.toFixed(6)}${web}`;
 }
 
-function formatTokenShort(value: number): string {
+export function formatTokenShort(value: number): string {
   const safeValue = Math.max(0, Math.round(value));
   if (safeValue >= 1_000_000) return `${(safeValue / 1_000_000).toFixed(1)}M`;
   if (safeValue >= 10_000) return `${Math.round(safeValue / 1000)}K`;

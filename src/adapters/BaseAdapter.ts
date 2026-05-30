@@ -197,6 +197,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * Edit a previously sent message. Default implementation sends a new message
    * (since not all platforms support editing). Subclasses override for true edit support.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- base default, subclasses override
   async editMessage(
     _chatId: string,
     _messageId: string,
@@ -216,6 +217,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   /**
    * Send a photo (image file) to the chat. Default no-op — subclasses override.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- base default, subclasses override
   async sendPhoto(
     _chatId: string,
     _filePath: string,
@@ -231,6 +233,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * @param caption - Optional caption
    * @returns SendResult with success status
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- base default, subclasses override
   async sendDocument(
     _chatId: string,
     _filePath: string,
@@ -246,6 +249,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * @param options - Optional settings (duration, caption)
    * @returns SendResult with success status
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- base default, subclasses override
   async sendAudio(
     _chatId: string,
     _audio: Buffer,
@@ -258,6 +262,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * Send a video to a chat (displayed as playable video).
    * Override in platform-specific adapters.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- base default, subclasses override
   async sendVideo(
     _chatId: string,
     _filePath: string,
@@ -416,6 +421,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    * Override in platform-specific adapters that support threads.
    * @returns threadId if successful
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- base default, subclasses override
   async createThread(
     _chatId: string,
     _threadName: string,
@@ -427,6 +433,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   /**
    * Archive/close a thread. Override in platform-specific adapters.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await -- base default, subclasses override
   async archiveThread(
     _threadId: string
   ): Promise<{ success: boolean; error?: string }> {

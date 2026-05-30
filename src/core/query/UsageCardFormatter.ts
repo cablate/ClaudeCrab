@@ -8,15 +8,7 @@
 import { EmbedBuilder } from 'discord.js';
 import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
 import type { QueryResult } from './SDKQueryManager.js';
-import { diagnoseQueryUsage, formatUsageAnomalySummary, splitMainSubagentUsage, type UsageAnomalyReport } from '../keepalive/UsageAnomalyDiagnostics.js';
-
-function formatTokenShort(value: number): string {
-  const safeValue = Math.max(0, Math.round(value));
-  if (safeValue >= 1_000_000) return `${(safeValue / 1_000_000).toFixed(1)}M`;
-  if (safeValue >= 10_000) return `${Math.round(safeValue / 1000)}K`;
-  if (safeValue >= 1000) return `${(safeValue / 1000).toFixed(1)}K`;
-  return safeValue.toLocaleString();
-}
+import { diagnoseQueryUsage, formatUsageAnomalySummary, splitMainSubagentUsage, formatTokenShort, type UsageAnomalyReport } from '../keepalive/UsageAnomalyDiagnostics.js';
 
 function formatProgressBar(pct: number | undefined, width = 10): string {
   const safePct = Math.max(0, Math.min(100, Math.round(pct ?? 0)));
