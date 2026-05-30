@@ -147,6 +147,7 @@ export async function initializeDiscordServices(
       ? (() => {
           pendingDashboard = new DiscordDashboard({
             adapter: discordAdapter,
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion — guarded by outer `if`
             channelId: channels.dashboard!,
             agentLoader,
             ...(persistence?.queryMetricsRepository !== undefined

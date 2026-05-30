@@ -248,9 +248,11 @@ export class SDKSessionManager {
 
       // If the stream detected a cache TTL tier, adjust keepalive interval.
       if (managed.detectedCacheTTLMs !== undefined) {
+        const capturedDetectedTTLMs = managed.detectedCacheTTLMs;
         import('../keepalive/SDKKeepaliveManager.js').then(({ adjustKeepaliveInterval }) => {
+          if (capturedDetectedTTLMs === undefined) return;
           adjustKeepaliveInterval(
-            sessionId, this.sessions, managed!.detectedCacheTTLMs!,
+            sessionId, this.sessions, capturedDetectedTTLMs,
             () => this.disposed,
             this.queryMetricsRepository,
             this.keepaliveConfig,

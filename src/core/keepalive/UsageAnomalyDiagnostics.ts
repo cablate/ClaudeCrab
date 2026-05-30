@@ -112,7 +112,8 @@ export function splitMainSubagentUsage(
   }
   if (mainModel === undefined) return null;
 
-  const mainUsage = modelUsage[mainModel]!;
+  const mainUsage = modelUsage[mainModel];
+  if (mainUsage === undefined) return null;
   const main = getUsageAnomalyMetrics(mainUsage, mainUsage.costUsd, undefined);
 
   let subInput = 0, subOutput = 0, subRead = 0, subCreate = 0, subCost = 0;

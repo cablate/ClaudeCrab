@@ -80,9 +80,14 @@ export class PlatformOrchestrator {
     );
 
     const results = await Promise.allSettled(
-      agentsWithDiscord.map(({ agentId, discordBotToken, discordChannelId }) =>
-        this.startDiscordAdapter(agentId, discordBotToken!, discordChannelId!)
-      )
+      agentsWithDiscord.map(({ agentId, discordBotToken, discordChannelId }) => {
+        // Guard: skip if token/channel missing (shouldn't happen after filter)
+        if (!discordBotToken || !discordChannelId) {
+          logger.warn({ agentId }, 'Skipping Discord adapter start — missing token or channel');
+          return Promise.resolve();
+        }
+        return this.startDiscordAdapter(agentId, discordBotToken, discordChannelId);
+      })
     );
 
     const failed = results.filter((r) => r.status === 'rejected');

@@ -100,6 +100,7 @@ export function parseJsonl(filePath: string): JsonlEntry[] {
   const entries: JsonlEntry[] = [];
   for (let i = 0; i < lines.length; i++) {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- loop: i < lines.length
       const parsed = JSON.parse(lines[i]!) as Omit<JsonlEntry, 'line'>;
       entries.push({ ...parsed, line: i + 1 });
     } catch {
@@ -139,6 +140,7 @@ export function identifyCause(
   let prevCacheRead = 0;
   let gapMs = 0;
   for (let i = assistantIndex - 1; i >= 0; i--) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- loop: i < entries.length
     const prev = entries[i]!;
     if (prev.type === 'assistant' && prev.timestamp) {
       prevAssistantIndex = i;
@@ -168,6 +170,7 @@ export function identifyCause(
   // 2. Known attachment/system causes — scan backwards from anomaly turn
   let nonAssistantSeen = 0;
   for (let i = assistantIndex - 1; i >= Math.max(0, assistantIndex - 30); i--) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- loop: i < entries.length
     const entry = entries[i]!;
     if (entry.type === 'assistant') continue;
     nonAssistantSeen++;
@@ -207,7 +210,8 @@ export function identifyCause(
   if (prevAssistantIndex >= 0) {
     let toolResultCount = 0;
     for (let i = prevAssistantIndex + 1; i < assistantIndex; i++) {
-      const entry = entries[i]!;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- loop: i < entries.length
+    const entry = entries[i]!;
       if (entry.type !== 'user') continue;
       const content = entry.message?.content;
       if (Array.isArray(content) && (content as { type?: string }[]).some(b => b.type === 'tool_result')) {
@@ -243,6 +247,7 @@ export function analyzeJsonl(filePath: string): ScanResult {
   let lastUsageKey = '';
 
   for (let i = 0; i < entries.length; i++) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- loop: i < entries.length
     const entry = entries[i]!;
     if (entry.type !== 'assistant') continue;
     const usage = entry.message?.usage;
@@ -289,6 +294,7 @@ export function analyzeJsonl(filePath: string): ScanResult {
   const totalCacheCreation = turns.reduce((sum, t) => sum + t.cacheCreation, 0);
   const totalCacheRead = turns.reduce((sum, t) => sum + t.cacheRead, 0);
   const worstTurn = anomalies.length > 0
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- anomalies guaranteed non-empty
     ? anomalies.reduce((worst, t) => t.cacheCreation > worst.cacheCreation ? t : worst, anomalies[0]!)
     : null;
 
@@ -381,10 +387,12 @@ export function analyzeCurrentTurn(
     if (fs.existsSync(jsonlPath)) {
       const entries = parseJsonlTail(jsonlPath, 40);
       if (entries.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded: entries.length > 0
         line = entries[entries.length - 1]!.line;
         // Find the last assistant entry in the tail (likely the current one)
         let assistantIdx = entries.length - 1;
         for (let i = entries.length - 1; i >= 0; i--) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- loop: i < entries.length
           if (entries[i]!.type === 'assistant') { assistantIdx = i; break; }
         }
         const identified = identifyCause(entries, assistantIdx, detectedTTLMs);

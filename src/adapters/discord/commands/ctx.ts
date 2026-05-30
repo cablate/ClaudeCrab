@@ -24,7 +24,10 @@ export async function handleCtx(
     return;
   }
 
-  const agent = deps.agentLoader.get(agentId)!;
+  const agent = deps.agentLoader.get(agentId);
+  if (!agent) {
+    await interaction.reply({ content: '❌ Agent 不存在', ephemeral: true }); return;
+  }
   const agentName = agent.config.name || agentId;
   const model = agent.config.model ?? 'sonnet';
   const ctxLimits: Record<string, number> = { opus: CLAUDE_CONTEXT_WINDOW_TOKENS, sonnet: CLAUDE_CONTEXT_WINDOW_TOKENS, haiku: CLAUDE_CONTEXT_WINDOW_TOKENS };

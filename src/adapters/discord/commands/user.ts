@@ -105,7 +105,7 @@ export async function handleModel(
     }
     return;
   }
-  const agent = deps.agentLoader.get(agentId!);
+  const agent = agentId ? deps.agentLoader.get(agentId) : undefined;
   if (agent === undefined) {
     await interaction.reply({ content: `❌ Agent "${agentId}" 不存在`, ephemeral: true });
     return;
