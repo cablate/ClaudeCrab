@@ -11,7 +11,7 @@
 
 import type { SDKMessage } from '../../types/sdk.js';
 import type { QueryUsage, QueryResult, ExecuteQueryOptions, QueryModelUsage } from './SDKQueryManager.js';
-import { extractAssistantText, extractAssistantModel, normalizeModelUsage, deltaModelUsage } from './StreamHelpers.js';
+import { extractAssistantText, extractAssistantModel, extractBaseModel, normalizeModelUsage, deltaModelUsage } from './StreamHelpers.js';
 import type { ToolEvent } from '../../types/message.js';
 import type { ManagedSession } from '../session/SDKSessionTypes.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
@@ -72,6 +72,13 @@ export async function processStream(
   let modelUsage: Record<string, QueryModelUsage> | undefined;
   let actualModels: string[] | undefined;
   const toolIdToName = new Map<string, string>();
+  // Collect per-turn usage for deferred cache anomaly analysis (read JSONL once instead of N times)
+  const perTurnUsage: Array<{
+    msgIndex: number;
+    input_tokens: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  }> = [];
 
   let streamMsgIndex = 0;
 
@@ -188,7 +195,13 @@ export async function processStream(
       }
     }
 
-    const fallbackMs = isFreshResume ? 30000 : 3000;
+    const fallbackMs = isFreshResume ? 15000 : 3000;
+    if (!streamReady && message.type === 'assistant') {
+      // First assistant message after resume is real content, not replay.
+      // Use it to become ready even if `init` system message was lost.
+      logger.info({ sessionId, msgIndex: streamMsgIndex - 1, elapsed }, 'streamReady triggered by assistant message');
+      streamReady = true;
+    }
     if (!streamReady && elapsed >= fallbackMs) {
       logger.info({ sessionId, elapsed, isFreshResume }, 'Stream ready via elapsed time fallback');
       streamReady = true;
@@ -264,7 +277,8 @@ export async function processStream(
         // Per-turn cache anomaly check ??main session turns only.
         // Subagent turns (different model) are logged but excluded from anomaly thresholds.
         const turnModel = extractAssistantModel(message);
-        const isSubagentTurn = turnModel !== undefined && turnModel !== managed.model;
+        const isSubagentTurn = turnModel !== undefined && turnModel !== managed.model
+          && extractBaseModel(turnModel) !== extractBaseModel(managed.model ?? '');
         if (isSubagentTurn && turnUsage.cache_creation_input_tokens !== undefined) {
           logger.info(
             {
@@ -278,39 +292,14 @@ export async function processStream(
             `Subagent turn cache: model=${turnModel} create=${turnUsage.cache_creation_input_tokens} read=${turnUsage.cache_read_input_tokens ?? 0}`
           );
         }
+        // Deferred anomaly analysis: collect per-turn usage, analyze once after result.
         if (!isSubagentTurn && turnUsage.cache_creation_input_tokens !== undefined && options.resume !== undefined) {
-          const jsonlPath = managed.sdkSessionId
-            ? getJsonlPathForAgent(managed.sdkSessionId, managed.cwd)
-            : '';
-          const turnAnomaly = analyzeCurrentTurn(
-            {
-              input_tokens: turnUsage.input_tokens ?? 0,
-              cache_read_input_tokens: turnUsage.cache_read_input_tokens ?? 0,
-              cache_creation_input_tokens: turnUsage.cache_creation_input_tokens ?? 0,
-              output_tokens: 0,
-            },
-            jsonlPath,
-            managed.detectedCacheTTLMs,
-          );
-          if (turnAnomaly !== null) {
-            logger.warn(
-              {
-                sessionId,
-                sdkSessionId: managed.sdkSessionId,
-                agentId: managed.agentId,
-                msgIndex: streamMsgIndex,
-                anomaly: turnAnomaly.anomaly,
-                cause: turnAnomaly.cause,
-                causeDetail: turnAnomaly.causeDetail,
-                causeLine: turnAnomaly.causeLine,
-                cacheRead: turnAnomaly.cacheRead,
-                cacheCreation: turnAnomaly.cacheCreation,
-                hitPct: turnAnomaly.hitPct,
-                event_type: EventType.CACHE_ANOMALY_PER_TURN,
-              },
-              `Per-turn cache anomaly: ${turnAnomaly.anomaly} (create=${turnAnomaly.cacheCreation} hit=${turnAnomaly.hitPct}% cause=${turnAnomaly.cause})`
-            );
-          }
+          perTurnUsage.push({
+            msgIndex: streamMsgIndex - 1,
+            input_tokens: turnUsage.input_tokens ?? 0,
+            cache_read_input_tokens: turnUsage.cache_read_input_tokens ?? 0,
+            cache_creation_input_tokens: turnUsage.cache_creation_input_tokens ?? 0,
+          });
         }
       }
     }
@@ -553,8 +542,63 @@ export async function processStream(
     }
   }
 
+  // Deferred cache anomaly analysis: run once after result instead of per-turn,
+  // reducing JSONL reads from O(n) to O(1).
+  if (perTurnUsage.length > 0 && managed.sdkSessionId) {
+    try {
+      const worst = perTurnUsage.reduce((a, b) =>
+        (a.cache_creation_input_tokens) > (b.cache_creation_input_tokens) ? a : b
+      );
+      const jsonlPath = getJsonlPathForAgent(managed.sdkSessionId, managed.cwd);
+      if (jsonlPath) {
+        const turnAnomaly = analyzeCurrentTurn(
+          {
+            input_tokens: worst.input_tokens,
+            cache_read_input_tokens: worst.cache_read_input_tokens,
+            cache_creation_input_tokens: worst.cache_creation_input_tokens,
+            output_tokens: 0,
+          },
+          jsonlPath,
+          managed.detectedCacheTTLMs,
+        );
+        if (turnAnomaly !== null) {
+          logger.warn(
+            {
+              sessionId,
+              sdkSessionId: managed.sdkSessionId,
+              agentId: managed.agentId,
+              msgIndex: worst.msgIndex,
+              anomaly: turnAnomaly.anomaly,
+              cause: turnAnomaly.cause,
+              causeDetail: turnAnomaly.causeDetail,
+              causeLine: turnAnomaly.causeLine,
+              cacheRead: turnAnomaly.cacheRead,
+              cacheCreation: turnAnomaly.cacheCreation,
+              hitPct: turnAnomaly.hitPct,
+              event_type: EventType.CACHE_ANOMALY_PER_TURN,
+            },
+            `Per-turn cache anomaly: ${turnAnomaly.anomaly} (create=${turnAnomaly.cacheCreation} hit=${turnAnomaly.hitPct}% cause=${turnAnomaly.cause})`
+          );
+        }
+      }
+    } catch (err) {
+      logger.warn(
+        { sessionId, err: err instanceof Error ? err.message : String(err) },
+        'Deferred cache anomaly analysis failed — non-fatal'
+      );
+    }
+  }
+
   const response = responseChunks.join('');
-  const contextUsage = await collectContextUsageSnapshot(sessionId, managed.session);
+  let contextUsage: import('../keepalive/ContextUsageTelemetry.js').ContextUsageSnapshot | undefined;
+  try {
+    contextUsage = await collectContextUsageSnapshot(sessionId, managed.session);
+  } catch (err) {
+    logger.warn(
+      { sessionId, err: err instanceof Error ? err.message : String(err) },
+      'collectContextUsageSnapshot failed — continuing without context usage data'
+    );
+  }
 
   // Cache efficiency monitoring
   let cacheEfficiency: number | undefined;

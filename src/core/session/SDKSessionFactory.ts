@@ -250,13 +250,8 @@ export async function createManagedSession(
     sessionOptions.maxTurns = options.maxTurns;
   }
 
-  // Thinking config
-  const model = (agent.config.model ?? '').toLowerCase();
-  const supportsAdaptiveThinking =
-    model.includes('opus') || model.includes('sonnet') || model.includes('haiku');
-  if (supportsAdaptiveThinking) {
-    sessionOptions.thinking = { type: 'adaptive' } as { type: string };
-  }
+  // Enable adaptive thinking for all sessions.
+  sessionOptions.thinking = { type: 'adaptive' } as { type: string };
 
   // canUseTool
   if (options.additionalOptions?.canUseTool !== undefined) {

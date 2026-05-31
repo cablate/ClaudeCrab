@@ -465,7 +465,10 @@ export async function executeQueryWithSDK(
     }
     const fullResponse = allResponses.join('\n\n');
 
+    // Finalize status/sub-agent managers
     await statusManager?.finalizeAll();
+    subAgentManager?.cleanupStale();
+    await subAgentManager?.finalizeAll();
 
     return fullResponse;
   } finally {
@@ -485,6 +488,11 @@ export async function executeQueryWithSDK(
 
 /**
  * Persist user and assistant messages to database for continuity and inspection.
+ *
+ * Deduplication: intermediate messages that were already delivered via streaming
+ * are stored only once. If the final resultResponse is identical to the last
+ * intermediate message (e.g., SDK emitted it both as stream event and final
+ * result), the duplicate is skipped.
  */
 function persistConversation(
   sessionId: string,
@@ -499,12 +507,23 @@ function persistConversation(
   try {
     conversationRepository.appendMessage(sessionId, 'user', prompt);
 
+    // Deduplicate intermediate messages: skip sequential exact duplicates
+    // (can happen across retry boundaries where state is cleared).
+    let lastStored = '';
     for (const msg of intermediateMessages) {
-      conversationRepository.appendMessage(sessionId, 'assistant', msg);
+      const trimmed = msg.trim();
+      if (trimmed.length > 0 && trimmed !== lastStored) {
+        conversationRepository.appendMessage(sessionId, 'assistant', msg);
+        lastStored = trimmed;
+      }
     }
 
+    // Store final response only if it differs from the last stored intermediate
     if (resultResponse.length > 0) {
-      conversationRepository.appendMessage(sessionId, 'assistant', resultResponse);
+      const trimmedResult = resultResponse.trim();
+      if (trimmedResult !== lastStored) {
+        conversationRepository.appendMessage(sessionId, 'assistant', resultResponse);
+      }
     }
   } catch (persistError) {
     qeLogger.warn(

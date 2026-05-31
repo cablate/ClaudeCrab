@@ -303,6 +303,14 @@ export class SDKSessionManager {
       const current = this.sessions.get(sessionId);
       if (current && current !== managed) {
         current.isQuerying = false;
+        // The original managed session was replaced by a concurrent recreate.
+        // Close its CLI process to avoid resource leak.
+        try { managed.session?.close(); } catch { /* best effort */ }
+        this.sessions.delete(sessionId);
+        logger.warn(
+          { sessionId, event_type: 'session.recreate_cleanup' },
+          'Cleaned up orphaned managed session after concurrent recreate'
+        );
       }
     }
   }

@@ -223,13 +223,22 @@ export async function deliverFinalResponse(
     state.failedMessages.push(result.response);
   }
 
-  // Post-query delivery audit: resend any messages that failed to deliver
+  // Post-query delivery audit: resend any messages that failed to deliver.
+  // Cap retries to avoid unbounded serial send attempts when the adapter is degraded.
+  const MAX_FAILED_RESEND = 5;
   if (state.failedMessages.length > 0) {
     srrLogger.info(
-      { chatId, agentId, failedCount: state.failedMessages.length },
+      { chatId, agentId, failedCount: state.failedMessages.length, maxResend: MAX_FAILED_RESEND },
       'Delivery audit: resending failed messages'
     );
-    for (const msg of state.failedMessages) {
+    const toResend = state.failedMessages.slice(0, MAX_FAILED_RESEND);
+    if (state.failedMessages.length > MAX_FAILED_RESEND) {
+      srrLogger.warn(
+        { chatId, agentId, dropped: state.failedMessages.length - MAX_FAILED_RESEND },
+        'Delivery audit: too many failed messages, dropping excess'
+      );
+    }
+    for (const msg of toResend) {
       try {
         const retryResult = await adapter.sendFormattedMessage(chatId, msg);
         if (retryResult.success) {

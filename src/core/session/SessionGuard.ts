@@ -192,6 +192,13 @@ interface GuardPromptOptions {
 /**
  * Show a guard prompt via QuestionBridge (same pattern as InteractionHandler).
  * Returns the selected option label, or null on timeout/abort.
+ *
+ * Note: The guard temporarily installs its own questionResolver that routes
+ * through the InteractionHandler static registry. Both the guard resolver and
+ * the InteractionHandler resolver are functionally identical (both call
+ * `InteractionHandler.resolveQuestionFromAdapter`), so overwriting is safe.
+ * The resolver is restored via finally to avoid subtle coupling if the call
+ * order ever changes.
  */
 async function showGuardPrompt(
   adapter: BaseAdapter,
@@ -209,14 +216,23 @@ async function showGuardPrompt(
     { signal: ac.signal }
   );
 
-  adapter.setQuestionResolver?.((id, answer) => {
-    InteractionHandler.resolveQuestionFromAdapter(id, answer);
-  });
+  // Save reference to the original resolver setter — used in finally to restore.
+  // This captures the overridden `setQuestionResolver` (DiscordAdapter stores
+  // the resolver internally), NOT a specific resolver closure.
+  const origSetResolver = adapter.setQuestionResolver?.bind(adapter);
 
   InteractionHandler.questionRegistry.set(requestId, bridge);
 
   let promptMessageId: string | undefined;
   try {
+    // Install guard resolver — note: both guard and InteractionHandler
+    // resolvers ultimately route through InteractionHandler.resolveQuestionFromAdapter,
+    // making them functionally equivalent. The restore in finally() is still
+    // done for defensive correctness.
+    adapter.setQuestionResolver?.((id, answer) => {
+      InteractionHandler.resolveQuestionFromAdapter(id, answer);
+    });
+
     const sendResult = await adapter.sendQuestionPrompt(chatId, {
       requestId,
       header: opts.header,
@@ -235,6 +251,12 @@ async function showGuardPrompt(
     ac.abort();
     InteractionHandler.questionRegistry.delete(requestId);
     return null;
+  } finally {
+    // Restore the original resolver so the InteractionHandler's bridge routing
+    // continues to work for subsequent AskUserQuestion tool calls.
+    origSetResolver?.((_id: string, _answer: string | null) => {
+      InteractionHandler.resolveQuestionFromAdapter(_id, _answer);
+    });
   }
 
   const answer = await promise;

@@ -32,6 +32,20 @@ export interface DiscordSenderDeps {
   emitMessageSent(chatId: string, text: string, userId: string): void;
 }
 
+// ---------------------------------------------------------------------------
+// Shared helper — resolve the target TextChannel/ThreadChannel for a given
+// chatId, preferring the main channel when chatId matches.
+// ---------------------------------------------------------------------------
+
+async function resolveTarget(
+  deps: DiscordSenderDeps,
+  chatId: string,
+): Promise<TextChannel | ThreadChannel | null> {
+  return chatId !== deps.channelId
+    ? await deps.resolveTextOrThread(chatId)
+    : deps.channel;
+}
+
 // ============================================================
 // Basic Message Sending
 // ============================================================
@@ -46,9 +60,7 @@ export async function sendMessage(
   }
 
   try {
-    const targetChannel = chatId !== deps.channelId
-      ? await deps.resolveTextOrThread(chatId)
-      : deps.channel;
+    const targetChannel = await resolveTarget(deps, chatId);
 
     if (targetChannel === null) {
       return { success: false, error: `Channel/thread ${chatId} not found` };
@@ -78,13 +90,16 @@ export async function sendStatusMessage(
   initialText: string = '🔄 處理中...',
 ): Promise<string | null> {
   try {
-    const targetChannel = chatId !== deps.channelId
-      ? await deps.resolveTextOrThread(chatId)
-      : deps.channel;
+    const targetChannel = await resolveTarget(deps, chatId);
 
     if (targetChannel === null) return null;
 
-    const msg = await deps.rateLimiter.rateLimitedSend(() => targetChannel.send(`\`\`\`\n${initialText}\n\`\`\``));
+    // Code fence adds 8 chars overhead; truncate to stay within Discord's 2000-char limit
+    const MAX_STATUS_BODY = 1990;
+    const safeText = initialText.length > MAX_STATUS_BODY
+      ? initialText.slice(0, MAX_STATUS_BODY - 3) + '...'
+      : initialText;
+    const msg = await deps.rateLimiter.rateLimitedSend(() => targetChannel.send(`\`\`\`\n${safeText}\n\`\`\``));
     return msg.id;
   } catch (error) {
     deps.log.warn({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, chatId }, 'Failed to send status message');
@@ -98,13 +113,12 @@ export async function sendSubtitleMessage(
   text: string,
 ): Promise<string | null> {
   try {
-    const targetChannel = chatId !== deps.channelId
-      ? await deps.resolveTextOrThread(chatId)
-      : deps.channel;
+    const targetChannel = await resolveTarget(deps, chatId);
 
     if (targetChannel === null) return null;
 
-    const msg = await deps.rateLimiter.rateLimitedSend(() => targetChannel.send(text));
+    const safeText = text.length > 1990 ? text.slice(0, 1987) + '...' : text;
+    const msg = await deps.rateLimiter.rateLimitedSend(() => targetChannel.send(safeText));
     return msg.id;
   } catch (error) {
     deps.log.warn({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, chatId }, 'Failed to send subtitle message');
@@ -119,9 +133,7 @@ export async function updateStatusMessage(
   text: string,
 ): Promise<boolean> {
   try {
-    const targetChannel = chatId !== deps.channelId
-      ? await deps.resolveTextOrThread(chatId)
-      : deps.channel;
+    const targetChannel = await resolveTarget(deps, chatId);
 
     if (targetChannel === null) return false;
 
@@ -283,9 +295,7 @@ export async function sendAudio(
   options?: { duration?: number; caption?: string; filename?: string },
 ): Promise<SendResult> {
   try {
-    const target = chatId !== deps.channelId
-      ? await deps.resolveTextOrThread(chatId)
-      : deps.channel;
+    const target = await resolveTarget(deps, chatId);
     if (target === null) {
       return { success: false, error: 'Channel not found' };
     }
@@ -308,9 +318,7 @@ async function sendFileAttachment(
   caption?: string,
 ): Promise<SendResult> {
   try {
-    const target = chatId !== deps.channelId
-      ? await deps.resolveTextOrThread(chatId)
-      : deps.channel;
+    const target = await resolveTarget(deps, chatId);
     if (target === null) {
       return { success: false, error: 'Channel not found' };
     }

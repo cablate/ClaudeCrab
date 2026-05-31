@@ -26,6 +26,17 @@ export function extractAssistantModel(msg: unknown): string | undefined {
     : undefined;
 }
 
+/**
+ * Extract the base tier name from a full Claude model identifier.
+ * "claude-sonnet-4-20250514" → "sonnet"
+ * "claude-3.5-haiku-v2" → "haiku"
+ * Unknown / non-Claude models return the full string as-is.
+ */
+export function extractBaseModel(fullModel: string): string {
+  const match = fullModel.match(/claude-(?:[\d.]+-)?(opus|sonnet|haiku)/);
+  return match ? (match[1] ?? fullModel) : fullModel;
+}
+
 export function normalizeModelUsage(
   modelUsage: Record<string, {
     inputTokens?: number;

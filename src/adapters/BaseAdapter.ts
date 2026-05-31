@@ -182,8 +182,14 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
 
   /**
    * Send a message with platform-aware markdown formatting.
-   * The Discord adapter handles its own markdown conversion.
-   * Default implementation: sends raw text via sendMessage() — subclasses override as needed.
+   *
+   * Default implementation sends raw text via sendMessage(). Subclasses override
+   * when platform markdown differs from raw text (e.g., Telegram requires HTML).
+   *
+   * Note: DiscordAdapter does NOT override this — Discord's markdown is plain
+   * text-based, so sendFormattedMessage and sendMessage are equivalent there.
+   * Callers (StreamResponseRouter, ResponseSender) use sendFormattedMessage for
+   * semantic correctness; the Discord path resolves to the same sendMessage flow.
    */
   async sendFormattedMessage(
     chatId: string,

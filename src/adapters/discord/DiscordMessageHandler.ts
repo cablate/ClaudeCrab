@@ -87,6 +87,7 @@ export async function handleDiscordMessage(
   if (!isVoiceMessage && message.attachments.size > 0) {
     const agentsDir = ctx.agentsDir;
 
+    // Phase 1: inline auto-converted text files (must happen first — sets shared `text`)
     for (const [, attachment] of message.attachments) {
       const fileName = attachment.name ?? 'unknown';
       const mimeType = attachment.contentType ?? undefined;
@@ -105,25 +106,47 @@ export async function handleDiscordMessage(
         } catch (err) {
           log.warn({ event_type: EventType.ADAPTER_MESSAGE_ERROR, err, url: attachment.url }, 'Failed to fetch .txt attachment');
         }
-        continue;
       }
+    }
 
-      const result = await downloadAttachment(
-        attachment.url,
-        fileName,
-        agentsDir,
-        agentId,
-        attachment.size,
-      );
-      if (result.success && result.filePath) {
-        downloadedAttachments.push({
+    // Phase 2: download remaining (non-auto-converted) attachments in parallel
+    const downloadTasks = [...message.attachments.values()]
+      .filter((att) => {
+        const fName = att.name ?? 'unknown';
+        const mType = att.contentType ?? undefined;
+        return !isAutoConvertedTextFile(fName, mType);
+      })
+      .map(async (attachment) => {
+        const fileName = attachment.name ?? 'unknown';
+        const mimeType = attachment.contentType ?? undefined;
+        const result = await downloadAttachment(
+          attachment.url,
           fileName,
-          mimeType,
-          fileSize: result.fileSize,
-          localPath: result.filePath,
-        });
-      } else {
-        log.warn({ event_type: EventType.ADAPTER_MESSAGE_ERROR, fileName, error: result.error }, 'Failed to download attachment');
+          agentsDir,
+          agentId,
+          attachment.size,
+        );
+        if (result.success && result.filePath) {
+          downloadedAttachments.push({
+            fileName,
+            mimeType,
+            fileSize: result.fileSize,
+            localPath: result.filePath,
+          });
+        } else {
+          log.warn({ event_type: EventType.ADAPTER_MESSAGE_ERROR, fileName, error: result.error }, 'Failed to download attachment');
+        }
+      });
+
+    if (downloadTasks.length > 0) {
+      const results = await Promise.allSettled(downloadTasks);
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          log.warn(
+            { event_type: EventType.ADAPTER_MESSAGE_ERROR, error: r.reason },
+            'Attachment download task rejected'
+          );
+        }
       }
     }
 
@@ -155,17 +178,26 @@ export async function handleDiscordMessage(
     return;
   }
 
+  // Track injection flag across both text and attachment paths
+  const injectionPatterns: string[] = [];
+
   if (validation.warnings?.includes('potential_prompt_injection')) {
+    // validateMessage() already ran detectPromptInjection internally;
+    // re-detect here only to capture pattern list for audit + downstream metadata.
     const patterns = detectPromptInjection(text, securityConfig);
+    injectionPatterns.push(...patterns);
     auditLogger.logInjectionDetected('discord', userId, patterns, channelId);
     log.warn({ event_type: EventType.ADAPTER_MESSAGE_REJECTED, userId, patternCount: patterns.length }, 'Potential prompt injection detected');
   }
 
-  if (isFromAttachment) {
+  // For attachment-based messages (auto-converted .txt OR regular downloads),
+  // run a separate injection scan since the content source differs from the text input.
+  if (hasAttachments && !validation.warnings?.includes('potential_prompt_injection')) {
     const patterns = detectPromptInjection(text, securityConfig);
+    injectionPatterns.push(...patterns);
     if (patterns.length > 0) {
       auditLogger.logInjectionDetected('discord', userId, patterns, channelId);
-      log.warn({ event_type: EventType.ADAPTER_MESSAGE_REJECTED, userId, patternCount: patterns.length }, 'Potential prompt injection detected in attachment');
+      log.warn({ event_type: EventType.ADAPTER_MESSAGE_REJECTED, userId, patternCount: patterns.length }, 'Potential prompt injection detected in attachment content');
     }
   }
 
@@ -249,6 +281,7 @@ export async function handleDiscordMessage(
         sessionUserId: `${userId}::thread::${threadId}`,
         parentConversationId: channelId,
       } : {}),
+      ...(injectionPatterns.length > 0 ? { injectionDetected: injectionPatterns } : {}),
     },
   };
 
