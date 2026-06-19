@@ -64,6 +64,8 @@ DB_PATH=./data/claudecab.db
 
 如果你用 `claude login`，就讓 `ANTHROPIC_API_KEY` 保持空白。
 
+如果你要接其他模型服務或 Anthropic-compatible proxy，不要急著只改 `.env`。請看 [CONFIGURATION.md](CONFIGURATION.md) 的「其他模型服務 / Anthropic-compatible proxy」段落。重點是把 provider key 放到 `agents/example/.claude/settings.local.json` 的 `env` 裡，ClaudeCab 才會自動隔離 Claude Code 憑證載入位置。
+
 ## 4. 填 `agents/example/agent.json`
 
 把 `discordBotToken` 和 `discordChannelId` 換成你的 Agent Bot token 與頻道 ID：
@@ -155,3 +157,5 @@ npm run schedule:trigger -- example/example-daily-check
 - OAuth：先跑 `claude login`，並讓 `ANTHROPIC_API_KEY` 空白
 
 如果使用 OAuth，不要設定 `ANTHROPIC_BASE_URL`。
+
+如果使用其他模型服務或 proxy，請把 `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` 放到 agent 的 `.claude/settings.local.json`，不要混用主機 OAuth。

@@ -95,6 +95,49 @@ claude login
 }
 ```
 
+### 其他模型服務 / Anthropic-compatible proxy
+
+如果你要接 DeepSeek、第三方 proxy，或任何相容 Anthropic API 的服務，不建議只填全域 `.env`。
+
+建議放在該 agent 的：
+
+```text
+agents/example/.claude/settings.local.json
+```
+
+例如：
+
+```json
+{
+  "model": "sonnet",
+  "permissions": {
+    "allow": [],
+    "deny": []
+  },
+  "env": {
+    "ANTHROPIC_API_KEY": "你的ProviderKey",
+    "ANTHROPIC_BASE_URL": "https://你的ProviderEndpoint"
+  }
+}
+```
+
+這裡有一個重要細節：
+
+只要 ClaudeCab 在 agent 的 `.claude/settings.local.json` 裡讀到 `env.ANTHROPIC_API_KEY`，就會自動做兩件事：
+
+1. 把 `CLAUDE_CONFIG_DIR` 指到該 agent 的 `.claude` 目錄。
+2. 把 `ANTHROPIC_AUTH_TOKEN` 清空。
+
+原因是 Claude Code 預設可能會讀主機上的 OAuth 憑證。如果你要走 API key 或第三方 provider，就要避免它誤用主機的 Claude Code OAuth。這個 redirect 由 ClaudeCab 自動處理，一般不需要手動設定 `CLAUDE_CONFIG_DIR`。
+
+簡單判斷：
+
+| 使用方式 | 設定位置 | `ANTHROPIC_BASE_URL` | 備註 |
+| --- | --- | --- | --- |
+| Claude Code 訂閱 / OAuth | 主機跑 `claude login` | 不要設定 | 使用主機 OAuth 憑證 |
+| Anthropic API key | `.env` 或 agent settings | 通常不需要 | 單一 agent 可先放 `.env` |
+| 其他模型服務 / proxy | agent `.claude/settings.local.json` 的 `env` | 要設定 | 會自動 redirect `CLAUDE_CONFIG_DIR` |
+
 ## 哪些設定一般人不用管
 
 這些都有預設值，第一次部署不要改：
@@ -167,9 +210,13 @@ claude login
 
 如果使用 Claude Code OAuth，不要設定 `ANTHROPIC_BASE_URL`。
 
-如果使用 Anthropic-compatible proxy 或其他模型服務，通常要同時設定：
+如果使用 Anthropic-compatible proxy 或其他模型服務，建議設定在 agent 的 `.claude/settings.local.json`：
 
-```env
-ANTHROPIC_API_KEY=你的ProviderKey
-ANTHROPIC_BASE_URL=https://你的ProviderEndpoint
+```json
+{
+  "env": {
+    "ANTHROPIC_API_KEY": "你的ProviderKey",
+    "ANTHROPIC_BASE_URL": "https://你的ProviderEndpoint"
+  }
+}
 ```

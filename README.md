@@ -101,6 +101,8 @@ supervisor 會寫入：
 
 完整設定說明請看 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
+如果要接 DeepSeek、第三方 proxy 或其他 Anthropic-compatible 服務，請特別看 `CONFIGURATION.md` 的「其他模型服務 / Anthropic-compatible proxy」。這種模式建議把 `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` 放在 agent 的 `.claude/settings.local.json`，ClaudeCab 會自動隔離 `CLAUDE_CONFIG_DIR`，避免讀到主機 Claude Code OAuth 憑證。
+
 ## Agent 設定檔
 
 Live agents 從 `AGENTS_DIR` 載入。
