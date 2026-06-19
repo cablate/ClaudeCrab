@@ -132,7 +132,34 @@ function getDiscordId(value: unknown, label: string): string {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(describeDiscordRestError(error));
     process.exitCode = 1;
   });
+}
+
+export function describeDiscordRestError(error: unknown): string {
+  const status = readNumberProperty(error, 'status');
+  const code = readNumberProperty(error, 'code');
+  const message = error instanceof Error ? error.message : String(error);
+  const detail = [`Discord setup check failed: ${message}`];
+
+  if (status === 401 || code === 0) {
+    detail.push('Action: verify agent discordBotToken is the Bot Token from Discord Developer Portal > Bot, then rerun discord:check.');
+  } else if (status === 403 || code === 50001 || code === 50013) {
+    detail.push('Action: verify the Agent Bot is invited to the server and has View Channels, Send Messages, Read Message History, Create Public Threads, and Send Messages in Threads permissions.');
+  } else if (status === 404 || code === 10003) {
+    detail.push('Action: verify agent discordChannelId is the numeric channel ID, not server ID/client ID, and that the bot can see that channel.');
+  } else if (status === 429) {
+    detail.push('Action: Discord rate-limited the test. Wait briefly and retry.');
+  } else {
+    detail.push('Action: rerun npm run setup:check, then verify token, channel ID, bot invite, and channel permissions.');
+  }
+
+  return detail.join('\n');
+}
+
+function readNumberProperty(value: unknown, key: string): number | undefined {
+  if (typeof value !== 'object' || value === null || !(key in value)) return undefined;
+  const raw = (value as Record<string, unknown>)[key];
+  return typeof raw === 'number' ? raw : undefined;
 }

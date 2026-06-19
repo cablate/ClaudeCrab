@@ -104,6 +104,12 @@ npm run discord:check -- --agent example
 
 這會使用 `agents/example/agent.json` 的 `discordBotToken` 和 `discordChannelId`，透過 Discord REST 直接送一則測試訊息到 channel，不會啟動 Gateway listener，也不會呼叫 Claude。
 
+如果這一步失敗，先照錯誤提示檢查：
+
+- 401 / Unauthorized：Agent Bot token 錯，或貼到的不是 Bot Token。
+- 403 / Missing Permissions：Bot 沒被邀進 server，或缺 channel 權限。
+- 404 / Unknown Channel：`discordChannelId` 錯，或 Bot 看不到該 channel。
+
 如果要連 thread 建立權限一起測：
 
 ```bash
