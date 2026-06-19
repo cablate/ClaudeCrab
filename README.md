@@ -94,6 +94,8 @@ npm start
 
 完整安裝、Discord bot、Claude OAuth/API key/proxy、AI 輔助設定、schedule 測試都集中在 [docs/SETUP.md](docs/SETUP.md)。
 
+安裝不能只看 build 是否通過；實際完成標準是 Agent Bot 在目標 Discord channel 上線並能回覆訊息。啟動後檢查方式請看 [docs/SETUP.md](docs/SETUP.md) 的最小安裝段落。
+
 ## Agent 設定
 
 Live agents 由 `AGENTS_DIR` 載入：

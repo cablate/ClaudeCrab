@@ -79,6 +79,20 @@ npm run build
 npm start
 ```
 
+啟動後用三個現象判斷成功：
+
+1. console 或 `logs/` 沒有持續重複的 error。
+2. Agent Bot 在 Discord 顯示上線，且目標 channel 看得到它。
+3. 在 `discordChannelId` 對應的 channel 發一則文字訊息，Agent Bot 有回覆。
+
+如果使用 `npm start`，ClaudeCab 也會寫入 supervisor runtime 檔：
+
+- `claudecab.pid`
+- `claudecab.runtime.json`
+- `logs/`
+
+如果上述任一項沒有出現，不要繼續調進階設定，先看「常見問題」。
+
 ## 主 Bot 與 Agent Bot
 
 ClaudeCab 會用兩層 Discord bot 設定：
@@ -199,6 +213,7 @@ agents/
 - 不要一開始就調整 session/cache/schedule/dashboard/STT 進階設定。
 - 先問清楚 Claude 認證模式：Claude Code OAuth、Anthropic API key、或第三方 proxy/provider。
 - 確認主 Bot 和 Agent Bot 是否同一個，不要把 token、client id、guild id、channel id 填錯欄位。
+- 不要宣稱安裝成功，除非 setup:check、typecheck、build 都通過，且你已說明使用者接下來要如何做 Discord 實測。
 
 請依序完成：
 1. npm install
@@ -214,6 +229,7 @@ agents/
 - 哪些值仍需要我自己補上
 - 檢查指令是否通過
 - 下一步如何啟動
+- 下一步如何在 Discord channel 實測
 ```
 
 AI 設定時建議先問使用者：
@@ -223,6 +239,36 @@ AI 設定時建議先問使用者：
 3. main bot token、application ID、guild ID 是否已準備好？
 4. agent bot token、目標 channel ID 是否已準備好？
 5. agent 名稱和基礎指令是否先用 example 預設？
+
+AI 最後回報建議使用這個格式：
+
+```text
+設定結果：
+- 已修改：
+  - .env：已填 main bot token/client id/guild id、AGENTS_DIR、Claude 認證模式
+  - agents/example/agent.json：已填 agent bot token/channel id
+  - agents/example/.claude/settings.local.json：未修改 / 已填 provider env
+- 未填或需要你確認：
+  - ...
+
+檢查結果：
+- npm run setup:check：通過 / 未通過，原因是 ...
+- npm run typecheck：通過 / 未通過，原因是 ...
+- npm run build：通過 / 未通過，原因是 ...
+
+啟動方式：
+- 開發測試：npm run dev
+- 正式啟動：npm run build && npm start
+
+Discord 實測：
+1. 確認 Agent Bot 已加入 server 並有 channel 權限。
+2. 到 agent.json 的 discordChannelId 對應 channel 發一則測試訊息。
+3. 如果沒有回覆，先貼 npm run setup:check 輸出與最新 logs，不要先改進階設定。
+
+安全提醒：
+- 我沒有印出完整 token/API key。
+- 我沒有修改 src/**、package.json、docs/**。
+```
 
 ## 設定檢查
 
@@ -330,4 +376,3 @@ npm run schedule:discord-test -- example/example-daily-check
 - `logs/` 是否被建立
 - `LOG_LEVEL=debug` 是否需要暫時打開
 - `npm start` 會寫入 supervisor runtime 檔，例如 `claudecab.pid`、`claudecab.runtime.json`
-
