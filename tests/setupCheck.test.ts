@@ -99,7 +99,52 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === 'discord' && check.message.includes('相同'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'discord' && check.message.includes('equals agent discordBotToken'))).toBe(true);
+  });
+
+  it('rejects Discord IDs pasted into bot token fields', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root, {
+      env: [
+        'DISCORD_ENABLED=true',
+        'DISCORD_MAIN_BOT_TOKEN=123456789012345678',
+        'DISCORD_MAIN_BOT_CLIENT_ID=223456789012345678',
+        'DISCORD_GUILD_ID=323456789012345678',
+        'AGENTS_DIR=./agents',
+        'ANTHROPIC_API_KEY=sk-test',
+        '',
+      ].join('\n'),
+      agent: { discordBotToken: '423456789012345678' },
+    });
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.errorCount).toBeGreaterThanOrEqual(2);
+    expect(result.checks.some((check) => check.message.includes('DISCORD_MAIN_BOT_TOKEN looks like a Discord ID'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('agent discordBotToken looks like a Discord ID'))).toBe(true);
+  });
+
+  it('rejects Discord ID fields that were mixed together', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root, {
+      env: [
+        'DISCORD_ENABLED=true',
+        'DISCORD_MAIN_BOT_TOKEN=main.real.token',
+        'DISCORD_MAIN_BOT_CLIENT_ID=123456789012345678',
+        'DISCORD_GUILD_ID=123456789012345678',
+        'AGENTS_DIR=./agents',
+        'ANTHROPIC_API_KEY=sk-test',
+        '',
+      ].join('\n'),
+      agent: { discordChannelId: '123456789012345678' },
+    });
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.errorCount).toBeGreaterThan(0);
+    expect(result.checks.some((check) => check.message.includes('Client ID is the application ID'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('Server ID and channel ID are different'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('Application ID and channel ID are different'))).toBe(true);
   });
 
   it('rejects OAuth-style config with base URL but no API key', async () => {
@@ -148,5 +193,31 @@ describe('setup-check', () => {
 
     expect(result.errorCount).toBe(0);
     expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('CLAUDE_CONFIG_DIR'))).toBe(true);
+  });
+
+  it('rejects agent-level proxy base URL without an API key', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root, {
+      env: [
+        'DISCORD_ENABLED=true',
+        'DISCORD_MAIN_BOT_TOKEN=main.real.token',
+        'DISCORD_MAIN_BOT_CLIENT_ID=123456789012345678',
+        'DISCORD_GUILD_ID=223456789012345678',
+        'AGENTS_DIR=./agents',
+        'ANTHROPIC_API_KEY=',
+        '',
+      ].join('\n'),
+      settings: {
+        model: 'sonnet',
+        env: {
+          ANTHROPIC_BASE_URL: 'https://proxy.example.com',
+        },
+      },
+    });
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.errorCount).toBeGreaterThan(0);
+    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('agent env has no ANTHROPIC_API_KEY'))).toBe(true);
   });
 });
