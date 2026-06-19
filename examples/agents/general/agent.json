@@ -1,0 +1,11 @@
+{
+  "name": "General",
+  "description": "General-purpose Discord agent",
+  "model": "sonnet",
+  "discordBotToken": "replace-with-agent-bot-token",
+  "discordChannelId": "replace-with-discord-channel-id",
+  "settings": {
+    "permissionMode": "default",
+    "maxTurns": 20
+  }
+}

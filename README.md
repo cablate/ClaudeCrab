@@ -78,6 +78,8 @@ The supervisor writes:
 - `claudecab.runtime.json`
 - logs under `logs/`
 
+For a full first-time setup walkthrough, including Discord bot permissions, `agent.json`, `CLAUDE.md`, `.claude/settings.local.json`, and schedule validation, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
 ## Agent Profiles
 
 Live agents are external to the repo and loaded from `AGENTS_DIR`.
@@ -115,12 +117,13 @@ Minimal `agent.json`:
   "discordChannelId": "target-channel-id",
   "model": "sonnet",
   "settings": {
-    "agentCwd": "./agents/general"
+    "permissionMode": "default",
+    "maxTurns": 20
   }
 }
 ```
 
-Live agent folders are local runtime configuration and are ignored by git. Put sanitized examples in your own documentation if you want to publish reusable agent profiles.
+Live agent folders are local runtime configuration and are ignored by git. A sanitized starter profile is available under [examples/agents/general](examples/agents/general).
 
 ## Important Configuration
 

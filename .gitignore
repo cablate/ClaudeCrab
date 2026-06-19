@@ -1,5 +1,5 @@
 # Claude Code local settings (machine-specific)
-.claude/
+/.claude/
 .claude/settings.local.json
 .claude/agent-memory/
 .claude/worktrees/
@@ -10,7 +10,7 @@
 .playwright-mcp/
 
 # Codex local settings/state (machine-specific)
-.codex/
+/.codex/
 
 # Dependencies
 node_modules/
@@ -59,7 +59,7 @@ temp/
 nul
 
 # Whole-agent directory — managed externally; see .env AGENTS_DIR
-agents/
+/agents/
 
 # Database files
 data/
@@ -81,9 +81,9 @@ data/*.db-shm
 
 # Mangled path artifacts
 _ProgramOwnProjectClaudeCab*/
-.spectra/
+/.spectra/
 openspec/.vector-search.db*
-.mcp.json
+/.mcp.json
 docs/archive/
 docs/migrations/
 docs/current-architecture-review-*.md
