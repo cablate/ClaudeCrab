@@ -1,6 +1,6 @@
 # ClaudeCab Logging Conventions
 
-**For every new or modified log call, follow this document. The `lint:logs` script enforces the core rule.**
+**For every new or modified log call, follow this document.** Current automated linting is `npm run lint`; there is no separate log-specific lint script in this repository.
 
 The logs are consumed by **two audiences**: humans scrolling `logs/claudecab.log.*`, and AI agents (Claude Code) greping/jq-ing to diagnose issues. Both need the same thing — structured, searchable, correlated events.
 
@@ -19,7 +19,7 @@ import { EventType } from '../utils/events.js';
 logger.info({ event_type: EventType.SESSION_CREATED, userId, agentId }, 'User connected');
 ```
 
-`event_type` values come from `src/utils/events.ts`. **Never inline a string literal** — add a new constant to the enum first, then use it.
+Prefer `event_type` values from `src/utils/events.ts`. For new durable events, add a constant to `EventType` first, then use it. Some legacy call sites still inline string literals; do not copy that pattern when adding new logs.
 
 `logger.debug` and `logger.trace` are exempt (they're fine-grained diagnostics).
 
@@ -160,11 +160,10 @@ Total disk budget: ~140MB. If this blows up you have a spam bug — find the hot
 ## Linting
 
 ```bash
-npm run lint:logs          # warn-only, for local dev
-npm run lint:logs:strict   # error if any violation (CI)
+npm run lint
 ```
 
-Escape hatch for unusual cases: append `// lint-logs: skip` on the same line as the log call. Use sparingly and explain why in a comment above.
+`npm run lint` currently runs ESLint against `src`. There is no log-only lint gate, so reviewers should still check new or modified logs against this document.
 
 ---
 
