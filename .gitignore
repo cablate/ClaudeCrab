@@ -59,7 +59,9 @@ temp/
 nul
 
 # Whole-agent directory — managed externally; see .env AGENTS_DIR
-/agents/
+/agents/*
+!/agents/example/
+!/agents/example/**
 
 # Database files
 data/

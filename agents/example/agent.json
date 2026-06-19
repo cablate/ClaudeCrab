@@ -1,6 +1,6 @@
 {
-  "name": "General",
-  "description": "General-purpose Discord agent",
+  "name": "Example",
+  "description": "Starter Discord agent profile",
   "model": "sonnet",
   "discordBotToken": "replace-with-agent-bot-token",
   "discordChannelId": "replace-with-discord-channel-id",

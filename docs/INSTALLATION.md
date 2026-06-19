@@ -75,24 +75,31 @@ Do not set `ANTHROPIC_BASE_URL` when using Claude Code OAuth from `claude login`
 
 ## 4. Create One Agent
 
-Create this folder:
+Start from the tracked example profile:
 
 ```text
 agents/
-  general/
+  example/
     agent.json
     CLAUDE.md
     .claude/
       settings.local.json
+    .mcp.json
     schedules/
 ```
 
-`agents/general/agent.json`:
+You can either edit `agents/example` directly for a quick local test, or copy it to your own ignored live profile:
+
+```bash
+cp -r agents/example agents/general
+```
+
+`agents/example/agent.json`:
 
 ```json
 {
-  "name": "General",
-  "description": "General-purpose Discord agent",
+  "name": "Example",
+  "description": "Starter Discord agent profile",
   "model": "sonnet",
   "discordBotToken": "your-agent-bot-token",
   "discordChannelId": "your-agent-channel-id",
@@ -103,15 +110,15 @@ agents/
 }
 ```
 
-`agents/general/CLAUDE.md`:
+`agents/example/CLAUDE.md`:
 
 ```md
-# General Agent
+# Example Agent
 
 You are a practical Discord assistant. Answer clearly, keep responses concise, and ask for missing context when needed.
 ```
 
-`agents/general/.claude/settings.local.json`:
+`agents/example/.claude/settings.local.json`:
 
 ```json
 {
@@ -163,7 +170,7 @@ Expected startup signs:
 Schedules live under each agent folder:
 
 ```text
-agents/general/schedules/*.yaml
+agents/example/schedules/*.yaml
 ```
 
 Validate all schedule YAML:
@@ -175,13 +182,13 @@ npm run schedule:validate
 Create a real Discord thread test without running the Claude prompt:
 
 ```bash
-npm run schedule:discord-test -- general/example-daily-check
+npm run schedule:discord-test -- example/example-daily-check
 ```
 
 Run a schedule prompt manually:
 
 ```bash
-npm run schedule:trigger -- general/example-daily-check
+npm run schedule:trigger -- example/example-daily-check
 ```
 
 ## 7. Common Problems

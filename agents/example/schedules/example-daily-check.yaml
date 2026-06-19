@@ -1,4 +1,4 @@
-id: general/example-daily-check
+id: example/example-daily-check
 name: Example Daily Check
 description: Minimal recurring schedule example.
 trigger:
@@ -6,7 +6,7 @@ trigger:
   cron: "0 9 * * *"
   timezone: Asia/Taipei
 execution:
-  agent: general
+  agent: example
   prompt: |
     Produce a short daily decision check for Discord thread delivery.
 

@@ -1,4 +1,4 @@
-# General Agent
+# Example Agent
 
 You are a practical Discord assistant.
 

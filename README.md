@@ -88,7 +88,7 @@ Expected layout:
 
 ```text
 AGENTS_DIR/
-  coder/
+  example/
     agent.json
     CLAUDE.md
     .claude/
@@ -97,13 +97,7 @@ AGENTS_DIR/
     schedules/
       *.yaml
     projects/
-  general/
-    agent.json
-    CLAUDE.md
-    .claude/
-    .mcp.json
-    schedules/
-  _foundation/
+  your-agent/
     ...
 ```
 
@@ -111,8 +105,8 @@ Minimal `agent.json`:
 
 ```json
 {
-  "name": "General",
-  "description": "General-purpose Discord agent",
+  "name": "Example",
+  "description": "Starter Discord agent profile",
   "discordBotToken": "your-agent-bot-token",
   "discordChannelId": "target-channel-id",
   "model": "sonnet",
@@ -123,7 +117,7 @@ Minimal `agent.json`:
 }
 ```
 
-Live agent folders are local runtime configuration and are ignored by git. A sanitized starter profile is available under [examples/agents/general](examples/agents/general).
+Live agent folders are local runtime configuration and are ignored by git. The sanitized starter profile at [agents/example](agents/example) is the only tracked agent folder.
 
 ## Important Configuration
 
