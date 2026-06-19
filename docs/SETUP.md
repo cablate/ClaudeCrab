@@ -12,6 +12,40 @@
 
 其他 session、cache、schedule、dashboard、STT 設定都有預設值。第一次安裝先不要改。
 
+## ClaudeCab 怎麼運作
+
+先理解這個流程，設定時比較不會混淆：
+
+```text
+Discord 使用者
+  -> Agent Bot 收到指定 channel 的訊息
+  -> ClaudeCab DiscordAdapter
+  -> 載入 AGENTS_DIR/<agent-id>/agent.json
+  -> 用 AGENTS_DIR/<agent-id>/CLAUDE.md 當 Claude Code 專案提示詞
+  -> 讀 AGENTS_DIR/<agent-id>/.claude/settings.local.json
+  -> 建立或恢復 Claude Agent SDK session
+  -> 回覆到同一個 Discord channel / thread
+```
+
+主 Bot 和 Agent Bot 的差別：
+
+| 角色 | 設定位置 | 用途 |
+| --- | --- | --- |
+| 主 Bot | `.env` 的 `DISCORD_MAIN_BOT_TOKEN` / `DISCORD_MAIN_BOT_CLIENT_ID` | slash command、按鈕、系統訊息、dashboard |
+| Agent Bot | `agents/example/agent.json` 的 `discordBotToken` / `discordChannelId` | 在指定頻道代表 agent 接收訊息與回覆 |
+
+Claude 認證的載入順序：
+
+1. 如果 agent `.claude/settings.local.json` 的 `env` 有 `ANTHROPIC_API_KEY`，優先使用 agent-level env。
+2. 否則使用 `.env` 的 `ANTHROPIC_API_KEY`。
+3. 如果都沒有 API key，就依賴部署機器上的 `claude login` OAuth 憑證。
+
+因此：
+
+- 只用 Claude Code 訂閱：跑 `claude login`，不要設定 `ANTHROPIC_BASE_URL`。
+- 用其他模型服務 / proxy：把 `ANTHROPIC_API_KEY` 和 `ANTHROPIC_BASE_URL` 放到 agent `.claude/settings.local.json` 的 `env`。
+- 不要把主 Bot token 填到 agent Bot token，也不要把 Agent Bot token 填到 `.env` 的主 Bot 欄位。
+
 ## 你需要準備什麼
 
 - Node.js 20+

@@ -8,6 +8,14 @@ ClaudeCab 是一個 Discord runtime，讓你可以在 Discord 裡透過 Claude A
 - 想部署 Claude Code SDK harness，接 Anthropic-compatible endpoint 或其他模型服務。
 - 想用 Discord channel/thread 承接 agent 對話與排程輸出。
 
+最小心智模型：
+
+```text
+Discord channel -> Agent Bot -> ClaudeCab -> Claude Agent SDK -> Discord reply
+```
+
+`.env` 設定主 Bot 和全域 runtime；`agents/example/agent.json` 設定實際回話的 Agent Bot；`agents/example/.claude/settings.local.json` 設定 Claude Code / provider env。
+
 ## 目前範圍
 
 ClaudeCab 目前是 Discord-first。核心功能是：

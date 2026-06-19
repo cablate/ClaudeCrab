@@ -18,6 +18,8 @@
 - 只修改必要設定檔，不重構程式碼。
 - 不要把 token、API key、OAuth credential commit 進 git。
 - 如果需要 secret，請列出我要去 Discord / provider 後台取得哪些值，等我提供後再填。
+- 先確認使用者要哪一種 Claude 認證：Anthropic API key、Claude Code OAuth、或第三方 proxy/provider。
+- 確認主 Bot 和 Agent Bot 是兩個不同角色，不要把 token 互相填錯。
 - 一般安裝不要修改 session/cache/schedule/dashboard/STT 進階設定，除非我明確要求。
 - 如果我要使用 DeepSeek、第三方 proxy、或 Anthropic-compatible endpoint，請把 ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL 放在 agents/<agent>/.claude/settings.local.json 的 env 裡，不要只放全域 .env。
 - 如果我要使用 Claude Code OAuth，請讓 ANTHROPIC_API_KEY 保持空白，提醒我先在部署機器跑 claude login，而且不要設定 ANTHROPIC_BASE_URL。
@@ -67,6 +69,21 @@
 | 用 Claude Code 訂閱 / OAuth | 主機跑 `claude login` | `.env` 的 `ANTHROPIC_API_KEY` 保持空白，不要設定 `ANTHROPIC_BASE_URL` |
 | 用 DeepSeek / proxy | `agents/example/.claude/settings.local.json` 的 `env` | 填 `ANTHROPIC_API_KEY` + `ANTHROPIC_BASE_URL`，ClaudeCab 會自動隔離 `CLAUDE_CONFIG_DIR` |
 | 多個 agents 用不同 provider | 各 agent 的 `.claude/settings.local.json` | 不要放全域 `.env` |
+
+## 運作模式簡圖
+
+```text
+Discord channel
+  -> Agent Bot
+  -> ClaudeCab
+  -> agents/<agent-id>/agent.json
+  -> agents/<agent-id>/CLAUDE.md
+  -> agents/<agent-id>/.claude/settings.local.json
+  -> Claude Agent SDK session
+  -> Discord reply
+```
+
+`.env` 裡的主 Bot 主要處理 slash command / 系統功能。`agent.json` 裡的 Agent Bot 才是實際在 agent channel 回話的 bot。
 
 ## 常見錯誤檢查
 

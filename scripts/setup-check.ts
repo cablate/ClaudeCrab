@@ -76,6 +76,7 @@ function main(): void {
     requireJsonString(agentConfig, 'name', checks, 'agent.json');
     requireJsonString(agentConfig, 'discordBotToken', checks, 'agent.json', undefined, templateMode);
     requireJsonString(agentConfig, 'discordChannelId', checks, 'agent.json', isDiscordId, templateMode);
+    checkDiscordBotSeparation(env, agentConfig, checks, templateMode);
     if (typeof agentConfig.model === 'string') {
       if (!['sonnet', 'opus', 'haiku'].includes(agentConfig.model)) {
         checks.push({ level: 'error', area: 'agent.json', message: 'model 必須是 sonnet、opus 或 haiku。' });
@@ -106,6 +107,41 @@ function main(): void {
   const errorCount = checks.filter((check) => check.level === 'error').length;
   if (errorCount > 0) {
     process.exitCode = 1;
+  }
+}
+
+function checkDiscordBotSeparation(
+  env: Record<string, string>,
+  agentConfig: Record<string, unknown>,
+  checks: Check[],
+  templateMode: boolean,
+): void {
+  const mainBotToken = env.DISCORD_MAIN_BOT_TOKEN ?? '';
+  const agentBotToken = typeof agentConfig.discordBotToken === 'string' ? agentConfig.discordBotToken : '';
+  if (isPlaceholder(mainBotToken) || isPlaceholder(agentBotToken)) {
+    if (templateMode) {
+      checks.push({ level: 'ok', area: 'discord', message: 'Template keeps main bot and agent bot tokens as placeholders.' });
+    }
+    return;
+  }
+  if (mainBotToken === agentBotToken) {
+    checks.push({
+      level: 'error',
+      area: 'discord',
+      message: 'DISCORD_MAIN_BOT_TOKEN 和 agent discordBotToken 相同。建議使用不同 Bot，避免主 Bot / Agent Bot 職責混淆。',
+    });
+    return;
+  }
+  checks.push({ level: 'ok', area: 'discord', message: 'Main bot token and agent bot token are distinct.' });
+
+  const guildId = env.DISCORD_GUILD_ID ?? '';
+  const channelId = typeof agentConfig.discordChannelId === 'string' ? agentConfig.discordChannelId : '';
+  if (!isPlaceholder(guildId) && !isPlaceholder(channelId) && guildId === channelId) {
+    checks.push({
+      level: 'error',
+      area: 'discord',
+      message: 'DISCORD_GUILD_ID 和 agent discordChannelId 相同。Server ID 和 Channel ID 是不同值。',
+    });
   }
 }
 
