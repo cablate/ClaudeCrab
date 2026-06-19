@@ -1,4 +1,4 @@
-id: example/example-daily-check
+id: example-daily-check
 name: Example Daily Check
 description: Minimal recurring schedule example.
 trigger:
