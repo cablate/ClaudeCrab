@@ -44,9 +44,13 @@ Discord channel/thread -> Agent Bot -> ClaudeCab -> Claude Agent SDK -> Discord 
 安裝：
 
 ```bash
+git clone https://github.com/cablate/ClaudeCrab.git ClaudeCab
+cd ClaudeCab
 npm install
 cp .env.example .env
 ```
+
+GitHub repository 目前叫 `ClaudeCrab`，但專案名稱是 `ClaudeCab`；clone 時指定資料夾可以避免後續路徑混淆。
 
 最小 `.env`：
 

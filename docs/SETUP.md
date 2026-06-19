@@ -26,11 +26,13 @@ Discord channel/thread
 安裝：
 
 ```bash
-git clone https://github.com/cablate/ClaudeCrab.git
+git clone https://github.com/cablate/ClaudeCrab.git ClaudeCab
 cd ClaudeCab
 npm install
 cp .env.example .env
 ```
+
+注意：GitHub repository 目前叫 `ClaudeCrab`，專案名稱是 `ClaudeCab`。上面的 clone 指令刻意指定本機資料夾為 `ClaudeCab`，避免後續 `cd` 路徑混淆。
 
 填 `.env`：
 
@@ -216,13 +218,14 @@ agents/
 - 不要宣稱安裝成功，除非 setup:check、typecheck、build 都通過，且你已說明使用者接下來要如何做 Discord 實測。
 
 請依序完成：
-1. npm install
-2. 建立或更新 .env
-3. 建立或更新 agents/example/agent.json
-4. 必要時更新 agents/example/.claude/settings.local.json
-5. 執行 npm run setup:check
-6. 執行 npm run typecheck
-7. 執行 npm run build
+1. 如果還沒 clone，使用 `git clone https://github.com/cablate/ClaudeCrab.git ClaudeCab`，然後 `cd ClaudeCab`。
+2. npm install
+3. 建立或更新 .env
+4. 建立或更新 agents/example/agent.json
+5. 必要時更新 agents/example/.claude/settings.local.json
+6. 執行 npm run setup:check
+7. 執行 npm run typecheck
+8. 執行 npm run build
 
 最後請只回報：
 - 修改了哪些設定檔
