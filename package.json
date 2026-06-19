@@ -14,6 +14,7 @@
     "start": "node --import tsx start.ts",
     "start:direct": "node --import tsx src/index.ts",
     "setup:check": "tsx scripts/setup-check.ts",
+    "setup:verify": "tsx scripts/setup-verify.ts",
     "discord:check": "tsx scripts/discord-check.ts",
     "test": "vitest",
     "test:run": "vitest run",

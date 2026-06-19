@@ -113,6 +113,7 @@ DISCORD_OWNER_USER_ID=
 
 ```bash
 npm run setup:check
+npm run setup:verify
 npm run discord:check -- --agent example
 npm run dev
 ```
@@ -121,9 +122,10 @@ npm run dev
 
 ```bash
 npm run setup:check -- --template
+npm run setup:verify -- --template
 ```
 
-`discord:check` 需要真實 token/channel，公開範例還是 placeholder 時不要執行。
+`setup:verify` 是安全總檢查，會跑設定檢查、公開 schedule strict check、typecheck、build；不會送 Discord 訊息。`discord:check` 需要真實 token/channel，公開範例還是 placeholder 時不要執行。
 
 正式啟動：
 
@@ -150,6 +152,7 @@ npm start
 
 ```bash
 npm run setup:check
+npm run setup:verify
 npm run discord:check -- --agent example
 npm run typecheck
 npm run build
@@ -305,7 +308,7 @@ agents/
 - 確認主 Bot 和 Agent Bot 是否同一個，不要把 token、client id、guild id、channel id 填錯欄位。
 - 確認 Discord Developer Portal 已開 Message Content Intent，且 invite scopes 包含 bot、applications.commands。
 - `npm run discord:check` 會真的送 Discord 訊息；只有 token/channel 已由使用者確認時才執行。
-- 不要宣稱安裝成功，除非 setup:check、typecheck、build 都通過，且你已說明使用者接下來要如何做 Discord 實測。
+- 不要宣稱安裝成功，除非 setup:check、setup:verify 都通過，且你已說明使用者接下來要如何做 Discord 實測。
 
 請依序完成：
 1. 如果還沒 clone，使用 `git clone https://github.com/cablate/ClaudeCrab.git ClaudeCab`，然後 `cd ClaudeCab`。
@@ -314,9 +317,8 @@ agents/
 4. 建立或更新 agents/example/agent.json
 5. 必要時更新 agents/example/.claude/settings.local.json
 6. 執行 npm run setup:check
-7. 如果 token/channel 已填好，執行 npm run discord:check -- --agent example
-8. 執行 npm run typecheck
-9. 執行 npm run build
+7. 執行 npm run setup:verify
+8. 如果 token/channel 已填好且使用者同意送測試訊息，執行 npm run discord:check -- --agent example
 
 最後請只回報：
 - 修改了哪些設定檔
@@ -340,6 +342,7 @@ AI 最後回報建議使用這個格式：
 
 檢查結果：
 - npm run setup:check：通過 / 未通過，原因是 ...
+- npm run setup:verify：通過 / 未通過，原因是 ...
 - npm run discord:check -- --agent example：通過 / 未通過 / 未執行，原因是 ...
 - npm run typecheck：通過 / 未通過，原因是 ...
 - npm run build：通過 / 未通過，原因是 ...
