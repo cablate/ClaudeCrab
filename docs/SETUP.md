@@ -121,6 +121,15 @@ Discord ID 複製方式：
 3. 右鍵 channel 複製 `Channel ID`，填到 `discordChannelId`。
 4. Discord Developer Portal 的 Application ID 填到 `DISCORD_MAIN_BOT_CLIENT_ID`。
 
+Discord Developer Portal 裡還要確認：
+
+1. Bot 頁面已建立 bot，並複製的是 `Bot Token`，不是 application public key。
+2. Bot 頁面的 `Privileged Gateway Intents` 開啟 `Message Content Intent`。
+3. OAuth2 URL Generator 勾選 scopes：`bot`、`applications.commands`。
+4. Main Bot 和 Agent Bot 都要 invite 到同一個 server；如果測試時共用同一個 bot，也至少要確認該 bot 已在 server 裡。
+
+ClaudeCab 的 Discord adapter 會使用 `Guilds`、`GuildMessages`、`MessageContent` intents。沒有 Message Content Intent 時，Bot 可能上線但讀不到一般文字訊息。
+
 Bot 權限至少需要：
 
 - View Channels
@@ -215,6 +224,7 @@ agents/
 - 不要一開始就調整 session/cache/schedule/dashboard/STT 進階設定。
 - 先問清楚 Claude 認證模式：Claude Code OAuth、Anthropic API key、或第三方 proxy/provider。
 - 確認主 Bot 和 Agent Bot 是否同一個，不要把 token、client id、guild id、channel id 填錯欄位。
+- 確認 Discord Developer Portal 已開 Message Content Intent，且 invite scopes 包含 bot、applications.commands。
 - 不要宣稱安裝成功，除非 setup:check、typecheck、build 都通過，且你已說明使用者接下來要如何做 Discord 實測。
 
 請依序完成：
@@ -238,7 +248,7 @@ agents/
 AI 設定時建議先問使用者：
 
 1. 你要用 Claude Code 訂閱 / OAuth，還是 API key / proxy？
-2. Discord main bot 與 agent bot 是否已經建立？
+2. Discord main bot 與 agent bot 是否已經建立、邀進 server，且開啟 Message Content Intent？
 3. main bot token、application ID、guild ID 是否已準備好？
 4. agent bot token、目標 channel ID 是否已準備好？
 5. agent 名稱和基礎指令是否先用 example 預設？
@@ -264,7 +274,7 @@ AI 最後回報建議使用這個格式：
 - 正式啟動：npm run build && npm start
 
 Discord 實測：
-1. 確認 Agent Bot 已加入 server 並有 channel 權限。
+1. 確認 Agent Bot 已加入 server、有 channel 權限，且 Message Content Intent 已開。
 2. 到 agent.json 的 discordChannelId 對應 channel 發一則測試訊息。
 3. 如果沒有回覆，先貼 npm run setup:check 輸出與最新 logs，不要先改進階設定。
 
@@ -358,6 +368,7 @@ npm run schedule:discord-test -- example/example-daily-check
 - `discordChannelId` 是目標 channel ID
 - Agent Bot 已加入 server
 - Agent Bot 對該 channel 有 View / Send / Read Message History 權限
+- Discord Developer Portal 的 Message Content Intent 已開啟
 
 ### Claude 認證失敗
 
