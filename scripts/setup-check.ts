@@ -19,6 +19,7 @@ export interface SetupCheckResult {
 export interface SetupCheckOptions {
   args?: string[];
   cwd?: string;
+  nodeVersion?: string;
 }
 
 const PLACEHOLDER_PATTERNS = [
@@ -41,6 +42,8 @@ export function runSetupCheck(options: SetupCheckOptions = {}): SetupCheckResult
   const agentId = readArg(args, '--agent') ?? 'example';
   const templateMode = args.includes('--template');
   const checks: Check[] = [];
+
+  checkNodeVersion(options.nodeVersion ?? process.versions.node, checks);
 
   const envPath = path.resolve(cwd, templateMode ? '.env.example' : '.env');
   const envExamplePath = path.resolve(cwd, '.env.example');
@@ -127,7 +130,22 @@ function checkRequiredEnv(env: Record<string, string>, checks: Check[], template
   requireEnv(env, 'DISCORD_MAIN_BOT_TOKEN', checks, undefined, templateMode);
   requireEnv(env, 'DISCORD_MAIN_BOT_CLIENT_ID', checks, isDiscordId, templateMode);
   requireEnv(env, 'DISCORD_GUILD_ID', checks, isDiscordId, templateMode);
+  requireEnv(env, 'AGENTS_DIR', checks, undefined, templateMode);
   checkDiscordEnvShape(env, checks, templateMode);
+}
+
+function checkNodeVersion(nodeVersion: string, checks: Check[]): void {
+  const majorText = nodeVersion.split('.')[0] ?? '';
+  const major = Number.parseInt(majorText, 10);
+  if (!Number.isFinite(major)) {
+    checks.push({ level: 'warn', area: 'node', message: `Could not parse Node.js version: ${nodeVersion}` });
+    return;
+  }
+  if (major < 20) {
+    checks.push({ level: 'error', area: 'node', message: `Node.js 20+ is required. Current version: ${nodeVersion}` });
+    return;
+  }
+  checks.push({ level: 'ok', area: 'node', message: `Node.js version is supported: ${nodeVersion}` });
 }
 
 function checkAgentConfig(

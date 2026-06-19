@@ -75,6 +75,16 @@ describe('setup-check', () => {
     expect(result.checks.some((check) => check.area === 'auth' && check.level === 'ok')).toBe(true);
   });
 
+  it('rejects unsupported Node.js versions', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root);
+
+    const result = runSetupCheck({ cwd: root, nodeVersion: '18.20.0' });
+
+    expect(result.errorCount).toBeGreaterThan(0);
+    expect(result.checks.some((check) => check.area === 'node' && check.message.includes('Node.js 20+ is required'))).toBe(true);
+  });
+
   it('allows placeholders in template mode', async () => {
     const root = await createTempRoot();
     await writeBaseProject(root, {
@@ -100,6 +110,25 @@ describe('setup-check', () => {
 
     expect(result.errorCount).toBeGreaterThan(0);
     expect(result.checks.some((check) => check.area === 'discord' && check.message.includes('equals agent discordBotToken'))).toBe(true);
+  });
+
+  it('rejects missing AGENTS_DIR instead of silently falling back', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root, {
+      env: [
+        'DISCORD_ENABLED=true',
+        'DISCORD_MAIN_BOT_TOKEN=main.real.token',
+        'DISCORD_MAIN_BOT_CLIENT_ID=123456789012345678',
+        'DISCORD_GUILD_ID=223456789012345678',
+        'ANTHROPIC_API_KEY=sk-test',
+        '',
+      ].join('\n'),
+    });
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.errorCount).toBeGreaterThan(0);
+    expect(result.checks.some((check) => check.area === '.env' && check.message.includes('AGENTS_DIR is required'))).toBe(true);
   });
 
   it('rejects Discord IDs pasted into bot token fields', async () => {

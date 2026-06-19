@@ -295,7 +295,9 @@ npm run setup:check -- --agent example
 
 這個檢查會避免常見錯誤，例如：
 
+- Node.js 版本低於 20
 - `.env` 缺少必要 Discord 設定
+- `.env` 缺少 `AGENTS_DIR`
 - `agent.json` 不是合法 JSON
 - 主 Bot token 和 Agent Bot token 填成同一個
 - token 欄位填到 Discord ID
