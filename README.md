@@ -48,6 +48,14 @@ Discord channel/thread
   - Claude Code 訂閱：在部署機器跑 `claude login`
   - API key / proxy：提供 `ANTHROPIC_API_KEY`，必要時提供 `ANTHROPIC_BASE_URL`
 
+最短成功路徑：
+
+1. 建立 Discord bot，開啟 `Message Content Intent`，invite 到 server。
+2. 填 `.env` 的主 Bot token、application ID、server ID、`AGENTS_DIR`、Claude 認證。
+3. 填 `agents/example/agent.json` 的 Agent Bot token 和目標 channel ID。
+4. 先跑 `npm run setup:check`，再跑 `npm run discord:check -- --agent example`。
+5. 啟動 ClaudeCab，最後到 Discord channel 發訊息確認 agent 真的會回覆。
+
 安裝：
 
 ```bash
@@ -74,6 +82,9 @@ ANTHROPIC_API_KEY=
 
 ENABLE_PERSISTENCE=true
 DB_PATH=./data/claudecab.db
+
+# 選填但建議：你的 Discord User ID。schedule 建立 thread 時可通知/加入你。
+DISCORD_OWNER_USER_ID=
 ```
 
 填 `agents/example/agent.json`：
@@ -99,6 +110,14 @@ npm run setup:check
 npm run discord:check -- --agent example
 npm run dev
 ```
+
+`setup:check` 和 `discord:check` 會讀 `.env` 的 `AGENTS_DIR`。如果你把 live agents 放在 repo 外，例如 `D:\_CabLate_Agents`，那 `--agent example` 會檢查外部資料夾裡的 `example`，不是 repo 內的 `agents/example`。只想檢查公開範例格式時使用：
+
+```bash
+npm run setup:check -- --template
+```
+
+`discord:check` 需要真實 token/channel，公開範例還是 placeholder 時不要執行。
 
 正式啟動：
 
@@ -141,7 +160,7 @@ npm run dev
 npm run discord:check -- --agent example --thread
 ```
 
-這會真的在 Discord 建立測試訊息或 thread，測完後可手動刪除。
+這會真的在 Discord 建立測試訊息或 thread，測完後可手動刪除。不要在未確認 token/channel 的情況下讓 AI 自動執行這個指令。
 
 常見錯誤：
 
@@ -167,6 +186,7 @@ ClaudeCab 會用兩層 Discord bot 設定：
 - Agent Bot token
 - Discord server/guild ID
 - Agent 要監聽的 channel ID
+- 選填：你的 Discord user ID，填到 `DISCORD_OWNER_USER_ID`，讓 schedule thread 可以通知或加入你
 
 Discord ID 複製方式：
 
@@ -278,6 +298,7 @@ agents/
 - 先問清楚 Claude 認證模式：Claude Code OAuth、Anthropic API key、或第三方 proxy/provider。
 - 確認主 Bot 和 Agent Bot 是否同一個，不要把 token、client id、guild id、channel id 填錯欄位。
 - 確認 Discord Developer Portal 已開 Message Content Intent，且 invite scopes 包含 bot、applications.commands。
+- `npm run discord:check` 會真的送 Discord 訊息；只有 token/channel 已由使用者確認時才執行。
 - 不要宣稱安裝成功，除非 setup:check、typecheck、build 都通過，且你已說明使用者接下來要如何做 Discord 實測。
 
 請依序完成：
@@ -297,6 +318,7 @@ agents/
 - 檢查指令是否通過
 - 下一步如何啟動
 - 下一步如何在 Discord channel 實測
+- 如果沒有執行 discord:check，請明確說明原因，例如缺 token/channel 或使用者未同意發送測試訊息
 ```
 
 AI 最後回報建議使用這個格式：

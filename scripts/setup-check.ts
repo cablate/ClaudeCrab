@@ -132,6 +132,7 @@ function checkRequiredEnv(env: Record<string, string>, checks: Check[], template
   requireEnv(env, 'DISCORD_GUILD_ID', checks, isDiscordId, templateMode);
   requireEnv(env, 'AGENTS_DIR', checks, undefined, templateMode);
   checkDiscordEnvShape(env, checks, templateMode);
+  checkOptionalDiscordOwnerUserId(env, checks, templateMode);
 }
 
 function checkNodeVersion(nodeVersion: string, checks: Check[]): void {
@@ -211,6 +212,33 @@ function checkDiscordEnvShape(env: Record<string, string>, checks: Check[], temp
       message: 'DISCORD_MAIN_BOT_CLIENT_ID equals DISCORD_GUILD_ID. Client ID is the application ID; guild ID is the server ID.',
     });
   }
+}
+
+function checkOptionalDiscordOwnerUserId(env: Record<string, string>, checks: Check[], templateMode: boolean): void {
+  const ownerUserId = env.DISCORD_OWNER_USER_ID ?? '';
+  if (isPlaceholder(ownerUserId)) {
+    if (templateMode) {
+      checks.push({ level: 'ok', area: '.env', message: 'DISCORD_OWNER_USER_ID is optional.' });
+    }
+    return;
+  }
+  if (DISCORD_TOKEN_HINT.test(ownerUserId)) {
+    checks.push({
+      level: 'error',
+      area: '.env',
+      message: 'DISCORD_OWNER_USER_ID looks like a bot token. Enable Discord Developer Mode and copy your numeric user ID.',
+    });
+    return;
+  }
+  if (!isDiscordId(ownerUserId)) {
+    checks.push({
+      level: 'error',
+      area: '.env',
+      message: 'DISCORD_OWNER_USER_ID must be a numeric Discord user ID when set.',
+    });
+    return;
+  }
+  checks.push({ level: 'ok', area: '.env', message: 'DISCORD_OWNER_USER_ID is set' });
 }
 
 function checkDiscordBotSeparation(

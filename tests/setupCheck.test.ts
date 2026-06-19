@@ -176,6 +176,27 @@ describe('setup-check', () => {
     expect(result.checks.some((check) => check.message.includes('Application ID and channel ID are different'))).toBe(true);
   });
 
+  it('rejects malformed Discord owner user IDs', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root, {
+      env: [
+        'DISCORD_ENABLED=true',
+        'DISCORD_MAIN_BOT_TOKEN=main.real.token',
+        'DISCORD_MAIN_BOT_CLIENT_ID=123456789012345678',
+        'DISCORD_GUILD_ID=223456789012345678',
+        'DISCORD_OWNER_USER_ID=not-a-discord-id',
+        'AGENTS_DIR=./agents',
+        'ANTHROPIC_API_KEY=sk-test',
+        '',
+      ].join('\n'),
+    });
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.errorCount).toBeGreaterThan(0);
+    expect(result.checks.some((check) => check.message.includes('DISCORD_OWNER_USER_ID must be a numeric Discord user ID'))).toBe(true);
+  });
+
   it('rejects OAuth-style config with base URL but no API key', async () => {
     const root = await createTempRoot();
     await writeBaseProject(root, {
