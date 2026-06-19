@@ -53,10 +53,10 @@ DISCORD_MAIN_BOT_TOKEN=your-main-bot-token
 DISCORD_MAIN_BOT_CLIENT_ID=your-main-bot-client-id
 DISCORD_GUILD_ID=your-discord-server-id
 
-AGENTS_DIR=D:\_CabLate_Agents
+AGENTS_DIR=./agents
 
 # Use either API key or Claude Code OAuth credentials.
-ANTHROPIC_API_KEY=sk-ant-xxxxx
+ANTHROPIC_API_KEY=
 ```
 
 Run in development:
@@ -115,12 +115,12 @@ Minimal `agent.json`:
   "discordChannelId": "target-channel-id",
   "model": "sonnet",
   "settings": {
-    "agentCwd": "D:\\_CabLate_Agents\\general"
+    "agentCwd": "./agents/general"
   }
 }
 ```
 
-The repo-local `agents/example/` directory is reference material only. Runtime foundation assets are resolved from `AGENTS_DIR/_foundation`.
+Live agent folders are local runtime configuration and are ignored by git. Put sanitized examples in your own documentation if you want to publish reusable agent profiles.
 
 ## Important Configuration
 
@@ -203,7 +203,7 @@ Key module boundaries:
 - `src/schedule/`: YAML schedule loading, cron registration, execution, output formatting, and thread mapping.
 - `src/persistence/`: SQLite repositories and migrations.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the current architecture map and [docs/current-architecture-review-2026-06-19.md](docs/current-architecture-review-2026-06-19.md) for the latest review snapshot.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the current architecture map.
 
 ## Development
 
@@ -279,9 +279,9 @@ The repository intentionally excludes runtime-heavy or local-only state:
 - `data/`
 - `logs/`
 - `.codegraph/`
-- external live agent folders
+- `.claude/` and external live agent folders
 
-The main source tree currently focuses on the Discord + Claude Agent SDK runtime. Large legacy public assets and old upgrade/research snapshots have been removed or archived.
+The main source tree focuses on the Discord + Claude Agent SDK runtime. Local agent skills, private prompts, generated databases, logs, and planning archives are intentionally kept out of git.
 
 ## License
 

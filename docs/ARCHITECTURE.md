@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-19
 
-This document is the current architecture entry point. Older architecture notes that mention Telegram, WebUI, BudgetService, TaskService, TTSService, or `npm run quality-gate` have been archived under `docs/archive/`.
+This document is the current architecture entry point. Legacy planning notes that mentioned removed systems are intentionally excluded from the public repository.
 
 ## Current Boundary
 
@@ -76,7 +76,7 @@ flowchart TD
 
 ## Runtime Profiles
 
-The repo-local `agents/example/*` tree is sanitized reference material only.
+Live agent folders are local runtime configuration and are intentionally ignored by git.
 
 Live profiles are external:
 
@@ -119,9 +119,3 @@ npm run build
 ```
 
 There is currently no `npm run quality-gate` script.
-
-## Current Baseline Report
-
-For the detailed 2026-06-19 architecture and quality review, see:
-
-[`docs/current-architecture-review-2026-06-19.md`](current-architecture-review-2026-06-19.md)
