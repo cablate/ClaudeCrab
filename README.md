@@ -65,6 +65,12 @@ npm install
 cp .env.example .env
 ```
 
+Windows PowerShell 如果 `cp` 不可用，改用：
+
+```powershell
+Copy-Item .env.example .env
+```
+
 GitHub repository 目前叫 `ClaudeCrab`，專案名稱是 `ClaudeCab`。上面的 clone 指令刻意指定本機資料夾為 `ClaudeCab`，避免後續 `cd` 路徑混淆。
 
 填 `.env`：
@@ -340,7 +346,9 @@ AI 最後回報建議使用這個格式：
 
 啟動方式：
 - 開發測試：npm run dev
-- 正式啟動：npm run build && npm start
+- 正式啟動：
+  1. npm run build
+  2. npm start
 
 Discord 實測：
 1. 確認 Agent Bot 已加入 server、有 channel 權限，且 Message Content Intent 已開。
