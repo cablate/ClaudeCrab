@@ -1,12 +1,24 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 type Level = 'ok' | 'warn' | 'error';
 
-interface Check {
+export interface Check {
   level: Level;
   area: string;
   message: string;
+}
+
+export interface SetupCheckResult {
+  checks: Check[];
+  errorCount: number;
+  warningCount: number;
+}
+
+export interface SetupCheckOptions {
+  args?: string[];
+  cwd?: string;
 }
 
 const PLACEHOLDER_PATTERNS = [
@@ -21,14 +33,15 @@ const PLACEHOLDER_PATTERNS = [
   /^.*-client-id$/i,
 ];
 
-function main(): void {
-  const args = process.argv.slice(2);
+export function runSetupCheck(options: SetupCheckOptions = {}): SetupCheckResult {
+  const args = options.args ?? [];
+  const cwd = options.cwd ?? process.cwd();
   const agentId = readArg(args, '--agent') ?? 'example';
   const templateMode = args.includes('--template');
   const checks: Check[] = [];
 
-  const envPath = path.resolve(process.cwd(), templateMode ? '.env.example' : '.env');
-  const envExamplePath = path.resolve(process.cwd(), '.env.example');
+  const envPath = path.resolve(cwd, templateMode ? '.env.example' : '.env');
+  const envExamplePath = path.resolve(cwd, '.env.example');
   const env = existsSync(envPath) ? parseEnv(readFileSync(envPath, 'utf-8')) : {};
 
   if (!existsSync(envPath)) {
@@ -40,7 +53,7 @@ function main(): void {
         : '.env 不存在。請先執行 cp .env.example .env，並填入必要設定。',
     });
   } else {
-    checks.push({ level: 'ok', area: '.env', message: `${relative(envPath)} exists` });
+    checks.push({ level: 'ok', area: '.env', message: `${relative(cwd, envPath)} exists` });
   }
 
   if (!existsSync(envExamplePath)) {
@@ -59,7 +72,7 @@ function main(): void {
   const agentsDir = agentsDirOverride ?? (env.AGENTS_DIR && !isPlaceholder(env.AGENTS_DIR)
     ? env.AGENTS_DIR
     : './agents');
-  const agentsDirPath = path.resolve(process.cwd(), agentsDir);
+  const agentsDirPath = path.resolve(cwd, agentsDir);
   const agentPath = path.join(agentsDirPath, agentId);
   const agentJsonPath = path.join(agentPath, 'agent.json');
   const claudeSettingsPath = path.join(agentPath, '.claude', 'settings.local.json');
@@ -71,7 +84,7 @@ function main(): void {
     checks.push({ level: 'ok', area: 'agents', message: `AGENTS_DIR exists: ${agentsDir}` });
   }
 
-  const agentConfig = readJsonRecord(agentJsonPath, checks, 'agent.json');
+  const agentConfig = readJsonRecord(cwd, agentJsonPath, checks, 'agent.json');
   if (agentConfig) {
     requireJsonString(agentConfig, 'name', checks, 'agent.json');
     requireJsonString(agentConfig, 'discordBotToken', checks, 'agent.json', undefined, templateMode);
@@ -86,7 +99,7 @@ function main(): void {
     }
   }
 
-  const settings = readJsonRecord(claudeSettingsPath, checks, '.claude/settings.local.json');
+  const settings = readJsonRecord(cwd, claudeSettingsPath, checks, '.claude/settings.local.json');
   if (settings) {
     const envValue = settings.env;
     if (envValue !== undefined && (typeof envValue !== 'object' || envValue === null || Array.isArray(envValue))) {
@@ -98,14 +111,19 @@ function main(): void {
   }
 
   if (!existsSync(claudeMdPath)) {
-    checks.push({ level: 'warn', area: 'CLAUDE.md', message: `${relative(claudeMdPath)} 不存在，agent 會缺少專案提示詞。` });
+    checks.push({ level: 'warn', area: 'CLAUDE.md', message: `${relative(cwd, claudeMdPath)} 不存在，agent 會缺少專案提示詞。` });
   }
 
   checkAuthMode(env, settings, checks, templateMode);
-  printChecks(checks);
-
   const errorCount = checks.filter((check) => check.level === 'error').length;
-  if (errorCount > 0) {
+  const warningCount = checks.filter((check) => check.level === 'warn').length;
+  return { checks, errorCount, warningCount };
+}
+
+function main(): void {
+  const result = runSetupCheck({ args: process.argv.slice(2) });
+  printChecks(result.checks);
+  if (result.errorCount > 0) {
     process.exitCode = 1;
   }
 }
@@ -171,23 +189,23 @@ function parseEnv(content: string): Record<string, string> {
   return out;
 }
 
-function readJsonRecord(filePath: string, checks: Check[], area: string): Record<string, unknown> | undefined {
+function readJsonRecord(cwd: string, filePath: string, checks: Check[], area: string): Record<string, unknown> | undefined {
   if (!existsSync(filePath)) {
-    checks.push({ level: 'error', area, message: `${relative(filePath)} 不存在。` });
+    checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} 不存在。` });
     return undefined;
   }
 
   try {
     const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as unknown;
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      checks.push({ level: 'error', area, message: `${relative(filePath)} 必須是 JSON object。` });
+      checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} 必須是 JSON object。` });
       return undefined;
     }
-    checks.push({ level: 'ok', area, message: `${relative(filePath)} is valid JSON` });
+    checks.push({ level: 'ok', area, message: `${relative(cwd, filePath)} is valid JSON` });
     return parsed as Record<string, unknown>;
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    checks.push({ level: 'error', area, message: `${relative(filePath)} JSON 格式錯誤：${reason}` });
+    checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} JSON 格式錯誤：${reason}` });
     return undefined;
   }
 }
@@ -320,8 +338,10 @@ function printChecks(checks: Check[]): void {
   console.log(`setup-check: ${errors} error(s), ${warnings} warning(s)`);
 }
 
-function relative(filePath: string): string {
-  return path.relative(process.cwd(), filePath).replaceAll('\\', '/');
+function relative(cwd: string, filePath: string): string {
+  return path.relative(cwd, filePath).replaceAll('\\', '/');
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
