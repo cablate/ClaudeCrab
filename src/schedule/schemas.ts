@@ -74,6 +74,8 @@ export const OutputSchema = z.object({
   persistSession: z.boolean().default(true),
   /** Delivery mode: 'streaming' sends intermediate messages, 'summary' sends formatted digest, 'last-only' sends final message */
   delivery: z.enum(['streaming', 'summary', 'last-only']).default('last-only'),
+  /** Discord user IDs to mention/add when creating schedule output threads */
+  notifyUserIds: z.array(z.string()).optional(),
 });
 
 // Metadata schema

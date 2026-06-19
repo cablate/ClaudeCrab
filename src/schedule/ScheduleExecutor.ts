@@ -19,6 +19,7 @@ import {
   type CreatedScheduleThread,
   buildThreadMapping,
   createPersistedScheduleThreadSession,
+  formatScheduleStart,
   formatScheduleResponse,
   formatScheduleSummary,
   resolveScheduleTargets,
@@ -240,11 +241,12 @@ export class ScheduleExecutor {
 
     const createdThreads: CreatedScheduleThread[] = [];
     const threadTitle = resolveThreadTitle(spec);
+    const initialContent = formatScheduleStart(spec);
 
     for (const target of resolveScheduleTargets(spec)) {
       const channelId = resolveThreadChannelId(spec, target.chatId);
       const threadId = await this.notifier.createThread(
-        agentId, target.platform, channelId, threadTitle
+        agentId, target.platform, channelId, threadTitle, initialContent
       );
 
       if (threadId) {

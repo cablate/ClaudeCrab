@@ -226,6 +226,29 @@ npm run format:check
 
 There is no `npm run quality-gate`; use the explicit commands above.
 
+## Schedule Checks
+
+Validate schedule YAML without running Claude or Discord delivery:
+
+```bash
+npm run schedule:list
+npm run schedule:validate
+```
+
+Run a schedule prompt through Claude SDK without Discord delivery:
+
+```bash
+npm run schedule:run -- general/morning-briefing
+```
+
+Create a real Discord thread and send a test message without running the schedule prompt:
+
+```bash
+npm run schedule:discord-test -- general/morning-briefing
+```
+
+`schedule:discord-test` uses the target agent bot token through Discord REST. It does not start a second Gateway listener, so it is suitable while the normal ClaudeCab process is already running.
+
 ## Deployment
 
 Docker:

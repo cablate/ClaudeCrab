@@ -80,6 +80,9 @@ export class CronScheduler {
   /**
    * Execute a schedule immediately
    */
+  async executeNow(scheduleId: string): Promise<void> {
+    await this.executeSchedule(scheduleId);
+  }
 
   /**
    * Convert trigger config to a cron expression.

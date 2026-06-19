@@ -335,6 +335,8 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       const thread = await message.startThread({
         name: threadName,
       });
+      await this.addOwnerToThread(thread);
+      await this.notifyOwnerInThread(thread);
 
       return { success: true, threadId: thread.id };
     } catch (err) {
@@ -546,6 +548,31 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       return await this.client.channels.fetch(channelId);
     } catch {
       return null;
+    }
+  }
+
+  private async addOwnerToThread(thread: ThreadChannel): Promise<void> {
+    const ownerUserId = process.env.DISCORD_OWNER_USER_ID;
+    if (!ownerUserId) return;
+
+    try {
+      await thread.members.add(ownerUserId);
+      this.log.debug({ threadId: thread.id, ownerUserId }, 'Added owner to created thread');
+    } catch (error) {
+      this.log.warn({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, threadId: thread.id },
+        'Failed to add owner to created thread');
+    }
+  }
+
+  private async notifyOwnerInThread(thread: ThreadChannel): Promise<void> {
+    const ownerUserId = process.env.DISCORD_OWNER_USER_ID;
+    if (!ownerUserId) return;
+
+    try {
+      await thread.send(`<@${ownerUserId}> schedule thread created.`);
+    } catch (error) {
+      this.log.warn({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, threadId: thread.id },
+        'Failed to notify owner in created thread');
     }
   }
 
