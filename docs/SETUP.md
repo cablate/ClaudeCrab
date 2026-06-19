@@ -71,6 +71,7 @@ DB_PATH=./data/claudecab.db
 
 ```bash
 npm run setup:check
+npm run discord:check -- --agent example
 npm run dev
 ```
 
@@ -94,6 +95,20 @@ npm start
 - `logs/`
 
 如果上述任一項沒有出現，不要繼續調進階設定，先看「常見問題」。
+
+如果要在啟動 ClaudeCab 前先測 Discord 權限，可以跑：
+
+```bash
+npm run discord:check -- --agent example
+```
+
+這會使用 `agents/example/agent.json` 的 `discordBotToken` 和 `discordChannelId`，透過 Discord REST 直接送一則測試訊息到 channel，不會啟動 Gateway listener，也不會呼叫 Claude。
+
+如果要連 thread 建立權限一起測：
+
+```bash
+npm run discord:check -- --agent example --thread
+```
 
 ## 主 Bot 與 Agent Bot
 
@@ -234,8 +249,9 @@ agents/
 4. 建立或更新 agents/example/agent.json
 5. 必要時更新 agents/example/.claude/settings.local.json
 6. 執行 npm run setup:check
-7. 執行 npm run typecheck
-8. 執行 npm run build
+7. 如果 token/channel 已填好，執行 npm run discord:check -- --agent example
+8. 執行 npm run typecheck
+9. 執行 npm run build
 
 最後請只回報：
 - 修改了哪些設定檔
@@ -266,6 +282,7 @@ AI 最後回報建議使用這個格式：
 
 檢查結果：
 - npm run setup:check：通過 / 未通過，原因是 ...
+- npm run discord:check -- --agent example：通過 / 未通過 / 未執行，原因是 ...
 - npm run typecheck：通過 / 未通過，原因是 ...
 - npm run build：通過 / 未通過，原因是 ...
 
@@ -289,6 +306,18 @@ Discord 實測：
 
 ```bash
 npm run setup:check
+```
+
+測試 Discord token、channel ID、channel 權限：
+
+```bash
+npm run discord:check -- --agent example
+```
+
+測試 Discord thread 建立權限：
+
+```bash
+npm run discord:check -- --agent example --thread
 ```
 
 檢查公開範例是否仍合法：

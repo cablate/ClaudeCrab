@@ -86,6 +86,7 @@ ANTHROPIC_API_KEY=
 
 ```bash
 npm run setup:check
+npm run discord:check -- --agent example
 npm run dev
 ```
 
@@ -164,6 +165,7 @@ start.ts supervisor
 
 ```bash
 npm run setup:check
+npm run discord:check -- --agent example
 npm run typecheck
 npm run test:run
 npm run build
