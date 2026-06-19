@@ -81,6 +81,7 @@ ANTHROPIC_API_KEY=your-anthropic-api-key
 開發模式啟動：
 
 ```bash
+npm run setup:check
 npm run dev
 ```
 

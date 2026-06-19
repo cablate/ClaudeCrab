@@ -130,6 +130,20 @@ claude login
 
 ## 6. 啟動
 
+啟動前先跑設定檢查：
+
+```bash
+npm run setup:check
+```
+
+如果你只是想確認 repo 內建範例結構是否正常，還沒填 secrets，可以跑：
+
+```bash
+npm run setup:check -- --template
+```
+
+`--template` 模式會允許 token / channel id 還是 placeholder，但會檢查 `.env.example`、`agents/example/agent.json`、`.claude/settings.local.json` 是否存在且格式正確。
+
 開發模式：
 
 ```bash
@@ -159,6 +173,7 @@ npm start
 - 不要把 token / API key commit 進 git。
 - 不要一開始就調整 session、cache、dashboard、STT 進階設定。
 - 如果缺 token 或 channel id，要先列清單請使用者提供，不要猜。
+- 修改後一定要跑 `npm run setup:check`，用工具輸出確認缺項，而不是只用肉眼判斷。
 
 完整 AI 任務提示請看 [AI_SETUP_ASSISTANT.md](AI_SETUP_ASSISTANT.md)。
 

@@ -24,6 +24,7 @@
 
 完成後請驗證：
 - npm install 已執行或 node_modules 已存在。
+- npm run setup:check 通過；如果使用者還沒提供 secret，請先說明哪些 error 是因為缺 token/channel id。
 - .env 存在，且 DISCORD_ENABLED、DISCORD_MAIN_BOT_TOKEN、DISCORD_MAIN_BOT_CLIENT_ID、DISCORD_GUILD_ID、AGENTS_DIR 已設定。
 - agents/example/agent.json 是合法 JSON，且 discordBotToken / discordChannelId 已替換。
 - agents/example/.claude/settings.local.json 是合法 JSON。
@@ -68,6 +69,18 @@
 | 多個 agents 用不同 provider | 各 agent 的 `.claude/settings.local.json` | 不要放全域 `.env` |
 
 ## 常見錯誤檢查
+
+先跑：
+
+```bash
+npm run setup:check
+```
+
+如果只是檢查 repository 內建範本：
+
+```bash
+npm run setup:check -- --template
+```
 
 ### Bot 沒回覆
 

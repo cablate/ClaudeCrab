@@ -13,6 +13,7 @@
     "build": "tsc",
     "start": "node --import tsx start.ts",
     "start:direct": "node --import tsx src/index.ts",
+    "setup:check": "tsx scripts/setup-check.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "schedule:list": "tsx scripts/schedule-tool.ts list",
