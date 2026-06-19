@@ -97,11 +97,9 @@ supervisor 會寫入：
 - `claudecab.runtime.json`
 - logs under `logs/`
 
-第一次安裝請先看 [docs/INSTALLATION.md](docs/INSTALLATION.md)。
+第一次安裝與完整設定請看 [docs/SETUP.md](docs/SETUP.md)。
 
-完整設定說明請看 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
-
-如果要接 DeepSeek、第三方 proxy 或其他 Anthropic-compatible 服務，請特別看 `CONFIGURATION.md` 的「其他模型服務 / Anthropic-compatible proxy」。這種模式建議把 `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` 放在 agent 的 `.claude/settings.local.json`，ClaudeCab 會自動隔離 `CLAUDE_CONFIG_DIR`，避免讀到主機 Claude Code OAuth 憑證。
+如果要接 DeepSeek、第三方 proxy 或其他 Anthropic-compatible 服務，請特別看 `SETUP.md` 的「其他模型服務 / Proxy」。這種模式建議把 `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` 放在 agent 的 `.claude/settings.local.json`，ClaudeCab 會自動隔離 `CLAUDE_CONFIG_DIR`，避免讀到主機 Claude Code OAuth 憑證。
 
 ## Agent 設定檔
 
@@ -153,7 +151,7 @@ Live agent folders 是本機 runtime 設定，預設會被 git ignore。只有 [
 
 Session、cache keepalive、schedule、dashboard、STT 都有預設值。不要在第一次安裝時全部調整。
 
-請看 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
+請看 [docs/SETUP.md](docs/SETUP.md)。
 
 ## 架構
 
