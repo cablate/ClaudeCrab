@@ -1,14 +1,17 @@
-# Installation Guide
+# ClaudeCab 安裝指南
 
-This guide shows the shortest path from a fresh clone to one working Discord agent.
+這份文件走「最短能跑起來」路線。完整設定說明請看 [CONFIGURATION.md](CONFIGURATION.md)。
 
-## 1. Install ClaudeCab
-
-Requirements:
+## 你需要準備什麼
 
 - Node.js 20+
-- A Discord server where you can add bots
-- Claude authentication, either `ANTHROPIC_API_KEY` or `claude login`
+- 一個你能管理的 Discord server
+- Discord Developer Portal 裡的兩個 Bot
+- Claude 認證，二選一：
+  - `ANTHROPIC_API_KEY`
+  - 或在部署機器上跑過 `claude login`
+
+## 1. 安裝專案
 
 ```bash
 git clone https://github.com/cablate/ClaudeCrab.git
@@ -17,16 +20,22 @@ npm install
 cp .env.example .env
 ```
 
-## 2. Create Discord Applications
+## 2. 建 Discord Bot
 
-ClaudeCab uses two kinds of Discord bots:
+最簡單先建兩個 Bot：
 
-- Main bot: slash commands and operational messages.
-- Agent bot: the bot identity that replies in an agent channel.
+- 主 Bot：填到 `.env`，負責 slash command、互動按鈕、系統訊息。
+- Agent Bot：填到 `agents/example/agent.json`，負責在 Discord 頻道回話。
 
-For a minimal install, create one main bot and one agent bot in the Discord Developer Portal.
+建 Bot 後記下：
 
-Enable these bot permissions when inviting them:
+- 主 Bot token
+- 主 Bot application/client ID
+- Agent Bot token
+- Discord server/guild ID
+- Agent 要回覆的 channel ID
+
+建議權限：
 
 - View Channels
 - Send Messages
@@ -36,73 +45,36 @@ Enable these bot permissions when inviting them:
 - Attach Files
 - Use Slash Commands
 
-Copy these values:
+## 3. 填 `.env`
 
-- Main bot token
-- Main application/client ID
-- Agent bot token
-- Guild/server ID
-- Agent channel ID
-
-## 3. Configure `.env`
-
-Minimum useful `.env`:
+只先填這些：
 
 ```env
 DISCORD_ENABLED=true
-DISCORD_MAIN_BOT_TOKEN=your-main-bot-token
-DISCORD_MAIN_BOT_CLIENT_ID=your-main-application-id
-DISCORD_GUILD_ID=your-server-id
+DISCORD_MAIN_BOT_TOKEN=你的主BotToken
+DISCORD_MAIN_BOT_CLIENT_ID=你的主BotApplicationId
+DISCORD_GUILD_ID=你的DiscordServerId
 
 AGENTS_DIR=./agents
 
-# Use one auth mode:
-ANTHROPIC_API_KEY=your-anthropic-api-key
-# or leave ANTHROPIC_API_KEY empty after running `claude login` on the host.
-
+ANTHROPIC_API_KEY=你的AnthropicApiKey
 ENABLE_PERSISTENCE=true
 DB_PATH=./data/claudecab.db
 ```
 
-For proxy-compatible services that expose an Anthropic-compatible endpoint, set:
+如果你用 `claude login`，就讓 `ANTHROPIC_API_KEY` 保持空白。
 
-```env
-ANTHROPIC_API_KEY=your-provider-key
-ANTHROPIC_BASE_URL=https://your-compatible-endpoint.example.com
-```
+## 4. 填 `agents/example/agent.json`
 
-Do not set `ANTHROPIC_BASE_URL` when using Claude Code OAuth from `claude login`.
-
-## 4. Create One Agent
-
-Start from the tracked example profile:
-
-```text
-agents/
-  example/
-    agent.json
-    CLAUDE.md
-    .claude/
-      settings.local.json
-    .mcp.json
-    schedules/
-```
-
-You can either edit `agents/example` directly for a quick local test, or copy it to your own ignored live profile:
-
-```bash
-cp -r agents/example agents/general
-```
-
-`agents/example/agent.json`:
+把 `discordBotToken` 和 `discordChannelId` 換成你的 Agent Bot token 與頻道 ID：
 
 ```json
 {
   "name": "Example",
   "description": "Starter Discord agent profile",
   "model": "sonnet",
-  "discordBotToken": "your-agent-bot-token",
-  "discordChannelId": "your-agent-channel-id",
+  "discordBotToken": "你的AgentBotToken",
+  "discordChannelId": "你的DiscordChannelId",
   "settings": {
     "permissionMode": "default",
     "maxTurns": 20
@@ -110,104 +82,76 @@ cp -r agents/example agents/general
 }
 ```
 
-`agents/example/CLAUDE.md`:
+`agents/example/CLAUDE.md` 是 agent 的基本提示詞，可以先不改。
 
-```md
-# Example Agent
+`agents/example/.claude/settings.local.json` 是 Claude Code 專案設定，第一次安裝也先不改。
 
-You are a practical Discord assistant. Answer clearly, keep responses concise, and ask for missing context when needed.
-```
+## 5. 啟動
 
-`agents/example/.claude/settings.local.json`:
-
-```json
-{
-  "model": "sonnet",
-  "permissions": {
-    "allow": [],
-    "deny": []
-  },
-  "env": {}
-}
-```
-
-If you want this agent to use an API key different from the global `.env`, put it in `env`:
-
-```json
-{
-  "model": "sonnet",
-  "env": {
-    "ANTHROPIC_API_KEY": "agent-specific-key",
-    "ANTHROPIC_BASE_URL": "https://your-compatible-endpoint.example.com"
-  }
-}
-```
-
-## 5. Run
-
-Development:
+開發模式：
 
 ```bash
 npm run dev
 ```
 
-Production-style local run:
+正式一點的本機跑法：
 
 ```bash
 npm run build
 npm start
 ```
 
-Expected startup signs:
+看到這些現象代表大致正常：
 
-- `logs/` is created.
-- `data/claudecab.db` is created when persistence is enabled.
-- The agent bot appears online.
-- A message in the configured Discord channel receives a response.
+- `logs/` 出現 log
+- `data/claudecab.db` 出現資料庫
+- Agent Bot 在 Discord 上線
+- 到指定 channel 發訊息，Agent Bot 有回覆
 
-## 6. Validate Schedules
+## 6. Schedule 測試
 
-Schedules live under each agent folder:
-
-```text
-agents/example/schedules/*.yaml
-```
-
-Validate all schedule YAML:
+先驗證 YAML：
 
 ```bash
 npm run schedule:validate
 ```
 
-Create a real Discord thread test without running the Claude prompt:
+測 Discord thread 建立，不跑 Claude prompt：
 
 ```bash
 npm run schedule:discord-test -- example/example-daily-check
 ```
 
-Run a schedule prompt manually:
+手動觸發 schedule：
 
 ```bash
 npm run schedule:trigger -- example/example-daily-check
 ```
 
-## 7. Common Problems
+## 常見問題
 
-No Discord response:
+### Agent 沒有回覆
 
-- Check `DISCORD_ENABLED=true`.
-- Check the agent has `discordBotToken` and `discordChannelId`.
-- Check the bot has permission to read and send messages in that channel.
-- Check logs under `logs/`.
+檢查：
 
-Agent not loaded:
+- `.env` 有 `DISCORD_ENABLED=true`
+- `agents/example/agent.json` 有填 Agent Bot token
+- `agents/example/agent.json` 有填正確 channel ID
+- Bot 有該 channel 的 View / Send / Read Message History 權限
 
-- Check `AGENTS_DIR`.
-- Check the agent folder contains `agent.json`.
-- Check `agent.json` is valid JSON.
+### 沒有載入 Agent
 
-Claude authentication fails:
+檢查：
 
-- Use either `ANTHROPIC_API_KEY` or `claude login`.
-- Do not use `ANTHROPIC_BASE_URL` with OAuth.
-- For provider proxies, set both `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL`.
+- `.env` 是 `AGENTS_DIR=./agents`
+- `agents/example/agent.json` 存在
+- `agent.json` 沒有 JSON 格式錯誤
+
+### Claude 認證失敗
+
+確認你只用一種方式：
+
+- API key：填 `ANTHROPIC_API_KEY`
+- OAuth：先跑 `claude login`，並讓 `ANTHROPIC_API_KEY` 空白
+
+如果使用 OAuth，不要設定 `ANTHROPIC_BASE_URL`。

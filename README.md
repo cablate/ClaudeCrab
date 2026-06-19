@@ -1,23 +1,27 @@
 # ClaudeCab
 
-Discord runtime for talking to Claude Code through the Claude Agent SDK.
+ClaudeCab 是一個 Discord runtime，讓你可以在 Discord 裡透過 Claude Agent SDK / Claude Code 與 agent 對話。
 
-ClaudeCab lets Discord users send messages to configured agents, keep Claude SDK sessions alive across turns, run scheduled prompts into Discord threads, and observe cost/cache/session behavior from operational Discord channels.
+主要用途：
 
-## Current Scope
+- 已訂閱 Claude Code，希望透過 Discord 使用。
+- 想部署 Claude Code SDK harness，接 Anthropic-compatible endpoint 或其他模型服務。
+- 想用 Discord channel/thread 承接 agent 對話與排程輸出。
 
-ClaudeCab is intentionally Discord-first. The current product surface is:
+## 目前範圍
 
-- Discord agent bots loaded from `AGENTS_DIR`.
-- Claude Agent SDK V2 persistent sessions, with optional ephemeral mode.
-- Prompt-cache keepalive and session idle cleanup.
-- Discord permission, question, and exit-plan interaction prompts.
-- YAML schedules that can post into Discord channels and continue in threads.
-- SQLite persistence for sessions, conversations, query metrics, rate-limit snapshots, and schedules.
-- Operational Discord services for dashboard, cost reports, and cache anomaly reports.
-- Built-in MCP tools for file sending and workspace validation.
+ClaudeCab 目前是 Discord-first。核心功能是：
 
-Not current scope:
+- 從 `AGENTS_DIR` 載入 Discord agents。
+- Claude Agent SDK V2 persistent sessions。
+- Prompt-cache keepalive 與 idle session cleanup。
+- Discord 內處理 permission / question / exit-plan 互動。
+- YAML schedules，可輸出到 Discord message/thread。
+- SQLite persistence，保存 sessions、conversation、query metrics、schedule thread 對應。
+- Discord dashboard、cost report、cache anomaly report。
+- 內建 MCP tools：檔案傳送、workspace validation。
+
+目前不做：
 
 - Web UI / public dashboard assets.
 - Telegram.
@@ -25,27 +29,27 @@ Not current scope:
 - Autonomous social posting or initiative routing.
 - Legacy task, budget, or activity services.
 
-## Quick Start
+## 快速開始
 
-Requirements:
+需求：
 
 - Node.js 20+
 - Discord bot tokens
-- Claude authentication through `ANTHROPIC_API_KEY` or local Claude Code OAuth credentials
+- Claude 認證：`ANTHROPIC_API_KEY` 或本機 Claude Code OAuth
 
-Install:
+安裝：
 
 ```bash
 npm install
 ```
 
-Create local env:
+建立 `.env`：
 
 ```bash
 cp .env.example .env
 ```
 
-Minimum useful `.env`:
+最小 `.env`：
 
 ```env
 DISCORD_ENABLED=true
@@ -55,36 +59,53 @@ DISCORD_GUILD_ID=your-discord-server-id
 
 AGENTS_DIR=./agents
 
-# Use either API key or Claude Code OAuth credentials.
-ANTHROPIC_API_KEY=
+# 使用 API key；如果改用 claude login，保持空白。
+ANTHROPIC_API_KEY=your-anthropic-api-key
 ```
 
-Run in development:
+接著修改 `agents/example/agent.json`：
+
+```json
+{
+  "name": "Example",
+  "model": "sonnet",
+  "discordBotToken": "your-agent-bot-token",
+  "discordChannelId": "target-channel-id",
+  "settings": {
+    "permissionMode": "default",
+    "maxTurns": 20
+  }
+}
+```
+
+開發模式啟動：
 
 ```bash
 npm run dev
 ```
 
-Run with the supervisor:
+使用 supervisor 啟動：
 
 ```bash
 npm run build
 npm start
 ```
 
-The supervisor writes:
+supervisor 會寫入：
 
 - `claudecab.pid`
 - `claudecab.runtime.json`
 - logs under `logs/`
 
-For a full first-time setup walkthrough, including Discord bot permissions, `agent.json`, `CLAUDE.md`, `.claude/settings.local.json`, and schedule validation, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
+第一次安裝請先看 [docs/INSTALLATION.md](docs/INSTALLATION.md)。
 
-## Agent Profiles
+完整設定說明請看 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
-Live agents are external to the repo and loaded from `AGENTS_DIR`.
+## Agent 設定檔
 
-Expected layout:
+Live agents 從 `AGENTS_DIR` 載入。
+
+目錄結構：
 
 ```text
 AGENTS_DIR/
@@ -101,7 +122,7 @@ AGENTS_DIR/
     ...
 ```
 
-Minimal `agent.json`:
+最小 `agent.json`：
 
 ```json
 {
@@ -117,60 +138,24 @@ Minimal `agent.json`:
 }
 ```
 
-Live agent folders are local runtime configuration and are ignored by git. The sanitized starter profile at [agents/example](agents/example) is the only tracked agent folder.
+Live agent folders 是本機 runtime 設定，預設會被 git ignore。只有 [agents/example](agents/example) 這份乾淨範例會被追蹤。
 
-## Important Configuration
+## 設定文件
 
-### Sessions
+一般使用者第一次安裝只需要設定：
 
-| Variable | Default | Purpose |
-| --- | ---: | --- |
-| `SESSION_EPHEMERAL` | `false` | If `true`, close the SDK process after each query and resume later from SDK session data. |
-| `SESSION_IDLE_CLOSE_MS` | `7200000` | Close live SDK CLI process after 2 hours of real-query idle time. App session and SDK session id are retained for resume. Set `0` to disable. |
-| `SESSION_QUERY_HARD_TIMEOUT_MS` | `3600000` | Interrupt a V2 query after 1 hour. Set `0` to disable. |
-| `SESSION_QUERY_HARD_TIMEOUT_GRACE_MS` | `30000` | Force-close the live SDK CLI process if a timed-out query does not stop during grace. |
-| `SESSION_TIMEOUT_MS` | `3600000` | App session inactivity timeout. |
-| `MAX_SESSIONS` | `1000` | Maximum app sessions kept in memory. |
+- `.env`：主 Bot、server id、Claude 認證。
+- `agents/example/agent.json`：Agent Bot token、channel id。
+- `agents/example/CLAUDE.md`：agent 行為提示詞，可先不改。
+- `agents/example/.claude/settings.local.json`：Claude Code 專案設定，可先不改。
 
-### Cache Keepalive
+Session、cache keepalive、schedule、dashboard、STT 都有預設值。不要在第一次安裝時全部調整。
 
-| Variable | Default | Purpose |
-| --- | ---: | --- |
-| `CACHE_KEEPALIVE_ENABLED` | `true` | Enable prompt-cache keepalive pings. |
-| `CACHE_KEEPALIVE_INTERVAL_MS` | `60000` | Default keepalive interval. |
-| `CACHE_KEEPALIVE_SKIP_RECENT_MS` | `15000` | Skip keepalive when user/cache activity is recent. |
-| `CACHE_KEEPALIVE_DETECTED_TTL_RATIO` | `0.6` | Recompute interval from detected prompt-cache TTL. |
-| `CACHE_KEEPALIVE_MIN_INTERVAL_MS` | `30000` | Lower bound for detected TTL interval. |
-| `CACHE_KEEPALIVE_QUERYING_RETRY_MS` | `15000` | Retry delay when keepalive fires while a query is running. |
-| `CACHE_KEEPALIVE_POST_QUERY_WARMUP_MS` | `5000` | Warmup delay after a normal user query. |
-| `CACHE_EFFICIENCY_WARN_THRESHOLD` | `50` | Warn when rolling cache-read efficiency falls below this percentage. |
+請看 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
-### Discord Ops
+## 架構
 
-| Variable | Purpose |
-| --- | --- |
-| `DISCORD_MAIN_BOT_TOKEN` | Main bot for slash commands and operational services. |
-| `DISCORD_MAIN_BOT_CLIENT_ID` | Main Discord application id. |
-| `DISCORD_GUILD_ID` | Discord server id. |
-| `DISCORD_OWNER_USER_ID` | Optional owner id for privileged notifications. |
-| `DISCORD_CHANNEL_DASHBOARD` | Operational dashboard channel. |
-| `DISCORD_CHANNEL_COST_REPORT` | Daily cost report channel. |
-| `DISCORD_CHANNEL_ALERTS` | Alert channel. |
-| `DISCORD_CHANNEL_SYSTEM_LOG` | System log channel. |
-| `DISCORD_DASHBOARD_UPDATE_MINUTES` | Dashboard refresh interval. |
-
-### Persistence And Schedules
-
-| Variable | Default | Purpose |
-| --- | ---: | --- |
-| `ENABLE_PERSISTENCE` | `false` | Enable SQLite repositories. |
-| `DB_PATH` | `./data/claudecab.db` | SQLite database path. |
-| `DB_RETENTION_MS` | `2592000000` | Persistence retention window. |
-| `SCHEDULE_ENABLED` | `true` | Enable YAML schedule loading and cron execution. |
-
-## Architecture
-
-Primary runtime flow:
+主要 runtime flow：
 
 ```text
 start.ts supervisor
@@ -188,7 +173,7 @@ start.ts supervisor
   -> DiscordSender / StreamResponseRouter
 ```
 
-Key module boundaries:
+主要模組邊界：
 
 - `src/adapters/discord/`: Discord client lifecycle, slash commands, message conversion, interaction UI, sending.
 - `src/core/orchestrator/`: app-level agent loading and platform orchestration.
@@ -200,9 +185,9 @@ Key module boundaries:
 - `src/schedule/`: YAML schedule loading, cron registration, execution, output formatting, and thread mapping.
 - `src/persistence/`: SQLite repositories and migrations.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the current architecture map.
+目前架構圖請看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-## Development
+## 開發
 
 ```bash
 npm run typecheck
@@ -211,7 +196,7 @@ npm run test:run
 npm run build
 ```
 
-Other scripts:
+其他 scripts：
 
 ```bash
 npm run dev
@@ -221,32 +206,32 @@ npm run format
 npm run format:check
 ```
 
-There is no `npm run quality-gate`; use the explicit commands above.
+目前沒有 `npm run quality-gate`，請使用上面的明確指令。
 
-## Schedule Checks
+## Schedule 檢查
 
-Validate schedule YAML without running Claude or Discord delivery:
+只驗證 schedule YAML，不執行 Claude 或 Discord delivery：
 
 ```bash
 npm run schedule:list
 npm run schedule:validate
 ```
 
-Run a schedule prompt through Claude SDK without Discord delivery:
+手動跑 schedule prompt，不做 Discord delivery：
 
 ```bash
 npm run schedule:run -- general/morning-briefing
 ```
 
-Create a real Discord thread and send a test message without running the schedule prompt:
+建立真實 Discord thread 並送測試訊息，但不跑 schedule prompt：
 
 ```bash
 npm run schedule:discord-test -- general/morning-briefing
 ```
 
-`schedule:discord-test` uses the target agent bot token through Discord REST. It does not start a second Gateway listener, so it is suitable while the normal ClaudeCab process is already running.
+`schedule:discord-test` 會用目標 agent bot token 透過 Discord REST 建 thread，不會啟動第二個 Gateway listener，所以 ClaudeCab 正在跑時也能測。
 
-## Deployment
+## 部署
 
 Docker:
 
@@ -265,11 +250,11 @@ npm run build
 npm start
 ```
 
-If using Claude Code OAuth instead of `ANTHROPIC_API_KEY`, run `claude login` on the host and make sure the runtime can read the resulting credentials.
+如果使用 Claude Code OAuth 而不是 `ANTHROPIC_API_KEY`，請先在部署機器執行 `claude login`，並確認 runtime 讀得到該憑證。
 
 ## Repository Notes
 
-The repository intentionally excludes runtime-heavy or local-only state:
+這個 repository 會刻意排除 runtime-heavy 或本機專用資料：
 
 - `node_modules/`
 - `dist/`
@@ -278,7 +263,7 @@ The repository intentionally excludes runtime-heavy or local-only state:
 - `.codegraph/`
 - `.claude/` and external live agent folders
 
-The main source tree focuses on the Discord + Claude Agent SDK runtime. Local agent skills, private prompts, generated databases, logs, and planning archives are intentionally kept out of git.
+主程式碼只保留 Discord + Claude Agent SDK runtime。Local agent skills、私人 prompts、generated databases、logs、planning archives 都不進 git。
 
 ## License
 
