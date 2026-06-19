@@ -99,6 +99,8 @@ supervisor 會寫入：
 
 第一次安裝與完整設定請看 [docs/SETUP.md](docs/SETUP.md)。
 
+如果要請 AI assistant 幫你設定，請把 [docs/AI_SETUP_ASSISTANT.md](docs/AI_SETUP_ASSISTANT.md) 貼給它。這份文件會要求 AI 只改必要設定、避免亂碰進階選項或 commit secrets。
+
 如果要接 DeepSeek、第三方 proxy 或其他 Anthropic-compatible 服務，請特別看 `SETUP.md` 的「其他模型服務 / Proxy」。這種模式建議把 `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` 放在 agent 的 `.claude/settings.local.json`，ClaudeCab 會自動隔離 `CLAUDE_CONFIG_DIR`，避免讀到主機 Claude Code OAuth 憑證。
 
 ## Agent 設定檔
@@ -217,16 +219,16 @@ npm run schedule:list
 npm run schedule:validate
 ```
 
-手動跑 schedule prompt，不做 Discord delivery：
+手動跑公開範例 schedule prompt，不做 Discord delivery：
 
 ```bash
-npm run schedule:run -- general/morning-briefing
+npm run schedule:run -- example/example-daily-check
 ```
 
 建立真實 Discord thread 並送測試訊息，但不跑 schedule prompt：
 
 ```bash
-npm run schedule:discord-test -- general/morning-briefing
+npm run schedule:discord-test -- example/example-daily-check
 ```
 
 `schedule:discord-test` 會用目標 agent bot token 透過 Discord REST 建 thread，不會啟動第二個 Gateway listener，所以 ClaudeCab 正在跑時也能測。

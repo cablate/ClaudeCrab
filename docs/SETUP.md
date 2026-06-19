@@ -2,6 +2,8 @@
 
 這份文件是新使用者的主路徑：從零安裝、填必要設定、啟動、驗證。
 
+如果你想請 AI 幫你安裝，先把 [AI_SETUP_ASSISTANT.md](AI_SETUP_ASSISTANT.md) 的任務貼給它。那份文件會限制 AI 只改必要設定、避免亂碰進階設定或 commit secrets。
+
 最小安裝只需要設定三個地方：
 
 1. `.env`
@@ -147,6 +149,18 @@ npm start
 - `data/claudecab.db` 出現資料庫
 - Agent Bot 在 Discord 上線
 - 到指定 channel 發訊息，Agent Bot 有回覆
+
+## AI 幫忙設定時的安全邊界
+
+如果你是請 AI assistant 幫忙設定，請要求它遵守：
+
+- 只改 `.env`、`agents/example/agent.json`，必要時才改 `agents/example/.claude/settings.local.json`。
+- 不要改 `src/**` 或 package 設定。
+- 不要把 token / API key commit 進 git。
+- 不要一開始就調整 session、cache、dashboard、STT 進階設定。
+- 如果缺 token 或 channel id，要先列清單請使用者提供，不要猜。
+
+完整 AI 任務提示請看 [AI_SETUP_ASSISTANT.md](AI_SETUP_ASSISTANT.md)。
 
 ## 其他模型服務 / Proxy
 
