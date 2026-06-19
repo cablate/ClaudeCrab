@@ -14,9 +14,7 @@
  * Anchor-based patching: uses stable string constants (not minified names) to locate targets.
  *
  * See:
- *   - docs/sop-sdk-cli-upgrade.md                                        (permanent SOP)
- *   - docs/upgrades/2026-04-24-sdk-0.2.76-to-0.2.119-patch-plan.md       (current patches' origin)
- *   - docs/upgrades/snapshots/sdk-<version>-patched.mjs                  (historical diff)
+ *   - docs/sop-sdk-cli-upgrade.md
  *
  * Run: node scripts/patch-sdk-v2.cjs
  * Lab: set CLAUDECAB_SDK_PATCH_DIR=<copied claude-agent-sdk dir> before running.
@@ -35,13 +33,6 @@ const IS_DEFAULT_TARGET = SDK_DIR === path.resolve(DEFAULT_SDK_DIR);
 const SDK_PATH = path.join(SDK_DIR, 'sdk.mjs');
 // Ephemeral pre-patch backup (next to sdk.mjs). Wiped by `rm -rf node_modules`.
 const BACKUP_PATH = SDK_PATH + '.pre-patch';
-// Persistent pre-patch snapshot (version-tagged, checked into git). Lets us
-// diff the upstream-shipped SDK across versions without having to re-download
-// tarballs. Written only when we actually apply a patch (i.e. on first install
-// of a new SDK version, or after a cache bust). Path matches SOP convention:
-//   docs/upgrades/snapshots/sdk-<version>-unpatched.mjs   ← upstream baseline
-//   docs/upgrades/snapshots/sdk-<version>-patched.mjs     ← our patched artifact
-const SNAPSHOTS_DIR = path.join(__dirname, '..', 'docs', 'upgrades', 'snapshots');
 
 // === Anchor-based patch definitions ===
 // Each patch: { anchor, find, replace, description }
@@ -56,7 +47,7 @@ const PATCHES = [
     // so a single replace is simpler and only needs one uniqueness check.
     // In 0.2.119, the cQ constructor parameter is `$` (was `Q` in 0.2.76).
     //
-    // Origin: docs/upgrades/2026-04-24-sdk-0.2.76-to-0.2.119-patch-plan.md#patch-a--thinking--extraargs-cluster合併舊-3--4
+    // Origin: SDK 0.2.119 V2 createSession options audit.
     // Last-modified: 2026-04-24
     id: 'thinking-and-extraArgs',
     anchor: 'Cannot send to closed session',
@@ -70,7 +61,7 @@ const PATCHES = [
     // (0.2.89+), includePartialMessages (0.2.108+), and agentProgressSummaries
     // (0.2.72+) from its own options.
     //
-    // Origin: docs/upgrades/2026-04-24-sdk-0.2.76-to-0.2.119-patch-plan.md#執行實況更新
+    // Origin: SDK 0.2.119 V2 forwarded-flags audit.
     // Last-modified: 2026-04-24
     id: 'cq-forwarded-flags',
     anchor: 'Cannot send to closed session',
@@ -94,7 +85,7 @@ const PATCHES = [
     // circular refs that crash JSON serialization for --mcp-config CLI args. The SDK path
     // routes MCP through sdkMcpMap in-process instead.
     //
-    // Origin: docs/upgrades/2026-04-24-sdk-0.2.76-to-0.2.119-patch-plan.md#patch-b--f9-constructor重寫舊-5
+    // Origin: SDK 0.2.119 F9 initConfig/MCP bridge audit.
     // Last-modified: 2026-04-25 (extended initConfig with agentProgressSummaries —
     //   SDK reads `this.initConfig?.agentProgressSummaries` to decide whether to
     //   emit ~30s progress summaries; the cq-forwarded-flags D9 patch alone was
@@ -137,29 +128,6 @@ function patchState(source) {
   };
 }
 
-function verifyPatchedSnapshot(source, version) {
-  if (version === 'unknown') {
-    console.log('[patch-sdk-v2] SDK version unknown; snapshot verification skipped.');
-    return;
-  }
-
-  const snapshotPath = path.join(SNAPSHOTS_DIR, `sdk-${version}-patched.mjs`);
-  if (!fs.existsSync(snapshotPath)) {
-    console.log(`[patch-sdk-v2] Patched snapshot not found: docs/upgrades/snapshots/sdk-${version}-patched.mjs`);
-    return;
-  }
-
-  const currentHash = hashContent(source);
-  const snapshotHash = hashContent(fs.readFileSync(snapshotPath, 'utf-8'));
-  if (currentHash === snapshotHash) {
-    console.log(`[patch-sdk-v2] Patched snapshot verified: sdk-${version}-patched.mjs (${currentHash.slice(0, 12)})`);
-  } else {
-    console.warn(`[patch-sdk-v2] WARNING: patched SDK differs from snapshot sdk-${version}-patched.mjs`);
-    console.warn(`[patch-sdk-v2] current=${currentHash}`);
-    console.warn(`[patch-sdk-v2] snapshot=${snapshotHash}`);
-  }
-}
-
 function main() {
   // 1. Read sdk.mjs
   if (!fs.existsSync(SDK_PATH)) {
@@ -171,13 +139,14 @@ function main() {
 
   const original = fs.readFileSync(SDK_PATH, 'utf-8');
   const version = readSdkVersion();
+  console.log(`[patch-sdk-v2] Target SDK version: ${version}`);
 
   // 2. Verify anchor exists
   const anchorStr = 'Cannot send to closed session';
   if (!original.includes(anchorStr)) {
     console.error('[patch-sdk-v2] ERROR: Anchor string not found. SDK version may have changed.');
     console.error('[patch-sdk-v2] Expected anchor: "' + anchorStr + '"');
-    console.error('[patch-sdk-v2] Please run the upgrade SOP: docs/sop-sdk-cli-upgrade.md');
+    console.error('[patch-sdk-v2] Update scripts/patch-sdk-v2.cjs for this SDK version before retrying.');
     process.exit(1);
   }
 
@@ -185,13 +154,12 @@ function main() {
   const state = patchState(original);
   if (state.isFullyPatched) {
     console.log('[patch-sdk-v2] Already fully patched, skipping.');
-    verifyPatchedSnapshot(original, version);
     return;
   }
   const isPatchableMixedState = state.applied.length + state.unpatched.length === PATCHES.length;
   if (state.isPartial && !isPatchableMixedState) {
     console.error(`[patch-sdk-v2] ERROR: SDK is partially patched. Applied: ${state.applied.join(', ')}`);
-    console.error('[patch-sdk-v2] Restore from the unpatched snapshot or reinstall the SDK before retrying.');
+    console.error('[patch-sdk-v2] Reinstall the SDK or restore sdk.mjs.pre-patch before retrying.');
     process.exit(1);
   }
 
@@ -230,36 +198,11 @@ function main() {
     return;
   }
 
-  // 6. Backup original — two tiers:
-  //    (a) ephemeral next to sdk.mjs (fast path, same-install restore)
-  //    (b) persistent version-tagged snapshot in docs/upgrades/snapshots/
+  // 6. Backup original next to sdk.mjs for same-install rollback.
   fs.writeFileSync(BACKUP_PATH, original, 'utf-8');
-  try {
-    const persistentPath = path.join(SNAPSHOTS_DIR, `sdk-${version}-unpatched.mjs`);
-    if (!IS_DEFAULT_TARGET) {
-      console.log('[patch-sdk-v2] Override target detected; persistent repo snapshot write skipped.');
-    } else if (!fs.existsSync(SNAPSHOTS_DIR)) {
-      fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
-    }
-    if (IS_DEFAULT_TARGET && !fs.existsSync(persistentPath)) {
-      fs.writeFileSync(persistentPath, original, 'utf-8');
-      console.log(`[patch-sdk-v2] Persistent unpatched snapshot written: docs/upgrades/snapshots/sdk-${version}-unpatched.mjs`);
-    }
-  } catch (err) {
-    // Non-fatal — persistent snapshot is for future diffability, not current correctness.
-    console.warn(`[patch-sdk-v2] Could not write persistent unpatched snapshot: ${err.message}`);
-  }
 
   // 7. Write patched file
   fs.writeFileSync(SDK_PATH, patched, 'utf-8');
-
-  if (IS_DEFAULT_TARGET && version !== 'unknown') {
-    const patchedSnapshotPath = path.join(SNAPSHOTS_DIR, `sdk-${version}-patched.mjs`);
-    if (!fs.existsSync(patchedSnapshotPath)) {
-      fs.writeFileSync(patchedSnapshotPath, patched, 'utf-8');
-      console.log(`[patch-sdk-v2] Persistent patched snapshot written: docs/upgrades/snapshots/sdk-${version}-patched.mjs`);
-    }
-  }
 
   // 8. Report
   const originalHash = hashContent(original, 'md5').slice(0, 8);
@@ -270,7 +213,6 @@ function main() {
   for (const r of results) {
     console.log(`  - ${r.id}: ${r.description}`);
   }
-  verifyPatchedSnapshot(patched, version);
 }
 
 main();

@@ -111,36 +111,6 @@ export interface ISessionRepository {
    */
   activateScheduleHandoff(sessionId: string): void;
 
-  /**
-   * Clear continuation_source and continuation_state (set to NULL) for a session.
-   */
-  clearContinuationSource(sessionId: string): void;
-}
-
-/**
- * Raw database row type for query_metrics table (ADR-020 Phase 2)
- */
-export interface QueryMetricRawRow {
-  id: number;
-  agent_id: string;
-  platform: string;
-  chat_id: string;
-  user_id: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_read_tokens: number;
-  cache_creation_tokens: number;
-  total_cost_usd: number;
-  num_turns: number;
-  duration_ms: number;
-  created_at: string;
-  turn_type: string | null;
-  sdk_session_id: string | null;
-  context_total_tokens: number | null;
-  context_max_tokens: number | null;
-  context_percentage: number | null;
-  context_model: string | null;
-  context_usage_json: string | null;
 }
 
 /**
@@ -158,17 +128,6 @@ export interface AgentUsageStats {
 }
 
 /**
- * Daily usage stats (ADR-020 Phase 2)
- */
-export interface DailyUsageStats {
-  date: string;
-  queries: number;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-}
-
-/**
  * Keepalive stats result
  */
 export interface KeepaliveStats {
@@ -177,26 +136,6 @@ export interface KeepaliveStats {
   totalCacheReadTokens: number;
   totalCacheCreationTokens: number;
   totalCostUsd: number;
-}
-
-/**
- * Weekly usage stats
- */
-export interface WeeklyUsageStats {
-  week: string;
-  queries: number;
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-}
-
-/**
- * Week-over-week growth for query costs
- */
-export interface WeekOverWeekQueryGrowth {
-  thisWeekCost: number;
-  lastWeekCost: number;
-  growthPct: number | null;
 }
 
 /**
@@ -224,23 +163,11 @@ export interface IQueryMetricsRepository {
     contextModel?: string;
   }): number;
 
-  /** Get aggregated stats for a specific agent (all time) */
-  getAgentStats(agentId: string): AgentUsageStats | null;
-
   /** Get aggregated stats for a specific agent since a given ISO timestamp */
   getAgentStatsSince(agentId: string, since: string): AgentUsageStats | null;
 
-  /** Get aggregated stats for all agents (all time) */
-  getAllAgentStats(): AgentUsageStats[];
-
   /** Get aggregated stats for all agents since a given ISO timestamp */
   getAllAgentStatsSince(since: string): AgentUsageStats[];
-
-  /** Get daily stats for an agent over N days */
-  getDailyStats(agentId: string, days: number): DailyUsageStats[];
-
-  /** Get daily stats across all agents over N days */
-  getDailyStatsAll(days: number): DailyUsageStats[];
 
   /** Get recent individual query records */
   getRecentQueries(limit: number, offset?: number, agentId?: string, since?: string): QueryMetricRow[];
@@ -253,12 +180,6 @@ export interface IQueryMetricsRepository {
 
   /** Get keepalive ping stats, optionally filtered by SDK session ID */
   getKeepaliveStats(sdkSessionId?: string): KeepaliveStats;
-
-  /** Get weekly aggregated stats for all query turns over N weeks */
-  getWeeklyStats(weeks: number): WeeklyUsageStats[];
-
-  /** Compare query costs this week vs last week */
-  getWeekOverWeekGrowth(): WeekOverWeekQueryGrowth;
 }
 
 /**

@@ -1,9 +1,6 @@
 import type {
   AdapterConfig,
   AdapterState,
-  UnifiedMessage,
-  SendOptions,
-  SendResult,
   MessageHandler,
   PermissionPromptOptions,
   PermissionPromptResult,
@@ -15,6 +12,7 @@ import type {
   ExitPlanModePromptResult,
   ExitPlanModeResolver,
 } from './types.js';
+import type { SendOptions, SendResult, UnifiedMessage } from '../types/message.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -52,13 +50,6 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
    */
   get state(): AdapterState {
     return this._state;
-  }
-
-  /**
-   * Check if adapter is ready to send/receive messages
-   */
-  isReady(): boolean {
-    return this._state === 'running';
   }
 
   /**
@@ -181,25 +172,6 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   ): Promise<SendResult>;
 
   /**
-   * Send a message with platform-aware markdown formatting.
-   *
-   * Default implementation sends raw text via sendMessage(). Subclasses override
-   * when platform markdown differs from raw text (e.g., Telegram requires HTML).
-   *
-   * Note: DiscordAdapter does NOT override this — Discord's markdown is plain
-   * text-based, so sendFormattedMessage and sendMessage are equivalent there.
-   * Callers (StreamResponseRouter, ResponseSender) use sendFormattedMessage for
-   * semantic correctness; the Discord path resolves to the same sendMessage flow.
-   */
-  async sendFormattedMessage(
-    chatId: string,
-    text: string,
-    options?: SendOptions
-  ): Promise<SendResult> {
-    return this.sendMessage(chatId, text, options);
-  }
-
-  /**
    * Edit a previously sent message. Default implementation sends a new message
    * (since not all platforms support editing). Subclasses override for true edit support.
    */
@@ -210,14 +182,6 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
     _text: string,
   ): Promise<SendResult> {
     return { success: false, error: 'editMessage not implemented' };
-  }
-
-  /**
-   * Get bot identity info (username, id). Override in platform-specific adapters.
-   * Used for group chat context injection and display.
-   */
-  getBotInfo(): { username: string; id: number } | null {
-    return null;
   }
 
   /**
@@ -437,16 +401,6 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   }
 
   /**
-   * Archive/close a thread. Override in platform-specific adapters.
-   */
-  // eslint-disable-next-line @typescript-eslint/require-await -- base default, subclasses override
-  async archiveThread(
-    _threadId: string
-  ): Promise<{ success: boolean; error?: string }> {
-    return { success: false, error: 'archiveThread not implemented for this platform' };
-  }
-
-  /**
    * Platform-specific initialization
    */
   protected abstract doInitialize(): Promise<void>;
@@ -467,7 +421,7 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
   protected abstract doDispose(): Promise<void>;
 
   /**
-   * Emit a received message to all handlers and EventBus
+   * Dispatch a received message to registered handlers.
    */
   protected async emitMessage(message: UnifiedMessage): Promise<void> {
     this.log.debug(
@@ -491,14 +445,4 @@ export abstract class BaseAdapter<TConfig extends AdapterConfig = AdapterConfig>
     );
   }
 
-  /**
-   * Log and emit sent message event
-   */
-  protected emitMessageSent(
-    _chatId: string,
-    _text: string,
-    _userId: string
-  ): void {
-    // (previously emitted to EventBus — removed, no subscribers)
-  }
 }

@@ -22,7 +22,7 @@ export const ModelSchema = z.enum(['sonnet', 'opus', 'haiku']);
 export type Model = z.infer<typeof ModelSchema>;
 
 
-export const AgentSettingsSchema = z.object({
+const AgentSettingsSchema = z.object({
   maxHistoryLength: z.number().int().positive().optional(),
   permissionMode: PermissionModeSchema.optional(),
   maxTurns: z.number().int().positive().optional(),
@@ -30,8 +30,6 @@ export const AgentSettingsSchema = z.object({
   /** Extended thinking config (passed through to SDK V2 session). */
   thinking: z.object({ type: z.string() }).optional(),
 });
-
-export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
 
 /**
  * agent.json Schema
@@ -45,8 +43,6 @@ const DisplaySchema = z.object({
   portrait: z.string().optional(),
   emoji: z.record(z.string(), z.string()).optional(),
 });
-
-export type AgentDisplay = z.infer<typeof DisplaySchema>;
 
 export const AgentConfigSchema = z.object({
   // Basic information
@@ -92,29 +88,6 @@ export const AgentConfigSchema = z.object({
 });
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
-
-/**
- * Validate agent configuration
- * @throws ZodError if validation fails
- */
-export function validateAgentConfig(data: unknown): AgentConfig {
-  return AgentConfigSchema.parse(data);
-}
-
-/**
- * Safe parse result type
- */
-export type SafeParseResult<T> =
-  | { success: true; data: T }
-  | { success: false; error: z.ZodError };
-
-/**
- * Safely validate agent configuration
- * @returns Result with data or error
- */
-export function safeValidateAgentConfig(data: unknown): SafeParseResult<AgentConfig> {
-  return AgentConfigSchema.safeParse(data) as SafeParseResult<AgentConfig>;
-}
 
 /**
  * MCP Server configuration

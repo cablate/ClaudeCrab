@@ -160,35 +160,12 @@ export class CronScheduler {
         // Reset consecutive failure count on success
         this.consecutiveFailures.delete(scheduleId);
       } else {
-        // Increment failure count
-        const count = (this.consecutiveFailures.get(scheduleId) ?? 0) + 1;
-        this.consecutiveFailures.set(scheduleId, count);
-
-        if (count >= MAX_CONSECUTIVE_FAILURES) {
-          logger.warn({ event_type: EventType.SCHEDULE_AUTO_PAUSED, scheduleId, count },
-            '[CronScheduler] Auto-pausing schedule after consecutive failures');
-          this.pause(scheduleId);
-          if (this.onAutoPause) {
-            await this.onAutoPause(scheduleId, job.agentId, job.spec, count);
-          }
-          this.consecutiveFailures.delete(scheduleId);
-        }
+        await this.recordFailure(scheduleId, job);
       }
     } catch (error) {
       // executor.execute() should not throw (internal catch), but handle defensively
       logger.error({ event_type: EventType.SCHEDULE_ERROR, err: error, scheduleId }, '[CronScheduler] Execution failed');
-      const count = (this.consecutiveFailures.get(scheduleId) ?? 0) + 1;
-      this.consecutiveFailures.set(scheduleId, count);
-
-      if (count >= MAX_CONSECUTIVE_FAILURES) {
-        logger.warn({ event_type: EventType.SCHEDULE_AUTO_PAUSED, scheduleId, count },
-          '[CronScheduler] Auto-pausing schedule after consecutive failures');
-        this.pause(scheduleId);
-        if (this.onAutoPause) {
-          await this.onAutoPause(scheduleId, job.agentId, job.spec, count);
-        }
-        this.consecutiveFailures.delete(scheduleId);
-      }
+      await this.recordFailure(scheduleId, job);
     } finally {
       this.runningExecutions.delete(scheduleId);
 
@@ -198,6 +175,21 @@ export class CronScheduler {
         logger.info({ event_type: EventType.SCHEDULE_UNREGISTERED }, `[CronScheduler] Auto-unregistered once schedule: ${scheduleId}`);
       }
     }
+  }
+
+  private async recordFailure(scheduleId: string, job: ScheduledJob): Promise<void> {
+    const count = (this.consecutiveFailures.get(scheduleId) ?? 0) + 1;
+    this.consecutiveFailures.set(scheduleId, count);
+
+    if (count < MAX_CONSECUTIVE_FAILURES) return;
+
+    logger.warn({ event_type: EventType.SCHEDULE_AUTO_PAUSED, scheduleId, count },
+      '[CronScheduler] Auto-pausing schedule after consecutive failures');
+    this.pause(scheduleId);
+    if (this.onAutoPause) {
+      await this.onAutoPause(scheduleId, job.agentId, job.spec, count);
+    }
+    this.consecutiveFailures.delete(scheduleId);
   }
 
   /**
@@ -223,39 +215,6 @@ export class CronScheduler {
       return true;
     }
     return false;
-  }
-
-  /**
-   * Resume a paused schedule
-   */
-  resume(scheduleId: string): boolean {
-    const job = this.jobs.get(scheduleId);
-    if (job) {
-      void job.task.start();
-      logger.info({ event_type: EventType.SCHEDULE_RESUMED }, `[CronScheduler] Resumed schedule: ${scheduleId}`);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Run a schedule immediately (manual trigger)
-   */
-  async runNow(scheduleId: string): Promise<boolean> {
-    const job = this.jobs.get(scheduleId);
-    if (!job) {
-      return false;
-    }
-
-    await this.executeSchedule(scheduleId);
-    return true;
-  }
-
-  /**
-   * Check if a schedule is currently running
-   */
-  isRunning(scheduleId: string): boolean {
-    return this.runningExecutions.has(scheduleId);
   }
 
   /**

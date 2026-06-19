@@ -1,7 +1,4 @@
-// Canonical definitions in src/types/message.ts
-// Re-export for backward compatibility
-import type { UnifiedMessage, MessageMetadata, SendOptions, SendResult, ToolEvent } from '../types/message.js';
-export type { UnifiedMessage, MessageMetadata, SendOptions, SendResult, ToolEvent };
+import type { UnifiedMessage } from '../types/message.js';
 
 /**
  * Options for sending a permission prompt to the user.
@@ -114,11 +111,6 @@ export interface ExitPlanModePromptResult {
  */
 export type ExitPlanModeResolver = (requestId: string, decision: 'approve' | 'reject') => void;
 
-
-// ============================================================
-// Tool Event Types (re-exported from types/message.ts)
-// ============================================================
-
 /**
  * Adapter lifecycle state
  */
@@ -150,25 +142,6 @@ export interface AdapterConfig {
   /** Base directory for agents (resolved from AGENTS_DIR or default ./agents) */
   agentsDir?: string;
 
-  /** Whether to enable debug logging */
-  debug?: boolean;
-
-  /** Custom rate limit settings */
-  rateLimit?: RateLimitConfig;
-}
-
-/**
- * Rate limiting configuration
- */
-export interface RateLimitConfig {
-  /** Maximum requests per second */
-  maxRequestsPerSecond: number;
-
-  /** Minimum interval between requests in ms */
-  minIntervalMs: number;
-
-  /** Maximum queue size */
-  maxQueueSize: number;
 }
 
 /**

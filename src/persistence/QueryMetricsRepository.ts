@@ -7,11 +7,8 @@ import type { Database as DatabaseType } from 'better-sqlite3';
 import type {
   IQueryMetricsRepository,
   AgentUsageStats,
-  DailyUsageStats,
   QueryMetricRow,
   KeepaliveStats,
-  WeeklyUsageStats,
-  WeekOverWeekQueryGrowth,
 } from './types.js';
 import { dateToString } from './types.js';
 import { logger } from '../utils/logger.js';
@@ -89,25 +86,6 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     return Number(result.lastInsertRowid);
   }
 
-  getAgentStats(agentId: string): AgentUsageStats | null {
-    const stmt = this.db.prepare(`
-      SELECT
-        agent_id,
-        COUNT(*) as total_queries,
-        SUM(input_tokens) as total_input_tokens,
-        SUM(output_tokens) as total_output_tokens,
-        SUM(cache_read_tokens) as total_cache_read_tokens,
-        SUM(cache_creation_tokens) as total_cache_creation_tokens,
-        SUM(total_cost_usd) as total_cost_usd,
-        AVG(duration_ms) as avg_duration_ms
-      FROM query_metrics
-      WHERE agent_id = ? AND (turn_type IS NULL OR turn_type = 'query')
-      GROUP BY agent_id
-    `);
-    const row = stmt.get(agentId) as RawStatsRow | undefined;
-    return row ? this.mapStatsRow(row) : null;
-  }
-
   getAgentStatsSince(agentId: string, since: string): AgentUsageStats | null {
     const stmt = this.db.prepare(`
       SELECT
@@ -127,25 +105,6 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     return row ? this.mapStatsRow(row) : null;
   }
 
-  getAllAgentStats(): AgentUsageStats[] {
-    const stmt = this.db.prepare(`
-      SELECT
-        agent_id,
-        COUNT(*) as total_queries,
-        SUM(input_tokens) as total_input_tokens,
-        SUM(output_tokens) as total_output_tokens,
-        SUM(cache_read_tokens) as total_cache_read_tokens,
-        SUM(cache_creation_tokens) as total_cache_creation_tokens,
-        SUM(total_cost_usd) as total_cost_usd,
-        AVG(duration_ms) as avg_duration_ms
-      FROM query_metrics
-      WHERE (turn_type IS NULL OR turn_type = 'query')
-      GROUP BY agent_id
-    `);
-    const rows = stmt.all() as RawStatsRow[];
-    return rows.map((row) => this.mapStatsRow(row));
-  }
-
   getAllAgentStatsSince(since: string): AgentUsageStats[] {
     const stmt = this.db.prepare(`
       SELECT
@@ -163,53 +122,6 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     `);
     const rows = stmt.all(since) as RawStatsRow[];
     return rows.map((row) => this.mapStatsRow(row));
-  }
-
-  getDailyStats(agentId: string, days: number): DailyUsageStats[] {
-    const stmt = this.db.prepare(`
-      SELECT
-        DATE(created_at) as date,
-        COUNT(*) as queries,
-        SUM(input_tokens) as input_tokens,
-        SUM(output_tokens) as output_tokens,
-        SUM(total_cost_usd) as cost_usd
-      FROM query_metrics
-      WHERE agent_id = ? AND created_at >= DATE('now', ?)
-        AND (turn_type IS NULL OR turn_type = 'query')
-      GROUP BY DATE(created_at)
-      ORDER BY date DESC
-    `);
-    const rows = stmt.all(agentId, `-${days} days`) as RawDailyRow[];
-    return rows.map((row) => ({
-      date: row.date,
-      queries: row.queries,
-      inputTokens: row.input_tokens,
-      outputTokens: row.output_tokens,
-      costUsd: row.cost_usd,
-    }));
-  }
-
-  getDailyStatsAll(days: number): DailyUsageStats[] {
-    const stmt = this.db.prepare(`
-      SELECT
-        DATE(created_at) as date,
-        COUNT(*) as queries,
-        SUM(input_tokens) as input_tokens,
-        SUM(output_tokens) as output_tokens,
-        SUM(total_cost_usd) as cost_usd
-      FROM query_metrics
-      WHERE created_at >= DATE('now', ?)
-      GROUP BY DATE(created_at)
-      ORDER BY date ASC
-    `);
-    const rows = stmt.all(`-${days} days`) as RawDailyRow[];
-    return rows.map((row) => ({
-      date: row.date,
-      queries: row.queries,
-      inputTokens: row.input_tokens,
-      outputTokens: row.output_tokens,
-      costUsd: row.cost_usd,
-    }));
   }
 
   getRecentQueries(limit: number, offset = 0, agentId?: string, since?: string): QueryMetricRow[] {
@@ -291,53 +203,6 @@ export class QueryMetricsRepository implements IQueryMetricsRepository {
     };
   }
 
-  /**
-   * Get weekly aggregated stats for all query turns over N weeks.
-   */
-  getWeeklyStats(weeks: number): WeeklyUsageStats[] {
-    const stmt = this.db.prepare(`
-      SELECT
-        STRFTIME('%Y-W%W', created_at) as week,
-        COUNT(*) as queries,
-        SUM(input_tokens) as input_tokens,
-        SUM(output_tokens) as output_tokens,
-        SUM(total_cost_usd) as cost_usd
-      FROM query_metrics
-      WHERE created_at >= DATE('now', ?) AND (turn_type IS NULL OR turn_type = 'query')
-      GROUP BY STRFTIME('%Y-W%W', created_at)
-      ORDER BY week ASC
-    `);
-    const rows = stmt.all(`-${weeks * 7} days`) as RawWeeklyRow[];
-    return rows.map((row) => ({
-      week: row.week,
-      queries: row.queries,
-      inputTokens: row.input_tokens,
-      outputTokens: row.output_tokens,
-      costUsd: row.cost_usd,
-    }));
-  }
-
-  /**
-   * Compare max total_cost_usd per week: this week vs last week.
-   */
-  getWeekOverWeekGrowth(): WeekOverWeekQueryGrowth {
-    const stmt = this.db.prepare(`
-      SELECT
-        SUM(CASE WHEN created_at >= DATE('now', '-7 days') THEN total_cost_usd ELSE 0 END) as this_week_cost,
-        SUM(CASE WHEN created_at >= DATE('now', '-14 days') AND created_at < DATE('now', '-7 days') THEN total_cost_usd ELSE 0 END) as last_week_cost
-      FROM query_metrics
-      WHERE turn_type IS NULL OR turn_type = 'query'
-    `);
-    const row = stmt.get() as { this_week_cost: number | null; last_week_cost: number | null };
-    const thisWeekCost = row.this_week_cost ?? 0;
-    const lastWeekCost = row.last_week_cost ?? 0;
-    let growthPct: number | null = null;
-    if (lastWeekCost > 0) {
-      growthPct = Math.round(((thisWeekCost - lastWeekCost) / lastWeekCost) * 100);
-    }
-    return { thisWeekCost, lastWeekCost, growthPct };
-  }
-
   private mapStatsRow(row: RawStatsRow): AgentUsageStats {
     return {
       agentId: row.agent_id,
@@ -389,15 +254,6 @@ interface RawStatsRow {
   avg_duration_ms: number;
 }
 
-/** Raw row from daily aggregation query */
-interface RawDailyRow {
-  date: string;
-  queries: number;
-  input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
-}
-
 /** Raw row from individual query record */
 interface RawQueryRow {
   id: number;
@@ -428,14 +284,5 @@ interface RawKeepaliveRow {
   total_cache_read_tokens: number;
   total_cache_creation_tokens: number;
   total_cost_usd: number;
-}
-
-/** Raw row from weekly aggregation */
-interface RawWeeklyRow {
-  week: string;
-  queries: number;
-  input_tokens: number;
-  output_tokens: number;
-  cost_usd: number;
 }
 

@@ -29,7 +29,6 @@ export interface DiscordMessageContext {
   securityConfig: SecurityConfig;
   log: Logger;
   client: Client;
-  taskThreadResolver: ((threadId: string) => { taskId: string } | undefined) | undefined;
   scheduleThreadResolver: ((threadId: string) => { sdkSessionId: string; agentId: string } | undefined) | undefined;
   sttProvider?: STTProvider | undefined;
   generateThreadTitle: (text: string) => Promise<string | null>;
@@ -87,7 +86,26 @@ export async function handleDiscordMessage(
   if (!isVoiceMessage && message.attachments.size > 0) {
     const agentsDir = ctx.agentsDir;
 
-    // Phase 1: inline auto-converted text files (must happen first — sets shared `text`)
+    // ⚠️ 注意：必須使用單一迴圈 + continue，不可拆成 Phase 1 (inline) + Phase 2 (filter+download)
+    //
+    // 邊界案例說明（踩過坑）：
+    //
+    // 案例 A：使用者打字「幫我看」+ 上傳 notes.txt
+    //   - text.trim().length > 0 → 不進入 inline 分支
+    //   - continue 不會執行 → 正常進 downloadAttachment 下載檔案 ✅
+    //   - 若拆成兩階段，Phase 2 的 filter 會直接把 .txt 濾掉 → 檔案遺失 ❌
+    //
+    // 案例 B：使用者只上傳 auto-converted .txt（Discord 把長訊息轉檔）
+    //   - text.trim().length === 0 → 進入 inline 分支
+    //   - continue 跳過 download → 文字內容直接用 ✅
+    //
+    // 案例 C：使用者上傳圖片/PDF（非文字檔）
+    //   - isAutoConvertedTextFile 回傳 false → 不進 inline
+    //   - 正常進 downloadAttachment ✅
+    //
+    // 核心原則：continue 同時控制了「已 inline 就不下載」與
+    // 「未 inline 就不能被 filter 擋掉」兩種行為，不可分離。
+    // 2026-06-03 hotfix: revert from Phase 1/2 split back to single loop.
     for (const [, attachment] of message.attachments) {
       const fileName = attachment.name ?? 'unknown';
       const mimeType = attachment.contentType ?? undefined;
@@ -106,47 +124,25 @@ export async function handleDiscordMessage(
         } catch (err) {
           log.warn({ event_type: EventType.ADAPTER_MESSAGE_ERROR, err, url: attachment.url }, 'Failed to fetch .txt attachment');
         }
+        continue;
       }
-    }
 
-    // Phase 2: download remaining (non-auto-converted) attachments in parallel
-    const downloadTasks = [...message.attachments.values()]
-      .filter((att) => {
-        const fName = att.name ?? 'unknown';
-        const mType = att.contentType ?? undefined;
-        return !isAutoConvertedTextFile(fName, mType);
-      })
-      .map(async (attachment) => {
-        const fileName = attachment.name ?? 'unknown';
-        const mimeType = attachment.contentType ?? undefined;
-        const result = await downloadAttachment(
-          attachment.url,
+      const result = await downloadAttachment(
+        attachment.url,
+        fileName,
+        agentsDir,
+        agentId,
+        attachment.size,
+      );
+      if (result.success && result.filePath) {
+        downloadedAttachments.push({
           fileName,
-          agentsDir,
-          agentId,
-          attachment.size,
-        );
-        if (result.success && result.filePath) {
-          downloadedAttachments.push({
-            fileName,
-            mimeType,
-            fileSize: result.fileSize,
-            localPath: result.filePath,
-          });
-        } else {
-          log.warn({ event_type: EventType.ADAPTER_MESSAGE_ERROR, fileName, error: result.error }, 'Failed to download attachment');
-        }
-      });
-
-    if (downloadTasks.length > 0) {
-      const results = await Promise.allSettled(downloadTasks);
-      for (const r of results) {
-        if (r.status === 'rejected') {
-          log.warn(
-            { event_type: EventType.ADAPTER_MESSAGE_ERROR, error: r.reason },
-            'Attachment download task rejected'
-          );
-        }
+          mimeType,
+          fileSize: result.fileSize,
+          localPath: result.filePath,
+        });
+      } else {
+        log.warn({ event_type: EventType.ADAPTER_MESSAGE_ERROR, fileName, error: result.error }, 'Failed to download attachment');
       }
     }
 
@@ -173,7 +169,8 @@ export async function handleDiscordMessage(
     } else if (validation.error === 'message_too_long') {
       auditLogger.logValidationFailed('discord', userId, 'message_too_long', channelId);
     }
-    const errorMessage = getSecurityErrorMessage(validation.error!);
+    const error = validation.error ?? 'unknown';
+    const errorMessage = getSecurityErrorMessage(error);
     await message.reply(errorMessage);
     return;
   }
@@ -238,20 +235,10 @@ export async function handleDiscordMessage(
     }
   }
 
-  // --- Task / Schedule thread override ---
-  let taskId: string | undefined;
+  // --- Schedule thread override ---
   let inheritedSdkSessionId: string | undefined;
 
-  if (isChildThread && ctx.taskThreadResolver) {
-    const resolved = ctx.taskThreadResolver(message.channelId);
-    if (resolved) {
-      taskId = resolved.taskId;
-      userId = `task:${resolved.taskId}`;
-      log.info({ event_type: EventType.ADAPTER_MESSAGE_INGRESS, threadId: message.channelId, taskId: resolved.taskId }, 'Task thread detected — overriding userId for session continuity');
-    }
-  }
-
-  if (isChildThread && taskId === undefined && ctx.scheduleThreadResolver) {
+  if (isChildThread && ctx.scheduleThreadResolver) {
     const resolved = ctx.scheduleThreadResolver(message.channelId);
     if (resolved) {
       inheritedSdkSessionId = resolved.sdkSessionId;
@@ -275,9 +262,8 @@ export async function handleDiscordMessage(
       sourceMessageChannelId: message.channelId,
       displayName,
       username: message.author.username,
-      ...(taskId !== undefined ? { taskId } : {}),
       ...(inheritedSdkSessionId !== undefined ? { inheritedSdkSessionId } : {}),
-      ...(threadId !== undefined && taskId === undefined && inheritedSdkSessionId === undefined ? {
+      ...(threadId !== undefined && inheritedSdkSessionId === undefined ? {
         sessionUserId: `${userId}::thread::${threadId}`,
         parentConversationId: channelId,
       } : {}),

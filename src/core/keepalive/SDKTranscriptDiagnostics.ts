@@ -73,7 +73,10 @@ export function inspectLatestKeepaliveTranscript(
     return { jsonlPath, error: 'keepalive_user_prompt_not_found' };
   }
 
-  const keepaliveUser = entries[keepaliveUserIndex]!;
+  const keepaliveUser = entries[keepaliveUserIndex];
+  if (keepaliveUser === undefined) {
+    return { jsonlPath, error: 'keepalive_user_prompt_not_found' };
+  }
   const keepaliveAssistant = entries
     .slice(keepaliveUserIndex + 1)
     .find((entry) => entry.type === 'assistant' && entry.message?.usage !== undefined);
@@ -134,7 +137,8 @@ function contentText(content: unknown): string {
 
 function findLastIndex<T>(items: T[], predicate: (item: T) => boolean): number {
   for (let i = items.length - 1; i >= 0; i--) {
-    if (predicate(items[i]!)) return i;
+    const item = items[i];
+    if (item !== undefined && predicate(item)) return i;
   }
   return -1;
 }
@@ -186,8 +190,10 @@ export function inspectJsonlTailIntegrity(
   let lastStableAssistantLine: number | undefined;
   let lastStableAssistantIndex = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (line === undefined) continue;
     try {
-      const entry = JSON.parse(lines[i]!) as { type?: string; message?: { role?: string; stop_reason?: string; model?: string } };
+      const entry = JSON.parse(line) as { type?: string; message?: { role?: string; stop_reason?: string; model?: string } };
       if (
         entry.type === 'assistant' &&
         entry.message?.stop_reason === 'end_turn' &&
@@ -202,8 +208,9 @@ export function inspectJsonlTailIntegrity(
 
   // Parse the last line to see what the tail is
   let tailEntry: { type?: string; subtype?: string; message?: { role?: string; stop_reason?: string } } | undefined;
+  const lastLine = lines[lines.length - 1];
   try {
-    tailEntry = JSON.parse(lines[lines.length - 1]!) as typeof tailEntry;
+    tailEntry = lastLine !== undefined ? JSON.parse(lastLine) as typeof tailEntry : undefined;
   } catch { /* skip */ }
 
   const isComplete =
@@ -214,8 +221,10 @@ export function inspectJsonlTailIntegrity(
   const danglingTypes: string[] = [];
   if (lastStableAssistantIndex >= 0 && lastStableAssistantIndex < lines.length - 1) {
     for (let i = lastStableAssistantIndex + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (line === undefined) continue;
       try {
-        const entry = JSON.parse(lines[i]!) as { type?: string; subtype?: string };
+        const entry = JSON.parse(line) as { type?: string; subtype?: string };
         danglingTypes.push(entry.type ?? 'unknown');
       } catch { danglingTypes.push('unparseable'); }
     }

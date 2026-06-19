@@ -2,9 +2,7 @@
  * QueryExecutor — Handles Claude SDK query execution with retry logic.
  *
  * Extracted from MessageProcessor to isolate SDK query concerns:
- * - V2 SDKSessionManager dispatch (primary path)
- * - no V1 SDKQueryManager fallback
- * - additionalDirectories configuration
+ * - SDKSessionManager dispatch
  * - MCP server setup
  * - Callback wiring (delegates to StreamResponseRouter)
  * - Budget post-check logic (delegates to QueryMetricsRecorder)
@@ -12,29 +10,19 @@
  * - Conversation persistence
  */
 
-import path from 'path';
 import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
 import type { IConversationRepository, IQueryMetricsRepository } from '../../persistence/types.js';
 import { SessionManager } from '../session/SessionManager.js';
-import type { QueryResult, SDKQueryManager } from './SDKQueryManager.js';
+import type { QueryResult } from './types.js';
 import { SDKSessionManager } from '../session/SDKSessionManager.js';
 import { InteractionHandler } from '../interaction/InteractionHandler.js';
 import { decoratePromptWithConfiguredDecorations, getPromptDecorationDecision } from './PromptDecorator.js';
-import { diagnoseQueryUsage, splitMainSubagentUsage, type UsageAnomalyReport } from '../keepalive/UsageAnomalyDiagnostics.js';
 import { deliverUsageSummary } from './UsageCardFormatter.js';
-import { analyzeCurrentTurn } from '../keepalive/CacheAnomalyAnalyzer.js';
-import { getJsonlPath } from '../keepalive/SDKTranscriptDiagnostics.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
 import { ProcessingError } from '../../types/errors.js';
-import {
-  retryAsync,
-  API_RETRY_OPTIONS,
-  isRateLimitError,
-  isTransientError,
-} from '../../utils/retry.js';
+import { executeSdkQueryWithRetry } from './QuerySdkRunner.js';
 import { buildMcpSetup } from '../../McpToolSetup.js';
-import { buildDiscordChannelUrl, buildDiscordMessageUrl } from '../../types/runtimeContext.js';
 import {
   buildQueryManagers,
   buildV2IntermediateMessageCallback,
@@ -45,6 +33,7 @@ import {
 import {
   recordQueryMetrics,
 } from './QueryMetricsRecorder.js';
+import { persistConversation, reportQueryUsageAnomaly } from './QueryPostProcessing.js';
 
 const qeLogger = logger.child({ module: 'QueryExecutor' });
 
@@ -53,11 +42,10 @@ const qeLogger = logger.child({ module: 'QueryExecutor' });
  */
 export interface QueryExecutorDeps {
   sessionManager: SessionManager;
-  sdkQueryManager: SDKQueryManager;
   sdkSessionManager: SDKSessionManager;
   queryMetricsRepository?: IQueryMetricsRepository;
   conversationRepository?: IConversationRepository;
-  getSystemPrompt?: (agentId: string) => Promise<string>;
+  getSystemPrompt?: (agentId: string) => string | Promise<string>;
   sendTypingIndicators: boolean;
   typingIndicatorIntervalMs: number;
   /** When false, hides the per-turn usage summary card */
@@ -135,7 +123,7 @@ export async function executeQueryWithSDK(
   );
 
   // Set up interaction handler for permission prompts and question prompts
-  const interactionHandler = new InteractionHandler(adapter, chatId, 120_000, agentId);
+  const interactionHandler = new InteractionHandler(adapter, chatId, 120_000);
   const canUseTool = interactionHandler.buildCanUseTool();
 
   const promptDecoration = getPromptDecorationDecision(prompt);
@@ -188,133 +176,15 @@ export async function executeQueryWithSDK(
       state, adapter, chatId, agentId, statusManager, streamOpts
     );
     const onToolEvent = buildToolEventCallback(state, agentId, statusManager, hookManager);
-
-    // Helper: execute SDK query with retry for rate limit / transient errors
-    const executeWithRetry = async (resumeId: string | undefined) => {
-      return await retryAsync(
-        async () => {
-          // V2 persistent session: keeps cli.js process alive so cache can persist.
-          try {
-            return await sdkSessionManager.executeQuery(
-              sessionId,
-              sdkPrompt,
-              agent,
-              {
-                cwd: agent.path,
-                systemPrompt,
-                additionalDirectories: [
-                  path.resolve(agent.path, '..', '_foundation'),
-                  path.resolve(agent.path, '..', '_example'),
-                ],
-                runtimeContext: {
-                  platform,
-                  agentId,
-                  chatId,
-                  userId,
-                  ...(process.env.DISCORD_GUILD_ID ? { guildId: process.env.DISCORD_GUILD_ID } : {}),
-                  ...(options?.parentConversationId !== undefined ? { parentConversationId: options.parentConversationId } : {}),
-                  ...(options?.replyToMessageId !== undefined ? { originalMessageId: options.replyToMessageId } : {}),
-                  ...(options?.sourceMessageChannelId !== undefined ? { sourceMessageChannelId: options.sourceMessageChannelId } : {}),
-                },
-                ...(agent.config.settings?.maxTurns !== undefined
-                  ? { maxTurns: agent.config.settings.maxTurns }
-                  : {}),
-                ...(Object.keys(mcpServers).length > 0
-                  ? { mcpServers, allowedTools }
-                  : {}),
-                resume: resumeId,
-                ...(internalSession.continuationState === 'pending' ? { requireResume: true } : {}),
-                onIntermediateMessage: onIntermediateMessageV2,
-                onToolEvent,
-                onSubAgentEvent: async (event) => {
-                  await subAgentManager?.handle(event);
-                },
-                onHookEvent: async (event) => {
-                  await hookManager?.handle(event);
-                },
-                ...(subAgentManager ? { subAgentManager } : {}),
-                additionalOptions: { canUseTool },
-              }
-            );
-          } catch (v2Error) {
-            // SDK abort may throw non-Error values like { value: "Claude Code process aborted by user" }
-            const errMsg = v2Error instanceof Error
-              ? v2Error.message
-              : typeof v2Error === 'object' && v2Error !== null && 'value' in v2Error
-                ? String((v2Error as { value: unknown }).value)
-                : String(v2Error);
-            // If query was cancelled by user (/stop) or interrupted, do not retry or fallback.
-            // CLI binary emits [ede_diagnostic] when interrupt() fires mid-tool_use.
-            if (
-              errMsg.includes('cancelled by user') ||
-              errMsg.includes('aborted by user') ||
-              (errMsg.includes('ede_diagnostic') && errMsg.includes('stop_reason=tool_use'))
-            ) {
-              const savedSdkSessionId = (v2Error as { _sdkSessionId?: string })._sdkSessionId;
-              if (savedSdkSessionId) {
-                sessionManager.setSdkSessionId(platform, agentId, userId, savedSdkSessionId);
-                qeLogger.info({ sessionId, sdkSessionId: savedSdkSessionId },
-                  'V2 query interrupted/cancelled - sdkSessionId preserved for resume');
-              } else {
-                qeLogger.info({ sessionId, errMsg }, 'V2 query interrupted/cancelled - no sdkSessionId to preserve');
-              }
-              throw Object.assign(new Error('Query cancelled'), { _cancelled: true });
-            }
-            // V2 fail-closed errors must not be converted into a generic fallback-disabled error.
-            if (
-              v2Error instanceof Error &&
-              (
-                '_resumeRequired' in v2Error ||
-                '_resumeRetryDisabled' in v2Error ||
-                '_zombieRetryDisabled' in v2Error ||
-                '_emptyStreamRetryDisabled' in v2Error
-              )
-            ) {
-              throw v2Error;
-            }
-
-            const savedSdkSessionId = (v2Error as { _sdkSessionId?: string })._sdkSessionId;
-            qeLogger.warn(
-              { sessionId, error: errMsg, sdkSessionId: savedSdkSessionId },
-              'V2 persistent session failed; V1 fallback disabled'
-            );
-            sdkSessionManager.destroySession(sessionId);
-
-            const fallbackDisabledError = new Error(
-              `V2 persistent session failed and V1 fallback is disabled to prevent duplicate high-cost query. Original error: ${errMsg}`
-            );
-            const typedError = fallbackDisabledError as Error & {
-              _v1FallbackDisabled: true;
-              _sdkSessionId?: string;
-            };
-            typedError._v1FallbackDisabled = true;
-            if (savedSdkSessionId !== undefined) typedError._sdkSessionId = savedSdkSessionId;
-            throw typedError;
-          }
-        },
-        {
-          ...API_RETRY_OPTIONS,
-          isRetryable: (err) =>
-            !(err instanceof Error && '_cancelled' in err) &&
-            !(err instanceof Error && '_v1FallbackDisabled' in err) &&
-            !(err instanceof Error && '_resumeRetryDisabled' in err) &&
-            !(err instanceof Error && '_zombieRetryDisabled' in err) &&
-            !(err instanceof Error && '_emptyStreamRetryDisabled' in err) &&
-            (isRateLimitError(err) || isTransientError(err)),
-          onRetry: (attempt, err, delayMs) => {
-            state.intermediateMessages.length = 0;
-            qeLogger.warn(
-              {
-                sessionId,
-                attempt,
-                delayMs,
-                error: err instanceof Error ? err.message : String(err),
-              },
-              'Retrying SDK query'
-            );
-          },
-        }
-      );
+    const runtimeContext = {
+      platform,
+      agentId,
+      chatId,
+      userId,
+      ...(process.env.DISCORD_GUILD_ID ? { guildId: process.env.DISCORD_GUILD_ID } : {}),
+      ...(options?.parentConversationId !== undefined ? { parentConversationId: options.parentConversationId } : {}),
+      ...(options?.replyToMessageId !== undefined ? { originalMessageId: options.replyToMessageId } : {}),
+      ...(options?.sourceMessageChannelId !== undefined ? { sourceMessageChannelId: options.sourceMessageChannelId } : {}),
     };
 
     // Capture the pre-query resume state. After a restart, resumed SDK sessions
@@ -323,9 +193,42 @@ export async function executeQueryWithSDK(
       typeof internalSession.sdkSessionId === 'string' && internalSession.sdkSessionId.length > 0;
 
     // Execute query. Resume failures are fail-closed to avoid automatic duplicate sends.
-    let result;
+    let result: QueryResult;
     try {
-      result = await executeWithRetry(internalSession.sdkSessionId);
+      result = await executeSdkQueryWithRetry({
+        sessionId,
+        sdkPrompt,
+        agent,
+        platform,
+        chatId,
+        userId,
+        systemPrompt,
+        sdkSessionManager,
+        resumeId: internalSession.sdkSessionId,
+        continuationState: internalSession.continuationState ?? undefined,
+        runtimeContext,
+        ...(agent.config.settings?.maxTurns !== undefined
+          ? { maxTurns: agent.config.settings.maxTurns }
+          : {}),
+        mcpServers,
+        allowedTools,
+        canUseTool,
+        onIntermediateMessage: onIntermediateMessageV2,
+        onToolEvent,
+        onSubAgentEvent: async (event) => {
+          await subAgentManager?.handle(event);
+        },
+        onHookEvent: async (event) => {
+          await hookManager?.handle(event);
+        },
+        ...(subAgentManager ? { subAgentManager } : {}),
+        clearIntermediateMessages: () => {
+          state.intermediateMessages.length = 0;
+        },
+        preserveSdkSessionId: (sdkSessionId) => {
+          sessionManager.setSdkSessionId(platform, agentId, userId, sdkSessionId);
+        },
+      });
     } catch (error) {
       const isCancelled =
         (error instanceof Error && '_cancelled' in error) ||
@@ -334,7 +237,7 @@ export async function executeQueryWithSDK(
         (typeof error === 'object' && error !== null && 'value' in error &&
           String((error as { value: unknown }).value).includes('aborted by user'));
       if (isCancelled) {
-        qeLogger.info({ sessionId, sdkSessionId: internalSession.sdkSessionId }, 'Query cancelled — returning empty response (sdkSessionId preserved)');
+        qeLogger.info({ sessionId, sdkSessionId: internalSession.sdkSessionId }, 'Query cancelled; returning empty response and preserving sdkSessionId');
         return '';
       }
 
@@ -342,11 +245,11 @@ export async function executeQueryWithSDK(
       if (isResumeRequired) {
         qeLogger.warn(
           { sessionId, sdkSessionId: internalSession.sdkSessionId },
-          'Schedule resume required but session returned empty — failing explicitly'
+          'Schedule resume required but session returned empty; failing explicitly'
         );
-        await adapter.sendFormattedMessage(
+        await adapter.sendMessage(
           chatId,
-          '❌ 無法恢復排程對話的上下文。原始 session 可能已過期或損壞。請重新執行排程任務。'
+          'Schedule thread resume failed. The original SDK session could not be resumed, so ClaudeCab will not silently start a new conversation. Please resend after checking context.'
         );
         return '';
       }
@@ -364,7 +267,7 @@ export async function executeQueryWithSDK(
           { sessionId, sdkSessionId: savedSdkSessionId ?? internalSession.sdkSessionId, error: errorMsg },
           'V2 session returned no usable stream; automatic retry disabled'
         );
-        await adapter.sendFormattedMessage(
+        await adapter.sendMessage(
           chatId,
           `V2 session returned no usable response. The broken process was closed, V1 fallback is disabled, and the SDK session id was preserved for V2 resume.\n\nPlease resend your message after checking context.\n\nReason: ${errorMsg}`
         );
@@ -376,7 +279,7 @@ export async function executeQueryWithSDK(
           { sessionId, sdkSessionId: internalSession.sdkSessionId, error: errorMsg },
           'V2 session failed; V1 fallback disabled'
         );
-        await adapter.sendFormattedMessage(
+        await adapter.sendMessage(
           chatId,
           `V2 session failed. V1 fallback is disabled to prevent duplicate high-cost query.\n\nReason: ${errorMsg}`
         );
@@ -395,11 +298,11 @@ export async function executeQueryWithSDK(
         if (internalSession.continuationState === 'pending') {
           qeLogger.warn(
             { sessionId, sdkSessionId: internalSession.sdkSessionId, error: errorMsg },
-            'Schedule thread resume failed — refusing to silently start new conversation'
+            'Schedule thread resume failed; refusing to silently start new conversation'
           );
-          await adapter.sendFormattedMessage(
+          await adapter.sendMessage(
             chatId,
-            '❌ 無法恢復排程對話的上下文。原始 session 可能已過期或損壞。請重新執行排程任務。'
+            'Schedule thread resume failed. The original SDK session could not be resumed, so ClaudeCab will not silently start a new conversation. Please resend after checking context.'
           );
           return '';
         }
@@ -407,7 +310,7 @@ export async function executeQueryWithSDK(
           { sessionId, sdkSessionId: internalSession.sdkSessionId, error: errorMsg },
           'SDK resume failed; automatic fresh-session retry disabled'
         );
-        await adapter.sendFormattedMessage(
+        await adapter.sendMessage(
           chatId,
           'V2 session resume failed. Automatic fresh-session retry is disabled to prevent duplicate high-cost query. Please resend after checking context if needed.'
         );
@@ -431,7 +334,7 @@ export async function executeQueryWithSDK(
     }
 
     // Record query metrics, execution audit, budget check
-    const queryMetricId = recordQueryMetrics(result, agentId, platform, chatId, userId, queryMetricsRepository, sessionManager);
+    const queryMetricId = recordQueryMetrics(result, agentId, platform, chatId, userId, queryMetricsRepository);
     const usageAnomaly = reportQueryUsageAnomaly({
       result,
       sessionId,
@@ -482,151 +385,4 @@ export async function executeQueryWithSDK(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Post-query helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Persist user and assistant messages to database for continuity and inspection.
- *
- * Deduplication: intermediate messages that were already delivered via streaming
- * are stored only once. If the final resultResponse is identical to the last
- * intermediate message (e.g., SDK emitted it both as stream event and final
- * result), the duplicate is skipped.
- */
-function persistConversation(
-  sessionId: string,
-  prompt: string,
-  intermediateMessages: string[],
-  resultResponse: string,
-  agentId: string,
-  conversationRepository: import('../../persistence/types.js').IConversationRepository | undefined,
-): void {
-  if (conversationRepository === undefined) return;
-
-  try {
-    conversationRepository.appendMessage(sessionId, 'user', prompt);
-
-    // Deduplicate intermediate messages: skip sequential exact duplicates
-    // (can happen across retry boundaries where state is cleared).
-    let lastStored = '';
-    for (const msg of intermediateMessages) {
-      const trimmed = msg.trim();
-      if (trimmed.length > 0 && trimmed !== lastStored) {
-        conversationRepository.appendMessage(sessionId, 'assistant', msg);
-        lastStored = trimmed;
-      }
-    }
-
-    // Store final response only if it differs from the last stored intermediate
-    if (resultResponse.length > 0) {
-      const trimmedResult = resultResponse.trim();
-      if (trimmedResult !== lastStored) {
-        conversationRepository.appendMessage(sessionId, 'assistant', resultResponse);
-      }
-    }
-  } catch (persistError) {
-    qeLogger.warn(
-      { error: persistError, sessionId },
-      'Failed to persist conversation messages'
-    );
-  }
-}
-
-interface UsageAnomalyReportContext {
-  result: QueryResult;
-  sessionId: string;
-  agentId: string;
-  chatId: string;
-  userId: string;
-  agentCwd: string;
-  sdkSessionManager: SDKSessionManager;
-  hasResume?: boolean;
-  queryMetricId?: number;
-  options?: QueryExecuteOptions;
-}
-
-function reportQueryUsageAnomaly(ctx: UsageAnomalyReportContext): UsageAnomalyReport | null {
-  const summaryReader = ctx.sdkSessionManager as SDKSessionManager & {
-    getSessionSummaries?: () => ReturnType<SDKSessionManager['getSessionSummaries']>;
-  };
-  const sessionSummary = typeof summaryReader.getSessionSummaries === 'function'
-    ? summaryReader.getSessionSummaries().find((summary) => summary.sessionId === ctx.sessionId)
-    : undefined;
-  const runtime = sessionSummary?.runtimeContext;
-  const guildId = runtime?.guildId ?? process.env.DISCORD_GUILD_ID;
-  const targetChatId = runtime?.chatId ?? ctx.chatId;
-  const sourceChannelId = runtime?.sourceMessageChannelId ?? ctx.options?.sourceMessageChannelId ?? targetChatId;
-  const sourceMessageId = runtime?.originalMessageId ?? ctx.options?.replyToMessageId;
-  const discordUrl = buildDiscordChannelUrl(guildId, targetChatId);
-  const sourceMessageUrl = buildDiscordMessageUrl(guildId, sourceChannelId, sourceMessageId);
-  const cwd = sessionSummary?.cwd ?? ctx.agentCwd;
-  const sdkSessionId = ctx.result.sdkSessionId || sessionSummary?.sdkSessionId;
-  const jsonlPath = sdkSessionId !== undefined && cwd.length > 0
-    ? getJsonlPath(sdkSessionId, cwd)
-    : undefined;
-
-  const report = diagnoseQueryUsage(ctx.result, {
-    sessionId: ctx.sessionId,
-    agentId: ctx.agentId,
-    chatId: targetChatId,
-    userId: ctx.userId,
-    cwd,
-    ...(sdkSessionId !== undefined ? { sdkSessionId } : {}),
-    ...(ctx.queryMetricId !== undefined ? { queryMetricId: ctx.queryMetricId } : {}),
-    ...(discordUrl !== undefined ? { discordUrl } : {}),
-    ...(sourceMessageUrl !== undefined ? { sourceMessageUrl } : {}),
-    ...(jsonlPath !== undefined ? { jsonlPath } : {}),
-    ...(sessionSummary?.messageCount !== undefined ? { sessionMessageCount: sessionSummary.messageCount } : {}),
-    ...(ctx.hasResume !== undefined ? { hasResume: ctx.hasResume } : {}),
-    ...(sessionSummary?.lastPromptCacheMutation !== undefined ? { promptCacheMutation: sessionSummary.lastPromptCacheMutation } : {}),
-  });
-  if (report === null) return null;
-
-  // Enrich with JSONL-based per-turn cause identification (main-only metrics)
-  const enrichSplit = splitMainSubagentUsage(ctx.result.modelUsage, ctx.result.mainModel);
-  if (jsonlPath !== undefined && ctx.result.usage !== undefined) {
-    const mainMetrics = enrichSplit?.main;
-    const jsonlFinding = analyzeCurrentTurn(
-      {
-        input_tokens: mainMetrics?.freshInputTokens ?? ctx.result.usage.inputTokens ?? 0,
-        cache_read_input_tokens: mainMetrics?.cacheReadTokens ?? ctx.result.usage.cacheReadInputTokens ?? 0,
-        cache_creation_input_tokens: mainMetrics?.cacheCreationTokens ?? ctx.result.usage.cacheCreationInputTokens ?? 0,
-        output_tokens: mainMetrics?.outputTokens ?? ctx.result.usage.outputTokens ?? 0,
-      },
-      jsonlPath,
-    );
-    if (jsonlFinding !== null) {
-      report.details += `\njsonlCause=${jsonlFinding.cause}${jsonlFinding.causeDetail ? ` detail=${jsonlFinding.causeDetail}` : ''}${jsonlFinding.causeLine ? ` at=L${jsonlFinding.causeLine}` : ''}`;
-    }
-  }
-
-  const logPayload = {
-    event_type: EventType.CACHE_QUERY_ANOMALY,
-    sessionId: ctx.sessionId,
-    sdkSessionId,
-    agentId: ctx.agentId,
-    chatId: targetChatId,
-    userId: ctx.userId,
-    queryMetricId: ctx.queryMetricId,
-    severity: report.severity,
-    shouldAlert: report.shouldAlert,
-    likelyCause: report.likelyCause,
-    findings: report.findings.map((finding) => finding.code),
-    hasResume: ctx.hasResume,
-    sessionMessageCount: sessionSummary?.messageCount,
-    modelBreakdown: report.modelBreakdown,
-    ...report.metrics,
-    discordUrl,
-    sourceMessageUrl,
-    jsonlPath,
-  };
-  if (report.shouldAlert) {
-    qeLogger.warn(logPayload, 'Query usage anomaly detected');
-  } else {
-    qeLogger.info(logPayload, 'Query usage diagnostic note');
-  }
-
-  return report;
-}
 

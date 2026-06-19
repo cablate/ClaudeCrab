@@ -13,9 +13,7 @@
 import { DiscordAdapter } from '../DiscordAdapter.js';
 import { DiscordInteractionHandler } from './DiscordInteractionHandler.js';
 import { registerSlashCommands } from './DiscordSlashCommands.js';
-import { DiscordDashboard } from './services/DiscordDashboard.js';
-import { DiscordCostReport } from './services/DiscordCostReport.js';
-import { DiscordCacheAnomalyReport } from './services/DiscordCacheAnomalyReport.js';
+import { initializeDiscordOpsServices, type DiscordOpsServices } from './services/DiscordOpsServices.js';
 import { logger } from '../../utils/logger.js';
 
 import type { AgentLoader } from '../../core/orchestrator/AgentLoader.js';
@@ -53,16 +51,14 @@ export interface DiscordBootstrapDeps {
 /** Services created by Discord bootstrap (returned to AppBootstrap for lifecycle management) */
 export interface DiscordServices {
   systemAdapter: DiscordAdapter;
-  dashboardService?: DiscordDashboard;
-  costReportTimer?: ReturnType<typeof setInterval>;
-  cacheAnomalyReportTimer?: ReturnType<typeof setInterval>;
+  ops: DiscordOpsServices;
 }
 
 /**
  * Initialize all Discord-specific services.
  *
- * Creates a system-level Discord adapter and wires up Dashboard, ActivityReporter,
- * TaskSync, CostReport, and InteractionHandler.
+ * Creates a system-level Discord adapter and wires up dashboard, cost reports,
+ * cache anomaly reports, and interaction handling.
  *
  * @returns DiscordServices for lifecycle management, or null if initialization fails
  */
@@ -93,7 +89,7 @@ export async function initializeDiscordServices(
     return null;
   }
 
-  const result: DiscordServices = { systemAdapter: discordAdapter };
+  const result: DiscordServices = { systemAdapter: discordAdapter, ops: {} };
 
   logger.info('Initializing Discord services...');
 
@@ -102,6 +98,13 @@ export async function initializeDiscordServices(
   // wired correctly before any service (e.g. taskService) populates `result`.
   const systemClient = discordAdapter.getClient();
   if (systemClient !== null) {
+    const orchestratorCommandDeps = orchestrator !== null
+      ? {
+          getBotStatus: (agentId: string) => orchestrator.getBotStatusForAgent(agentId),
+          reloadAgent: (agentId: string) => orchestrator.reloadAgent(agentId),
+        }
+      : {};
+
     const interactionHandler = new DiscordInteractionHandler({
       client: systemClient,
       adapters: new Map(),
@@ -113,13 +116,7 @@ export async function initializeDiscordServices(
           ? { queryMetricsRepository: persistence.queryMetricsRepository }
           : {}),
         get sdkSessionManager() { return messageProcessor.sdkSession; },
-        ...(orchestrator !== null ? {
-          getBotStatus: (agentId: string) =>
-            orchestrator!.getBotStatusForAgent(agentId),
-        } : {}),
-        ...(orchestrator !== null ? {
-          reloadAgent: (agentId: string) => orchestrator!.reloadAgent(agentId),
-        } : {}),
+        ...orchestratorCommandDeps,
       },
     });
 
@@ -133,99 +130,18 @@ export async function initializeDiscordServices(
     }
   }
 
-  // === PARALLEL: SLASH COMMANDS + DASHBOARD ===
-  // These two are independent of each other and only depend on the already-
-  // authenticated discordAdapter, so they can be started concurrently.
-  // Promise.allSettled ensures one failure does not abort the other.
-  {
-    const slashCommandsTask = (discordConfig.mainBotClientId && discordConfig.guildId)
-      ? registerSlashCommands(mainBotToken, discordConfig.mainBotClientId, discordConfig.guildId)
-      : Promise.resolve();
-
-    let pendingDashboard: DiscordDashboard | undefined;
-    const dashboardTask = channels.dashboard
-      ? (() => {
-          pendingDashboard = new DiscordDashboard({
-            adapter: discordAdapter,
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by outer if check
-            channelId: channels.dashboard!,
-            agentLoader,
-            ...(persistence?.queryMetricsRepository !== undefined
-              ? { queryMetricsRepository: persistence.queryMetricsRepository }
-              : {}),
-            ...(persistence?.rateLimitRepository !== undefined
-              ? { rateLimitRepository: persistence.rateLimitRepository }
-              : {}),
-            ...(dashboardUpdateMinutes !== undefined
-              ? { updateIntervalMinutes: dashboardUpdateMinutes }
-              : {}),
-          });
-          return pendingDashboard.start();
-        })()
-      : Promise.resolve();
-
-    const [slashResult, dashResult] = await Promise.allSettled([slashCommandsTask, dashboardTask]);
-
-    if (slashResult.status === 'rejected') {
-      logger.error({ error: slashResult.reason }, 'Slash command registration failed');
-    }
-
-    if (dashResult.status === 'rejected') {
-      logger.error({ error: dashResult.reason }, 'Dashboard service failed to start');
-    } else if (pendingDashboard !== undefined) {
-      result.dashboardService = pendingDashboard;
-      logger.info({ channelId: channels.dashboard }, 'Dashboard service started');
-    }
+  if (discordConfig.mainBotClientId && discordConfig.guildId) {
+    await registerSlashCommands(mainBotToken, discordConfig.mainBotClientId, discordConfig.guildId)
+      .catch((error) => logger.error({ error }, 'Slash command registration failed'));
   }
 
-  // === COST REPORT (daily cron) ===
-  if (channels.costReport && persistence?.queryMetricsRepository !== undefined) {
-    const costReportService = new DiscordCostReport({
-      adapter: discordAdapter,
-      channelId: channels.costReport,
-      agentLoader,
-      queryMetricsRepository: persistence.queryMetricsRepository,
-    });
-
-    let lastCostReportDate = '';
-    const timer = setInterval(() => {
-      const now = new Date();
-      const dateStr = now.toISOString().slice(0, 10);
-      if (now.getHours() === 23 && now.getMinutes() >= 55 && dateStr !== lastCostReportDate) {
-        lastCostReportDate = dateStr;
-        void costReportService.sendDailyReport().catch((err) => {
-          logger.error({ err }, 'Failed to send daily cost report');
-        });
-      }
-    }, 5 * 60 * 1000);
-    timer.unref();
-    result.costReportTimer = timer;
-    logger.info({ channelId: channels.costReport }, 'CostReport daily cron started');
-  }
-
-  // === CACHE ANOMALY REPORT (daily, runs at 23:50) ===
-  const cacheAnomalyChannelId = channels.alerts ?? channels.costReport;
-  if (cacheAnomalyChannelId) {
-    const cacheAnomalyService = new DiscordCacheAnomalyReport({
-      adapter: discordAdapter,
-      channelId: cacheAnomalyChannelId,
-    });
-
-    let lastCacheAnomalyReportDate = '';
-    const cacheTimer = setInterval(() => {
-      const now = new Date();
-      const dateStr = now.toISOString().slice(0, 10);
-      if (now.getHours() === 23 && now.getMinutes() >= 50 && now.getMinutes() < 55 && dateStr !== lastCacheAnomalyReportDate) {
-        lastCacheAnomalyReportDate = dateStr;
-        void cacheAnomalyService.sendDailyReport().catch((err) => {
-          logger.error({ err }, 'Failed to send cache anomaly report');
-        });
-      }
-    }, 5 * 60 * 1000);
-    cacheTimer.unref();
-    result.cacheAnomalyReportTimer = cacheTimer;
-    logger.info({ channelId: cacheAnomalyChannelId }, 'CacheAnomalyReport daily cron started');
-  }
+  result.ops = await initializeDiscordOpsServices({
+    adapter: discordAdapter,
+    agentLoader,
+    channels,
+    ...(dashboardUpdateMinutes !== undefined ? { dashboardUpdateMinutes } : {}),
+    persistence,
+  });
 
   logger.info('Discord services initialized');
   return result;

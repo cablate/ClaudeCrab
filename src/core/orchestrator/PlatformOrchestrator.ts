@@ -2,11 +2,8 @@
  * Starts and manages Discord adapters for loaded agents.
  */
 
-import type {
-  AdapterSecurityConfig,
-  DiscordAdapterFactory,
-  PlatformAdapter,
-} from '../../types/platform.js';
+import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
+import type { AdapterSecurityConfig, DiscordAdapterConfig } from '../../adapters/types.js';
 import type { ScheduleManager } from '../../schedule/ScheduleManager.js';
 import type { ConversationRequest } from '../../conversation/types.js';
 import { AdapterRegistry } from './AdapterRegistry.js';
@@ -15,6 +12,8 @@ import { SessionManager } from '../session/SessionManager.js';
 import { MessageProcessor } from './MessageProcessor.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
+
+type DiscordAdapterFactory = (config: DiscordAdapterConfig) => BaseAdapter;
 
 export interface RunningAdapterInfo {
   agentId: string;
@@ -254,7 +253,7 @@ export class PlatformOrchestrator {
     }
   }
 
-  private buildDiscordAdapter(config: Parameters<DiscordAdapterFactory>[0]): PlatformAdapter {
+  private buildDiscordAdapter(config: Parameters<DiscordAdapterFactory>[0]): BaseAdapter {
     if (!this.discordFactory) throw new Error('DiscordAdapterFactory not injected');
     return this.discordFactory(config);
   }
@@ -293,7 +292,7 @@ export class PlatformOrchestrator {
       await this.messageProcessor.processConversationRequest(request);
     });
 
-    const discordAdapter = adapter as PlatformAdapter & {
+    const discordAdapter = adapter as BaseAdapter & {
       setScheduleThreadResolver?: (resolver: (threadId: string) => { sdkSessionId: string; agentId: string } | undefined) => void;
     };
 
@@ -321,8 +320,7 @@ export class PlatformOrchestrator {
 
     await adapter.initialize();
     await adapter.start();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.registry.register(adapter as any);
+    this.registry.register(adapter);
 
     void this.scheduleManager?.syncSchedulesForAgent(agentId);
 

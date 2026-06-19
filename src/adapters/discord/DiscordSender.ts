@@ -19,7 +19,7 @@ import * as path from 'node:path';
 import { splitDiscordMessage } from './discordUtils.js';
 import { DiscordRateLimiter } from './DiscordRateLimiter.js';
 import { EventType } from '../../utils/events.js';
-import type { SendResult } from '../types.js';
+import type { SendResult } from '../../types/message.js';
 
 export interface DiscordSenderDeps {
   channel: TextChannel | null;
@@ -29,7 +29,6 @@ export interface DiscordSenderDeps {
   resolveTextChannel(channelId: string): Promise<TextChannel | null>;
   resolveChannel(channelId: string): Promise<TextChannel | ThreadChannel | null>;
   log: { error: (obj: Record<string, unknown>, msg: string) => void; warn: (obj: Record<string, unknown>, msg: string) => void };
-  emitMessageSent(chatId: string, text: string, userId: string): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,8 +72,6 @@ export async function sendMessage(
       const sent = await deps.rateLimiter.rateLimitedSend(() => targetChannel.send(chunk));
       lastMessageId = sent.id;
     }
-
-    deps.emitMessageSent(chatId, text, chatId);
 
     return { success: true, messageId: lastMessageId };
   } catch (error) {

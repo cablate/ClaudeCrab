@@ -75,22 +75,6 @@ export function queryMetricToDiagnosticResult(row: QueryMetricRow) {
       costUsd: row.totalCostUsd,
     },
     totalCostUsd: row.totalCostUsd,
-    ...(row.contextTotalTokens !== undefined && row.contextMaxTokens !== undefined && row.contextPercentage !== undefined
-      ? {
-          contextUsage: {
-            totalTokens: row.contextTotalTokens,
-            maxTokens: row.contextMaxTokens,
-            rawMaxTokens: row.contextMaxTokens,
-            percentage: row.contextPercentage,
-            model: row.contextModel ?? 'unknown',
-            categories: [],
-            memoryFiles: [],
-            mcpTools: [],
-            agents: [],
-            apiUsage: null,
-          },
-        }
-      : {}),
   };
 }
 

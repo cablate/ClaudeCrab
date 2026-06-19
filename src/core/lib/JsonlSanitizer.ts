@@ -122,14 +122,15 @@ export function sanitizeJsonl(jsonlPath: string): SanitizeResult {
       continue;
     }
 
-    if (msg.type !== 'assistant' || !Array.isArray(msg.message?.content)) {
+    const content = msg.message?.content;
+    if (msg.type !== 'assistant' || !Array.isArray(content)) {
       outputLines.push(line);
       continue;
     }
 
     let lineModified = false;
 
-    for (const block of msg.message!.content) {
+    for (const block of content) {
       if (block.type !== 'tool_use') continue;
       const b = block as ToolUseBlock;
 

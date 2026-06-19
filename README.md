@@ -126,6 +126,9 @@ npm run build && npm start
 | 變數 | 預設 | 說明 |
 |------|------|------|
 | `SESSION_EPHEMERAL` | `false` | 設 `true` 進入 ephemeral 模式：每次 query 用完即銷毀 CLI process（省 ~150MB RAM），resume 資料保留在磁碟 JSONL，下次自動恢復 |
+| `SESSION_IDLE_CLOSE_MS` | `7200000`（2h） | Persistent mode only. Close the live SDK CLI process after real-query idle time; keep app session and `sdkSessionId` so the next message resumes. Set `0` to disable. |
+| `SESSION_QUERY_HARD_TIMEOUT_MS` | `3600000`（1h） | Active query protection. Interrupt a V2 query that stays running longer than this. Set `0` to disable. |
+| `SESSION_QUERY_HARD_TIMEOUT_GRACE_MS` | `30000`（30s） | After timeout interrupt, force-close the live SDK CLI process if the query is still running. |
 | `SESSION_TIMEOUT_MS` | `3600000`（1h） | Session 閒置多久後自動清理 |
 | `CLEANUP_INTERVAL_MS` | `60000`（1m） | 清理檢查間隔 |
 | `MAX_SESSIONS` | `1000` | 最大同時 session 數 |
@@ -357,10 +360,9 @@ claudecab/
 │   ├── core/            # SessionManager, MessageProcessor, SDK integration
 │   ├── persistence/     # SQLite repositories
 │   ├── schedule/        # Cron schedule system
-│   ├── services/        # Budget, Activity services
+│   ├── services/        # OAuth usage and keepalive ROI services
 │   ├── types/           # TypeScript types
 │   └── utils/           # Logging, events, security, formatting
-├── public/              # Web UI assets (dashboard)
 ├── docs/                # Architecture docs, upgrade guides
 ├── scripts/             # Build-time scripts (patch-sdk-v2.cjs)
 ├── agents/              # Agent 目錄（外部管理，不走 git）

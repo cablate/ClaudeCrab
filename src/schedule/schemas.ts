@@ -47,11 +47,7 @@ export const NotificationTargetSchema = z.object({
 export const NotificationSchema = z.object({
   onComplete: z.boolean().optional(),
   onError: z.boolean().optional(),
-  /** @deprecated Use targets[] instead. Discord is the only supported value. */
-  platform: z.literal('discord').optional(),
-  /** @deprecated Use targets[] instead. Kept for backward compatibility. */
-  chatId: z.string().optional(),
-  /** Discord notification targets. Takes priority over legacy platform/chatId. */
+  /** Discord notification targets. */
   targets: z.array(NotificationTargetSchema).optional(),
   /** Local sound notification - plays audio file on schedule completion/error */
   localSound: z
@@ -101,12 +97,6 @@ export const ScheduleSpecSchema = z.object({
 });
 
 // Infer TypeScript types from schemas
-export type Trigger = z.infer<typeof TriggerSchema>;
-export type Execution = z.infer<typeof ExecutionSchema>;
-export type NotificationTarget = z.infer<typeof NotificationTargetSchema>;
-export type Notification = z.infer<typeof NotificationSchema>;
-export type Output = z.infer<typeof OutputSchema>;
-export type Metadata = z.infer<typeof MetadataSchema>;
 export type ScheduleSpec = z.infer<typeof ScheduleSpecSchema>;
 
 // Validation helper

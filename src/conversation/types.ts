@@ -2,7 +2,7 @@
  * Conversation pipeline types.
  *
  * ConversationRequest is the unified entry point for Discord interactive messages.
- * Schedule execution has its own pipeline (ScheduleExecutor → SDKQueryManager)
+ * Schedule execution has its own pipeline (ScheduleExecutor → SDKSessionManager)
  * due to fundamentally different semantics (thread pre-creation, custom retry,
  * streaming delivery modes).
  */

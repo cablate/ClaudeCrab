@@ -1,15 +1,15 @@
 /**
- * MessageProcessor ??Unified message processing pipeline.
+ * MessageProcessor: unified message processing pipeline.
  *
- * Receives UnifiedMessage ??manages session ??executes SDK query ??routes response.
- * Supports V1 (stateless query via SDKQueryManager) and V2 (cached session via SDKSessionManager).
+ * Receives UnifiedMessage, manages session, executes SDK query, and routes response.
+ * Uses V2 cached sessions for interactive message processing.
  *
  * Key dependencies:
  * - SessionManager: conversation session lifecycle
- * - SDKQueryManager / SDKSessionManager: Claude SDK query execution
+ * - SDKSessionManager: Claude SDK query execution
  * - ResponseSender: routes replies to the correct platform adapter
  *
- * Main flow: processMessage() ??getOrCreateSession() ??executeQueryWithSDK() ??sendResponse()
+ * Main flow: processMessage() -> getOrCreateSession() -> executeQueryWithSDK() -> sendResponse()
  */
 
 import type { UnifiedMessage } from '../../types/message.js';
@@ -17,7 +17,6 @@ import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
 import type { IConversationRepository, IQueryMetricsRepository } from '../../persistence/types.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
 import { SessionManager } from '../session/SessionManager.js';
-import { SDKQueryManager } from '../query/SDKQueryManager.js';
 import { SDKSessionManager } from '../session/SDKSessionManager.js';
 import { logger } from '../../utils/logger.js';
 import { logContext, newCorrelationId, type LogContext } from '../../utils/logContext.js';
@@ -55,7 +54,7 @@ export interface MessageProcessorOptions {
    * allowing agents that self-update their CLAUDE.md to see changes reflected immediately.
    * Falls back to the cached agent.systemPrompt if not provided.
    */
-  getSystemPrompt?: (agentId: string) => Promise<string>;
+  getSystemPrompt?: (agentId: string) => string | Promise<string>;
 
   /**
    * Query metrics repository for token usage tracking (ADR-020 Phase 2).
@@ -77,6 +76,19 @@ export interface MessageProcessorOptions {
    * Intended for resource-constrained or Q&A-bot deployments.
    */
   ephemeral?: boolean;
+
+  /**
+   * Close idle live SDK CLI processes after this many ms.
+   * App sessions and sdkSessionId are preserved so the next message resumes.
+   * Set 0 to disable.
+   */
+  idleCloseMs?: number;
+
+  /** Active query hard timeout. 0 disables. */
+  queryHardTimeoutMs?: number;
+
+  /** Grace period between timeout interrupt and force-close. */
+  queryHardTimeoutGraceMs?: number;
 
   /**
    * When false, hides in-chat tool status messages.
@@ -115,11 +127,10 @@ export class MessageProcessor {
   ) => BaseAdapter | undefined;
   private readonly sendTypingIndicators: boolean;
   private readonly typingIndicatorIntervalMs: number;
-  private readonly sdkQueryManager: SDKQueryManager;
   private readonly sdkSessionManager: SDKSessionManager;
   private readonly conversationRepository: IConversationRepository | undefined;
   private readonly getSystemPrompt:
-    | ((agentId: string) => Promise<string>)
+    | ((agentId: string) => string | Promise<string>)
     | undefined;
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly usageCardEnabled: boolean;
@@ -130,12 +141,14 @@ export class MessageProcessor {
     this.getAdapter = options.getAdapter;
     this.sendTypingIndicators = options.sendTypingIndicators ?? true;
     this.typingIndicatorIntervalMs = options.typingIndicatorIntervalMs ?? 5000;
-    this.sdkQueryManager = new SDKQueryManager();
     this.sdkSessionManager = new SDKSessionManager({
       ...(options.rateLimitRepository !== undefined ? { rateLimitRepository: options.rateLimitRepository } : {}),
       ...(options.queryMetricsRepository !== undefined ? { queryMetricsRepository: options.queryMetricsRepository } : {}),
       ...(options.cacheKeepaliveConfig !== undefined ? { keepaliveConfig: options.cacheKeepaliveConfig } : {}),
       ephemeral: options.ephemeral ?? false,
+      ...(options.idleCloseMs !== undefined ? { idleCloseMs: options.idleCloseMs } : {}),
+      ...(options.queryHardTimeoutMs !== undefined ? { queryHardTimeoutMs: options.queryHardTimeoutMs } : {}),
+      ...(options.queryHardTimeoutGraceMs !== undefined ? { queryHardTimeoutGraceMs: options.queryHardTimeoutGraceMs } : {}),
     });
     this.conversationRepository = options.conversationRepository;
     this.getSystemPrompt = options.getSystemPrompt;
@@ -144,14 +157,6 @@ export class MessageProcessor {
     this.inChatUsageSummary = options.inChatUsageSummary ?? true;
 
     logger.info('MessageProcessor initialized');
-  }
-
-  /**
-   * Late dependency injection for services that depend on Discord adapters.
-   * Called by AppBootstrap after Discord initialization completes.
-   */
-  wirePostInit(_deps: Record<string, never>): void {
-    // no-op: all late-injected services removed
   }
 
   /** Expose SDKSessionManager for operational consumers. */
@@ -241,7 +246,6 @@ export class MessageProcessor {
   private _buildQueryExecutorDeps(): import('../query/QueryExecutor.js').QueryExecutorDeps {
     const deps: import('../query/QueryExecutor.js').QueryExecutorDeps = {
       sessionManager: this.sessionManager,
-      sdkQueryManager: this.sdkQueryManager,
       sdkSessionManager: this.sdkSessionManager,
       sendTypingIndicators: this.sendTypingIndicators,
       typingIndicatorIntervalMs: this.typingIndicatorIntervalMs,
@@ -279,15 +283,6 @@ export class MessageProcessor {
   }
 
   /**
-   * Clear conversation for a session.
-   * Clears the SDK session ID and persisted conversation records.
-   */
-  clearConversation(sessionId: string): void {
-    const { platform, agentId, userId } = this.getSessionIdentifiers(sessionId);
-    this.clearConversationFor(platform, agentId, userId);
-  }
-
-  /**
    * Clear conversation by logical identity.
    * Handles DB-only sessions whose SessionManager entry expired while the
    * SDKSessionManager still has a live managed session under the same sessionId.
@@ -319,7 +314,7 @@ export class MessageProcessor {
 
   /**
    * Close the V2 persistent session (kill cli.js process) without clearing conversation history.
-   * Used by /close command ??releases resources while keeping context for future resume.
+   * Used by /close command; releases resources while keeping context for future resume.
    * Returns true if a V2 session was active and destroyed.
    */
   closeSession(sessionId: string): boolean {
@@ -327,10 +322,10 @@ export class MessageProcessor {
     const internalSession = this.sessionManager.getInternalSession(platform, agentId, userId);
 
     if (internalSession?.sdkSessionId !== undefined) {
-      // Only destroy V2 process ??keep sdkSessionId so next message can resume.
+      // Only destroy V2 process; keep sdkSessionId so next message can resume.
       // IMPORTANT: SDKSessionManager.sessions is keyed by ClaudeCab sessionId, NOT sdkSessionId.
       this.sdkSessionManager.destroySession(sessionId);
-      // sdkSessionId is preserved ??next query will use resume: sdkSessionId ??conversation continues
+      // sdkSessionId is preserved; next query will use resume: sdkSessionId and continue the conversation.
       logger.info({ sessionId, sdkSessionId: internalSession.sdkSessionId }, 'V2 process closed (sdkSessionId preserved for resume)');
       return true;
     }
@@ -344,34 +339,14 @@ export class MessageProcessor {
    * without sending a new prompt (pure status poll, no model call).
    *
    * Returns:
-   *   null   ??no V2 session for this sessionId
-   *   object ??{ routed, drained, active }
+   *   null   -> no V2 session for this sessionId
+   *   object -> { routed, drained, active }
    *     routed  : sub-agent events successfully handled
    *     drained : total messages drained from buffer
    *     active  : sub-agent records still in started/progress lifecycle
    */
-  async syncSubAgentUpdates(sessionId: string): Promise<{ routed: number; drained: number; active: number } | null> {
+  syncSubAgentUpdates(sessionId: string): { routed: number; drained: number; active: number } | null {
     return this.sdkSessionManager.syncSubAgentUpdates(sessionId);
-  }
-
-  /**
-   * Cancel an active query for the given session.
-   * Returns true if a query was cancelled, false if no active query was found.
-   */
-  cancelQuery(sessionId: string): boolean {
-    // Try V1 (SDKQueryManager) first
-    if (this.sdkQueryManager.hasActiveQuery(sessionId)) {
-      this.sdkQueryManager.cancelQuery(sessionId);
-      logger.info({ sessionId }, 'Cancelled active V1 query');
-      return true;
-    }
-    // Try V2 (SDKSessionManager) ??only if a query is actually running
-    if (this.sdkSessionManager.hasActiveQuery(sessionId)) {
-      this.sdkSessionManager.cancelActiveQuery(sessionId);
-      logger.info({ sessionId }, 'Cancelled active V2 query');
-      return true;
-    }
-    return false;
   }
 
   /**
@@ -391,34 +366,18 @@ export class MessageProcessor {
     if (session === undefined) {
       return false;
     }
-    return this.cancelQuery(session.sessionId);
-  }
-
-  /**
-   * Check if there's an active query for a user.
-   */
-  hasActiveQueryForUser(
-    platform: string,
-    agentId: string,
-    userId: string
-  ): boolean {
-    const session = this.sessionManager.getInternalSession(
-      platform,
-      agentId,
-      userId
-    );
-    if (session === undefined) {
-      return false;
+    if (this.sdkSessionManager.hasActiveQuery(session.sessionId)) {
+      this.sdkSessionManager.cancelActiveQuery(session.sessionId);
+      logger.info({ sessionId: session.sessionId }, 'Cancelled active V2 query');
+      return true;
     }
-    return this.sdkQueryManager.hasActiveQuery(session.sessionId) ||
-      this.sdkSessionManager.hasActiveQuery(session.sessionId);
+    return false;
   }
 
   /**
    * Dispose resources
    */
   async dispose(): Promise<void> {
-    this.sdkQueryManager.dispose();
     await this.sdkSessionManager.dispose();
   }
 }

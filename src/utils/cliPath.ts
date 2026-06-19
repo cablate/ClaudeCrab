@@ -1,8 +1,7 @@
 /**
- * Shared CLAUDE_CLI_PATH resolver — used by both SDKSessionManager (V2
- * persistent session) and SDKQueryManager (V1 one-shot query) so the env
- * var override works in every code path that spawns a Claude Code CLI,
- * including scheduled tasks and V1 fallback.
+ * Shared CLAUDE_CLI_PATH resolver used by SDKSessionManager so the env var
+ * override works in every code path that spawns a Claude Code CLI, including
+ * scheduled tasks.
  *
  * Resolution order (only when CLAUDE_CLI_PATH is explicitly set):
  *   1. configured path (honor user intent when it works)

@@ -1,8 +1,7 @@
 /**
- * DiscordCacheAnomalyReport — Daily cache anomaly report Embed.
+ * Daily Discord report for JSONL cache anomalies.
  *
- * Scans today's JSONL files via CacheAnomalyAnalyzer and sends a summary
- * to a Discord channel. Same pattern as DiscordCostReport.
+ * This is an ops-only report. The chat runtime does not call this path.
  */
 
 import { EmbedBuilder } from 'discord.js';
@@ -32,63 +31,50 @@ export class DiscordCacheAnomalyReport {
     log.info({ event_type: EventType.ADAPTER_DISCORD_CACHE_ANOMALY_REPORT, date: today }, 'Generating cache anomaly report');
 
     const results = scanRecentJsonlFiles({ since: today });
-
     if (results.length === 0) {
       log.info({ date: today }, 'No cache anomalies today, skipping report');
       return;
     }
 
-    const totalAnomalies = results.reduce((sum, r) => sum + r.anomalies.length, 0);
-    const worstResult = results[0]!;
-    const worstTurn = worstResult.worstTurn;
+    const totalAnomalies = results.reduce((sum, result) => sum + result.anomalies.length, 0);
+    const worstResult = results[0];
+    if (worstResult === undefined) return;
 
+    const worstTurn = worstResult.worstTurn;
     const embed = new EmbedBuilder()
       .setAuthor({ name: 'ClaudeCab Cache Monitor' })
-      .setTitle(`Cache Anomaly Report — ${today}`)
+      .setTitle(`Cache Anomaly Report - ${today}`)
       .setColor(totalAnomalies >= 10 ? 0xED4245 : totalAnomalies >= 3 ? 0xFEE75C : 0x57F287)
       .setTimestamp();
 
-    // Session overview table
-    const sessionLines = results.slice(0, 8).map(r => {
-      const sessionId = extractSessionId(r.file);
-      const worst = r.worstTurn;
-      return `\`${sessionId}\` ${r.anomalies.length} anomalies · worst ${fmtTokens(worst?.cacheCreation ?? 0)} · ${worst?.cause ?? '?'}`;
-    });
-    embed.setDescription(sessionLines.join('\n'));
-
-    // Summary fields
+    embed.setDescription(results.slice(0, 8).map(formatSessionSummary).join('\n'));
     embed.addFields(
-      { name: '📊 Sessions', value: `${results.length}`, inline: true },
-      { name: '⚠️ Anomalies', value: `${totalAnomalies}`, inline: true },
-      { name: '💸 Worst Create', value: worstTurn ? fmtTokens(worstTurn.cacheCreation) : 'N/A', inline: true },
+      { name: 'Sessions', value: `${results.length}`, inline: true },
+      { name: 'Anomalies', value: `${totalAnomalies}`, inline: true },
+      { name: 'Worst Create', value: worstTurn ? fmtTokens(worstTurn.cacheCreation) : 'N/A', inline: true },
     );
 
-    // Cause distribution
-    const causeCounts = countCauses(results);
-    if (causeCounts.length > 0) {
-      const causeText = causeCounts
-        .slice(0, 6)
-        .map(([cause, count]) => `${causeEmoji(cause)} \`${cause}\`: ${count}`)
-        .join('\n');
+    const causeText = countCauses(results)
+      .slice(0, 6)
+      .map(([cause, count]) => `${causeLabel(cause)}: ${count}`)
+      .join('\n');
+    if (causeText.length > 0) {
       embed.addFields({ name: 'Cause Distribution', value: causeText });
     }
 
-    // Worst turn detail
-    if (worstTurn) {
+    if (worstTurn !== null) {
       const sessionId = extractSessionId(worstResult.file);
       const time = worstTurn.timestamp ? new Date(worstTurn.timestamp).toTimeString().slice(0, 8) : '?';
       embed.addFields({
-        name: '🔍 Worst Turn Detail',
+        name: 'Worst Turn Detail',
         value: [
           `Session: \`${sessionId}\``,
           `Line: L${worstTurn.line} @ ${time}`,
-          `input=${fmtTokens(worstTurn.inputTokens)} read=${fmtTokens(worstTurn.cacheRead)} **create=${fmtTokens(worstTurn.cacheCreation)}** out=${fmtTokens(worstTurn.outputTokens)}`,
-          `Cause: ${causeEmoji(worstTurn.cause)} \`${worstTurn.cause ?? 'unknown'}\`${worstTurn.causeDetail ? ` — ${worstTurn.causeDetail.slice(0, 80)}` : ''}`,
+          `input=${fmtTokens(worstTurn.inputTokens)} read=${fmtTokens(worstTurn.cacheRead)} create=${fmtTokens(worstTurn.cacheCreation)} out=${fmtTokens(worstTurn.outputTokens)}`,
+          `Cause: ${causeLabel(worstTurn.cause)}${worstTurn.causeDetail ? ` - ${worstTurn.causeDetail.slice(0, 80)}` : ''}`,
         ].join('\n'),
       });
     }
-
-    embed.setFooter({ text: 'npm run trace:cache -- --scan-files --today' });
 
     const sendResult = await this.adapter.sendEmbed(this.channelId, [embed]);
     if (sendResult.success) {
@@ -99,7 +85,11 @@ export class DiscordCacheAnomalyReport {
   }
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+function formatSessionSummary(result: ScanResult): string {
+  const sessionId = extractSessionId(result.file);
+  const worst = result.worstTurn;
+  return `\`${sessionId}\` ${result.anomalies.length} anomalies | worst ${fmtTokens(worst?.cacheCreation ?? 0)} | ${causeLabel(worst?.cause)}`;
+}
 
 function extractSessionId(filePath: string): string {
   const basename = filePath.replace(/\\/g, '/').split('/').pop() ?? '';
@@ -114,29 +104,14 @@ function fmtTokens(n: number): string {
 
 function countCauses(results: ScanResult[]): [CauseLabel, number][] {
   const counts = new Map<CauseLabel, number>();
-  for (const r of results) {
-    for (const a of r.anomalies) {
-      if (a.cause) counts.set(a.cause, (counts.get(a.cause) ?? 0) + 1);
+  for (const result of results) {
+    for (const anomaly of result.anomalies) {
+      if (anomaly.cause) counts.set(anomaly.cause, (counts.get(anomaly.cause) ?? 0) + 1);
     }
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-function causeEmoji(cause: CauseLabel | null | undefined): string {
-  switch (cause) {
-    case 'stop_hook_summary': return '🔴';
-    case 'hook_blocking_error': return '🔴';
-    case 'todo_reminder': return '🟡';
-    case 'task_reminder': return '🟡';
-    case 'prefix_rebuild': return '🔵';
-    case 'mcp_instructions_delta': return '🟠';
-    case 'deferred_tools_delta': return '🟠';
-    case 'hook_additional_context': return '🟠';
-    case 'dynamic_system_reminder': return '🟠';
-    case 'ttl_expiry': return '⏰';
-    case 'batch_tool_results': return '📦';
-    case 'near_ttl_gap': return '⏳';
-    case 'unknown_prefix_rebuild': return '❓';
-    default: return '⬜';
-  }
+function causeLabel(cause: CauseLabel | null | undefined): string {
+  return cause ?? 'unknown';
 }

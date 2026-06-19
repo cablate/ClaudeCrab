@@ -1,4 +1,4 @@
-import type { QueryResult, QueryUsage, QueryModelUsage } from '../query/SDKQueryManager.js';
+import type { QueryResult, QueryUsage, QueryModelUsage } from '../query/types.js';
 
 export type UsageAnomalySeverity = 'info' | 'warn';
 

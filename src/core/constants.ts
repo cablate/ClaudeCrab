@@ -20,14 +20,14 @@ const TAIPEI_TZ = 'Asia/Taipei';
 /**
  * Startup protocol reminder for new sessions.
  */
-export const STARTUP_PROTOCOL_REMINDER =
+const STARTUP_PROTOCOL_REMINDER =
   '【啟動協議】新 session，回覆前先完成 CLAUDE.md 規定的 Startup Protocol。';
 
 /**
  * Cross-agent call tools reminder.
  * Agents can use these tools to trigger other agents.
  */
-export const CROSS_AGENT_CALL_CONTEXT = `【跨 Agent 呼叫】
+const CROSS_AGENT_CALL_CONTEXT = `【跨 Agent 呼叫】
 可用工具：call_agent — 觸發其他 Agent 執行任務（fire-and-forget，不等待回覆）
 使用時機：需要其他 Agent 協助處理任務、通知有新工作、請求審閱或回饋時。`;
 
@@ -35,7 +35,7 @@ export const CROSS_AGENT_CALL_CONTEXT = `【跨 Agent 呼叫】
  * Skill proactive invocation reminder.
  * Reminds agents to check if any skills are applicable to the current task.
  */
-export const SKILL_REMINDER_CONTEXT = `【Skill 檢查】這輪任務有適用的 skill 嗎？符合觸發時機就主動調用。`;
+const SKILL_REMINDER_CONTEXT = `【Skill 檢查】這輪任務有適用的 skill 嗎？符合觸發時機就主動調用。`;
 
 /**
  * Build the complete prompt context with current time.

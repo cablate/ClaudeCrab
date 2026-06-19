@@ -29,18 +29,6 @@ export interface RateLimitRecordParams {
   isUsingOverage?: number;
 }
 
-export interface RateLimitSessionDelta {
-  firstUtilization: number;
-  lastUtilization: number;
-  delta: number;
-}
-
-export interface WeekOverWeekGrowth {
-  thisWeekMax: number;
-  lastWeekMax: number;
-  growthPct: number | null;
-}
-
 export class RateLimitRepository {
   private readonly db: DatabaseType;
   private readonly log = logger.child({ module: 'RateLimitRepository' });
@@ -79,63 +67,6 @@ export class RateLimitRepository {
       },
       'Rate limit snapshot recorded'
     );
-  }
-
-  /**
-   * Get rate limit trend for a given type since a timestamp, ordered ASC.
-   */
-  getTrend(rateLimitType: string, since: string): RateLimitSnapshotRow[] {
-    const stmt = this.db.prepare(`
-      SELECT * FROM rate_limit_snapshots
-      WHERE rate_limit_type = ? AND created_at >= ?
-      ORDER BY created_at ASC
-    `);
-    return stmt.all(rateLimitType, since) as RateLimitSnapshotRow[];
-  }
-
-  /**
-   * Get first and last utilization_pct for a session and rate limit type.
-   * Returns null if fewer than 2 records exist.
-   */
-  getSessionDelta(sdkSessionId: string, rateLimitType: string): RateLimitSessionDelta | null {
-    const stmt = this.db.prepare(`
-      SELECT utilization_pct FROM rate_limit_snapshots
-      WHERE sdk_session_id = ? AND rate_limit_type = ?
-      ORDER BY created_at ASC
-    `);
-    const rows = stmt.all(sdkSessionId, rateLimitType) as { utilization_pct: number }[];
-    if (rows.length < 2) return null;
-    const firstRow = rows[0];
-    const lastRow = rows[rows.length - 1];
-    if (firstRow === undefined || lastRow === undefined) return null;
-    const first = firstRow.utilization_pct;
-    const last = lastRow.utilization_pct;
-    return {
-      firstUtilization: first,
-      lastUtilization: last,
-      delta: last - first,
-    };
-  }
-
-  /**
-   * Compare max utilization this week vs last week for each rate limit type.
-   * Returns the aggregate across all types.
-   */
-  getWeekOverWeekGrowth(): WeekOverWeekGrowth {
-    const stmt = this.db.prepare(`
-      SELECT
-        MAX(CASE WHEN created_at >= DATE('now', '-7 days') THEN utilization_pct ELSE NULL END) as this_week_max,
-        MAX(CASE WHEN created_at >= DATE('now', '-14 days') AND created_at < DATE('now', '-7 days') THEN utilization_pct ELSE NULL END) as last_week_max
-      FROM rate_limit_snapshots
-    `);
-    const row = stmt.get() as { this_week_max: number | null; last_week_max: number | null };
-    const thisWeekMax = row.this_week_max ?? 0;
-    const lastWeekMax = row.last_week_max ?? 0;
-    let growthPct: number | null = null;
-    if (lastWeekMax > 0) {
-      growthPct = Math.round(((thisWeekMax - lastWeekMax) / lastWeekMax) * 100);
-    }
-    return { thisWeekMax, lastWeekMax, growthPct };
   }
 
   /**

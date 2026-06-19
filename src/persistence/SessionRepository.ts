@@ -194,13 +194,6 @@ export class SessionRepository implements ISessionRepository {
     stmt.run(sessionId);
   }
 
-  clearContinuationSource(sessionId: string): void {
-    const stmt = this.db.prepare(`
-      UPDATE sessions SET continuation_source = NULL, continuation_state = NULL WHERE session_id = ?
-    `);
-    stmt.run(sessionId);
-  }
-
   /**
    * Update processed message IDs
    */

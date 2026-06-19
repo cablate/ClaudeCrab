@@ -1,18 +1,13 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { AgentDefinition, PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { Model } from '../../types/agent.js';
+import { resolveFoundationDir } from '../agentPaths.js';
 
 const MODEL_ALIASES = new Set(['sonnet', 'opus', 'haiku']);
 
-const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(moduleDir, '../../..');
-
 export const FOUNDATION_SUBAGENTS_ROOT = path.join(
-  repoRoot,
-  'agents',
-  '_foundation',
+  resolveFoundationDir(),
   'subagents',
 );
 
@@ -38,9 +33,11 @@ interface ParsedPromptFile {
 function parseFrontmatter(content: string): ParsedPromptFile | null {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n*/);
   if (!match) return null;
+  const frontmatter = match[1];
+  if (frontmatter === undefined) return null;
 
   const fields: Record<string, string> = {};
-  for (const line of match[1]!.split('\n')) {
+  for (const line of frontmatter.split('\n')) {
     const colonIdx = line.indexOf(':');
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
@@ -95,9 +92,11 @@ export function loadFoundationSubagents(
 
     const { name, fields, body } = parsed;
     const ov = overrides[name];
+    const description = ov?.description ?? fields['description'];
+    if (description === undefined) continue;
 
     const def: AgentDefinition = {
-      description: ov?.description ?? fields['description']!,
+      description,
       prompt: body,
     };
 

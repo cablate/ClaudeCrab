@@ -45,69 +45,10 @@ export class AdapterRegistry {
   }
 
   /**
-   * Check if an adapter is registered
-   */
-  has(agentId: string): boolean {
-    return this.adapters.has(agentId);
-  }
-
-  /**
-   * Get all registered agent IDs.
-   */
-  list(): string[] {
-    return Array.from(this.adapters.keys());
-  }
-
-  /**
    * Get all registered adapters
    */
   getAll(): BaseAdapter[] {
     return Array.from(this.adapters.values());
-  }
-
-  /**
-   * Initialize all adapters
-   */
-  async initializeAll(): Promise<void> {
-    const adapters = this.getAll();
-    logger.info({ event_type: EventType.ADAPTER_INIT_BEGIN, count: adapters.length }, 'Initializing all adapters');
-
-    const results = await Promise.allSettled(
-      adapters.map((adapter) => adapter.initialize())
-    );
-
-    const failed = results.filter((r) => r.status === 'rejected');
-    if (failed.length > 0) {
-      logger.error(
-        { event_type: EventType.ADAPTER_INIT_ERROR, failedCount: failed.length },
-        'Some adapters failed to initialize'
-      );
-    }
-  }
-
-  /**
-   * Start all adapters
-   */
-  async startAll(): Promise<void> {
-    const adapters = this.getAll();
-    logger.info({ event_type: EventType.ADAPTER_START_BEGIN, count: adapters.length }, 'Starting all adapters');
-
-    const results = await Promise.allSettled(
-      adapters.map((adapter) => adapter.start())
-    );
-
-    const failed = results.filter((r) => r.status === 'rejected');
-    if (failed.length > 0) {
-      logger.error(
-        { event_type: EventType.ADAPTER_START_ERROR, failedCount: failed.length },
-        'Some adapters failed to start'
-      );
-      for (const result of failed) {
-        if (result.status === 'rejected') {
-          logger.error({ event_type: EventType.ADAPTER_START_ERROR, err: result.reason }, 'Adapter start error');
-        }
-      }
-    }
   }
 
   /**
@@ -152,27 +93,5 @@ export class AdapterRegistry {
     this.adapters.clear();
     logger.info({ event_type: EventType.ADAPTER_DISPOSE_COMPLETE }, 'All adapters disposed');
   }
-
-  /**
-   * Get count of registered adapters
-   */
-  get size(): number {
-    return this.adapters.size;
-  }
-}
-
-/**
- * Global adapter registry instance
- */
-let globalRegistry: AdapterRegistry | null = null;
-
-/**
- * Get the global adapter registry
- */
-export function getAdapterRegistry(): AdapterRegistry {
-  if (globalRegistry === null) {
-    globalRegistry = new AdapterRegistry();
-  }
-  return globalRegistry;
 }
 

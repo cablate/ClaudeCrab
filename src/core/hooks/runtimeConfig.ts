@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolveFoundationDir } from '../agentPaths.js';
 
 export const HOOK_PROMPT_IDS = [
   'userPromptSubmit',
@@ -50,13 +50,8 @@ export interface RuntimeHookConfig {
   };
 }
 
-const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(moduleDir, '../../..');
-
 export const HOOK_RUNTIME_CONFIG_PATH = path.join(
-  repoRoot,
-  'agents',
-  '_foundation',
+  resolveFoundationDir(),
   'hooks',
   'runtime-config.json',
 );
@@ -66,7 +61,6 @@ function readRuntimeHookConfig(): RuntimeHookConfig {
 }
 
 export const HOOK_RUNTIME_CONFIG = readRuntimeHookConfig();
-export const HOOK_PROMPT_FILES = HOOK_RUNTIME_CONFIG.promptFiles;
 
 export function compileHookPatterns(patterns: readonly RuntimeHookPattern[]): readonly RegExp[] {
   return patterns.map(({ pattern, flags = '' }) => new RegExp(pattern, flags));

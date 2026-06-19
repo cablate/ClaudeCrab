@@ -19,6 +19,13 @@ export interface AppConfig {
     cleanupIntervalMs: number;
     maxSessions: number;
     dbRetentionMs: number;
+    /** Close the live SDK CLI process after this much real-query idle time.
+     *  The app session and sdkSessionId are preserved for later resume. */
+    idleCloseMs: number;
+    /** Interrupt active SDK queries that exceed this runtime. 0 disables. */
+    queryHardTimeoutMs: number;
+    /** After timeout interrupt, force-close the live SDK process after this grace period. */
+    queryHardTimeoutGraceMs: number;
     /** Destroy the SDK CLI process after each query to free ~150MB RAM.
      *  Resume data stays on disk so the next query can restore context via JSONL. */
     ephemeral: boolean;
@@ -142,6 +149,9 @@ export function loadAppConfig(): AppConfig {
       cleanupIntervalMs: parseIntegerEnv('CLEANUP_INTERVAL_MS', 60_000),
       maxSessions: parseIntegerEnv('MAX_SESSIONS', 1000),
       dbRetentionMs: parseIntegerEnv('DB_RETENTION_MS', 2_592_000_000), // 30 days
+      idleCloseMs: parseIntegerEnv('SESSION_IDLE_CLOSE_MS', 7_200_000),
+      queryHardTimeoutMs: parseIntegerEnv('SESSION_QUERY_HARD_TIMEOUT_MS', 3_600_000),
+      queryHardTimeoutGraceMs: parseIntegerEnv('SESSION_QUERY_HARD_TIMEOUT_GRACE_MS', 30_000),
       ephemeral: process.env.SESSION_EPHEMERAL === 'true',
     },
     schedule: {

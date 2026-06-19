@@ -113,19 +113,6 @@ export class STTError extends ClaudeCabError {
 }
 
 /**
- * Error thrown for validation failures
- */
-export class ValidationError extends ClaudeCabError {
-  constructor(
-    public readonly field: string,
-    message: string
-  ) {
-    super(message, 'VALIDATION_ERROR', true, '輸入驗證失敗');
-    this.name = 'ValidationError';
-  }
-}
-
-/**
  * Processing error codes
  */
 export type ProcessingErrorCode =

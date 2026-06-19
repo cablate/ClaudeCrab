@@ -247,7 +247,7 @@ export class DiscordInteractionHandler {
   /**
    * Handle modal submit interactions.
    */
-  private async handleModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  private handleModalSubmit(interaction: ModalSubmitInteraction): void {
     log.warn({ customId: interaction.customId }, 'Unhandled modal submit');
   }
 

@@ -1,42 +1,21 @@
 import * as fs from 'node:fs/promises';
 import * as fsSync from 'node:fs';
 import * as path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import {
   AgentConfigSchema,
   type AgentConfig,
   type LoadedAgent,
   type IAgentRepository,
-  type McpServerConfig,
 } from '../../types/agent.js';
-import { type AgentHooks, HOOK_EVENT_NAMES } from '../../types/hooks.js';
 import { AgentLoadError, AgentConfigError } from '../../types/errors.js';
 import { logger } from '../../utils/logger.js';
+import { loadAgentHooks } from './AgentHooksLoader.js';
+import { loadAgentMcpConfig } from './AgentMcpConfigLoader.js';
 
 /**
  * Default agent configuration file name
  */
 const AGENT_CONFIG_FILE = 'agent.json';
-
-/**
- * Default system prompt file name
- * Uses CLAUDE.md to align with Claude Code conventions
- */
-
-/**
- * Default hooks file name
- */
-const HOOKS_FILE = 'hooks.ts';
-
-/**
- * Compiled hooks file name (for production)
- */
-const HOOKS_FILE_JS = 'hooks.js';
-
-/**
- * MCP config file name
- */
-const MCP_CONFIG_FILE = '.mcp.json';
 
 /**
  * AgentLoader options
@@ -148,14 +127,14 @@ export class AgentLoader implements IAgentRepository {
       // Sync model from settings.local.json (SDK source of truth) -> config
       await this.syncModelFromSettings(agentPath, config);
 
-      // Load system prompt
+      // Keep SDK systemPrompt append empty. Claude Code reads CLAUDE.md via project settings.
       const systemPrompt = await this.loadSystemPrompt(agentPath, config);
 
       // Load hooks (optional)
-      const hooks = await this.loadHooks(agentPath, agentId);
+      const hooks = await loadAgentHooks(agentPath, agentId);
 
       // Load MCP servers (optional)
-      const mcpServers = await this.loadMcpConfig(agentPath, config);
+      const mcpServers = await loadAgentMcpConfig(agentPath, config);
 
       const loadedAgent: LoadedAgent = {
         id: agentId,
@@ -170,9 +149,6 @@ export class AgentLoader implements IAgentRepository {
       this.cache.set(agentId, loadedAgent);
 
       logger.info({ agentId, name: config.name }, 'Agent loaded');
-
-      // Emit event
-      // (EventBus removed — no subscribers)
 
       return loadedAgent;
     } catch (error) {
@@ -238,7 +214,7 @@ export class AgentLoader implements IAgentRepository {
     } catch {
       logger.warn(
         { agentId },
-        'Agent has no CLAUDE.md ??the agent will run without a system prompt file. ' +
+        'Agent has no CLAUDE.md; the agent will run without project instructions. ' +
         'Create CLAUDE.md to define agent behavior.'
       );
     }
@@ -283,228 +259,18 @@ export class AgentLoader implements IAgentRepository {
     }
   }
 
-  /**
-   * Load system prompt from file or config
-   */
   private loadSystemPrompt(
     _agentPath: string,
     _config: AgentConfig
   ): string {
-    // CLAUDE.md is NOT read here ??SDK's WL8 memory loader handles it
+    // CLAUDE.md is not read here; the SDK project memory loader handles it
     // automatically via settingSources: ['project']. Manual reading would
     // duplicate the content AND add the file to readFileState, triggering
     // diff injection in system-reminder on every turn.
-    //
-    // We only return engine-level global rules (Custom Tools descriptions)
-    // that aren't part of any CLAUDE.md file.
-    return this.getGlobalStaticRules();
+    return '';
   }
 
 
-  /**
-   * Returns global static rules that apply to all agents.
-   * These are engine-level conventions that don't change at runtime.
-   */
-  private getGlobalStaticRules(): string {
-    return `
-?�Custom Tools??
-??檔�??��?(mcp__file-send__send_file)：傳?��?案給使用?�。�??��?path（�?案�??�路徑�??�caption（可?�說?��??�自?�偵測�?案�??��??��?/?��?/?�件）並以�??��??�方式傳?��?
-??�?Agent ?�叫 (mcp__agent-call__call_agent)：�?要其�?Agent ?�助?�使?��?fire-and-forget）。�??��?targetAgent（admin/coder/general）、message?�priority（low/normal/high）�?
-
-?�Skill 載入??
-你�? .claude/skills/ 裡�??��??��??�造�?專業?��??�任?��???skills ?��?，�??��???skill（含 references/）�??��??�。�?讀 skill ?��?跟通用 AI 沒�?差別??
-`.trim();
-  }
-
-
-
-  /**
-   * Load hooks from hooks.ts or hooks.js
-   * Uses pathToFileURL for Windows compatibility
-   */
-  private async loadHooks(
-    agentPath: string,
-    agentId: string
-  ): Promise<AgentHooks | undefined> {
-    // Try .js first (compiled), then .ts (with tsx)
-    const jsPath = path.join(agentPath, HOOKS_FILE_JS);
-    const tsPath = path.join(agentPath, HOOKS_FILE);
-
-    let hooksPath: string | undefined;
-
-    try {
-      await fs.access(jsPath);
-      hooksPath = jsPath;
-    } catch {
-      try {
-        await fs.access(tsPath);
-        hooksPath = tsPath;
-      } catch {
-        // No hooks file found, which is fine
-        logger.debug({ agentId }, 'No hooks file found');
-        return undefined;
-      }
-    }
-
-    try {
-      // Use pathToFileURL for Windows compatibility
-      const fileUrl = pathToFileURL(hooksPath).href;
-
-      // Add cache busting for hot reload support
-      const urlWithCacheBust = `${fileUrl}?t=${Date.now()}`;
-
-      const module = (await import(urlWithCacheBust)) as Record<string, unknown>;
-
-      // Validate and extract hooks
-      const hooks = this.validateHooksExport(module, agentId);
-
-      logger.info(
-        { agentId, hookCount: Object.keys(hooks).length },
-        'Hooks loaded'
-      );
-
-      return hooks;
-    } catch (error) {
-      throw new AgentLoadError(
-        agentId,
-        new Error(
-          `Failed to load hooks: ${(error as Error).message}`
-        )
-      );
-    }
-  }
-
-  /**
-   * Validate hooks module export
-   */
-  private validateHooksExport(
-    module: Record<string, unknown>,
-    agentId: string
-  ): AgentHooks {
-    const hooks: AgentHooks = {};
-    const validHookNames = new Set<string>(HOOK_EVENT_NAMES);
-
-    for (const [key, value] of Object.entries(module)) {
-      // Skip default export if it's not a function
-      if (key === 'default') {
-        if (typeof value === 'object' && value !== null) {
-          // Handle default export as an object containing hooks
-          return this.validateHooksExport(
-            value as Record<string, unknown>,
-            agentId
-          );
-        }
-        continue;
-      }
-
-      // Check if this is a valid hook name
-      if (validHookNames.has(key)) {
-        if (typeof value !== 'function') {
-          throw new AgentConfigError(agentId, [
-            `Hook "${key}" must be a function, got ${typeof value}`,
-          ]);
-        }
-        // Use Object.assign to avoid exactOptionalPropertyTypes issues
-        Object.assign(hooks, { [key]: value });
-      } else {
-        logger.warn(
-          { agentId, hookName: key },
-          'Unknown hook name in hooks file, ignoring'
-        );
-      }
-    }
-
-    return hooks;
-  }
-
-  /**
-   * Load MCP server configuration
-   * Supports both mcpConfigFile in agent.json and default mcp.json
-   */
-  private async loadMcpConfig(
-    agentPath: string,
-    config: AgentConfig
-  ): Promise<Record<string, McpServerConfig> | undefined> {
-    // Determine MCP config file path
-    let mcpConfigPath: string;
-
-    if (config.mcpConfigFile !== undefined) {
-      mcpConfigPath = path.isAbsolute(config.mcpConfigFile)
-        ? config.mcpConfigFile
-        : path.join(agentPath, config.mcpConfigFile);
-    } else {
-      mcpConfigPath = path.join(agentPath, MCP_CONFIG_FILE);
-    }
-
-    // Check if file exists
-    try {
-      await fs.access(mcpConfigPath);
-    } catch {
-      logger.debug({ agentPath }, 'No MCP config file found');
-      return undefined;
-    }
-
-    try {
-      const content = await fs.readFile(mcpConfigPath, 'utf-8');
-      const data = JSON.parse(content) as Record<string, unknown>;
-
-      // Validate and transform MCP config
-      // The MCP config can have a 'mcpServers' key or be the servers directly
-      const serversData =
-        (data['mcpServers'] as Record<string, unknown> | undefined) ?? data;
-
-      const mcpServers: Record<string, McpServerConfig> = {};
-
-      for (const [serverName, serverConfig] of Object.entries(serversData)) {
-        if (serverName === 'mcpServers') continue; // Skip if we already extracted
-
-        if (typeof serverConfig !== 'object' || serverConfig === null) {
-          logger.warn(
-            { serverName },
-            'Invalid MCP server config, skipping'
-          );
-          continue;
-        }
-
-        const cfg = serverConfig as Record<string, unknown>;
-        mcpServers[serverName] = {
-          ...(typeof cfg['command'] === 'string'
-            ? { command: cfg['command'] }
-            : {}),
-          ...(Array.isArray(cfg['args'])
-            ? { args: cfg['args'] as string[] }
-            : {}),
-          ...(typeof cfg['env'] === 'object' && cfg['env'] !== null
-            ? { env: cfg['env'] as Record<string, string> }
-            : {}),
-          ...(typeof cfg['url'] === 'string' ? { url: cfg['url'] } : {}),
-          ...(cfg['transport'] === 'stdio' ||
-          cfg['transport'] === 'sse' ||
-          cfg['transport'] === 'http'
-            ? { transport: cfg['transport'] }
-            : {}),
-        };
-      }
-
-      if (Object.keys(mcpServers).length === 0) {
-        return undefined;
-      }
-
-      logger.info(
-        { serverCount: Object.keys(mcpServers).length },
-        'MCP config loaded'
-      );
-
-      return mcpServers;
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        logger.error({ mcpConfigPath, error }, 'Invalid JSON in MCP config');
-      } else {
-        logger.error({ mcpConfigPath, error }, 'Failed to load MCP config');
-      }
-      return undefined;
-    }
-  }
 
   /**
    * Load all agents from the agents directory
@@ -568,29 +334,19 @@ export class AgentLoader implements IAgentRepository {
   }
 
   /**
-   * Clear all cached agents
-   */
-  clearAllCache(): void {
-    this.cache.clear();
-    logger.debug('All agent caches cleared');
-  }
-
-  /**
    * Reload a specific agent (clear cache and reload)
    */
   async reloadAgent(agentId: string): Promise<LoadedAgent> {
     this.clearCache(agentId);
     const agent = await this.loadAgent(agentId);
-    // (EventBus removed — no subscribers)
     return agent;
   }
 
   /**
-   * Read the current system prompt from disk for the given agent.
-   * Unlike the cached `systemPrompt` on LoadedAgent, this always reads fresh from the filesystem.
-   * Useful when the agent may have updated its own CLAUDE.md during runtime.
+   * Preserve the getSystemPrompt callback contract without duplicating CLAUDE.md.
+   * Claude Code loads project instructions directly from the agent cwd.
    */
-  async readSystemPrompt(agentId: string): Promise<string> {
+  readSystemPrompt(agentId: string): string {
     const agent = this.cache.get(agentId);
     if (agent === undefined) {
       throw new AgentLoadError(agentId, new Error('Agent not loaded'));
@@ -622,8 +378,8 @@ export class AgentLoader implements IAgentRepository {
       discordChannelId?: string;
     }> = [];
 
-    const seenDiscordTokens = new Map<string, string>(); // token ??agentId
-    const seenDiscordChannels = new Map<string, string>(); // channelId ??agentId
+    const seenDiscordTokens = new Map<string, string>(); // token -> agentId
+    const seenDiscordChannels = new Map<string, string>(); // channelId -> agentId
 
     for (const [agentId, agent] of this.cache) {
       const discordBotToken = agent.config.discordBotToken;

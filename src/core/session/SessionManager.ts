@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { Mutex } from 'async-mutex';
 import {
   type UserSession,
@@ -14,52 +13,28 @@ import { AgentLoader } from '../orchestrator/AgentLoader.js';
 import { ConfigTransformer, type SDKOptions } from '../lib/ConfigTransformer.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
-import type { ISessionRepository, SessionRow } from '../../persistence/types.js';
+import type { ISessionRepository } from '../../persistence/types.js';
+import { buildInternalSession, extractPreviousSessionState } from './SessionCreation.js';
 import {
-  serializeMessageIds,
-  deserializeMessageIds,
-  dateToString,
-  stringToDate,
-} from '../../persistence/types.js';
+  restoreSessionsFromRepository,
+  toPublicSession,
+  toSessionRow,
+} from './SessionPersistence.js';
 
-/**
- * Internal session data with mutex for concurrency control
- */
-/** Cumulative usage snapshot for per-query delta calculation */
-export interface UsageSnapshot {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadInputTokens: number;
-  cacheCreationInputTokens: number;
-  costUsd: number;
-  totalCostUsd: number;
-}
-
-interface InternalSession extends UserSession {
-  /** Mutex for preventing concurrent message processing */
+export interface InternalSession extends UserSession {
   mutex: Mutex;
-  /** Loaded agent reference */
   agent: LoadedAgent;
-  /** SDK options for this session */
   sdkOptions: SDKOptions;
-  /** Previous cumulative usage ??for computing per-query delta (V1 resume also reports cumulative) */
-  prevUsage?: UsageSnapshot;
 }
 
-/**
- * SessionManager options
- */
 export interface SessionManagerOptions {
-  /** Agent loader instance */
   agentLoader: AgentLoader;
-  /** Session store configuration */
   config?: Partial<SessionStoreConfig>;
-  /** Optional session repository for persistence */
   sessionRepository?: ISessionRepository | undefined;
 }
 
 /**
- * UserSession lifecycle manager — tracks conversation sessions per (platform, agentId, userId).
+ * UserSession lifecycle manager for conversation sessions per (platform, agentId, userId).
  *
  * Responsibilities:
  * - CRUD of UserSession records with state tracking (idle/processing/error)
@@ -68,7 +43,7 @@ export interface SessionManagerOptions {
  * - Idle cleanup via configurable interval
  *
  * Boundary: manages app-level session metadata only. Does NOT manage SDK CLI
- * processes, cache keepalive, or query execution — use SDKSessionManager for those.
+ * processes, cache keepalive, or query execution; use SDKSessionManager for those.
  */
 export class SessionManager {
   private readonly sessions: Map<string, InternalSession> = new Map();
@@ -92,7 +67,7 @@ export class SessionManager {
     }
 
     this.cleanupInterval = setInterval(() => {
-      void this.cleanupExpired();
+      this.cleanupExpired();
     }, this.config.cleanupIntervalMs);
 
     logger.info(
@@ -145,27 +120,6 @@ export class SessionManager {
   }
 
   /**
-   * Get a session by session key
-   */
-  getSessionByKey(key: string): UserSession | undefined {
-    const session = this.sessions.get(key);
-
-    if (session !== undefined) {
-      session.lastActiveAt = new Date();
-    }
-
-    return session;
-  }
-
-  /**
-   * Check if a session exists
-   */
-  hasSession(platform: string, agentId: string, userId: string): boolean {
-    const key = getSessionKey(platform, agentId, userId);
-    return this.sessions.has(key);
-  }
-
-  /**
    * Create a new session
    */
   async createSession(options: CreateSessionOptions): Promise<UserSession> {
@@ -201,66 +155,15 @@ export class SessionManager {
     // Transform config to SDK options
     const sdkOptions = ConfigTransformer.toSDKOptions(agent);
 
-    const inheritedSdkSessionId = options.inheritedSdkSessionId;
-
-    let previousSessionId: string | undefined;
-    let previousSdkSessionId: string | undefined;
-    let previousContinuationSource: 'schedule' | null | undefined;
-    let previousContinuationState: 'pending' | 'active' | null | undefined;
-    if (this.sessionRepository !== undefined) {
-      const previousRow = this.sessionRepository.findByPlatformAgentAndUser(platform, agentId, userId);
-      if (previousRow !== undefined) {
-        previousSessionId = previousRow.session_id;
-        const previousIsActive = previousRow.is_active !== 0;
-        if (previousIsActive) {
-          previousSdkSessionId = previousRow.sdk_session_id ?? undefined;
-          previousContinuationSource = previousRow.continuation_source as 'schedule' | null | undefined;
-          previousContinuationState = previousRow.continuation_state as 'pending' | 'active' | null | undefined;
-        }
-        logger.info(
-          {
-            event_type: EventType.SESSION_RESTORE_BEGIN,
-            previousSessionId,
-            previousSdkSessionId: previousSdkSessionId ?? null,
-            previousIsActive: previousRow.is_active,
-            previousCreatedAt: previousRow.created_at,
-            continuationSource: previousContinuationSource,
-            continuationState: previousContinuationState,
-          },
-          `Inheriting session from DB ??sdkSessionId=${previousSdkSessionId ?? 'none'}, isActive=${previousRow.is_active}`
-        );
-      }
-    }
-
-    const now = new Date();
-    const session: InternalSession = {
-      // Reuse previous session ID to maintain DB FK linkage (conversations table)
-      sessionId: previousSessionId ?? uuidv4(),
-      agentId,
-      platform,
-      userId,
-      state: 'idle',
-      createdAt: now,
-      lastActiveAt: now,
-      processedMessageIds: new Set(),
-      mutex: new Mutex(),
-      agent,
-      sdkOptions,
-      ...(inheritedSdkSessionId !== undefined
-        ? { sdkSessionId: inheritedSdkSessionId }
-        : previousSdkSessionId !== undefined
-          ? { sdkSessionId: previousSdkSessionId }
-          : {}),
-      isActive: true,
-      continuationSource: previousContinuationSource ?? undefined,
-      continuationState: previousContinuationState ?? undefined,
-    };
+    const previousRow = this.sessionRepository?.findByPlatformAgentAndUser(platform, agentId, userId);
+    const previous = extractPreviousSessionState(previousRow);
+    const session = buildInternalSession({ options, agent, sdkOptions, previous });
 
     this.sessions.set(key, session);
 
     // Persist to database (ON CONFLICT updates existing row, preserving FK linkage)
     if (this.sessionRepository !== undefined) {
-      this.sessionRepository.save(this.toSessionRow(session));
+      this.sessionRepository.save(toSessionRow(session));
     }
 
     logger.info(
@@ -270,16 +173,13 @@ export class SessionManager {
         platform,
         userId,
         agentId,
-        inherited: previousSessionId !== undefined,
+        inherited: previous.previousSessionId !== undefined,
         hasSdkSessionId: session.sdkSessionId !== undefined,
       },
       'Session created'
     );
 
-    // Emit event
-    // (EventBus removed — no subscribers)
-
-    return this.toPublicSession(session);
+    return toPublicSession(session);
   }
 
   /**
@@ -296,7 +196,7 @@ export class SessionManager {
       return existing;
     }
 
-    // Soft-deleted (isActive=false) or no session ??remove stale entry and create fresh
+    // Soft-deleted (isActive=false) or no session: remove stale entry and create fresh
     if (existing !== undefined && !existing.isActive) {
       const key = getSessionKey(platform, agentId, userId);
       this.sessions.delete(key);
@@ -330,46 +230,11 @@ export class SessionManager {
       { sessionId: session.sessionId, previousState, newState: state },
       'Session state updated'
     );
-
-    // (EventBus removed — no subscribers)
-  }
-
-  /**
-   * Close a session
-   */
-  closeSession(
-    platform: string,
-    agentId: string,
-    userId: string,
-    reason: 'timeout' | 'user_request' | 'error' = 'user_request'
-  ): boolean {
-    const key = getSessionKey(platform, agentId, userId);
-    const session = this.sessions.get(key);
-
-    if (session === undefined) {
-      return false;
-    }
-
-    this.sessions.delete(key);
-
-    // Remove from database
-    if (this.sessionRepository !== undefined) {
-      this.sessionRepository.delete(session.sessionId);
-    }
-
-    logger.info(
-      { event_type: EventType.SESSION_DISPOSED, sessionId: session.sessionId, reason },
-      'Session closed'
-    );
-
-    // (EventBus removed — no subscribers)
-
-    return true;
   }
 
   /**
    * Soft-delete a session: mark as inactive in memory + DB.
-   * Used by /reset ??survives process restart (unlike memory-only isActive).
+   * Used by /reset; survives process restart unlike memory-only isActive.
    * Also handles sessions that have been expired from memory but still exist in DB.
    */
   softDeleteSession(platform: string, agentId: string, userId: string): boolean {
@@ -391,7 +256,7 @@ export class SessionManager {
       return true;
     }
 
-    // Session not in memory (expired/cleaned up) ??deactivate DB row directly
+    // Session not in memory (expired/cleaned up): deactivate DB row directly
     if (this.sessionRepository !== undefined) {
       const deactivated = this.sessionRepository.deactivateByPlatformAgentAndUser(platform, agentId, userId);
       if (deactivated) {
@@ -444,7 +309,7 @@ export class SessionManager {
             dedupSize: session.processedMessageIds.size,
             maxSize: this.config.maxProcessedMessageIds,
           },
-          'Dedup cache full ??evicting oldest processed message id (risk: same id replay would bypass dedup)'
+          'Dedup cache full; evicting oldest processed message id (risk: same id replay would bypass dedup)'
         );
       }
     }
@@ -551,22 +416,10 @@ export class SessionManager {
     }
   }
 
-  clearContinuationSource(platform: string, agentId: string, userId: string): void {
-    const key = getSessionKey(platform, agentId, userId);
-    const session = this.sessions.get(key);
-    if (session !== undefined) {
-      session.continuationSource = undefined;
-      session.continuationState = undefined;
-      if (this.sessionRepository !== undefined) {
-        this.sessionRepository.clearContinuationSource(session.sessionId);
-      }
-    }
-  }
-
   /**
    * Cleanup expired sessions
    */
-  async cleanupExpired(): Promise<number> {
+  cleanupExpired(): number {
     const now = Date.now();
     const expiredKeys: string[] = [];
 
@@ -582,10 +435,8 @@ export class SessionManager {
       if (session !== undefined) {
         this.sessions.delete(key);
 
-        // NOTE: Do NOT delete from database ??DB row preserves sdkSessionId
+        // NOTE: Do not delete from database; DB row preserves sdkSessionId
         // for conversation continuity when the user returns.
-
-        // (EventBus removed — no subscribers)
       }
     }
 
@@ -608,112 +459,13 @@ export class SessionManager {
       return 0;
     }
 
-    // Purge truly ancient sessions (beyond DB retention period)
-    const ancientRows = this.sessionRepository.findExpired(this.config.dbRetentionMs);
-    for (const row of ancientRows) {
-      this.sessionRepository.delete(row.session_id);
-    }
-    if (ancientRows.length > 0) {
-      logger.info({ event_type: EventType.SESSION_PURGED, count: ancientRows.length }, 'Purged ancient sessions from database');
-    }
-
-    // Identify expired sessions (beyond active timeout) ??skip loading but keep in DB
-    const expiredRows = this.sessionRepository.findExpired(this.config.sessionTimeoutMs);
-    const expiredIds = new Set(expiredRows.map((r) => r.session_id));
-    if (expiredRows.length > 0) {
-      logger.info(
-        { event_type: EventType.SESSION_RESTORE_SKIPPED, count: expiredRows.length },
-        'Skipped expired sessions (kept in DB for continuity)'
-      );
-    }
-
-    // Restore active sessions into memory
-    const rows = this.sessionRepository.findAll();
-    let restored = 0;
-
-    for (const row of rows) {
-      // Skip expired sessions ??they stay in DB for sdkSessionId continuity
-      if (expiredIds.has(row.session_id)) {
-        continue;
-      }
-
-      try {
-        // Try to load the agent
-        const agent = this.agentLoader.get(row.agent_id) ??
-          (await this.agentLoader.loadAgent(row.agent_id));
-
-        const sdkOptions = ConfigTransformer.toSDKOptions(agent);
-        const key = getSessionKey(row.platform, row.agent_id, row.user_id);
-
-        // Skip if session already exists in memory
-        if (this.sessions.has(key)) {
-          continue;
-        }
-
-        // Reset stuck 'processing' state (server crash recovery)
-        const restoredState = row.state === 'processing' ? 'idle' : row.state;
-
-        // Skip soft-deleted sessions (reset by user, persisted to DB)
-        if (row.is_active === 0) {
-          logger.debug(
-            { sessionId: row.session_id, platform: row.platform, userId: row.user_id },
-            'Skipped inactive (soft-deleted) session'
-          );
-          continue;
-        }
-
-        const session: InternalSession = {
-          sessionId: row.session_id,
-          agentId: row.agent_id,
-          platform: row.platform,
-          userId: row.user_id,
-          state: restoredState as SessionState,
-          createdAt: stringToDate(row.created_at),
-          lastActiveAt: stringToDate(row.last_active_at),
-          processedMessageIds: deserializeMessageIds(row.processed_message_ids),
-          mutex: new Mutex(),
-          agent,
-          sdkOptions,
-          isActive: true,
-        };
-
-        // Only set sdkSessionId if it exists in the database
-        if (row.sdk_session_id !== null) {
-          session.sdkSessionId = row.sdk_session_id;
-        }
-
-        this.sessions.set(key, session);
-        restored++;
-
-        // Sync state reset to DB if needed
-        if (restoredState !== row.state) {
-          this.sessionRepository.updateState(row.session_id, restoredState as SessionState);
-          logger.info({ event_type: EventType.SESSION_STATE_TRANSITION, sessionId: row.session_id }, 'Reset stuck processing state to idle');
-        }
-
-        logger.debug(
-          {
-            sessionId: row.session_id,
-            platform: row.platform,
-            userId: row.user_id,
-            hasSdkSessionId: row.sdk_session_id !== null,
-          },
-          'Session restored from database'
-        );
-      } catch (error) {
-        logger.warn(
-          { event_type: EventType.SESSION_ERROR, sessionId: row.session_id, agentId: row.agent_id, err: (error as Error).message },
-          'Failed to restore session, agent may not exist'
-        );
-        // Don't delete from DB ??keep for sdkSessionId continuity
-      }
-    }
-
-    if (restored > 0) {
-      logger.info({ event_type: EventType.SESSION_RESTORED, count: restored }, 'Sessions restored from database');
-    }
-
-    return restored;
+    return restoreSessionsFromRepository({
+      sessionRepository: this.sessionRepository,
+      config: this.config,
+      agentLoader: this.agentLoader,
+      sessions: this.sessions,
+      getSessionKey,
+    });
   }
 
   /**
@@ -721,7 +473,7 @@ export class SessionManager {
    */
   getAllSessions(): UserSession[] {
     return Array.from(this.sessions.values()).map((s) =>
-      this.toPublicSession(s)
+      toPublicSession(s)
     );
   }
 
@@ -730,68 +482,6 @@ export class SessionManager {
    */
   getSessionCount(): number {
     return this.sessions.size;
-  }
-
-  /**
-   * Get sessions by platform
-   */
-  getSessionsByPlatform(platform: string): UserSession[] {
-    const sessions: UserSession[] = [];
-    for (const session of this.sessions.values()) {
-      if (session.platform === platform) {
-        sessions.push(this.toPublicSession(session));
-      }
-    }
-    return sessions;
-  }
-
-  /**
-   * Convert internal session to public session (remove mutex and internal refs)
-   */
-  private toPublicSession(internal: InternalSession): UserSession {
-    return {
-      sessionId: internal.sessionId,
-      agentId: internal.agentId,
-      platform: internal.platform,
-      userId: internal.userId,
-      state: internal.state,
-      createdAt: internal.createdAt,
-      lastActiveAt: internal.lastActiveAt,
-      processedMessageIds: internal.processedMessageIds,
-      ...(internal.sdkSessionId !== undefined
-        ? { sdkSessionId: internal.sdkSessionId }
-        : {}),
-      isActive: internal.isActive,
-      continuationSource: internal.continuationSource,
-      continuationState: internal.continuationState,
-    };
-  }
-
-  /**
-   * Convert internal session to database row
-   */
-  private toSessionRow(internal: InternalSession): SessionRow {
-    return {
-      session_id: internal.sessionId,
-      agent_id: internal.agentId,
-      platform: internal.platform,
-      user_id: internal.userId,
-      state: internal.state,
-      created_at: dateToString(internal.createdAt),
-      last_active_at: dateToString(internal.lastActiveAt),
-      sdk_session_id: internal.sdkSessionId ?? null,
-      processed_message_ids: serializeMessageIds(internal.processedMessageIds),
-      is_active: internal.isActive ? 1 : 0,
-      continuation_source: internal.continuationSource ?? null,
-      continuation_state: internal.continuationState ?? null,
-    };
-  }
-
-  /**
-   * Check if persistence is enabled
-   */
-  isPersistenceEnabled(): boolean {
-    return this.sessionRepository !== undefined;
   }
 
   /**

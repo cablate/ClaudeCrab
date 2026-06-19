@@ -128,7 +128,12 @@ export async function checkSessionGuard(
   // the first-turn baseline, so this reflects conversation growth rather than
   // fixed system prompt/tool definition cost.
   const shouldFireLengthGuard = tokenCount !== null &&
-    tokenCount >= config.tokenThreshold;
+    tokenCount >= config.tokenThreshold &&
+    (
+      !guardState.guardShownForLength ||
+      guardState.guardLastShownTokenCount === undefined ||
+      tokenCount > guardState.guardLastShownTokenCount * 1.5
+    );
 
   if (shouldFireLengthGuard && tokenCount !== null) {
     const currentTokenCount = tokenCount;
@@ -175,7 +180,7 @@ export async function checkSessionGuard(
         warnings.push(`7d: ${oauthUsage.seven_day.utilization.toFixed(1)}%`);
       }
       if (warnings.length > 0) {
-        await adapter.sendFormattedMessage(chatId, `-# ⚠️ Rate limit approaching: ${warnings.join(' · ')}`);
+        await adapter.sendMessage(chatId, `-# ⚠️ Rate limit approaching: ${warnings.join(' · ')}`);
       }
     }
   } catch { /* ignore */ }

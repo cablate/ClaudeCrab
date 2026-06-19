@@ -63,25 +63,6 @@ CREATE TABLE IF NOT EXISTS metadata (
     updated_at TEXT NOT NULL
 );
 
--- Scheduled tasks table
-CREATE TABLE IF NOT EXISTS scheduled_tasks (
-    id TEXT PRIMARY KEY,
-    agent_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-    trigger_type TEXT NOT NULL,
-    trigger_config TEXT NOT NULL,
-    execution_config TEXT NOT NULL,
-    notification_config TEXT,
-    enabled INTEGER DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
--- Scheduled tasks indexes
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_agent ON scheduled_tasks(agent_id);
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
-
 -- Schedule executions table (no FK - YAML files are source of truth)
 CREATE TABLE IF NOT EXISTS schedule_executions (
     id TEXT PRIMARY KEY,
@@ -144,22 +125,6 @@ CREATE TABLE IF NOT EXISTS rate_limit_snapshots (
 CREATE INDEX IF NOT EXISTS idx_rls_type_created ON rate_limit_snapshots(rate_limit_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_rls_session ON rate_limit_snapshots(sdk_session_id);
 
--- Activity events table (v2.0)
-CREATE TABLE IF NOT EXISTS activity_events (
-    id TEXT PRIMARY KEY,
-    agent_id TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    type TEXT NOT NULL,
-    phase TEXT,
-    message TEXT NOT NULL,
-    mood TEXT,
-    metadata TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_activity_events_agent ON activity_events(agent_id);
-CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
-CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
 `;
 
 export const SCHEMA_VERSION = '14';
@@ -199,28 +164,9 @@ CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id);
 
 /**
  * Migration SQL from v2 to v3:
- * Adds scheduled_tasks and schedule_executions tables
+ * Adds schedule_executions for schedule run history.
  */
 const MIGRATION_V2_TO_V3 = `
--- Scheduled tasks table
-CREATE TABLE IF NOT EXISTS scheduled_tasks (
-    id TEXT PRIMARY KEY,
-    agent_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT,
-    trigger_type TEXT NOT NULL,
-    trigger_config TEXT NOT NULL,
-    execution_config TEXT NOT NULL,
-    notification_config TEXT,
-    enabled INTEGER DEFAULT 1,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
--- Scheduled tasks indexes
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_agent ON scheduled_tasks(agent_id);
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
-
 -- Schedule executions table (no FK - YAML files are source of truth)
 CREATE TABLE IF NOT EXISTS schedule_executions (
     id TEXT PRIMARY KEY,
@@ -293,26 +239,6 @@ CREATE TABLE IF NOT EXISTS query_metrics (
 CREATE INDEX IF NOT EXISTS idx_query_metrics_agent ON query_metrics(agent_id);
 CREATE INDEX IF NOT EXISTS idx_query_metrics_created ON query_metrics(created_at);
 `;
-
-const MIGRATION_V5_TO_V6 = `
--- Activity events table (v2.0: workflow visibility + personality reactions)
-CREATE TABLE IF NOT EXISTS activity_events (
-    id TEXT PRIMARY KEY,
-    agent_id TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    type TEXT NOT NULL,
-    phase TEXT,
-    message TEXT NOT NULL,
-    mood TEXT,
-    metadata TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_activity_events_agent ON activity_events(agent_id);
-CREATE INDEX IF NOT EXISTS idx_activity_events_type ON activity_events(type);
-CREATE INDEX IF NOT EXISTS idx_activity_events_created ON activity_events(created_at);
-`;
-
 
 const MIGRATION_V7_TO_V8 = `
 -- Add integer cents column to query_metrics (coexists with total_cost_usd for backward compat)
@@ -434,8 +360,7 @@ export function runMigrations(db: DatabaseType, currentVersion: string): void {
   }
 
   if (currentVersion === '5') {
-    db.exec(MIGRATION_V5_TO_V6);
-    logger.info('Migration v5 → v6 completed');
+    logger.info('Migration v5 → v6 skipped (legacy activity_events table is no longer created)');
     currentVersion = '6';
   }
 

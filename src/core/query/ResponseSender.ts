@@ -48,7 +48,7 @@ export async function sendFinalResponse(
     sendOpts.replyToMessageId = options.replyToMessageId;
   }
 
-  const sendResult = await adapter.sendFormattedMessage(chatId, response, sendOpts);
+  const sendResult = await adapter.sendMessage(chatId, response, sendOpts);
 
   if (!sendResult.success) {
     logger.warn({ error: sendResult.error, chatId }, 'Failed to send response');

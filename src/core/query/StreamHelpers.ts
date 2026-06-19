@@ -6,7 +6,7 @@
  */
 
 import type { SDKMessage } from '../../types/sdk.js';
-import type { QueryModelUsage } from './SDKQueryManager.js';
+import type { QueryModelUsage } from './types.js';
 
 /** Extract text content from an assistant stream message. */
 export function extractAssistantText(msg: SDKMessage): string {

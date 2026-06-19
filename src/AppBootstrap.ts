@@ -15,7 +15,9 @@ import { SessionRepository } from './persistence/SessionRepository.js';
 import { ConversationRepository } from './persistence/ConversationRepository.js';
 import { QueryMetricsRepository } from './persistence/QueryMetricsRepository.js';
 import { RateLimitRepository } from './persistence/RateLimitRepository.js';
-import { ScheduleThreadMap, type ScheduleManager, type ScheduleExecutor } from './schedule/index.js';
+import { ScheduleThreadMap } from './schedule/ScheduleThreadMap.js';
+import type { ScheduleManager } from './schedule/ScheduleManager.js';
+import type { ScheduleExecutor } from './schedule/ScheduleExecutor.js';
 import { initializeScheduleSystem } from './schedule/ScheduleBootstrap.js';
 import type { AppConfig } from './config.js';
 import { createSTTProvider, type STTProvider } from './core/stt/index.js';
@@ -118,8 +120,6 @@ export class AppBootstrap {
 
     await this.initializeDiscordServices(agentLoader, persistence, messageProcessor, sessionManager);
 
-    messageProcessor.wirePostInit({});
-
     if (this.scheduleExecutor !== null) {
       this.scheduleExecutor.wirePostInit({
         ...(this.scheduleThreadMap !== null ? { threadMap: this.scheduleThreadMap } : {}),
@@ -185,8 +185,6 @@ export class AppBootstrap {
         this.databaseManager.close();
         logger.info('Database connection closed');
       }
-
-      // EventBus removed — no subscribers
 
       logger.info(
         { event_type: 'lifecycle.shutdown_complete', signal, uptime_s: Math.floor((Date.now() - INSTANCE_STARTED_AT) / 1000) },
@@ -301,10 +299,12 @@ export class AppBootstrap {
       typingIndicatorIntervalMs: TYPING_INDICATOR_INTERVAL_MS,
       ...(conversationRepository !== undefined ? { conversationRepository } : {}),
       ...(queryMetricsRepository !== undefined ? { queryMetricsRepository } : {}),
-      // eventBus removed — no subscribers
       ...(rateLimitRepository !== undefined ? { rateLimitRepository } : {}),
       cacheKeepaliveConfig: this.config.cacheKeepalive,
       ephemeral: this.config.session.ephemeral,
+      idleCloseMs: this.config.session.idleCloseMs,
+      queryHardTimeoutMs: this.config.session.queryHardTimeoutMs,
+      queryHardTimeoutGraceMs: this.config.session.queryHardTimeoutGraceMs,
       usageCardEnabled: this.config.discord.usageCardEnabled,
       inChatUsageSummary: this.config.discord.inChatUsageSummary,
     });
@@ -329,7 +329,7 @@ export class AppBootstrap {
       ...(sttProvider !== undefined ? { sttProvider } : {}),
       ...(this.scheduleThreadMap !== null ? { scheduleThreadMap: this.scheduleThreadMap } : {}),
       ...(persistence?.sessionRepository !== undefined ? { sessionRepository: persistence.sessionRepository } : {}),
-      createDiscordAdapter: (config) => new DiscordAdapter(config as ConstructorParameters<typeof DiscordAdapter>[0]),
+      createDiscordAdapter: (config) => new DiscordAdapter(config),
     });
   }
 
@@ -373,9 +373,9 @@ export class AppBootstrap {
     }
 
     this.discordSystemAdapter = services.systemAdapter;
-    if (services.dashboardService !== undefined) this.dashboardService = services.dashboardService;
-    if (services.costReportTimer !== undefined) this.costReportTimer = services.costReportTimer;
-    if (services.cacheAnomalyReportTimer !== undefined) this.cacheAnomalyReportTimer = services.cacheAnomalyReportTimer;
+    if (services.ops.dashboardService !== undefined) this.dashboardService = services.ops.dashboardService;
+    if (services.ops.costReportTimer !== undefined) this.costReportTimer = services.ops.costReportTimer;
+    if (services.ops.cacheAnomalyReportTimer !== undefined) this.cacheAnomalyReportTimer = services.ops.cacheAnomalyReportTimer;
   }
 
   private logStartupSummary(agentLoader: AgentLoader): void {

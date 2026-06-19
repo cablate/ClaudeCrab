@@ -121,7 +121,7 @@ export function buildV2IntermediateMessageCallback(
     if (options.replyToMessageId) {
       sendOpts.replyToMessageId = options.replyToMessageId;
     }
-    const sendResult = await adapter.sendFormattedMessage(chatId, text, sendOpts);
+    const sendResult = await adapter.sendMessage(chatId, text, sendOpts);
     if (sendResult.success && sendResult.messageId) {
       state.lastSentMessageId = sendResult.messageId;
     } else if (!sendResult.success) {
@@ -133,7 +133,7 @@ export function buildV2IntermediateMessageCallback(
 }
 
 /**
- * Build the onToolEvent callback shared by both V2 and V1 paths.
+ * Build the onToolEvent callback for the interactive V2 message path.
  */
 export function buildToolEventCallback(
   state: StreamState,
@@ -200,7 +200,7 @@ export function buildToolEventCallback(
  */
 export async function deliverFinalResponse(
   state: StreamState,
-  result: { response: string; sessionDegraded?: boolean; numTurns?: number },
+  result: { response: string; numTurns?: number },
   adapter: BaseAdapter,
   chatId: string,
   agentId: string,
@@ -240,7 +240,7 @@ export async function deliverFinalResponse(
     }
     for (const msg of toResend) {
       try {
-        const retryResult = await adapter.sendFormattedMessage(chatId, msg);
+        const retryResult = await adapter.sendMessage(chatId, msg);
         if (retryResult.success) {
           if (retryResult.messageId) state.lastSentMessageId = retryResult.messageId;
           srrLogger.debug({ chatId, agentId }, 'Delivery audit: message resent successfully');
@@ -256,12 +256,9 @@ export async function deliverFinalResponse(
   // Silent failure detection: query completed but user received nothing.
   if (state.lastSentMessageId === undefined && state.intermediateMessages.length === 0) {
     srrLogger.warn(
-      { sessionId, chatId, agentId, numTurns: result.numTurns, responseLength: result.response.length, sessionDegraded: result.sessionDegraded },
+      { sessionId, chatId, agentId, numTurns: result.numTurns, responseLength: result.response.length },
       'Silent failure detected: query completed but no messages delivered to user'
     );
-    const fallbackMsg = result.sessionDegraded
-      ? '⚠️ 對話 session 異常，已自動重建。請重新發送訊息。'
-      : '⚠️ 模型回應為空，請重新發送訊息。若持續發生，請稍後再試。';
-    await adapter.sendFormattedMessage(chatId, fallbackMsg);
+    await adapter.sendMessage(chatId, '模型回應為空，請重新發送訊息。若持續發生，請稍後再試。');
   }
 }

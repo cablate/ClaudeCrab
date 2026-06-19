@@ -133,8 +133,7 @@ export async function sendQuestionPrompt(
     let currentRow = new ActionRowBuilder<ButtonBuilder>();
     let btnCount = 0;
 
-    for (let i = 0; i < options.options.length; i++) {
-      const opt = options.options[i]!;
+    for (const [i, opt] of options.options.entries()) {
       if (btnCount >= 5) {
         rows.push(currentRow);
         currentRow = new ActionRowBuilder<ButtonBuilder>();

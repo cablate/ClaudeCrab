@@ -1,74 +1,71 @@
 /**
- * SDK CLI process manager — wraps V2 SDK createSession for persistent connections.
+ * SDK CLI process manager for persistent V2 Claude Code sessions.
  *
  * Responsibilities:
  * - ManagedSession lifecycle (SDK CLI process ~150MB each)
- * - Query execution via executeQuery (send → processStream → result)
+ * - Query execution via executeQuery (send -> processStream -> result)
  * - Cache keepalive scheduling (SDKKeepaliveManager coordination)
  * - LRU eviction when maxSessions cap reached
  * - SubAgentMessageManager coordination
  *
  * Boundary: manages the SDK CLI process and query pipeline only. Does NOT manage
- * app-level UserSession metadata, state tracking, or dedup — use SessionManager for those.
+ * app-level UserSession metadata, state tracking, or dedup; use SessionManager for those.
  *
- * Requires patched sdk.mjs (scripts/patch-sdk-v2.cjs) for settingSources support.
- * See: docs/upgrades/research/sdk-reverse-engineering-v0.2.76.md
+ * Requires patched sdk.mjs (scripts/patch-sdk-v2.cjs) for SDK V2 option forwarding.
+ * See: docs/sop-sdk-cli-upgrade.md
  */
 
 import type { LoadedAgent } from '../../types/agent.js';
-import type { ExecuteQueryOptions, QueryResult } from '../query/SDKQueryManager.js';
+import type { ExecuteQueryOptions, QueryResult } from '../query/types.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
 import type { IQueryMetricsRepository } from '../../persistence/types.js';
 import type { CacheKeepaliveConfig } from '../../config.js';
-import type { ConversationRuntimeContext } from '../../types/runtimeContext.js';
 import { DEFAULT_CACHE_KEEPALIVE_CONFIG } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import type { ManagedSession } from './SDKSessionTypes.js';
 import type { SubAgentMessageManager } from '../query/SubAgentMessageManager.js';
-import { createManagedSession } from './SDKSessionFactory.js';
-import { processStream, preDrainResidualMessages, getSessionQuery } from '../query/SDKStreamProcessor.js';
+import { processStream } from '../query/SDKStreamProcessor.js';
+import { preDrainResidualMessages } from '../query/SDKStreamDrain.js';
 import {
-  startKeepalive,
   updateCacheEfficiency,
-  CACHE_EFFICIENCY_WARN_THRESHOLD,
 } from '../keepalive/SDKKeepaliveManager.js';
+import { createSdkManagedSession } from './SDKSessionCreation.js';
+import {
+  clearQueryHardTimeout,
+  scheduleIdleClose,
+  startQueryHardTimeout,
+} from './SDKSessionLifecycle.js';
+import {
+  getCacheStats,
+  getDetectedCacheTTLMs,
+  getSessionCacheActivityState,
+  getSessionGuardState,
+  getSessionStats,
+  getSessionSummaries,
+  getSessionTokenCount,
+  setSessionGuardState,
+  type CacheStats,
+  type SDKSessionSummary,
+  type SessionCacheActivityState,
+  type SessionGuardState,
+} from './SDKSessionSelectors.js';
+import {
+  cancelManagedQuery,
+  destroyManagedSession,
+  evictLeastRecentlyUsedIdleSession,
+} from './SDKSessionOperations.js';
 
 // Re-export types so external callers that import from SDKSessionManager still work
 export type { ManagedSession };
 
-export interface SDKSessionSummary {
-  sessionId: string;
-  sdkSessionId: string;
-  createdAt: number;
-  lastQueryAt: number;
-  lastUsedAt: number;
-  messageCount: number;
-  contextTokens: number | undefined;
-  contextWindowSize: number | undefined;
-  cacheEfficiencyAvg: number | undefined;
-  totalCostUsd: number;
-  isQuerying: boolean;
-  agentId: string;
-  cwd: string;
-  runtimeContext: ConversationRuntimeContext | undefined;
-  lastPromptCacheMutation: ManagedSession['lastPromptCacheMutation'] | undefined;
-  lastKeepaliveAnomaly: ManagedSession['lastKeepaliveAnomaly'] | undefined;
-}
-
-export interface SessionCacheActivityState {
-  lastActivityAt: number;
-  source: 'lastCacheTouchAt' | 'lastQueryAt' | 'lastUsedAt';
-  lastCacheTouchAt: number | undefined;
-  lastQueryAt: number | undefined;
-  lastUsedAt: number;
-}
+export type { SDKSessionSummary, SessionCacheActivityState };
 
 /**
  * Manages persistent SDK V2 sessions for agent conversations.
  *
- * Key difference from SDKQueryManager:
- * - V1 (old): each executeQuery() spawns new CLI process ??cache bust
- * - V2 (this): process stays alive between messages ??cache persists
+ * Sessions stay alive between messages so prompt cache and SDK state can be reused.
+ * Callers that need one-shot behavior must disable persistence and destroy the
+ * session after the query completes.
  */
 export class SDKSessionManager {
   private sessions = new Map<string, ManagedSession>();
@@ -80,6 +77,12 @@ export class SDKSessionManager {
   private ephemeral = false;
   /** Max concurrent V2 sessions. Each holds an SDK CLI process (~150MB). */
   private readonly maxSessions: number;
+  /** Close live V2 processes after this much real-query idle time. 0 disables. */
+  private readonly idleCloseMs: number;
+  /** Interrupt active queries after this runtime. 0 disables. */
+  private readonly queryHardTimeoutMs: number;
+  /** Force-close process this long after timeout interrupt if still querying. */
+  private readonly queryHardTimeoutGraceMs: number;
 
   constructor(options?: {
     rateLimitRepository?: RateLimitRepository;
@@ -90,12 +93,21 @@ export class SDKSessionManager {
     ephemeral?: boolean;
     /** Maximum concurrent sessions (default 20). LRU evicted when exceeded. */
     maxSessions?: number;
+    /** Idle real-query timeout before closing the live SDK CLI process. 0 disables. */
+    idleCloseMs?: number;
+    /** Active query hard timeout. 0 disables. */
+    queryHardTimeoutMs?: number;
+    /** Grace period between timeout interrupt and force-close. */
+    queryHardTimeoutGraceMs?: number;
   }) {
     this.rateLimitRepository = options?.rateLimitRepository;
     this.queryMetricsRepository = options?.queryMetricsRepository;
     this.keepaliveConfig = options?.keepaliveConfig ?? DEFAULT_CACHE_KEEPALIVE_CONFIG;
     this.ephemeral = options?.ephemeral ?? false;
     this.maxSessions = options?.maxSessions ?? 20;
+    this.idleCloseMs = options?.idleCloseMs ?? 7_200_000;
+    this.queryHardTimeoutMs = options?.queryHardTimeoutMs ?? 3_600_000;
+    this.queryHardTimeoutGraceMs = options?.queryHardTimeoutGraceMs ?? 30_000;
   }
 
 
@@ -159,6 +171,7 @@ export class SDKSessionManager {
     managed.cancelled = false;
     managed.interruptedAt = undefined;
     managed.lastIntermediateSendPromise = undefined;
+    this.startQueryHardTimeout(sessionId, managed, startTime);
     try {
       await preDrainResidualMessages(sessionId, managed);
 
@@ -242,7 +255,7 @@ export class SDKSessionManager {
       if (managed.interruptedAt) {
         logger.info(
           { sessionId, sdkSessionId: managed.sdkSessionId, interruptMs: Date.now() - managed.interruptedAt },
-          'V2 query completed gracefully after interrupt ??JSONL should be consistent'
+          'V2 query completed gracefully after interrupt; JSONL should be consistent'
         );
       }
 
@@ -297,6 +310,7 @@ export class SDKSessionManager {
       }
       throw error;
     } finally {
+      clearQueryHardTimeout(managed);
       delete managed.currentOptions;
       managed.isQuerying = false;
       managed.interruptedAt = undefined;
@@ -311,6 +325,8 @@ export class SDKSessionManager {
           { sessionId, event_type: 'session.recreate_cleanup' },
           'Cleaned up orphaned managed session after concurrent recreate'
         );
+      } else if (current && !this.ephemeral) {
+        this.scheduleIdleClose(sessionId, current);
       }
     }
   }
@@ -323,64 +339,16 @@ export class SDKSessionManager {
     agent: LoadedAgent,
     options: ExecuteQueryOptions
   ): Promise<ManagedSession> {
-    const managed = await createManagedSession(
+    return createSdkManagedSession({
       sessionId,
       agent,
       options,
-      // onCreated: register in Map before keepalive starts so the timer
-      // can find the session via sessions.get(sessionId)
-      (m) => { this.sessions.set(sessionId, m); },
-    );
-
-    // Restore context size from JSONL if resuming an existing session.
-    // This ensures SessionGuard and /ctx have accurate data immediately
-    // after restart, before the first assistant message arrives.
-    if (options.resume && managed.lastTurnContextTokens === undefined) {
-      import('./SDKContextRestore.js').then(({ restoreContextFromJsonl }) =>
-        restoreContextFromJsonl(options.resume!, options.cwd).then((ctx) => {
-          if (ctx !== null && managed.lastTurnContextTokens === undefined) {
-            managed.lastTurnContextTokens = ctx;
-            logger.info(
-              { sessionId, sdkSessionId: options.resume, contextTokens: ctx, event_type: 'sdk.context_restored' },
-              `Context restored from JSONL: ${Math.round(ctx / 1000)}K tokens`
-            );
-          } else {
-            logger.debug(
-              { sessionId, sdkSessionId: options.resume, event_type: 'sdk.context_restore_skip' },
-              ctx === null ? 'No JSONL context data found' : 'Context already set by stream'
-            );
-          }
-        })
-      ).catch((err) => {
-        logger.warn({ sessionId, sdkSessionId: options.resume, err: err instanceof Error ? err.message : String(err) }, 'Context restore from JSONL failed');
-      });
-    }
-
-    // Start cache keepalive timer (no-op in ephemeral mode ??session dies after one query)
-    if (!this.ephemeral) {
-      startKeepalive(
-        sessionId,
-        this.sessions,
-        () => this.disposed,
-        this.queryMetricsRepository,
-        this.keepaliveConfig,
-      );
-    }
-
-    logger.info(
-      {
-        sessionId,
-        keepaliveIntervalMs: this.keepaliveConfig.intervalMs,
-        keepaliveSkipRecentMs: this.keepaliveConfig.skipRecentMs,
-        keepaliveDetectedTTLRatio: this.keepaliveConfig.detectedTTLRatio,
-        ephemeral: this.ephemeral,
-      },
-      this.ephemeral
-        ? 'V2 ephemeral session created (will be destroyed after query)'
-        : 'V2 persistent session registered (with cache keepalive)'
-    );
-
-    return managed;
+      sessions: this.sessions,
+      ephemeral: this.ephemeral,
+      disposed: () => this.disposed,
+      queryMetricsRepository: this.queryMetricsRepository,
+      keepaliveConfig: this.keepaliveConfig,
+    });
   }
 
   syncSubAgentUpdates(sessionId: string): { routed: number; drained: number; active: number } | null {
@@ -390,17 +358,6 @@ export class SDKSessionManager {
       return { routed: 0, drained: 0, active: managed.subAgentManager?.activeCount() ?? 0 };
     }
     return { routed: 0, drained: 0, active: managed.subAgentManager?.activeCount() ?? 0 };
-  }
-
-  /**
-   * Attach a SubAgentMessageManager to a session so pre-drain can route
-   * late task_notification messages. Idempotent: if already set, no-op.
-   */
-  attachSubAgentManager(sessionId: string, manager: SubAgentMessageManager): void {
-    const managed = this.sessions.get(sessionId);
-    if (!managed) return;
-    if (managed.subAgentManager) return;
-    managed.subAgentManager = manager;
   }
 
   /** Get the session's subAgentManager if attached (for MessageProcessor to reuse). */
@@ -414,52 +371,44 @@ export class SDKSessionManager {
    * active conversations and schedule-resumed sessions.
    */
   private evictIdleSessions(): void {
-    if (this.sessions.size < this.maxSessions) return;
-
-    let oldestId: string | undefined;
-    let oldestUsed = Infinity;
-    for (const [id, s] of this.sessions) {
-      if (s.isQuerying) continue; // never evict an active query
-      if (s.lastUsedAt < oldestUsed) {
-        oldestUsed = s.lastUsedAt;
-        oldestId = id;
-      }
-    }
-    if (oldestId !== undefined) {
-      logger.info(
-        { sessionId: oldestId, event_type: 'session.evicted_lru', totalSessions: this.sessions.size, maxSessions: this.maxSessions },
-        `Evicting LRU idle session (${this.sessions.size} >= ${this.maxSessions})`
-      );
-      this.destroySession(oldestId);
-    }
+    evictLeastRecentlyUsedIdleSession(
+      this.sessions,
+      this.maxSessions,
+      (sessionId) => this.destroySession(sessionId),
+    );
   }
 
   /**
    * Destroy a specific session
    */
   destroySession(sessionId: string): void {
-    const managed = this.sessions.get(sessionId);
-    if (managed) {
-      if (managed.keepaliveTimer) {
-        clearTimeout(managed.keepaliveTimer);
-        managed.keepaliveTimer = undefined;
-      }
-      if (managed.subAgentManager) {
-        managed.subAgentManager.finalizeAll().catch((err) => {
-          logger.warn(
-            { sessionId, err: err instanceof Error ? err.message : String(err) },
-            'destroySession: subAgentManager.finalizeAll threw, continuing'
-          );
-        });
-        managed.subAgentManager.dispose();
-        delete managed.subAgentManager;
-      }
-      try {
-        managed.session.close();
-      } catch { /* ignore close errors */ }
-      this.sessions.delete(sessionId);
-      logger.info({ sessionId }, 'V2 session destroyed');
-    }
+    destroyManagedSession(this.sessions, sessionId);
+  }
+
+  private scheduleIdleClose(sessionId: string, managed: ManagedSession): void {
+    scheduleIdleClose({
+      sessionId,
+      managed,
+      sessions: this.sessions,
+      idleCloseMs: this.idleCloseMs,
+      isDisposed: () => this.disposed,
+      isEphemeral: () => this.ephemeral,
+      destroySession: (id) => this.destroySession(id),
+    });
+  }
+
+  private startQueryHardTimeout(sessionId: string, managed: ManagedSession, startTime: number): void {
+    startQueryHardTimeout({
+      sessionId,
+      managed,
+      sessions: this.sessions,
+      startTime,
+      queryHardTimeoutMs: this.queryHardTimeoutMs,
+      queryHardTimeoutGraceMs: this.queryHardTimeoutGraceMs,
+      isDisposed: () => this.disposed,
+      cancelActiveQuery: (id) => this.cancelActiveQuery(id),
+      destroySession: (id) => this.destroySession(id),
+    });
   }
 
   /**
@@ -471,13 +420,6 @@ export class SDKSessionManager {
       if (key === prefix || key.startsWith(prefix)) return key;
     }
     return undefined;
-  }
-
-  /**
-   * Check if a persistent session exists for the given ID
-   */
-  hasSession(sessionId: string): boolean {
-    return this.sessions.has(sessionId);
   }
 
   /**
@@ -493,34 +435,7 @@ export class SDKSessionManager {
    * JSONL transcript ends on a complete assistant turn.
    */
   cancelActiveQuery(sessionId: string): boolean {
-    const managed = this.sessions.get(sessionId);
-    if (!managed?.isQuerying) {
-      return false;
-    }
-
-    const query = getSessionQuery(managed.session);
-    if (!query) {
-      logger.error(
-        { sessionId, sdkSessionId: managed.sdkSessionId },
-        'cancelActiveQuery: no Query object found on session ??interrupt unavailable'
-      );
-      return false;
-    }
-
-    managed.interruptedAt = Date.now();
-    logger.info(
-      { sessionId, sdkSessionId: managed.sdkSessionId },
-      'Interrupting active V2 query (graceful)'
-    );
-
-    query.interrupt().catch((err: unknown) => {
-      logger.warn(
-        { sessionId, sdkSessionId: managed.sdkSessionId, err: err instanceof Error ? err.message : String(err) },
-        'interrupt() rejected'
-      );
-    });
-
-    return true;
+    return cancelManagedQuery(this.sessions, sessionId);
   }
 
   /**
@@ -528,93 +443,31 @@ export class SDKSessionManager {
    * Returns null if no query has completed yet.
    */
   getSessionTokenCount(sessionId: string): number | null {
-    const managed = this.sessions.get(sessionId);
-    if (!managed || managed.lastTurnContextTokens === undefined) return null;
-    return managed.lastTurnContextTokens;
-  }
-
-  /**
-   * Get context window usage as percentage (0-100).
-   * Uses modelUsage.contextWindow as the denominator.
-   */
-  getSessionContextPercentage(sessionId: string): number | null {
-    const managed = this.sessions.get(sessionId);
-    if (!managed || managed.lastTurnContextTokens === undefined || !managed.contextWindowSize) return null;
-    return Math.round((managed.lastTurnContextTokens / managed.contextWindowSize) * 1000) / 10;
+    return getSessionTokenCount(this.sessions.get(sessionId));
   }
 
   /**
    * Get the cache-relevant activity timestamp for a session.
-   * Includes both user queries and keepalive pings ??reflects when the
+   * Includes both user queries and keepalive pings; reflects when the
    * cache was last touched, not just when the user last sent a message.
    */
   getSessionCacheActivityState(sessionId: string): SessionCacheActivityState | null {
-    const managed = this.sessions.get(sessionId);
-    if (!managed) return null;
-    if (managed.lastCacheTouchAt !== undefined) {
-      return {
-        lastActivityAt: managed.lastCacheTouchAt,
-        source: 'lastCacheTouchAt',
-        lastCacheTouchAt: managed.lastCacheTouchAt,
-        lastQueryAt: managed.lastQueryAt,
-        lastUsedAt: managed.lastUsedAt,
-      };
-    }
-    if (managed.lastQueryAt !== undefined) {
-      return {
-        lastActivityAt: managed.lastQueryAt,
-        source: 'lastQueryAt',
-        lastCacheTouchAt: managed.lastCacheTouchAt,
-        lastQueryAt: managed.lastQueryAt,
-        lastUsedAt: managed.lastUsedAt,
-      };
-    }
-    return {
-      lastActivityAt: managed.lastUsedAt,
-      source: 'lastUsedAt',
-      lastCacheTouchAt: managed.lastCacheTouchAt,
-      lastQueryAt: managed.lastQueryAt,
-      lastUsedAt: managed.lastUsedAt,
-    };
-  }
-
-  getSessionLastActivityAt(sessionId: string): number | null {
-    return this.getSessionCacheActivityState(sessionId)?.lastActivityAt ?? null;
+    return getSessionCacheActivityState(this.sessions.get(sessionId));
   }
 
   /**
    * Get detected cache TTL in ms from API response, or null if not yet detected.
    */
   getDetectedCacheTTLMs(sessionId: string): number | null {
-    return this.sessions.get(sessionId)?.detectedCacheTTLMs ?? null;
-  }
-
-  /**
-   * Get the timestamp (ms) of the last completed user query for a session.
-   * Returns null if the session does not exist.
-   */
-  getSessionLastQueryAt(sessionId: string): number | null {
-    const managed = this.sessions.get(sessionId);
-    if (!managed) return null;
-    return managed.lastQueryAt;
+    return getDetectedCacheTTLMs(this.sessions.get(sessionId));
   }
 
   /**
    * Get guard state fields from a session (for session-length-handoff-guard).
    * Returns null if the session does not exist.
    */
-  getSessionGuardState(sessionId: string): {
-    guardShownForLength: boolean;
-    guardLastShownTokenCount: number | undefined;
-    guardShownForCacheTTL: boolean;
-  } | null {
-    const managed = this.sessions.get(sessionId);
-    if (!managed) return null;
-    return {
-      guardShownForLength: managed.guardShownForLength === true,
-      guardLastShownTokenCount: managed.guardLastShownTokenCount,
-      guardShownForCacheTTL: managed.guardShownForCacheTTL === true,
-    };
+  getSessionGuardState(sessionId: string): SessionGuardState | null {
+    return getSessionGuardState(this.sessions.get(sessionId));
   }
 
   /**
@@ -625,81 +478,25 @@ export class SDKSessionManager {
     guardLastShownTokenCount?: number;
     guardShownForCacheTTL?: boolean;
   }): void {
-    const managed = this.sessions.get(sessionId);
-    if (!managed) return;
-    if (state.guardShownForLength !== undefined) managed.guardShownForLength = state.guardShownForLength;
-    if (state.guardLastShownTokenCount !== undefined) managed.guardLastShownTokenCount = state.guardLastShownTokenCount;
-    if (state.guardShownForCacheTTL !== undefined) managed.guardShownForCacheTTL = state.guardShownForCacheTTL;
+    setSessionGuardState(this.sessions.get(sessionId), state);
   }
 
   /**
    * Get session stats
    */
   getSessionStats(sessionId: string): { messageCount: number; ageMs: number } | null {
-    const managed = this.sessions.get(sessionId);
-    if (!managed) return null;
-    return {
-      messageCount: managed.messageCount,
-      ageMs: Date.now() - managed.createdAt,
-    };
+    return getSessionStats(this.sessions.get(sessionId));
   }
 
   /**
-   * Aggregated cache health snapshot ??for heartbeat / `/metrics/cache` / ops commands.
+   * Aggregated cache health snapshot for heartbeat, `/metrics/cache`, and ops commands.
    */
-  getCacheStats(): {
-    active_sessions: number;
-    avg_cache_efficiency_pct: number | null;
-    low_efficiency_sessions: number;
-    querying_sessions: number;
-    total_messages: number;
-  } {
-    let effSum = 0;
-    let effCount = 0;
-    let low = 0;
-    let querying = 0;
-    let totalMessages = 0;
-    for (const s of this.sessions.values()) {
-      totalMessages += s.messageCount;
-      if (s.isQuerying) querying++;
-      if (typeof s.cacheEfficiencyAvg === 'number') {
-        effSum += s.cacheEfficiencyAvg;
-        effCount++;
-        if (s.cacheEfficiencyAvg < CACHE_EFFICIENCY_WARN_THRESHOLD) low++;
-      }
-    }
-    return {
-      active_sessions: this.sessions.size,
-      avg_cache_efficiency_pct: effCount > 0 ? Math.round(effSum / effCount) : null,
-      low_efficiency_sessions: low,
-      querying_sessions: querying,
-      total_messages: totalMessages,
-    };
+  getCacheStats(): CacheStats {
+    return getCacheStats(this.sessions);
   }
 
   getSessionSummaries(): SDKSessionSummary[] {
-    const result: SDKSessionSummary[] = [];
-    for (const [sessionId, s] of this.sessions) {
-      result.push({
-        sessionId,
-        sdkSessionId: s.sdkSessionId,
-        createdAt: s.createdAt,
-        lastQueryAt: s.lastQueryAt,
-        lastUsedAt: s.lastUsedAt,
-        messageCount: s.messageCount,
-        contextTokens: s.lastTurnContextTokens,
-        contextWindowSize: s.contextWindowSize,
-        cacheEfficiencyAvg: s.cacheEfficiencyAvg,
-        totalCostUsd: s.prevUsage.totalCostUsd,
-        isQuerying: s.isQuerying,
-        agentId: s.agentId,
-        cwd: s.cwd,
-        runtimeContext: s.runtimeContext,
-        lastPromptCacheMutation: s.lastPromptCacheMutation,
-        lastKeepaliveAnomaly: s.lastKeepaliveAnomaly,
-      });
-    }
-    return result;
+    return getSessionSummaries(this.sessions);
   }
 
   /**

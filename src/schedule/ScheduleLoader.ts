@@ -12,6 +12,10 @@ import { type ScheduleSpec, validateScheduleSpec, safeValidateScheduleSpec } fro
 import { logger } from '../utils/logger.js';
 import { EventType } from '../utils/events.js';
 
+function scheduleFilename(id: string): string {
+  return id.includes('/') ? id.split('/').pop() ?? '' : id;
+}
+
 export class ScheduleLoader {
   constructor(private agentsDir: string) {}
 
@@ -96,36 +100,12 @@ export class ScheduleLoader {
   }
 
   /**
-   * Load a specific schedule by ID
-   */
-  async loadById(agentId: string, scheduleId: string): Promise<ScheduleSpec | null> {
-    // scheduleId may be in format "agentId/filename" or just "filename"
-    // Extract the filename part for file lookup
-    const filename = scheduleId.includes('/') ? scheduleId.split('/').pop()! : scheduleId;
-    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${filename}.yaml`);
-
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = parseYaml(content);
-      const spec = validateScheduleSpec(parsed);
-      // Ensure ID is in canonical format: agentId/filename
-      spec.id = `${agentId}/${filename}`;
-      return spec;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.error({ event_type: EventType.SCHEDULE_ERROR, err: error, scheduleId }, '[ScheduleLoader] Failed to load schedule');
-      }
-      return null;
-    }
-  }
-
-  /**
    * Save a schedule specification
    */
   async save(agentId: string, spec: ScheduleSpec): Promise<void> {
     const schedulesDir = path.join(this.agentsDir, agentId, 'schedules');
     // Extract filename from spec.id (may be "agentId/filename" or just "filename")
-    const filename = spec.id.includes('/') ? spec.id.split('/').pop()! : spec.id;
+    const filename = scheduleFilename(spec.id);
     const filePath = path.join(schedulesDir, `${filename}.yaml`);
 
     // Validate spec before saving
@@ -146,64 +126,5 @@ export class ScheduleLoader {
 
     await fs.writeFile(filePath, yamlContent, 'utf-8');
     logger.info({ event_type: EventType.SCHEDULE_LOADED }, `[ScheduleLoader] Saved schedule: ${spec.id} for ${agentId}`);
-  }
-
-  /**
-   * Delete a schedule
-   */
-  async delete(agentId: string, scheduleId: string): Promise<boolean> {
-    // Extract filename from scheduleId (may be "agentId/filename" or just "filename")
-    const filename = scheduleId.includes('/') ? scheduleId.split('/').pop()! : scheduleId;
-    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${filename}.yaml`);
-
-    try {
-      await fs.unlink(filePath);
-      logger.info({ event_type: EventType.SCHEDULE_DELETED }, `[ScheduleLoader] Deleted schedule: ${scheduleId} from ${agentId}`);
-      return true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        logger.error({ event_type: EventType.SCHEDULE_ERROR, err: error, scheduleId }, '[ScheduleLoader] Failed to delete schedule');
-      }
-      return false;
-    }
-  }
-
-  /**
-   * Check if a schedule exists
-   */
-  async exists(agentId: string, scheduleId: string): Promise<boolean> {
-    // Extract filename from scheduleId (may be "agentId/filename" or just "filename")
-    const filename = scheduleId.includes('/') ? scheduleId.split('/').pop()! : scheduleId;
-    const filePath = path.join(this.agentsDir, agentId, 'schedules', `${filename}.yaml`);
-
-    try {
-      await fs.access(filePath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * List all schedule IDs for an agent
-   */
-  async listIds(agentId: string): Promise<string[]> {
-    const schedulesDir = path.join(this.agentsDir, agentId, 'schedules');
-    const ids: string[] = [];
-
-    try {
-      const files = await fs.readdir(schedulesDir);
-      for (const file of files) {
-        if (file.endsWith('.yaml') || file.endsWith('.yml')) {
-          // Return canonical ID format: agentId/filename
-          const filename = file.replace(/\.ya?ml$/, '');
-          ids.push(`${agentId}/${filename}`);
-        }
-      }
-    } catch {
-      // Directory doesn't exist
-    }
-
-    return ids;
   }
 }

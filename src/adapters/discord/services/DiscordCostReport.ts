@@ -1,10 +1,7 @@
 /**
- * DiscordCostReport — Daily cost report Embed to #cost-report channel.
+ * Daily Discord cost report.
  *
- * Generates a per-agent cost breakdown with progress bars.
- * Intended to be triggered by a cron schedule (daily at 23:55).
- *
- * Moved from services/CostReportService.ts — this is 100% Discord-specific.
+ * This is Discord-specific ops reporting, not part of the chat runtime path.
  */
 
 import { EmbedBuilder } from 'discord.js';
@@ -37,12 +34,9 @@ export class DiscordCostReport {
     this.queryMetrics = options.queryMetricsRepository;
   }
 
-  /**
-   * Generate and send the daily cost report.
-   */
   async sendDailyReport(): Promise<void> {
     const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const dateStr = now.toISOString().slice(0, 10);
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
@@ -50,9 +44,8 @@ export class DiscordCostReport {
 
     const todayStats = this.queryMetrics.getAllAgentStatsSince(todayStart);
     const monthStats = this.queryMetrics.getAllAgentStatsSince(monthStart);
-
-    const todayMap = new Map(todayStats.map(s => [s.agentId, s]));
-    const monthMap = new Map(monthStats.map(s => [s.agentId, s]));
+    const todayMap = new Map(todayStats.map((stat) => [stat.agentId, stat]));
+    const monthMap = new Map(monthStats.map((stat) => [stat.agentId, stat]));
 
     let totalToday = 0;
     let totalMonth = 0;
@@ -72,35 +65,26 @@ export class DiscordCostReport {
 
       agentRows.push(
         `${emoji} **${name}**\n` +
-        `\u4ECA\u65E5 $${todayCost.toFixed(2)}\uFF08${todayQueries} \u6B21\uFF09\u00B7 \u6708\u7D2F\u8A08 $${monthCost.toFixed(2)}`
+        `Today $${todayCost.toFixed(2)} (${todayQueries} queries) | Month $${monthCost.toFixed(2)}`
       );
     }
 
-    // Summary embed
     const embed = new EmbedBuilder()
       .setAuthor({ name: 'ClaudeCab Cost Tracking' })
-      .setTitle(`\u6BCF\u65E5\u6210\u672C\u5831\u544A \u2014 ${dateStr}`)
+      .setTitle(`Daily Cost Report - ${dateStr}`)
       .setColor(0x57F287)
       .setTimestamp();
 
-    if (agentRows.length > 0) {
-      embed.setDescription(agentRows.join('\n\n'));
-    } else {
-      embed.setDescription('\u4ECA\u65E5\u7121\u82B1\u8CBB\u7D00\u9304');
-    }
-
-    // Total summary as fields
-    embed.addFields({ name: '\u200b', value: '\u200b' }); // spacer
+    embed.setDescription(agentRows.length > 0 ? agentRows.join('\n\n') : 'No spend recorded today');
+    embed.addFields({ name: '\u200b', value: '\u200b' });
     embed.addFields(
-      { name: '\u{1F4CA} \u4ECA\u65E5\u5408\u8A08', value: `**$${totalToday.toFixed(2)}**`, inline: true },
-      { name: '\u{1F4C8} \u6708\u7D2F\u8A08', value: `**$${totalMonth.toFixed(2)}**`, inline: true },
+      { name: 'Today Total', value: `**$${totalToday.toFixed(2)}**`, inline: true },
+      { name: 'Month Total', value: `**$${totalMonth.toFixed(2)}**`, inline: true },
     );
 
-    // Keepalive ROI section — query today's keepalive stats
     try {
       const keepaliveStats = this.queryMetrics.getKeepaliveStats();
       if (keepaliveStats.totalPings > 0) {
-        // Use aggregate cacheRead tokens to estimate ROI
         const roiResult = calculatePingROI(
           {
             inputTokens: keepaliveStats.totalInputTokens,
@@ -116,15 +100,15 @@ export class DiscordCostReport {
           ? `${(roiResult.roiRatio * 100).toFixed(0)}%`
           : 'N/A';
 
-        embed.addFields({ name: '​', value: '​' }); // spacer
+        embed.addFields({ name: '\u200b', value: '\u200b' });
         embed.addFields({
-          name: '⚡ Keepalive ROI',
+          name: 'Keepalive ROI',
           value: [
             `Pings: **${keepaliveStats.totalPings}**`,
             `Cost: **$${keepaliveStats.totalCostUsd.toFixed(4)}**`,
             `Savings: **$${roiResult.savings.toFixed(4)}**`,
             `ROI: **${roiDisplay}**`,
-          ].join(' · '),
+          ].join(' | '),
         });
       }
     } catch (roiErr) {

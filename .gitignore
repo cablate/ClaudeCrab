@@ -1,8 +1,15 @@
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+.claude/agent-memory/
+.claude/worktrees/
+.claude/projects/
+.claude/todos/
 
 # Playwright MCP testing
 .playwright-mcp/
+
+# Codex local settings/state (machine-specific)
+.codex/
 
 # Dependencies
 node_modules/
@@ -75,8 +82,8 @@ _ProgramOwnProjectClaudeCab*/
 .spectra/
 openspec/.vector-search.db*
 
-# Generated images
-public/images/generated/
+# Legacy/local Web UI static assets are not part of the current runtime
+public/
 
 # Runtime PID files
 *.pid

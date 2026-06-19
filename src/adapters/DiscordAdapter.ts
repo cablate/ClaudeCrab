@@ -13,7 +13,6 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   type TextChannel,
-  type ForumChannel,
   type ThreadChannel,
   type Message as DiscordMessage,
   ChannelType,
@@ -23,8 +22,6 @@ import { generateThreadTitle } from './discord/discordUtils.js';
 import { BaseAdapter } from './BaseAdapter.js';
 import type {
   DiscordAdapterConfig,
-  SendOptions,
-  SendResult,
   PermissionPromptOptions,
   PermissionPromptResult,
   PermissionResolver,
@@ -35,6 +32,7 @@ import type {
   ExitPlanModePromptResult,
   ExitPlanModeResolver,
 } from './types.js';
+import type { SendOptions, SendResult } from '../types/message.js';
 import {
   DEFAULT_SECURITY_CONFIG,
   type SecurityConfig,
@@ -68,9 +66,6 @@ import {
   type DiscordSenderDeps,
 } from './discord/DiscordSender.js';
 
-/** Discord message length limit */
-const MAX_MESSAGE_LENGTH = 2000;
-
 /**
  * Discord platform adapter using discord.js (one Client per agent)
  */
@@ -82,17 +77,6 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   private readonly sttProvider: import('../core/stt/index.js').STTProvider | undefined;
   private boundMessageHandler: ((message: DiscordMessage) => void) | null =
     null;
-  // Task thread resolver: given a threadId, returns taskId if this thread belongs to a task
-  private taskThreadResolver?: (threadId: string) => { taskId: string } | undefined;
-
-  /**
-   * Set a resolver that maps thread IDs to task IDs.
-   * Used to override userId when a user messages in a per-task agent thread,
-   * ensuring session continuity with the agent call.
-   */
-  setTaskThreadResolver(resolver: (threadId: string) => { taskId: string } | undefined): void {
-    this.taskThreadResolver = resolver;
-  }
 
   // Schedule thread resolver: given a threadId, returns sdkSessionId + agentId for session bridging
   private scheduleThreadResolver?: (threadId: string) => { sdkSessionId: string; agentId: string } | undefined;
@@ -113,7 +97,6 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       resolveTextChannel: (id) => this.resolveTextChannel(id),
       resolveChannel: (id) => this.resolveTextOrThread(id),
       log: this.log,
-      emitMessageSent: (chatId, text, userId) => this.emitMessageSent(chatId, text, userId),
     };
   }
 
@@ -177,7 +160,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     );
   }
 
-  protected async doStart(): Promise<void> {
+  protected doStart(): Promise<void> {
     if (this.client === null) {
       throw new Error('Discord client not initialized');
     }
@@ -214,9 +197,10 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       { event_type: EventType.ADAPTER_STARTED, channelId: this.channelId },
       'Discord adapter listening for messages and interactions'
     );
+    return Promise.resolve();
   }
 
-  protected async doStop(): Promise<void> {
+  protected doStop(): Promise<void> {
     if (this.client !== null) {
       if (this.boundMessageHandler !== null) {
         this.client.removeListener('messageCreate', this.boundMessageHandler);
@@ -224,6 +208,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       }
 
     }
+    return Promise.resolve();
   }
 
   protected async doDispose(): Promise<void> {
@@ -244,24 +229,11 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
       securityConfig: this.securityConfig,
       log: this.log,
       client: this.client,
-      taskThreadResolver: this.taskThreadResolver,
       scheduleThreadResolver: this.scheduleThreadResolver,
       sttProvider: this.sttProvider,
       generateThreadTitle: (text) => generateThreadTitle(text),
       emitMessage: (msg) => this.emitMessage(msg),
     });
-  }
-
-
-  /**
-   * Get bot identity info from Discord client.
-   * Returns username and numeric id (snowflake converted to number for interface compat).
-   */
-  override getBotInfo(): { username: string; id: number } | null {
-    const user = this.client?.user;
-    if (user === null || user === undefined) return null;
-    // Discord snowflake IDs exceed Number.MAX_SAFE_INTEGER; use lower bits for compat
-    return { username: user.username, id: Number(BigInt(user.id) & BigInt(0x7FFFFFFF)) };
   }
 
   async sendMessage(
@@ -337,94 +309,8 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   }
 
   // ============================================================
-  // Forum Channel Operations
+  // Thread Operations
   // ============================================================
-
-  /**
-   * Create a new Forum post (thread) in a Forum channel.
-   * Each post = a task/ticket in the task board.
-   */
-  async createForumPost(
-    forumChannelId: string,
-    title: string,
-    content: string,
-    tagIds?: string[]
-  ): Promise<{ success: boolean; threadId?: string; error?: string }> {
-    try {
-      const channel = await this.resolveChannel(forumChannelId);
-      if (channel === null || channel.type !== ChannelType.GuildForum) {
-        return { success: false, error: `Channel ${forumChannelId} is not a Forum channel` };
-      }
-
-      const forumChannel = channel as ForumChannel;
-      const createOptions: { name: string; message: { content: string }; appliedTags?: string[] } = {
-        name: title.slice(0, 100), // Discord thread name limit
-        message: { content: content.slice(0, MAX_MESSAGE_LENGTH) },
-      };
-      if (tagIds !== undefined) {
-        createOptions.appliedTags = tagIds;
-      }
-      const thread = await forumChannel.threads.create(createOptions);
-
-      return { success: true, threadId: thread.id };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, forumChannelId, title }, 'Failed to create forum post');
-      return { success: false, error: errorMessage };
-    }
-  }
-
-  /**
-   * Update tags on a Forum thread (for status/priority changes).
-   */
-  async updateForumPostTags(
-    threadId: string,
-    tagIds: string[]
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      if (this.client === null) {
-        return { success: false, error: 'Client not initialized' };
-      }
-      const thread = await this.client.channels.fetch(threadId);
-      if (thread === null || !thread.isThread()) {
-        return { success: false, error: `Thread ${threadId} not found` };
-      }
-
-      await (thread as ThreadChannel).setAppliedTags(tagIds);
-      return { success: true };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, threadId }, 'Failed to update forum tags');
-      return { success: false, error: errorMessage };
-    }
-  }
-
-  /**
-   * Reply to a thread (for progress updates on tasks).
-   */
-  async replyToThread(
-    threadId: string,
-    content: string
-  ): Promise<SendResult> {
-    try {
-      if (this.client === null) {
-        return { success: false, error: 'Client not initialized' };
-      }
-      const thread = await this.client.channels.fetch(threadId);
-      if (thread === null || !thread.isThread()) {
-        return { success: false, error: `Thread ${threadId} not found` };
-      }
-
-      const msg = await this.rateLimiter.rateLimitedSend(() =>
-        (thread as ThreadChannel).send(content.slice(0, MAX_MESSAGE_LENGTH))
-      );
-      return { success: true, messageId: msg.id };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, threadId }, 'Failed to reply to thread');
-      return { success: false, error: errorMessage };
-    }
-  }
 
   /**
    * Create a new thread in a text channel from an initial message.
@@ -468,87 +354,6 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     initialContent?: string
   ): Promise<{ success: boolean; threadId?: string; error?: string }> {
     return this.createThreadInChannel(chatId, threadName, initialContent ?? threadName);
-  }
-
-  /**
-   * Archive a thread (for completed/cancelled tasks).
-   */
-  override async archiveThread(
-    threadId: string
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      if (this.client === null) {
-        return { success: false, error: 'Client not initialized' };
-      }
-      const thread = await this.client.channels.fetch(threadId);
-      if (thread === null || !thread.isThread()) {
-        return { success: false, error: `Thread ${threadId} not found` };
-      }
-
-      await (thread as ThreadChannel).setArchived(true);
-      return { success: true };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.log.error({ event_type: EventType.ADAPTER_SEND_ERROR, err: error, threadId }, 'Failed to archive thread');
-      return { success: false, error: errorMessage };
-    }
-  }
-
-  /**
-   * Send an Embed with optional action buttons to a thread.
-   * Used for quality gate review Embeds.
-   */
-  async replyToThreadEmbed(
-    threadId: string,
-    embeds: EmbedBuilder[],
-    components?: ActionRowBuilder<ButtonBuilder>[]
-  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    try {
-      const thread = await this.client?.channels.fetch(threadId);
-      if (!thread || !thread.isTextBased()) {
-        return { success: false, error: `Thread ${threadId} not found` };
-      }
-
-      const msg = await this.rateLimiter.rateLimitedSend(async () =>
-        (thread as TextChannel).send({
-          embeds,
-          ...(components ? { components } : {}),
-        })
-      );
-
-      return { success: true, messageId: msg.id };
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      this.log.warn({ event_type: EventType.ADAPTER_SEND_ERROR, err: errorMsg, threadId }, 'Failed to send embed to thread');
-      return { success: false, error: errorMsg };
-    }
-  }
-
-  /**
-   * Fetch recent messages from a thread.
-   * Used by read_task MCP tool to return thread context.
-   */
-  async fetchRecentThreadMessages(
-    threadId: string,
-    limit = 10
-  ): Promise<Array<{ author: string; content: string; timestamp: string }>> {
-    try {
-      const thread = await this.client?.channels.fetch(threadId);
-      if (!thread || !thread.isTextBased()) return [];
-
-      const messages = await (thread as TextChannel).messages.fetch({ limit });
-
-      return [...messages.values()]
-        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
-        .map(m => ({
-          author: m.author.username,
-          content: m.content.slice(0, 500),
-          timestamp: m.createdAt.toISOString(),
-        }));
-    } catch (err) {
-      this.log.warn({ event_type: EventType.ADAPTER_MESSAGE_ERROR, err: err instanceof Error ? err.message : String(err), threadId }, 'Failed to fetch thread messages');
-      return [];
-    }
   }
 
   // ============================================================

@@ -132,7 +132,7 @@ export class ConversationPipeline {
     if (this.deps.sessionManager.isMessageProcessed(platform, agentId, effectiveUserId, messageId)) {
       logger.warn(
         { event_type: EventType.MESSAGE_RACE_PREVENTED, messageId, platform, agentId, effectiveUserId },
-        'Skipping duplicate message (caught inside lock ??race condition prevented)'
+        'Skipping duplicate message (caught inside lock; race condition prevented)'
       );
       return { success: true, skipped: true, response: '' };
     }
@@ -150,9 +150,9 @@ export class ConversationPipeline {
       if (guardResult === 'switch') {
         this.deps.sdkSessionManager.destroySession(session.sessionId);
         this.deps.sessionManager.setSdkSessionId(platform, agentId, effectiveUserId, undefined);
-        await adapter.sendFormattedMessage(
+        await adapter.sendMessage(
           message.chatId,
-          '?? Session destroyed. Send your message again to start a fresh conversation.'
+          'Session destroyed. Send your message again to start a fresh conversation.'
         );
         return { success: true, skipped: true, response: '' };
       }

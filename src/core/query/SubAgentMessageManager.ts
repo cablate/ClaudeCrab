@@ -84,7 +84,7 @@ export class SubAgentMessageManager {
       if (record.discordMessageId) {
         await this.adapter.editMessage(this.chatId, record.discordMessageId, content);
       } else {
-        const sendResult = await this.adapter.sendFormattedMessage(this.chatId, content);
+        const sendResult = await this.adapter.sendMessage(this.chatId, content);
         if (sendResult.success && sendResult.messageId) {
           record.discordMessageId = sendResult.messageId;
         }

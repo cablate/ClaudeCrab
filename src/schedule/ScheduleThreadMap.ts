@@ -42,22 +42,6 @@ export class ScheduleThreadMap {
   }
 
   /**
-   * Remove a thread mapping (e.g., when thread is archived).
-   */
-  remove(platform: 'discord', threadId: string): void {
-    if (platform === 'discord') {
-      this.threads.delete(threadId);
-    }
-  }
-
-  /**
-   * Get all thread mappings for a specific schedule.
-   */
-  getByScheduleId(scheduleId: string): ScheduleThreadMapping[] {
-    return Array.from(this.threads.values()).filter(m => m.scheduleId === scheduleId);
-  }
-
-  /**
    * Get total count of tracked threads.
    */
   get size(): number {

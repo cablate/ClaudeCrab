@@ -1,5 +1,5 @@
 /**
- * Canonical event_type registry ??AI-grepable taxonomy for logs.
+ * Canonical event_type registry for log taxonomy.
  *
  * Rules:
  * 1. Dot-namespaced (`<category>.<event>`). Glob-friendly.
@@ -114,10 +114,7 @@ export const EventType = {
   SCHEDULE_REGISTERED: 'schedule.registered',
   SCHEDULE_UNREGISTERED: 'schedule.unregistered',
   SCHEDULE_PAUSED: 'schedule.paused',
-  SCHEDULE_RESUMED: 'schedule.resumed',
   SCHEDULE_AUTO_PAUSED: 'schedule.auto_paused',
-  SCHEDULE_CREATED: 'schedule.created',
-  SCHEDULE_DELETED: 'schedule.deleted',
   SCHEDULE_RELOADED: 'schedule.reloaded',
   SCHEDULE_FILE_CHANGE: 'schedule.file_change',
   SCHEDULE_WATCHER_STARTED: 'schedule.watcher_started',
@@ -143,7 +140,6 @@ export const EventType = {
   ADAPTER_DISCORD_CACHE_ANOMALY_REPORT_ERROR: 'adapter.discord_cache_anomaly_report_error',
 
   // cache.* - AI-query caching observability (Anthropic prompt cache + SDK session)
-  CACHE_ANOMALY_PER_TURN: 'cache.anomaly_per_turn',
   CACHE_EFFICIENCY_SNAPSHOT: 'cache.efficiency_snapshot',
   CACHE_EFFICIENCY_WARN: 'cache.efficiency_warn',
   CACHE_KEEPALIVE_PING: 'cache.keepalive_ping',

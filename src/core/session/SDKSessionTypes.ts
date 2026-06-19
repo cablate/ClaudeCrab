@@ -1,5 +1,5 @@
 /**
- * SDKSessionTypes ??shared type definitions for V2 session management modules.
+ * SDKSessionTypes: shared type definitions for V2 session management modules.
  *
  * These types are used across:
  *   - SDKSessionFactory (creates ManagedSession)
@@ -9,7 +9,7 @@
  */
 
 import type { SDKSession, McpSdkServerConfigWithInstance, AgentDefinition, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { ExecuteQueryOptions, QueryModelUsage } from '../query/SDKQueryManager.js';
+import type { ExecuteQueryOptions, QueryModelUsage } from '../query/types.js';
 import type { ConversationRuntimeContext } from '../../types/runtimeContext.js';
 import type { SubAgentMessageManager } from '../query/SubAgentMessageManager.js';
 
@@ -20,6 +20,7 @@ import type { SubAgentMessageManager } from '../query/SubAgentMessageManager.js'
 export interface PatchedSessionOptions {
   model: string;
   cwd?: string;
+  abortController?: AbortController;
   permissionMode?: string;
   allowedTools?: string[];
   disallowedTools?: string[];
@@ -29,6 +30,7 @@ export interface PatchedSessionOptions {
   systemPrompt?: string | { type: 'preset'; preset: 'claude_code'; append?: string };
   thinking?: { type: string };
   maxTurns?: number;
+  persistSession?: boolean;
   extraArgs?: Record<string, unknown>;
   additionalDirectories?: string[];
   /** Programmatic subagent definitions forwarded to SDK initialize payload. */
@@ -55,7 +57,7 @@ export interface ExtendedSessionOptions extends PatchedSessionOptions {
   agentProgressSummaries?: boolean;
 }
 
-/** Cumulative usage snapshot ??used to compute per-query deltas for V2 sessions */
+/** Cumulative usage snapshot used to compute per-query deltas for V2 sessions */
 export interface UsageSnapshot {
   inputTokens: number;
   outputTokens: number;
@@ -76,7 +78,7 @@ export interface ManagedSession {
   createdAt: number;
   lastUsedAt: number;
   messageCount: number;
-  /** Previous cumulative usage ??subtract from current to get per-query delta */
+  /** Previous cumulative usage; subtract from current to get per-query delta */
   prevUsage: UsageSnapshot;
   /** Previous cumulative per-model usage, used to identify models used in the current query. */
   prevModelUsage?: Record<string, QueryModelUsage>;
@@ -90,12 +92,18 @@ export interface ManagedSession {
   currentOptions?: ExecuteQueryOptions;
   /** Sub-agent Discord UI manager (Plan G). Set once when the first query creates a session. */
   subAgentManager?: SubAgentMessageManager;
-  /** Set to true when /stop is called ??processStream checks this to break the loop */
+  /** Set to true when /stop is called; processStream checks this to break the loop */
   cancelled?: boolean;
-  /** Timestamp when interrupt() was called ??used to distinguish graceful vs hard cancel */
+  /** Timestamp when interrupt() was called; used to distinguish graceful vs hard cancel */
   interruptedAt?: number | undefined;
-  /** Cache keepalive timer ??pings session to prevent Anthropic API cache TTL expiry */
+  /** Cache keepalive timer; pings session to prevent Anthropic API cache TTL expiry */
   keepaliveTimer?: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | undefined;
+  /** Idle-close timer for freeing the live SDK CLI process after real-query inactivity. */
+  idleCloseTimer?: ReturnType<typeof setTimeout> | undefined;
+  /** Hard timeout timer for active queries that never finish. */
+  queryHardTimeoutTimer?: ReturnType<typeof setTimeout> | undefined;
+  /** Force-close timer started after a hard-timeout interrupt. */
+  queryHardTimeoutForceTimer?: ReturnType<typeof setTimeout> | undefined;
   /**
    * Effective keepalive interval for this session. This can differ from the env
    * default after the API reports the actual prompt-cache TTL tier.

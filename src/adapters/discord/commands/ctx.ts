@@ -120,9 +120,7 @@ export async function handleCtx(
   if (matchedQueries.length > 0) {
     const historyLines: string[] = [];
     const chronological = [...matchedQueries].reverse();
-    const showMax = chronological.length;
-    for (let i = 0; i < showMax; i++) {
-      const q = chronological[i]!;
+    for (const [i, q] of chronological.entries()) {
       const throughput = q.inputTokens + q.cacheReadTokens + q.cacheCreationTokens;
       const hitPct = throughput > 0 ? Math.round((q.cacheReadTokens / throughput) * 100) : 0;
       const hitBar = hitPct >= 80 ? '🟩' : hitPct >= 40 ? '🟨' : '🟥';

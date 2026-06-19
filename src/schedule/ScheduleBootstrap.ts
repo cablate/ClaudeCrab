@@ -9,7 +9,7 @@ import { CronScheduler } from './CronScheduler.js';
 import { ScheduleManager } from './ScheduleManager.js';
 import { ScheduleThreadMap } from './ScheduleThreadMap.js';
 import { ScheduleRepository } from '../persistence/ScheduleRepository.js';
-import { SDKQueryManager } from '../core/query/SDKQueryManager.js';
+import { SDKSessionManager } from '../core/session/SDKSessionManager.js';
 import { logger } from '../utils/logger.js';
 
 export interface ScheduleBootstrapResult {
@@ -33,13 +33,20 @@ export async function initializeScheduleSystem(opts: {
     : undefined;
 
   const scheduleLoader = new ScheduleLoader(opts.agentLoader.getAgentsDir());
-  const sdkManager = new SDKQueryManager();
+  const sdkSessionManager = new SDKSessionManager({
+    // Schedule execution is one-shot. The sdkSessionId is persisted for
+    // thread follow-up resume, but the live CLI process should not stay open.
+    ephemeral: true,
+    ...(opts.queryMetricsRepository !== undefined
+      ? { queryMetricsRepository: opts.queryMetricsRepository }
+      : {}),
+  });
   const scheduleNotifier = new ScheduleNotifier(new Map());
   const scheduleThreadMap = opts.scheduleThreadMap ?? new ScheduleThreadMap();
 
   const scheduleExecutor = new ScheduleExecutor(
     opts.agentLoader,
-    sdkManager,
+    sdkSessionManager,
     scheduleNotifier,
     scheduleRepository,
     opts.queryMetricsRepository,
@@ -60,7 +67,7 @@ export async function initializeScheduleSystem(opts: {
   const scheduleManager = new ScheduleManager(
     scheduleLoader,
     cronScheduler,
-    scheduleRepository
+    () => scheduleExecutor.dispose()
   );
 
   await scheduleManager.initialize();

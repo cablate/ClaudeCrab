@@ -1,7 +1,5 @@
 /**
- * Core message types — platform-agnostic.
- * Lives in types/ to avoid circular dependency (types/ → adapters/).
- * Re-exported from adapters/types.ts for backward compatibility.
+ * Core platform-agnostic message types.
  */
 
 /**
@@ -75,20 +73,10 @@ export interface MessageMetadata {
 }
 
 /**
- * Connection health state for adapter monitoring.
- */
-export type ConnectionState = 'healthy' | 'degraded' | 'unhealthy';
-
-/**
- * Options for sending messages (platform-agnostic).
+ * Options for sending Discord messages.
  */
 export interface SendOptions {
-  parseMode?: 'Markdown' | 'HTML' | 'MarkdownV2';
   replyToMessageId?: string;
-  disableLinkPreview?: boolean;
-  disableNotification?: boolean;
-  messageThreadId?: string;
-  platformOptions?: Record<string, unknown>;
 }
 
 /**

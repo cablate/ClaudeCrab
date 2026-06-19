@@ -1,5 +1,5 @@
-/**
- * UsageCardFormatter — Per-turn usage summary card formatting.
+﻿/**
+ * UsageCardFormatter: per-turn usage summary card formatting.
  *
  * Extracted from QueryExecutor.ts to separate usage card concern
  * from query execution logic.
@@ -7,13 +7,13 @@
 
 import { EmbedBuilder } from 'discord.js';
 import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
-import type { QueryResult } from './SDKQueryManager.js';
+import type { QueryResult } from './types.js';
 import { diagnoseQueryUsage, formatUsageAnomalySummary, splitMainSubagentUsage, formatTokenShort, type UsageAnomalyReport } from '../keepalive/UsageAnomalyDiagnostics.js';
 
 function formatProgressBar(pct: number | undefined, width = 10): string {
   const safePct = Math.max(0, Math.min(100, Math.round(pct ?? 0)));
   const filled = Math.round((safePct / 100) * width);
-  return `${'▰'.repeat(filled)}${'▱'.repeat(width - filled)}`;
+  return `${'#'.repeat(filled)}${'-'.repeat(width - filled)}`;
 }
 
 function formatTurnLabel(turns: number): string {
@@ -32,15 +32,15 @@ function formatModelUsageLines(result: QueryResult, totalCost: number): string[]
       .filter(([, usage]) => usage.costUsd > 0 || usage.inputTokens > 0 || usage.outputTokens > 0 || usage.cacheCreationInputTokens > 0 || usage.cacheReadInputTokens > 0)
       .sort(([, left], [, right]) => right.costUsd - left.costUsd);
     if (entries.length > 0) {
-      return entries.map(([model, usage]) => `• ${model} · $${usage.costUsd.toFixed(3)}`);
+      return entries.map(([model, usage]) => `${model} | $${usage.costUsd.toFixed(3)}`);
     }
   }
 
   const actualModels = uniqueActualModels(result);
   if (actualModels.length === 1 && actualModels[0] !== undefined) {
-    return [`• ${actualModels[0]} · $${totalCost.toFixed(4)}`];
+    return [`${actualModels[0]} | $${totalCost.toFixed(4)}`];
   }
-  return actualModels.map((model) => `• ${model}`);
+  return actualModels;
 }
 
 function formatCacheModelBreakdown(result: QueryResult): string[] {
@@ -52,7 +52,7 @@ function formatCacheModelBreakdown(result: QueryResult): string[] {
   if (entries.length <= 1) return [];
   return entries.map(([model, usage]) => {
     const shortModel = model.replace(/^claude-/, '').replace(/-\d{8}$/, '');
-    return `  ${shortModel}: w ${formatTokenShort(usage.cacheCreationInputTokens ?? 0)} · r ${formatTokenShort(usage.cacheReadInputTokens ?? 0)}`;
+    return `  ${shortModel}: write ${formatTokenShort(usage.cacheCreationInputTokens ?? 0)} | read ${formatTokenShort(usage.cacheReadInputTokens ?? 0)}`;
   });
 }
 
@@ -61,15 +61,6 @@ export interface UsageQuotaSummary {
   sevenDayPct?: number;
 }
 
-type UsageContext = NonNullable<QueryResult['contextUsage']>;
-
-function buildContextBreakdownLines(ctx: UsageContext): string[] {
-  if (ctx.categories.length === 0) return [];
-  return [ctx.categories
-    .filter((c) => c.tokens > 0)
-    .map((c) => `${c.name.toLowerCase()} ${formatTokenShort(c.tokens)}`)
-    .join(' · ')];
-}
 
 function getUsageSummaryColor(hitPct: number, _quota: UsageQuotaSummary): number {
   if (hitPct < 50) return 0xD83A34;
@@ -104,32 +95,22 @@ function getUsageSummaryParts(
   const hitPct = mainThroughput > 0 ? Math.round((mainRead / mainThroughput) * 100) : 0;
 
   const description = [
-    `${formatTurnLabel(turns)} · fresh ${formatTokenShort(u.inputTokens)} · output ${formatTokenShort(u.outputTokens)}`,
+    `${formatTurnLabel(turns)} | fresh ${formatTokenShort(u.inputTokens)} | output ${formatTokenShort(u.outputTokens)}`,
     ...formatModelUsageLines(result, cost),
   ].join('\n');
 
   const cacheLines = [
     `${hitPct}% hit${split !== null ? ' (main)' : ''}`,
     formatProgressBar(hitPct),
-    `fresh ${formatTokenShort(mainFresh)} · write ${formatTokenShort(mainCreate)} · read ${formatTokenShort(mainRead)}`,
+    `fresh ${formatTokenShort(mainFresh)} | write ${formatTokenShort(mainCreate)} | read ${formatTokenShort(mainRead)}`,
     ...formatCacheModelBreakdown(result),
   ];
   if (split !== null && split.subagent.cacheCreationTokens > 0) {
-    cacheLines.push(`subagent: write ${formatTokenShort(split.subagent.cacheCreationTokens)} · read ${formatTokenShort(split.subagent.cacheReadTokens)}`);
+    cacheLines.push(`subagent: write ${formatTokenShort(split.subagent.cacheCreationTokens)} | read ${formatTokenShort(split.subagent.cacheReadTokens)}`);
   }
   const cache = cacheLines.join('\n');
 
-  let context: string | undefined;
-  if (result.contextUsage !== undefined) {
-    const ctx = result.contextUsage;
-    context = [
-      `${formatTokenShort(ctx.totalTokens)} / ${formatTokenShort(ctx.maxTokens)} · ${Math.round(ctx.percentage)}%`,
-      formatProgressBar(ctx.percentage),
-      ...buildContextBreakdownLines(ctx),
-    ].join('\n');
-  } else if (result.contextTokens !== undefined) {
-    context = formatTokenShort(result.contextTokens);
-  }
+  const context = result.contextTokens !== undefined ? formatTokenShort(result.contextTokens) : undefined;
 
   const quotaParts: string[] = [];
   if (quota.fiveHourPct !== undefined) quotaParts.push(`5h ${quota.fiveHourPct.toFixed(0)}% ${formatProgressBar(quota.fiveHourPct, 6)}`);
@@ -138,7 +119,7 @@ function getUsageSummaryParts(
   const anomaly = anomalyReport !== null ? formatUsageAnomalySummary(anomalyReport).slice(0, 1000) : undefined;
 
   return {
-    title: `📊 Usage · $${cost.toFixed(4)}`,
+    title: `Usage | $${cost.toFixed(4)}`,
     description,
     cache,
     ...(anomaly !== undefined ? { anomaly } : {}),
@@ -162,13 +143,13 @@ function buildUsageSummaryCardText(
     parts.title,
     parts.description,
     '',
-    '🧊 Cache',
+    'Cache',
     parts.cache,
   ];
 
-  if (parts.anomaly !== undefined) lines.push('', '⚠ Anomaly', parts.anomaly);
-  if (parts.context !== undefined) lines.push('', '🧱 Context', parts.context);
-  if (parts.quota !== undefined) lines.push('', '⏳ Quota', parts.quota);
+  if (parts.anomaly !== undefined) lines.push('', 'Anomaly', parts.anomaly);
+  if (parts.context !== undefined) lines.push('', 'Context', parts.context);
+  if (parts.quota !== undefined) lines.push('', 'Quota', parts.quota);
 
   return lines.join('\n');
 }
@@ -186,10 +167,10 @@ export function buildUsageSummaryEmbed(
     .setDescription(parts.description)
     .setColor(parts.color);
 
-  embed.addFields({ name: '🧊 Cache', value: parts.cache, inline: true });
-  if (parts.context !== undefined) embed.addFields({ name: '🧱 Context', value: parts.context, inline: true });
-  if (parts.quota !== undefined) embed.addFields({ name: '⏳ Quota', value: parts.quota, inline: true });
-  if (parts.anomaly !== undefined) embed.addFields({ name: '⚠ Anomaly', value: parts.anomaly, inline: false });
+  embed.addFields({ name: 'Cache', value: parts.cache, inline: true });
+  if (parts.context !== undefined) embed.addFields({ name: 'Context', value: parts.context, inline: true });
+  if (parts.quota !== undefined) embed.addFields({ name: 'Quota', value: parts.quota, inline: true });
+  if (parts.anomaly !== undefined) embed.addFields({ name: 'Anomaly', value: parts.anomaly, inline: false });
 
   return embed;
 }
@@ -219,7 +200,7 @@ export async function deliverUsageSummary(
         ...(oauthUsage.seven_day ? { sevenDayPct: oauthUsage.seven_day.utilization } : {}),
       };
     }
-  } catch { /* ignore — OAuth usage is optional */ }
+  } catch { /* OAuth usage is optional */ }
 
   const embed = buildUsageSummaryEmbed(result, quota, anomaly);
   const embedSender = getUsageEmbedSender(adapter);
@@ -230,7 +211,7 @@ export async function deliverUsageSummary(
 
   const text = buildUsageSummaryText(result, quota, anomaly);
   if (text === null) return;
-  await adapter.sendFormattedMessage(chatId, text);
+  await adapter.sendMessage(chatId, text);
 }
 
 interface UsageEmbedSender {
