@@ -4,37 +4,39 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { REST, Routes } from 'discord.js';
 
-interface AgentDiscordConfig {
+export interface AgentDiscordConfig {
   name?: string;
   discordBotToken?: string;
   discordChannelId?: string;
 }
 
-interface DiscordCheckOptions {
+export interface DiscordCheckOptions {
   agentId: string;
   agentsDir: string;
+  createThread: boolean;
+}
+
+export interface ResolvedDiscordCheckConfig {
+  agentId: string;
+  agentPath: string;
+  agent: Required<Pick<AgentDiscordConfig, 'discordBotToken' | 'discordChannelId'>> & AgentDiscordConfig;
   createThread: boolean;
 }
 
 const DISCORD_ID_PATTERN = /^\d{15,25}$/;
 
 async function main(): Promise<void> {
-  const options = readOptions(process.argv.slice(2));
-  const agentPath = path.resolve(options.agentsDir, options.agentId, 'agent.json');
-  const agent = readAgentConfig(agentPath);
+  const config = resolveDiscordCheckConfig(readOptions(process.argv.slice(2)));
+  await runDiscordCheck(config);
+}
 
-  if (!agent.discordBotToken || agent.discordBotToken.startsWith('replace-with-')) {
-    throw new Error(`Agent ${options.agentId} has no usable discordBotToken in ${agentPath}.`);
-  }
-  if (!agent.discordChannelId || !DISCORD_ID_PATTERN.test(agent.discordChannelId)) {
-    throw new Error(`Agent ${options.agentId} has no valid numeric discordChannelId in ${agentPath}.`);
-  }
-
+export async function runDiscordCheck(config: ResolvedDiscordCheckConfig): Promise<void> {
+  const { agent, agentId, createThread } = config;
   const rest = new REST({ version: '10' }).setToken(agent.discordBotToken);
   const now = new Date().toISOString();
   const content = [
     'ClaudeCab Discord setup check',
-    `agent: ${options.agentId}`,
+    `agent: ${agentId}`,
     `time: ${now}`,
   ].join('\n');
 
@@ -45,8 +47,8 @@ async function main(): Promise<void> {
   const messageId = getDiscordId(message, 'message');
   console.log(`ok messageId=${messageId}`);
 
-  if (options.createThread) {
-    const threadName = `[setup-check] ${agent.name ?? options.agentId}`;
+  if (createThread) {
+    const threadName = `[setup-check] ${agent.name ?? agentId}`;
     console.log(`Creating Discord setup check thread in channel ${agent.discordChannelId}...`);
     const thread = await rest.post(Routes.threads(agent.discordChannelId, messageId), {
       body: {
@@ -62,15 +64,41 @@ async function main(): Promise<void> {
   }
 }
 
-function readOptions(args: string[]): DiscordCheckOptions {
+export function resolveDiscordCheckConfig(options: DiscordCheckOptions): ResolvedDiscordCheckConfig {
+  const agentPath = path.resolve(options.agentsDir, options.agentId, 'agent.json');
+  const agent = readAgentConfig(agentPath);
+
+  if (!agent.discordBotToken || isPlaceholder(agent.discordBotToken)) {
+    throw new Error(`Agent ${options.agentId} has no usable discordBotToken in ${agentPath}.`);
+  }
+  if (DISCORD_ID_PATTERN.test(agent.discordBotToken)) {
+    throw new Error(`Agent ${options.agentId} discordBotToken looks like a Discord ID. Paste the Bot Token, not an ID.`);
+  }
+  if (!agent.discordChannelId || !DISCORD_ID_PATTERN.test(agent.discordChannelId)) {
+    throw new Error(`Agent ${options.agentId} has no valid numeric discordChannelId in ${agentPath}.`);
+  }
+
+  return {
+    agentId: options.agentId,
+    agentPath,
+    agent: {
+      ...agent,
+      discordBotToken: agent.discordBotToken,
+      discordChannelId: agent.discordChannelId,
+    },
+    createThread: options.createThread,
+  };
+}
+
+export function readOptions(args: string[], env: NodeJS.ProcessEnv = process.env): DiscordCheckOptions {
   return {
     agentId: readArg(args, '--agent') ?? 'example',
-    agentsDir: readArg(args, '--agents-dir') ?? process.env.AGENTS_DIR ?? './agents',
+    agentsDir: readArg(args, '--agents-dir') ?? env.AGENTS_DIR ?? './agents',
     createThread: args.includes('--thread'),
   };
 }
 
-function readAgentConfig(agentPath: string): AgentDiscordConfig {
+export function readAgentConfig(agentPath: string): AgentDiscordConfig {
   if (!existsSync(agentPath)) {
     throw new Error(`agent.json not found: ${agentPath}`);
   }
@@ -79,6 +107,14 @@ function readAgentConfig(agentPath: string): AgentDiscordConfig {
     throw new Error(`agent.json must be a JSON object: ${agentPath}`);
   }
   return parsed as AgentDiscordConfig;
+}
+
+function isPlaceholder(value: string): boolean {
+  return value.trim() === '' ||
+    value.startsWith('replace-with-') ||
+    value.startsWith('your-') ||
+    value.endsWith('-token') ||
+    value.endsWith('-channel-id');
 }
 
 function readArg(args: string[], name: string): string | undefined {
