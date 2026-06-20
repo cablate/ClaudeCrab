@@ -32,6 +32,11 @@ export interface AppConfig {
   };
   schedule: {
     enabled: boolean;
+    catchUpEnabled: boolean;
+    catchUpCheckIntervalMs: number;
+    catchUpGraceMs: number;
+    catchUpWindowMs: number;
+    staleRunningMs: number;
   };
   stt: {
     enabled: boolean;
@@ -156,6 +161,11 @@ export function loadAppConfig(): AppConfig {
     },
     schedule: {
       enabled: process.env.SCHEDULE_ENABLED !== 'false', // Default enabled
+      catchUpEnabled: process.env.SCHEDULE_CATCHUP_ENABLED !== 'false',
+      catchUpCheckIntervalMs: parseIntegerEnv('SCHEDULE_CATCHUP_CHECK_INTERVAL_MS', 1_800_000),
+      catchUpGraceMs: parseIntegerEnv('SCHEDULE_CATCHUP_GRACE_MS', 1_800_000),
+      catchUpWindowMs: parseIntegerEnv('SCHEDULE_CATCHUP_WINDOW_MS', 10_800_000),
+      staleRunningMs: parseIntegerEnv('SCHEDULE_STALE_RUNNING_MS', 7_200_000),
     },
     stt: {
       enabled: process.env.STT_ENABLED === 'true',

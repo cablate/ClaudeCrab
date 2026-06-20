@@ -112,6 +112,7 @@ export class AppBootstrap {
         scheduleThreadMap: this.scheduleThreadMap,
         queryMetricsRepository: persistence?.queryMetricsRepository,
         sessionRepository: persistence?.sessionRepository,
+        scheduleConfig: this.config.schedule,
       });
       this.scheduleManager = schedule.scheduleManager;
       this.scheduleExecutor = schedule.scheduleExecutor;

@@ -400,6 +400,7 @@ npm run schedule:discord-test -- example/example-daily-check
 | `CACHE_KEEPALIVE_*` | 自動維持 prompt cache | 需要優化 cache 成本或命中率 |
 | `SESSION_GUARD_*` | 保護長對話與 cache 狀態 | 長對話常爆 token 或 cache 異常 |
 | `SCHEDULE_ENABLED` | 控制 schedule loader | 不使用 schedule 才關 |
+| `SCHEDULE_CATCHUP_*` | 排程補跑健康檢查 | 預設每 30 分鐘檢查一次；每日固定時間 cron 若超過 grace 仍沒有 DB 執行紀錄，且仍在補跑窗口內，才會補跑 |
 | `DISCORD_CHANNEL_*` | dashboard、cost report、alert channel | 需要營運監控頻道 |
 | `STT_*` | 語音轉文字 | 要處理語音訊息 |
 | `ALLOWED_USERS` | 使用者白名單 | 需要限制可用 Discord 使用者 |

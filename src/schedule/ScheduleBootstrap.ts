@@ -7,10 +7,12 @@ import { ScheduleNotifier } from './ScheduleNotifier.js';
 import { ScheduleExecutor } from './ScheduleExecutor.js';
 import { CronScheduler } from './CronScheduler.js';
 import { ScheduleManager } from './ScheduleManager.js';
+import { ScheduleCatchUp } from './ScheduleCatchUp.js';
 import { ScheduleThreadMap } from './ScheduleThreadMap.js';
 import { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import { SDKSessionManager } from '../core/session/SDKSessionManager.js';
 import { logger } from '../utils/logger.js';
+import type { AppConfig } from '../config.js';
 
 export interface ScheduleBootstrapResult {
   scheduleManager: ScheduleManager;
@@ -25,6 +27,7 @@ export async function initializeScheduleSystem(opts: {
   scheduleThreadMap: ScheduleThreadMap | null;
   queryMetricsRepository: IQueryMetricsRepository | undefined;
   sessionRepository: ISessionRepository | undefined;
+  scheduleConfig: AppConfig['schedule'];
 }): Promise<ScheduleBootstrapResult> {
   logger.info('Initializing Schedule System...');
 
@@ -63,10 +66,22 @@ export async function initializeScheduleSystem(opts: {
       logger.warn({ scheduleId, failureCount }, '[Schedule] Auto-paused after consecutive failures');
     }
   );
+  const scheduleCatchUp = new ScheduleCatchUp(
+    cronScheduler,
+    scheduleRepository,
+    {
+      enabled: opts.scheduleConfig.catchUpEnabled,
+      checkIntervalMs: opts.scheduleConfig.catchUpCheckIntervalMs,
+      graceMs: opts.scheduleConfig.catchUpGraceMs,
+      windowMs: opts.scheduleConfig.catchUpWindowMs,
+      staleRunningMs: opts.scheduleConfig.staleRunningMs,
+    }
+  );
 
   const scheduleManager = new ScheduleManager(
     scheduleLoader,
     cronScheduler,
+    scheduleCatchUp,
     () => scheduleExecutor.dispose()
   );
 

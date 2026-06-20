@@ -7,6 +7,7 @@
 import type { FSWatcher } from 'chokidar';
 import type { ScheduleLoader } from './ScheduleLoader.js';
 import type { CronScheduler } from './CronScheduler.js';
+import type { ScheduleCatchUp } from './ScheduleCatchUp.js';
 import { logger } from '../utils/logger.js';
 import { EventType } from '../utils/events.js';
 
@@ -19,6 +20,7 @@ export class ScheduleManager {
   constructor(
     private loader: ScheduleLoader,
     private scheduler: CronScheduler,
+    private catchUp?: ScheduleCatchUp,
     private disposeExecutor?: () => void
   ) {}
 
@@ -46,6 +48,7 @@ export class ScheduleManager {
 
     // Start watching YAML files for changes
     this.startFileWatcher();
+    this.catchUp?.start();
   }
 
   /**
@@ -134,6 +137,7 @@ export class ScheduleManager {
    */
   dispose(): void {
     this.stopFileWatcher();
+    this.catchUp?.stop();
     this.scheduler.dispose();
     this.disposeExecutor?.();
     logger.info({ event_type: EventType.SCHEDULE_MANAGER_DISPOSED }, '[ScheduleManager] Disposed');

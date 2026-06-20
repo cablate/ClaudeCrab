@@ -7,6 +7,14 @@
 import type { Database as DatabaseType } from 'better-sqlite3';
 import { logger } from '../utils/logger.js';
 
+export interface ScheduleExecutionRecord {
+  id: string;
+  scheduleId: string;
+  startedAt: string;
+  completedAt: string | null;
+  success: number | null;
+}
+
 export class ScheduleRepository {
   constructor(private db: DatabaseType) {}
 
@@ -47,5 +55,22 @@ export class ScheduleRepository {
       executionId
     );
     logger.debug(`[ScheduleRepository] Recorded complete: ${executionId}`);
+  }
+
+  listExecutions(scheduleId: string, fromIso: string, toIso: string): ScheduleExecutionRecord[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        id,
+        schedule_id AS scheduleId,
+        started_at AS startedAt,
+        completed_at AS completedAt,
+        success
+      FROM schedule_executions
+      WHERE schedule_id = ?
+        AND started_at >= ?
+        AND started_at < ?
+      ORDER BY started_at DESC
+    `);
+    return stmt.all(scheduleId, fromIso, toIso) as ScheduleExecutionRecord[];
   }
 }
