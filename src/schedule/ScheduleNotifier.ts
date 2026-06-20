@@ -128,18 +128,20 @@ export class ScheduleNotifier {
     _chatId: string,
     threadId: string,
     text: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     const adapter = this.adapters.get(agentId);
     if (!adapter) {
       logger.warn(`[ScheduleNotifier] Adapter not found for ${agentId}:${platform}`);
-      return;
+      return false;
     }
 
     try {
       await adapter.sendMessage(threadId, text);
+      return true;
     } catch (error) {
       logger.error({ error, agentId, platform, threadId },
         '[ScheduleNotifier] Failed to send to thread');
+      return false;
     }
   }
 

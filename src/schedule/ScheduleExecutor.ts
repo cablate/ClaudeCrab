@@ -157,9 +157,12 @@ export class ScheduleExecutor {
 
                     if (deliveryMode === 'streaming' && createdThreads.length > 0) {
                       for (const thread of createdThreads) {
-                        await this.notifier.sendToThread(
+                        const sent = await this.notifier.sendToThread(
                           agentId, thread.platform, thread.chatId, thread.threadId, text
                         );
+                        if (!sent) {
+                          throw new Error(`Failed to stream schedule output to Discord thread ${thread.threadId}`);
+                        }
                       }
                     }
                   },
@@ -188,6 +191,13 @@ export class ScheduleExecutor {
         const duration = Date.now() - startTime;
         const finalResponse = lastMessage || result.response;
 
+        const sdkErrorMessage = detectScheduleSdkError(finalResponse);
+        if (sdkErrorMessage) {
+          throw new Error(sdkErrorMessage);
+        }
+
+        await this.deliverOutput(agentId, spec, result, finalResponse, allMessages, createdThreads);
+
         if (this.repository) {
           await this.repository.recordComplete(executionId, {
             success: true,
@@ -197,7 +207,6 @@ export class ScheduleExecutor {
         }
 
         this.recordQueryMetrics(agentId, spec, result, duration);
-        await this.deliverOutput(agentId, spec, result, finalResponse, allMessages, createdThreads);
 
         logger.info(
           { scheduleId: spec.id, executionId, duration, success: true,
@@ -256,6 +265,10 @@ export class ScheduleExecutor {
       }
     }
 
+    if (resolveScheduleTargets(spec).length > 0 && createdThreads.length === 0) {
+      throw new Error(`Failed to create any output thread for schedule ${spec.id}`);
+    }
+
     return createdThreads;
   }
 
@@ -310,9 +323,12 @@ export class ScheduleExecutor {
         : formatScheduleResponse(finalResponse);
 
       for (const thread of createdThreads) {
-        await this.notifier.sendToThread(
+        const sent = await this.notifier.sendToThread(
           agentId, thread.platform, thread.chatId, thread.threadId, outputText
         );
+        if (!sent) {
+          throw new Error(`Failed to deliver schedule output to Discord thread ${thread.threadId}`);
+        }
       }
     }
 
@@ -389,4 +405,22 @@ export class ScheduleExecutor {
   dispose(): void {
     this.sdkSessionManager.dispose();
   }
+}
+
+function detectScheduleSdkError(response: string): string | null {
+  const text = response.trim();
+  if (!text) return null;
+
+  const knownErrorPatterns = [
+    /^Authentication error\b/i,
+    /^API Error\b/i,
+    /^OAuth error\b/i,
+    /^Rate limit error\b/i,
+  ];
+
+  if (knownErrorPatterns.some((pattern) => pattern.test(text))) {
+    return text.split(/\r?\n/, 1)[0] ?? 'Schedule SDK error';
+  }
+
+  return null;
 }
