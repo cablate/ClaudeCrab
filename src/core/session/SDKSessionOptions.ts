@@ -22,7 +22,13 @@ export async function buildSessionOptions(
 ): Promise<BuiltSessionOptions> {
   const settingsEnv = await loadAgentSettingsEnv(agent.path);
   const wantsApiKeyAuth = typeof settingsEnv.ANTHROPIC_API_KEY === 'string' && settingsEnv.ANTHROPIC_API_KEY.length > 0;
-  const redirectedConfigDir = wantsApiKeyAuth ? path.join(agent.path, '.claude') : undefined;
+  const wantsAgentConfigDir = wantsApiKeyAuth || (
+    typeof settingsEnv.ANTHROPIC_AUTH_TOKEN === 'string'
+    && settingsEnv.ANTHROPIC_AUTH_TOKEN.length > 0
+    && typeof settingsEnv.ANTHROPIC_BASE_URL === 'string'
+    && settingsEnv.ANTHROPIC_BASE_URL.length > 0
+  );
+  const redirectedConfigDir = wantsAgentConfigDir ? path.join(agent.path, '.claude') : undefined;
   const resumeSessionId = await resolveResumeSessionId(
     sessionId,
     options.resume,
@@ -40,9 +46,9 @@ export async function buildSessionOptions(
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
       CLAUDE_CODE_ENABLE_TASKS: '0',
       ...settingsEnv,
-      ...(wantsApiKeyAuth
+      ...(wantsAgentConfigDir
         ? {
-            ANTHROPIC_AUTH_TOKEN: '',
+            ...(wantsApiKeyAuth ? { ANTHROPIC_AUTH_TOKEN: '' } : {}),
             ...(redirectedConfigDir ? { CLAUDE_CONFIG_DIR: redirectedConfigDir } : {}),
           }
         : {}),
