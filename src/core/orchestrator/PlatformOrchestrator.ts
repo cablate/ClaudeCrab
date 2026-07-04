@@ -31,6 +31,7 @@ export interface PlatformOrchestratorOptions {
   sttProvider?: import('../stt/index.js').STTProvider;
   scheduleThreadMap?: import('../../schedule/ScheduleThreadMap.js').ScheduleThreadMap;
   sessionRepository?: import('../../persistence/types.js').ISessionRepository;
+  ownerUserId?: string;
   createDiscordAdapter?: DiscordAdapterFactory;
 }
 
@@ -43,6 +44,7 @@ export class PlatformOrchestrator {
   private readonly scheduleManager: ScheduleManager | undefined;
   private readonly scheduleThreadMap: import('../../schedule/ScheduleThreadMap.js').ScheduleThreadMap | undefined;
   private readonly sessionRepository: import('../../persistence/types.js').ISessionRepository | undefined;
+  private readonly ownerUserId: string | undefined;
   private readonly discordFactory: DiscordAdapterFactory | undefined;
   private readonly sttProvider: import('../stt/index.js').STTProvider | undefined;
 
@@ -54,6 +56,7 @@ export class PlatformOrchestrator {
     this.scheduleManager = options.scheduleManager;
     this.scheduleThreadMap = options.scheduleThreadMap;
     this.sessionRepository = options.sessionRepository;
+    this.ownerUserId = options.ownerUserId;
     this.discordFactory = options.createDiscordAdapter;
     this.sttProvider = options.sttProvider;
   }
@@ -271,6 +274,7 @@ export class PlatformOrchestrator {
       agentsDir: this.agentLoader.getAgentsDir(),
       token,
       channelId,
+      ...(this.ownerUserId !== undefined ? { ownerUserId: this.ownerUserId } : {}),
       ...(this.securityConfig !== undefined ? { securityConfig: this.securityConfig } : {}),
       ...(this.sttProvider !== undefined ? { sttProvider: this.sttProvider } : {}),
     });

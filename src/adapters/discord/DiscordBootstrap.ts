@@ -78,6 +78,7 @@ export async function initializeDiscordServices(
     agentId: '_system',
     token: mainBotToken,
     channelId: channels.systemLog || channels.dashboard || '',
+    ...(discordConfig.ownerUserId !== undefined ? { ownerUserId: discordConfig.ownerUserId } : {}),
   };
 
   const discordAdapter = new DiscordAdapter(systemAdapterConfig);
@@ -115,6 +116,8 @@ export async function initializeDiscordServices(
         ...(persistence?.queryMetricsRepository !== undefined
           ? { queryMetricsRepository: persistence.queryMetricsRepository }
           : {}),
+        ...(discordConfig.ownerUserId !== undefined ? { ownerUserId: discordConfig.ownerUserId } : {}),
+        ...(discordConfig.guildId !== undefined ? { guildId: discordConfig.guildId } : {}),
         get sdkSessionManager() { return messageProcessor.sdkSession; },
         ...orchestratorCommandDeps,
       },

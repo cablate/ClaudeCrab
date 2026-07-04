@@ -9,8 +9,7 @@ import { logger } from '../utils/logger.js';
 import { playSound } from '../utils/localSound.js';
 import { sendErrorToUser } from '../core/query/ResponseSender.js';
 import { executeQueryWithSDK, type QueryRequest } from '../core/query/QueryExecutor.js';
-import { loadAppConfig } from '../config.js';
-import { checkSessionGuard } from '../core/session/SessionGuard.js';
+import { checkSessionGuard, type SessionGuardConfig } from '../core/session/SessionGuard.js';
 
 export interface ProcessMessageOptions {
   replyToMessageId?: string;
@@ -30,6 +29,7 @@ export interface ConversationPipelineDeps {
   getAdapter: (platform: 'discord', agentId: string) => BaseAdapter | undefined;
   buildQueryExecutorDeps: () => QueryExecutorDeps;
   getAgentCwd?: (agentId: string) => string | undefined;
+  sessionGuardConfig?: SessionGuardConfig;
 }
 
 /**
@@ -139,13 +139,13 @@ export class ConversationPipeline {
 
     this.deps.sessionManager.markMessageProcessed(platform, agentId, effectiveUserId, messageId);
 
-    const appConfig = loadAppConfig();
-    if (appConfig.sessionGuard.enabled) {
+    const sessionGuardConfig = this.deps.sessionGuardConfig;
+    if (sessionGuardConfig?.enabled) {
       const agentCwd = this.deps.getAgentCwd?.(agentId);
       const guardResult = await checkSessionGuard(
         { sdkSessionManager: this.deps.sdkSessionManager, adapter, chatId: message.chatId, agentCwd },
         session,
-        appConfig.sessionGuard
+        sessionGuardConfig
       );
       if (guardResult === 'switch') {
         this.deps.sdkSessionManager.destroySession(session.sessionId);
@@ -210,6 +210,9 @@ export class ConversationPipeline {
     }
     if (typeof message.metadata?.sourceMessageChannelId === 'string') {
       queryOptions.sourceMessageChannelId = message.metadata.sourceMessageChannelId;
+    }
+    if (typeof message.metadata?.guildId === 'string') {
+      queryOptions.guildId = message.metadata.guildId;
     }
     if (typeof message.metadata?.taskId === 'string') {
       queryOptions.taskId = message.metadata.taskId;

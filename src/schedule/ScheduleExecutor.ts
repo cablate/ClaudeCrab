@@ -51,7 +51,8 @@ export class ScheduleExecutor {
     private notifier: ScheduleNotifier,
     private repository?: ScheduleRepository,
     private queryMetricsRepository?: IQueryMetricsRepository,
-    private sessionRepository?: ISessionRepository
+    private sessionRepository?: ISessionRepository,
+    private ownerUserId?: string
   ) {}
 
   /**
@@ -250,7 +251,7 @@ export class ScheduleExecutor {
 
     const createdThreads: CreatedScheduleThread[] = [];
     const threadTitle = resolveThreadTitle(spec);
-    const initialContent = formatScheduleStart(spec);
+    const initialContent = formatScheduleStart(spec, this.ownerUserId);
 
     for (const target of resolveScheduleTargets(spec)) {
       const channelId = resolveThreadChannelId(spec, target.chatId);

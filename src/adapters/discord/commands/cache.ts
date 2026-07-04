@@ -87,7 +87,7 @@ export async function handleCache(
   }
 
   if (sub === 'flush') {
-    const ownerId = process.env['DISCORD_OWNER_USER_ID'];
+    const ownerId = deps.ownerUserId;
     if (!ownerId || interaction.user.id !== ownerId) {
       await interaction.reply({ content: '❌ 僅 admin 可用', ephemeral: true });
       return;

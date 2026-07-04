@@ -74,7 +74,7 @@ export function reportQueryUsageAnomaly(ctx: UsageAnomalyReportContext): UsageAn
     ? summaryReader.getSessionSummaries().find((summary) => summary.sessionId === ctx.sessionId)
     : undefined;
   const runtime = sessionSummary?.runtimeContext;
-  const guildId = runtime?.guildId ?? process.env.DISCORD_GUILD_ID;
+  const guildId = runtime?.guildId;
   const targetChatId = runtime?.chatId ?? ctx.chatId;
   const sourceChannelId = runtime?.sourceMessageChannelId ?? ctx.options?.sourceMessageChannelId ?? targetChatId;
   const sourceMessageId = runtime?.originalMessageId ?? ctx.options?.replyToMessageId;

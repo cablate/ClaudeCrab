@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { logger } from './utils/logger.js';
-import { loadAppConfig } from './config.js';
+import { formatRuntimeConfigIssues, loadAppConfig, validateAppConfigForRuntime } from './config.js';
 import { AppBootstrap } from './AppBootstrap.js';
 import { CRASH_MARKER_PATH } from './constants.js';
 
@@ -54,7 +54,15 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-const app = new AppBootstrap(loadAppConfig());
+const config = loadAppConfig();
+const configValidation = validateAppConfigForRuntime(config);
+if (!configValidation.ok) {
+  const message = formatRuntimeConfigIssues(configValidation.issues);
+  logger.fatal({ event_type: 'config.validation_failed', issues: configValidation.issues }, message);
+  process.exit(1);
+}
+
+const app = new AppBootstrap(config);
 
 app.start().catch((error: unknown) => {
   const err = error instanceof Error ? error : new Error(String(error));

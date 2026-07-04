@@ -486,7 +486,7 @@ async function triggerScheduleWithDiscordDelivery(
     keepaliveConfig: { ...config.cacheKeepalive, enabled: false },
   });
   const persistence = initializeCliPersistence(config);
-  const restAdapter = new RestDiscordScheduleAdapter(selected.agentId, token);
+  const restAdapter = new RestDiscordScheduleAdapter(selected.agentId, token, config.discord.ownerUserId);
   const notifier = new ScheduleNotifier(new Map([[selected.agentId, restAdapter as unknown as BaseAdapter]]));
   const executor = new ScheduleExecutor(
     agentLoader,
@@ -495,6 +495,7 @@ async function triggerScheduleWithDiscordDelivery(
     undefined,
     undefined,
     persistence?.sessionRepository,
+    config.discord.ownerUserId,
   );
 
   try {
@@ -574,7 +575,7 @@ async function testDiscordThreadDelivery(config: ReturnType<typeof loadAppConfig
     await rest.post(Routes.channelMessages(threadId), {
       body: {
         content: [
-          formatOwnerMention(),
+          formatOwnerMention(config.discord.ownerUserId),
           `Schedule thread send test succeeded.`,
           `schedule: ${spec.id}`,
           `delivery: ${spec.output?.delivery ?? 'last-only'}`,
@@ -618,6 +619,7 @@ class RestDiscordScheduleAdapter {
   constructor(
     readonly agentId: string,
     token: string,
+    private readonly ownerUserId?: string,
   ) {
     this.rest = new REST({ version: '10' }).setToken(token);
   }
@@ -659,14 +661,14 @@ class RestDiscordScheduleAdapter {
   }
 
   private async addOwnerToThread(threadId: string): Promise<void> {
-    const ownerUserId = process.env.DISCORD_OWNER_USER_ID;
+    const ownerUserId = this.ownerUserId;
     if (!ownerUserId) return;
 
     await this.rest.put(Routes.threadMembers(threadId, ownerUserId));
   }
 
   private async notifyOwnerInThread(threadId: string): Promise<void> {
-    const mention = formatOwnerMention();
+    const mention = formatOwnerMention(this.ownerUserId);
     if (!mention) return;
 
     await this.rest.post(Routes.channelMessages(threadId), {
@@ -679,8 +681,7 @@ function truncateDiscordMessage(text: string): string {
   return text.length > 1900 ? `${text.slice(0, 1900)}\n\n[truncated]` : text;
 }
 
-function formatOwnerMention(): string | undefined {
-  const ownerUserId = process.env.DISCORD_OWNER_USER_ID;
+function formatOwnerMention(ownerUserId?: string): string | undefined {
   return ownerUserId && /^\d+$/.test(ownerUserId) ? `<@${ownerUserId}>` : undefined;
 }
 

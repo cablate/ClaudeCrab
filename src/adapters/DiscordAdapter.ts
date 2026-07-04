@@ -73,6 +73,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   private client: Client | null = null;
   private channel: TextChannel | null = null;
   private readonly channelId: string;
+  private readonly ownerUserId: string | undefined;
   private readonly securityConfig: SecurityConfig;
   private readonly sttProvider: import('../core/stt/index.js').STTProvider | undefined;
   private boundMessageHandler: ((message: DiscordMessage) => void) | null =
@@ -108,6 +109,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   constructor(config: DiscordAdapterConfig) {
     super(config);
     this.channelId = config.channelId;
+    this.ownerUserId = config.ownerUserId;
     this.sttProvider = config.sttProvider;
 
     this.securityConfig = config.securityConfig
@@ -552,7 +554,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   }
 
   private async addOwnerToThread(thread: ThreadChannel): Promise<void> {
-    const ownerUserId = process.env.DISCORD_OWNER_USER_ID;
+    const ownerUserId = this.ownerUserId;
     if (!ownerUserId) return;
 
     try {
@@ -565,7 +567,7 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
   }
 
   private async notifyOwnerInThread(thread: ThreadChannel): Promise<void> {
-    const ownerUserId = process.env.DISCORD_OWNER_USER_ID;
+    const ownerUserId = this.ownerUserId;
     if (!ownerUserId) return;
 
     try {

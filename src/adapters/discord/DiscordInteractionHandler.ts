@@ -149,7 +149,7 @@ export class DiscordInteractionHandler {
     const customId = interaction.customId;
 
     // Admin gate — BEFORE deferUpdate so we can send ephemeral reply
-    const ownerId = process.env['DISCORD_OWNER_USER_ID'];
+    const ownerId = this.slashCommandDeps?.ownerUserId;
     if (!ownerId || interaction.user.id !== ownerId) {
       try {
         await interaction.reply({ content: '❌ 僅 admin 可用', ephemeral: true });

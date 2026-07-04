@@ -24,6 +24,7 @@ import { createSTTProvider, type STTProvider } from './core/stt/index.js';
 import { DiscordAdapter } from './adapters/DiscordAdapter.js';
 import { DiscordDashboard } from './adapters/discord/services/DiscordDashboard.js';
 import { initializeDiscordServices, notifyCrashRecovery } from './adapters/discord/DiscordBootstrap.js';
+import { configureAgentPaths } from './core/agentPaths.js';
 
 const TYPING_INDICATOR_INTERVAL_MS = 5000;
 
@@ -44,6 +45,7 @@ export class AppBootstrap {
 
   constructor(config: AppConfig) {
     this.config = config;
+    configureAgentPaths(config.agentsDir);
   }
 
   async start(): Promise<void> {
@@ -113,6 +115,7 @@ export class AppBootstrap {
         queryMetricsRepository: persistence?.queryMetricsRepository,
         sessionRepository: persistence?.sessionRepository,
         scheduleConfig: this.config.schedule,
+        ...(this.config.discord.ownerUserId !== undefined ? { ownerUserId: this.config.discord.ownerUserId } : {}),
       });
       this.scheduleManager = schedule.scheduleManager;
       this.scheduleExecutor = schedule.scheduleExecutor;
@@ -302,12 +305,14 @@ export class AppBootstrap {
       ...(queryMetricsRepository !== undefined ? { queryMetricsRepository } : {}),
       ...(rateLimitRepository !== undefined ? { rateLimitRepository } : {}),
       cacheKeepaliveConfig: this.config.cacheKeepalive,
+      sessionGuardConfig: this.config.sessionGuard,
       ephemeral: this.config.session.ephemeral,
       idleCloseMs: this.config.session.idleCloseMs,
       queryHardTimeoutMs: this.config.session.queryHardTimeoutMs,
       queryHardTimeoutGraceMs: this.config.session.queryHardTimeoutGraceMs,
       usageCardEnabled: this.config.discord.usageCardEnabled,
       inChatUsageSummary: this.config.discord.inChatUsageSummary,
+      ...(this.config.discord.guildId !== '' ? { guildId: this.config.discord.guildId } : {}),
     });
   }
 
@@ -330,6 +335,7 @@ export class AppBootstrap {
       ...(sttProvider !== undefined ? { sttProvider } : {}),
       ...(this.scheduleThreadMap !== null ? { scheduleThreadMap: this.scheduleThreadMap } : {}),
       ...(persistence?.sessionRepository !== undefined ? { sessionRepository: persistence.sessionRepository } : {}),
+      ...(this.config.discord.ownerUserId !== undefined ? { ownerUserId: this.config.discord.ownerUserId } : {}),
       createDiscordAdapter: (config) => new DiscordAdapter(config),
     });
   }

@@ -50,17 +50,25 @@ export interface RuntimeHookConfig {
   };
 }
 
-export const HOOK_RUNTIME_CONFIG_PATH = path.join(
-  resolveFoundationDir(),
-  'hooks',
-  'runtime-config.json',
-);
-
-function readRuntimeHookConfig(): RuntimeHookConfig {
-  return JSON.parse(readFileSync(HOOK_RUNTIME_CONFIG_PATH, 'utf8')) as RuntimeHookConfig;
+export function resolveHookRuntimeConfigPath(): string {
+  return path.join(
+    resolveFoundationDir(),
+    'hooks',
+    'runtime-config.json',
+  );
 }
 
-export const HOOK_RUNTIME_CONFIG = readRuntimeHookConfig();
+let cachedConfigPath: string | undefined;
+let cachedConfig: RuntimeHookConfig | undefined;
+
+export function getHookRuntimeConfig(): RuntimeHookConfig {
+  const configPath = resolveHookRuntimeConfigPath();
+  if (cachedConfigPath !== configPath || cachedConfig === undefined) {
+    cachedConfig = JSON.parse(readFileSync(configPath, 'utf8')) as RuntimeHookConfig;
+    cachedConfigPath = configPath;
+  }
+  return cachedConfig;
+}
 
 export function compileHookPatterns(patterns: readonly RuntimeHookPattern[]): readonly RegExp[] {
   return patterns.map(({ pattern, flags = '' }) => new RegExp(pattern, flags));

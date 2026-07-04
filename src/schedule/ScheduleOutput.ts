@@ -115,8 +115,8 @@ export function formatScheduleSummary(spec: ScheduleSpec, messages: string[], fi
   return lines.join('\n');
 }
 
-export function formatScheduleStart(spec: ScheduleSpec): string {
-  const notifyUserIds = resolveScheduleNotifyUserIds(spec);
+export function formatScheduleStart(spec: ScheduleSpec, ownerUserId?: string): string {
+  const notifyUserIds = resolveScheduleNotifyUserIds(spec, ownerUserId);
   const mentionLine = notifyUserIds.length > 0
     ? `${notifyUserIds.map((id) => `<@${id}>`).join(' ')}`
     : undefined;
@@ -135,10 +135,9 @@ export function formatScheduleResponse(response: string): string {
   return response || 'Schedule execution completed.';
 }
 
-export function resolveScheduleNotifyUserIds(spec: ScheduleSpec): string[] {
+export function resolveScheduleNotifyUserIds(spec: ScheduleSpec, ownerUserId?: string): string[] {
   const explicit = spec.output?.notifyUserIds ?? [];
-  const owner = process.env.DISCORD_OWNER_USER_ID;
-  const ids = [...explicit, ...(owner ? [owner] : [])]
+  const ids = [...explicit, ...(ownerUserId ? [ownerUserId] : [])]
     .map((id) => id.trim())
     .filter((id) => /^\d+$/.test(id));
   return Array.from(new Set(ids));

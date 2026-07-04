@@ -28,7 +28,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
 };
 
 /**
- * Parse ALLOWED_USERS environment variable
+ * Parse comma-separated allowed user IDs.
  * Format: comma-separated user IDs (e.g., "123456,789012,345678")
  */
 function parseAllowedUsers(envValue: string | undefined): string[] {
@@ -43,25 +43,21 @@ function parseAllowedUsers(envValue: string | undefined): string[] {
 }
 
 /**
- * Load security configuration.
- * When appSecurityConfig (from AppConfig.security) is provided, uses those values
- * instead of re-parsing process.env — satisfying the single-source-of-truth requirement.
+ * Load security configuration from AppConfig.
  */
 export function loadSecurityConfig(appSecurityConfig?: {
   allowedUsers?: string;
   maxMessageLength?: number;
   promptInjectionDetection?: boolean;
 }): SecurityConfig {
-  const allowedUsers = parseAllowedUsers(appSecurityConfig?.allowedUsers ?? process.env.ALLOWED_USERS);
+  const allowedUsers = parseAllowedUsers(appSecurityConfig?.allowedUsers);
   const whitelistEnabled = allowedUsers.length > 0;
 
   const maxMessageLength = appSecurityConfig?.maxMessageLength
-    ?? (process.env.MAX_MESSAGE_LENGTH
-      ? parseInt(process.env.MAX_MESSAGE_LENGTH, 10)
-      : DEFAULT_SECURITY_CONFIG.maxMessageLength);
+    ?? DEFAULT_SECURITY_CONFIG.maxMessageLength;
 
   const promptInjectionDetection = appSecurityConfig?.promptInjectionDetection
-    ?? process.env.PROMPT_INJECTION_DETECTION !== 'false';
+    ?? DEFAULT_SECURITY_CONFIG.promptInjectionDetection;
 
   const config: SecurityConfig = {
     allowedUsers,
@@ -232,4 +228,3 @@ export function getSecurityErrorMessage(error: string): string {
       return '抱歉，發生安全驗證錯誤。';
   }
 }
-

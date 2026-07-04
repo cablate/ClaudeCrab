@@ -104,12 +104,15 @@ export interface QueryExecutorDeps {
   usageCardEnabled: boolean;
   /** When false, hides in-chat tool status messages */
   inChatUsageSummary: boolean;
+  /** Discord guild id used for diagnostics links when runtime context does not provide one. */
+  guildId?: string;
 }
 
 export interface QueryExecuteOptions {
   replyToMessageId?: string;
   parentConversationId?: string;
   sourceMessageChannelId?: string;
+  guildId?: string;
   taskId?: string;
 }
 
@@ -143,6 +146,7 @@ export async function executeQueryWithSDK(
     conversationRepository,
     usageCardEnabled,
     inChatUsageSummary,
+    guildId,
   } = deps;
 
   // Get internal session for agent info
@@ -233,7 +237,7 @@ export async function executeQueryWithSDK(
       agentId,
       chatId,
       userId,
-      ...(process.env.DISCORD_GUILD_ID ? { guildId: process.env.DISCORD_GUILD_ID } : {}),
+      ...(options?.guildId !== undefined ? { guildId: options.guildId } : guildId !== undefined ? { guildId } : {}),
       ...(options?.parentConversationId !== undefined ? { parentConversationId: options.parentConversationId } : {}),
       ...(options?.replyToMessageId !== undefined ? { originalMessageId: options.replyToMessageId } : {}),
       ...(options?.sourceMessageChannelId !== undefined ? { sourceMessageChannelId: options.sourceMessageChannelId } : {}),

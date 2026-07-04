@@ -18,6 +18,8 @@ export interface SlashCommandDependencies {
   messageProcessor: MessageProcessor;
   queryMetricsRepository?: IQueryMetricsRepository;
   sdkSessionManager?: SDKSessionManager;
+  ownerUserId?: string;
+  guildId?: string;
   getBotStatus?: (agentId: string) => 'running' | 'stopped' | 'error' | 'no-token';
   reloadAgent?: (agentId: string) => Promise<void>;
 }

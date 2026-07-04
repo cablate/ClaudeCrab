@@ -58,8 +58,7 @@ class AuditLogger {
   private enabled: boolean;
 
   constructor() {
-    // Fallback: read env directly at module load time (before AppConfig is available)
-    this.enabled = process.env.AUDIT_LOGGING !== 'false';
+    this.enabled = true;
   }
 
   configure(enabled: boolean): void {

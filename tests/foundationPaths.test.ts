@@ -34,17 +34,19 @@ describe('foundation runtime paths', () => {
   it('resolves hook runtime assets from AGENTS_DIR', async () => {
     const agentsDir = path.join(tmpdir(), `claudecab-agents-${Date.now()}`);
     writeRuntimeConfig(agentsDir);
-    process.env.AGENTS_DIR = agentsDir;
     vi.resetModules();
 
+    const agentPaths = await import('../src/core/agentPaths.ts');
+    agentPaths.configureAgentPaths(agentsDir);
     const runtime = await import('../src/core/hooks/runtimeConfig.ts');
     const prompts = await import('../src/core/hooks/promptLoader.ts');
 
-    expect(runtime.HOOK_RUNTIME_CONFIG_PATH).toBe(
+    expect(runtime.resolveHookRuntimeConfigPath()).toBe(
       path.join(agentsDir, '_foundation', 'hooks', 'runtime-config.json'),
     );
-    expect(prompts.HOOK_PROMPT_ROOT).toBe(
+    expect(prompts.resolveHookPromptRoot()).toBe(
       path.join(agentsDir, '_foundation', 'hooks', 'prompts'),
     );
+    expect(runtime.getHookRuntimeConfig().preCompact.message).toBe('compact');
   });
 });

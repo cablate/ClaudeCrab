@@ -18,7 +18,7 @@ export async function handleSessions(
   interaction: ChatInputCommandInteraction,
   deps: SlashCommandDependencies,
 ): Promise<void> {
-  const ownerId = process.env['DISCORD_OWNER_USER_ID'];
+  const ownerId = deps.ownerUserId;
   if (!ownerId || interaction.user.id !== ownerId) {
     await interaction.reply({ content: '❌ 僅 admin 可用', ephemeral: true });
     return;
@@ -67,7 +67,7 @@ export async function handleSessions(
       targetLabel = `thread:${targetChannelId}`;
     }
 
-    const guildId = s.runtimeContext?.guildId ?? interaction.guildId ?? process.env.DISCORD_GUILD_ID;
+    const guildId = s.runtimeContext?.guildId ?? interaction.guildId ?? deps.guildId;
     const discordUrl = buildDiscordChannelUrl(guildId, targetChannelId);
     const sourceMessageUrl = buildDiscordMessageUrl(guildId, s.runtimeContext?.sourceMessageChannelId ?? targetChannelId, s.runtimeContext?.originalMessageId);
     const target = discordUrl !== undefined ? ` · [${targetLabel}](${discordUrl})` : ` · ${targetLabel}`;

@@ -4,6 +4,7 @@
  */
 
 import * as path from 'node:path';
+import { z } from 'zod';
 
 /**
  * Application configuration loaded from environment variables.
@@ -124,96 +125,251 @@ export const DEFAULT_CACHE_KEEPALIVE_CONFIG: CacheKeepaliveConfig = {
   postQueryWarmupMs: 5 * 1000,
 };
 
-function parseIntegerEnv(name: string, fallback: number, min = 0): number {
-  const raw = process.env[name];
+type EnvSource = NodeJS.ProcessEnv;
+
+function optionalString(env: EnvSource, name: string): string | undefined {
+  const raw = env[name];
+  return raw === undefined || raw === '' ? undefined : raw;
+}
+
+function integerFromEnv(env: EnvSource, name: string, fallback: number, min = 0): number {
+  const raw = env[name];
   if (raw === undefined || raw === '') return fallback;
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed >= min ? parsed : fallback;
 }
 
-function parseFloatEnv(name: string, fallback: number, min = 0): number {
-  const raw = process.env[name];
+function floatFromEnv(env: EnvSource, name: string, fallback: number, min = 0): number {
+  const raw = env[name];
   if (raw === undefined || raw === '') return fallback;
   const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) && parsed >= min ? parsed : fallback;
+}
+
+function envFlag(env: EnvSource, name: string, enabledValue = 'true'): boolean {
+  return env[name] === enabledValue;
+}
+
+function envEnabledByDefault(env: EnvSource, name: string): boolean {
+  return env[name] !== 'false';
+}
+
+const CacheKeepaliveSchema = z.object({
+  enabled: z.boolean(),
+  intervalMs: z.number().int().min(0),
+  skipRecentMs: z.number().int().min(0),
+  detectedTTLRatio: z.number().min(0),
+  minIntervalMs: z.number().int().min(0),
+  queryingRetryMs: z.number().int().min(0),
+  alertCooldownMs: z.number().int().min(0),
+  efficiencyWarnThreshold: z.number().int().min(0),
+  postQueryWarmupMs: z.number().int().min(0),
+}) satisfies z.ZodType<CacheKeepaliveConfig>;
+
+const AppConfigSchema = z.object({
+  agentsDir: z.string().min(1),
+  persistence: z.object({
+    enabled: z.boolean(),
+    dbPath: z.string().min(1),
+  }),
+  session: z.object({
+    timeoutMs: z.number().int().min(0),
+    cleanupIntervalMs: z.number().int().min(0),
+    maxSessions: z.number().int().min(0),
+    dbRetentionMs: z.number().int().min(0),
+    idleCloseMs: z.number().int().min(0),
+    queryHardTimeoutMs: z.number().int().min(0),
+    queryHardTimeoutGraceMs: z.number().int().min(0),
+    ephemeral: z.boolean(),
+  }),
+  schedule: z.object({
+    enabled: z.boolean(),
+    catchUpEnabled: z.boolean(),
+    catchUpCheckIntervalMs: z.number().int().min(0),
+    catchUpGraceMs: z.number().int().min(0),
+    catchUpWindowMs: z.number().int().min(0),
+    staleRunningMs: z.number().int().min(0),
+  }),
+  stt: z.object({
+    enabled: z.boolean(),
+    provider: z.literal('groq'),
+    apiKey: z.string(),
+    model: z.string().min(1),
+  }),
+  discord: z.object({
+    enabled: z.boolean(),
+    mainBotToken: z.string(),
+    mainBotClientId: z.string(),
+    guildId: z.string(),
+    channels: z.object({
+      dashboard: z.string(),
+      costReport: z.string(),
+      alerts: z.string(),
+      systemLog: z.string(),
+    }),
+    dashboardUpdateMinutes: z.number().int().min(0),
+    ownerUserId: z.string().optional(),
+    inChatUsageSummary: z.boolean(),
+    usageCardEnabled: z.boolean(),
+  }),
+  security: z.object({
+    allowedUsers: z.string().optional(),
+    maxMessageLength: z.number().int().min(1).optional(),
+    promptInjectionDetection: z.boolean().optional(),
+  }).optional(),
+  audit: z.object({
+    enabled: z.boolean().optional(),
+  }).optional(),
+  sessionGuard: z.object({
+    enabled: z.boolean(),
+    tokenThreshold: z.number().int().min(0),
+    cacheTTLMs: z.number().int().min(0),
+  }),
+  cacheKeepalive: CacheKeepaliveSchema,
+});
+
+export interface RuntimeConfigIssue {
+  path: string;
+  message: string;
+  envVars: string[];
+}
+
+export interface RuntimeConfigValidation {
+  ok: boolean;
+  issues: RuntimeConfigIssue[];
+}
+
+function addOptional<T extends Record<string, unknown>, K extends string, V>(
+  target: T,
+  key: K,
+  value: V | undefined
+): asserts target is T & Partial<Record<K, V>> {
+  if (value !== undefined) {
+    Object.assign(target, { [key]: value });
+  }
+}
+
+function buildRawAppConfig(env: EnvSource, cwd: string): AppConfig {
+  const discordConfig: AppConfig['discord'] = {
+    enabled: envFlag(env, 'DISCORD_ENABLED'),
+    mainBotToken: env.DISCORD_MAIN_BOT_TOKEN ?? '',
+    mainBotClientId: env.DISCORD_MAIN_BOT_CLIENT_ID ?? '',
+    guildId: env.DISCORD_GUILD_ID ?? '',
+    channels: {
+      dashboard: env.DISCORD_CHANNEL_DASHBOARD ?? '',
+      costReport: env.DISCORD_CHANNEL_COST_REPORT ?? '',
+      alerts: env.DISCORD_CHANNEL_ALERTS ?? '',
+      systemLog: env.DISCORD_CHANNEL_SYSTEM_LOG ?? '',
+    },
+    dashboardUpdateMinutes: integerFromEnv(env, 'DISCORD_DASHBOARD_UPDATE_MINUTES', 15),
+    inChatUsageSummary: envEnabledByDefault(env, 'IN_CHAT_USAGE_SUMMARY_ENABLED'),
+    usageCardEnabled: envEnabledByDefault(env, 'USAGE_CARD_ENABLED'),
+  };
+  addOptional(discordConfig, 'ownerUserId', optionalString(env, 'DISCORD_OWNER_USER_ID'));
+
+  const securityConfig: NonNullable<AppConfig['security']> = {
+    promptInjectionDetection: envFlag(env, 'PROMPT_INJECTION_DETECTION'),
+  };
+  addOptional(securityConfig, 'allowedUsers', optionalString(env, 'ALLOWED_USERS'));
+  if (env.MAX_MESSAGE_LENGTH !== undefined && env.MAX_MESSAGE_LENGTH !== '') {
+    securityConfig.maxMessageLength = integerFromEnv(env, 'MAX_MESSAGE_LENGTH', 10_000, 1);
+  }
+
+  return {
+    agentsDir: env.AGENTS_DIR ?? path.resolve(cwd, 'agents'),
+    persistence: {
+      enabled: envFlag(env, 'ENABLE_PERSISTENCE'),
+      dbPath: env.DB_PATH ?? './data/claudecab.db',
+    },
+    session: {
+      timeoutMs: integerFromEnv(env, 'SESSION_TIMEOUT_MS', 3_600_000),
+      cleanupIntervalMs: integerFromEnv(env, 'CLEANUP_INTERVAL_MS', 60_000),
+      maxSessions: integerFromEnv(env, 'MAX_SESSIONS', 1000),
+      dbRetentionMs: integerFromEnv(env, 'DB_RETENTION_MS', 2_592_000_000),
+      idleCloseMs: integerFromEnv(env, 'SESSION_IDLE_CLOSE_MS', 7_200_000),
+      queryHardTimeoutMs: integerFromEnv(env, 'SESSION_QUERY_HARD_TIMEOUT_MS', 3_600_000),
+      queryHardTimeoutGraceMs: integerFromEnv(env, 'SESSION_QUERY_HARD_TIMEOUT_GRACE_MS', 30_000),
+      ephemeral: envFlag(env, 'SESSION_EPHEMERAL'),
+    },
+    schedule: {
+      enabled: envEnabledByDefault(env, 'SCHEDULE_ENABLED'),
+      catchUpEnabled: envEnabledByDefault(env, 'SCHEDULE_CATCHUP_ENABLED'),
+      catchUpCheckIntervalMs: integerFromEnv(env, 'SCHEDULE_CATCHUP_CHECK_INTERVAL_MS', 1_800_000),
+      catchUpGraceMs: integerFromEnv(env, 'SCHEDULE_CATCHUP_GRACE_MS', 1_800_000),
+      catchUpWindowMs: integerFromEnv(env, 'SCHEDULE_CATCHUP_WINDOW_MS', 10_800_000),
+      staleRunningMs: integerFromEnv(env, 'SCHEDULE_STALE_RUNNING_MS', 7_200_000),
+    },
+    stt: {
+      enabled: envFlag(env, 'STT_ENABLED'),
+      provider: 'groq',
+      apiKey: env.STT_API_KEY ?? '',
+      model: env.STT_MODEL ?? 'whisper-large-v3-turbo',
+    },
+    discord: discordConfig,
+    security: securityConfig,
+    audit: {
+      enabled: envEnabledByDefault(env, 'AUDIT_LOGGING'),
+    },
+    sessionGuard: {
+      enabled: envEnabledByDefault(env, 'SESSION_GUARD_ENABLED'),
+      tokenThreshold: integerFromEnv(env, 'SESSION_GUARD_TOKEN_THRESHOLD', 150_000),
+      cacheTTLMs: integerFromEnv(env, 'SESSION_GUARD_CACHE_TTL_MS', 300_000),
+    },
+    cacheKeepalive: {
+      enabled: envEnabledByDefault(env, 'CACHE_KEEPALIVE_ENABLED'),
+      intervalMs: integerFromEnv(env, 'CACHE_KEEPALIVE_INTERVAL_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.intervalMs),
+      skipRecentMs: integerFromEnv(env, 'CACHE_KEEPALIVE_SKIP_RECENT_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.skipRecentMs),
+      detectedTTLRatio: floatFromEnv(env, 'CACHE_KEEPALIVE_DETECTED_TTL_RATIO', DEFAULT_CACHE_KEEPALIVE_CONFIG.detectedTTLRatio),
+      minIntervalMs: integerFromEnv(env, 'CACHE_KEEPALIVE_MIN_INTERVAL_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.minIntervalMs),
+      queryingRetryMs: integerFromEnv(env, 'CACHE_KEEPALIVE_QUERYING_RETRY_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.queryingRetryMs),
+      alertCooldownMs: integerFromEnv(env, 'CACHE_KEEPALIVE_ALERT_COOLDOWN_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.alertCooldownMs),
+      efficiencyWarnThreshold: integerFromEnv(env, 'CACHE_EFFICIENCY_WARN_THRESHOLD', DEFAULT_CACHE_KEEPALIVE_CONFIG.efficiencyWarnThreshold),
+      postQueryWarmupMs: integerFromEnv(env, 'CACHE_KEEPALIVE_POST_QUERY_WARMUP_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.postQueryWarmupMs),
+    },
+  };
 }
 
 /**
  * Load and validate application configuration from environment variables.
  * Called once at startup before any initialization.
  */
-export function loadAppConfig(): AppConfig {
+export function loadAppConfig(env: EnvSource = process.env, cwd: string = process.cwd()): AppConfig {
+  const config = buildRawAppConfig(env, cwd);
+  AppConfigSchema.parse(config);
+  return config;
+}
+
+export function validateAppConfigForRuntime(config: AppConfig): RuntimeConfigValidation {
+  const issues: RuntimeConfigIssue[] = [];
+
+  if (config.discord.enabled) {
+    if (!config.discord.mainBotToken) {
+      issues.push({
+        path: 'discord.mainBotToken',
+        message: 'Discord 啟用時必須設定主 Bot token。',
+        envVars: ['DISCORD_MAIN_BOT_TOKEN'],
+      });
+    }
+    if (!config.discord.mainBotClientId) {
+      issues.push({
+        path: 'discord.mainBotClientId',
+        message: 'Discord 啟用時必須設定主 Bot client ID，slash command 註冊會用到。',
+        envVars: ['DISCORD_MAIN_BOT_CLIENT_ID'],
+      });
+    }
+  }
+
   return {
-    agentsDir: process.env.AGENTS_DIR ?? path.resolve(process.cwd(), 'agents'),
-    persistence: {
-      enabled: process.env.ENABLE_PERSISTENCE === 'true',
-      dbPath: process.env.DB_PATH ?? './data/claudecab.db',
-    },
-    session: {
-      timeoutMs: parseIntegerEnv('SESSION_TIMEOUT_MS', 3_600_000),
-      cleanupIntervalMs: parseIntegerEnv('CLEANUP_INTERVAL_MS', 60_000),
-      maxSessions: parseIntegerEnv('MAX_SESSIONS', 1000),
-      dbRetentionMs: parseIntegerEnv('DB_RETENTION_MS', 2_592_000_000), // 30 days
-      idleCloseMs: parseIntegerEnv('SESSION_IDLE_CLOSE_MS', 7_200_000),
-      queryHardTimeoutMs: parseIntegerEnv('SESSION_QUERY_HARD_TIMEOUT_MS', 3_600_000),
-      queryHardTimeoutGraceMs: parseIntegerEnv('SESSION_QUERY_HARD_TIMEOUT_GRACE_MS', 30_000),
-      ephemeral: process.env.SESSION_EPHEMERAL === 'true',
-    },
-    schedule: {
-      enabled: process.env.SCHEDULE_ENABLED !== 'false', // Default enabled
-      catchUpEnabled: process.env.SCHEDULE_CATCHUP_ENABLED !== 'false',
-      catchUpCheckIntervalMs: parseIntegerEnv('SCHEDULE_CATCHUP_CHECK_INTERVAL_MS', 1_800_000),
-      catchUpGraceMs: parseIntegerEnv('SCHEDULE_CATCHUP_GRACE_MS', 1_800_000),
-      catchUpWindowMs: parseIntegerEnv('SCHEDULE_CATCHUP_WINDOW_MS', 10_800_000),
-      staleRunningMs: parseIntegerEnv('SCHEDULE_STALE_RUNNING_MS', 7_200_000),
-    },
-    stt: {
-      enabled: process.env.STT_ENABLED === 'true',
-      provider: (process.env.STT_PROVIDER ?? 'groq') as 'groq',
-      apiKey: process.env.STT_API_KEY ?? '',
-      model: process.env.STT_MODEL ?? 'whisper-large-v3-turbo',
-    },
-    discord: {
-      enabled: process.env.DISCORD_ENABLED === 'true',
-      mainBotToken: process.env.DISCORD_MAIN_BOT_TOKEN ?? '',
-      mainBotClientId: process.env.DISCORD_MAIN_BOT_CLIENT_ID ?? '',
-      guildId: process.env.DISCORD_GUILD_ID ?? '',
-      channels: {
-        dashboard: process.env.DISCORD_CHANNEL_DASHBOARD ?? '',
-        costReport: process.env.DISCORD_CHANNEL_COST_REPORT ?? '',
-        alerts: process.env.DISCORD_CHANNEL_ALERTS ?? '',
-        systemLog: process.env.DISCORD_CHANNEL_SYSTEM_LOG ?? '',
-      },
-      dashboardUpdateMinutes: parseIntegerEnv('DISCORD_DASHBOARD_UPDATE_MINUTES', 15),
-      inChatUsageSummary: process.env.IN_CHAT_USAGE_SUMMARY_ENABLED !== 'false',
-      usageCardEnabled: process.env.USAGE_CARD_ENABLED !== 'false',
-      ...(process.env.DISCORD_OWNER_USER_ID !== undefined ? { ownerUserId: process.env.DISCORD_OWNER_USER_ID } : {}),
-    },
-    security: {
-      ...(process.env.ALLOWED_USERS !== undefined ? { allowedUsers: process.env.ALLOWED_USERS } : {}),
-      ...(process.env.MAX_MESSAGE_LENGTH !== undefined
-        ? { maxMessageLength: parseIntegerEnv('MAX_MESSAGE_LENGTH', 10_000) }
-        : {}),
-      promptInjectionDetection: process.env.PROMPT_INJECTION_DETECTION === 'true',
-    },
-    audit: {
-      enabled: process.env.AUDIT_LOGGING !== 'false',
-    },
-    sessionGuard: {
-      enabled: process.env.SESSION_GUARD_ENABLED !== 'false',
-      tokenThreshold: parseIntegerEnv('SESSION_GUARD_TOKEN_THRESHOLD', 150_000),
-      cacheTTLMs: parseIntegerEnv('SESSION_GUARD_CACHE_TTL_MS', 300_000),
-    },
-    cacheKeepalive: {
-      enabled: process.env.CACHE_KEEPALIVE_ENABLED !== 'false',
-      intervalMs: parseIntegerEnv('CACHE_KEEPALIVE_INTERVAL_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.intervalMs),
-      skipRecentMs: parseIntegerEnv('CACHE_KEEPALIVE_SKIP_RECENT_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.skipRecentMs),
-      detectedTTLRatio: parseFloatEnv('CACHE_KEEPALIVE_DETECTED_TTL_RATIO', DEFAULT_CACHE_KEEPALIVE_CONFIG.detectedTTLRatio),
-      minIntervalMs: parseIntegerEnv('CACHE_KEEPALIVE_MIN_INTERVAL_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.minIntervalMs),
-      queryingRetryMs: parseIntegerEnv('CACHE_KEEPALIVE_QUERYING_RETRY_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.queryingRetryMs),
-      alertCooldownMs: parseIntegerEnv('CACHE_KEEPALIVE_ALERT_COOLDOWN_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.alertCooldownMs),
-      efficiencyWarnThreshold: parseIntegerEnv('CACHE_EFFICIENCY_WARN_THRESHOLD', DEFAULT_CACHE_KEEPALIVE_CONFIG.efficiencyWarnThreshold),
-      postQueryWarmupMs: parseIntegerEnv('CACHE_KEEPALIVE_POST_QUERY_WARMUP_MS', DEFAULT_CACHE_KEEPALIVE_CONFIG.postQueryWarmupMs),
-    },
+    ok: issues.length === 0,
+    issues,
   };
+}
+
+export function formatRuntimeConfigIssues(issues: RuntimeConfigIssue[]): string {
+  if (issues.length === 0) return '';
+  const lines = issues.map((issue) => {
+    const envList = issue.envVars.join(', ');
+    return `- ${issue.path}: ${issue.message} 請設定 ${envList}`;
+  });
+  return ['ClaudeCab configuration is incomplete:', ...lines].join('\n');
 }

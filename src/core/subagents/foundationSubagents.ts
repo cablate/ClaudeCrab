@@ -6,17 +6,19 @@ import { resolveFoundationDir } from '../agentPaths.js';
 
 const MODEL_ALIASES = new Set(['sonnet', 'opus', 'haiku']);
 
-export const FOUNDATION_SUBAGENTS_ROOT = path.join(
-  resolveFoundationDir(),
-  'subagents',
-);
+export function resolveFoundationSubagentsRoot(): string {
+  return path.join(
+    resolveFoundationDir(),
+    'subagents',
+  );
+}
 
-const PROMPTS_DIR = path.join(FOUNDATION_SUBAGENTS_ROOT, 'prompts');
-
-export const FOUNDATION_SUBAGENTS_RUNTIME_CONFIG_PATH = path.join(
-  FOUNDATION_SUBAGENTS_ROOT,
-  'runtime-config.json',
-);
+export function resolveFoundationSubagentsRuntimeConfigPath(): string {
+  return path.join(
+    resolveFoundationSubagentsRoot(),
+    'runtime-config.json',
+  );
+}
 
 type RuntimeOverrides = Record<string, Partial<AgentDefinition>>;
 
@@ -61,7 +63,7 @@ function parseCommaSeparated(value: string | undefined): string[] | undefined {
 
 function readRuntimeOverrides(): RuntimeOverrides {
   try {
-    const file = JSON.parse(readFileSync(FOUNDATION_SUBAGENTS_RUNTIME_CONFIG_PATH, 'utf8')) as RuntimeOverridesFile;
+    const file = JSON.parse(readFileSync(resolveFoundationSubagentsRuntimeConfigPath(), 'utf8')) as RuntimeOverridesFile;
     return file.subagents ?? {};
   } catch {
     return {};
@@ -83,10 +85,11 @@ export function loadFoundationSubagents(
   const overrides = readRuntimeOverrides();
   const result: Record<string, AgentDefinition> = {};
 
-  const files = readdirSync(PROMPTS_DIR).filter((f) => f.endsWith('.md'));
+  const promptsDir = path.join(resolveFoundationSubagentsRoot(), 'prompts');
+  const files = readdirSync(promptsDir).filter((f) => f.endsWith('.md'));
 
   for (const file of files) {
-    const content = readFileSync(path.join(PROMPTS_DIR, file), 'utf8');
+    const content = readFileSync(path.join(promptsDir, file), 'utf8');
     const parsed = parseFrontmatter(content);
     if (!parsed) continue;
 

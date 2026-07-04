@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { HOOK_PROMPT_ROOT } from '../hooks/promptLoader.js';
-import { compileHookPatterns, HOOK_RUNTIME_CONFIG } from '../hooks/runtimeConfig.js';
+import { resolveHookPromptRoot } from '../hooks/promptLoader.js';
+import { compileHookPatterns, getHookRuntimeConfig } from '../hooks/runtimeConfig.js';
 
 export type PromptDecorationKey = string;
 export type PromptDecorationSkipReason = 'min_length' | 'slash_command' | 'trivial_pattern';
@@ -13,10 +13,6 @@ export interface PromptDecorationDecision {
   readonly keys: readonly PromptDecorationKey[];
   readonly tagNames: readonly string[];
 }
-
-const queryPromptTrivialPatterns = compileHookPatterns(
-  HOOK_RUNTIME_CONFIG.userPromptSubmit.trivialPatterns,
-);
 
 interface ResolvedPromptDecoration {
   readonly key: string;
@@ -41,18 +37,19 @@ export function decoratePrompt(
 
 export function decoratePromptWithConfiguredDecorations(prompt: string): string {
   if (!getPromptDecorationDecision(prompt).shouldDecorate) return prompt;
-  return decoratePrompt(prompt, HOOK_RUNTIME_CONFIG.queryPromptDecorationKeys);
+  return decoratePrompt(prompt, getHookRuntimeConfig().queryPromptDecorationKeys);
 }
 
 export function getPromptDecorationDecision(prompt: string): PromptDecorationDecision {
+  const config = getHookRuntimeConfig();
   const trimmed = prompt.trim();
-  const keys = HOOK_RUNTIME_CONFIG.queryPromptDecorationKeys;
+  const keys = config.queryPromptDecorationKeys;
   const tagNames = keys.map((key) => {
-    const def = HOOK_RUNTIME_CONFIG.promptDecorations?.[key];
+    const def = config.promptDecorations?.[key];
     return def?.tagName ?? key;
   });
 
-  if (trimmed.length < HOOK_RUNTIME_CONFIG.userPromptSubmit.minLengthForInject) {
+  if (trimmed.length < config.userPromptSubmit.minLengthForInject) {
     return {
       shouldDecorate: false,
       reason: 'min_length',
@@ -70,6 +67,9 @@ export function getPromptDecorationDecision(prompt: string): PromptDecorationDec
       tagNames,
     };
   }
+  const queryPromptTrivialPatterns = compileHookPatterns(
+    config.userPromptSubmit.trivialPatterns,
+  );
   if (queryPromptTrivialPatterns.some((pattern) => pattern.test(trimmed))) {
     return {
       shouldDecorate: false,
@@ -89,12 +89,12 @@ export function getPromptDecorationDecision(prompt: string): PromptDecorationDec
 }
 
 function resolveDecoration(key: PromptDecorationKey): ResolvedPromptDecoration {
-  const def = HOOK_RUNTIME_CONFIG.promptDecorations?.[key];
+  const def = getHookRuntimeConfig().promptDecorations?.[key];
   if (def === undefined) {
     throw new Error(`Unknown prompt decoration key: ${key}`);
   }
 
-  const promptPath = path.join(HOOK_PROMPT_ROOT, def.promptFile);
+  const promptPath = path.join(resolveHookPromptRoot(), def.promptFile);
   const body = readFileSync(promptPath, 'utf8').trimEnd();
   const firstLine = body.split('\n')[0] ?? body;
   return { key, body, firstLine };

@@ -28,6 +28,7 @@ export async function initializeScheduleSystem(opts: {
   queryMetricsRepository: IQueryMetricsRepository | undefined;
   sessionRepository: ISessionRepository | undefined;
   scheduleConfig: AppConfig['schedule'];
+  ownerUserId?: string;
 }): Promise<ScheduleBootstrapResult> {
   logger.info('Initializing Schedule System...');
 
@@ -54,6 +55,7 @@ export async function initializeScheduleSystem(opts: {
     scheduleRepository,
     opts.queryMetricsRepository,
     opts.sessionRepository,
+    opts.ownerUserId,
   );
 
   const cronScheduler = new CronScheduler(

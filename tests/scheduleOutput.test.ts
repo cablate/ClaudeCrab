@@ -4,7 +4,9 @@ import {
   buildThreadMapping,
   createPersistedScheduleThreadSession,
   formatScheduleResponse,
+  formatScheduleStart,
   formatScheduleSummary,
+  resolveScheduleNotifyUserIds,
   resolveScheduleTargets,
   resolveThreadChannelId,
   resolveThreadTitle,
@@ -99,5 +101,17 @@ describe('ScheduleOutput', () => {
     expect(formatScheduleResponse('')).toBe('Schedule execution completed.');
     expect(formatScheduleSummary(spec, ['first', 'second'], '')).toContain('2 intermediate messages:');
     expect(formatScheduleSummary(spec, ['first', 'second'], '')).toContain('**Final response**');
+  });
+
+  it('formats schedule start mentions from injected owner id', () => {
+    const spec = schedule({
+      output: {
+        ...schedule().output,
+        notifyUserIds: ['123', '456', '123'],
+      },
+    });
+
+    expect(resolveScheduleNotifyUserIds(spec, '456')).toEqual(['123', '456']);
+    expect(formatScheduleStart(spec, '456')).toContain('<@123> <@456>');
   });
 });

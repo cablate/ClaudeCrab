@@ -22,6 +22,7 @@ import { logger } from '../../utils/logger.js';
 import { logContext, newCorrelationId, type LogContext } from '../../utils/logContext.js';
 import { ProcessingError } from '../../types/errors.js';
 import type { CacheKeepaliveConfig } from '../../config.js';
+import type { SessionGuardConfig } from '../session/SessionGuard.js';
 import type { ConversationRequest, ConversationResult } from '../../conversation/types.js';
 import {
   ConversationPipeline,
@@ -69,6 +70,12 @@ export interface MessageProcessorOptions {
 
   /** Cache keepalive runtime configuration loaded once from AppConfig. */
   cacheKeepaliveConfig?: CacheKeepaliveConfig;
+
+  /** Session guard runtime configuration loaded once from AppConfig. */
+  sessionGuardConfig?: SessionGuardConfig;
+
+  /** Discord guild id used for diagnostic links. */
+  guildId?: string;
 
   /**
    * When true, the SDK CLI process is destroyed after each query (~150MB RAM freed).
@@ -135,6 +142,8 @@ export class MessageProcessor {
   private readonly queryMetricsRepository: IQueryMetricsRepository | undefined;
   private readonly usageCardEnabled: boolean;
   private readonly inChatUsageSummary: boolean;
+  private readonly guildId: string | undefined;
+  private readonly sessionGuardConfig: SessionGuardConfig | undefined;
 
   constructor(options: MessageProcessorOptions) {
     this.sessionManager = options.sessionManager;
@@ -155,6 +164,8 @@ export class MessageProcessor {
     this.queryMetricsRepository = options.queryMetricsRepository;
     this.usageCardEnabled = options.usageCardEnabled ?? true;
     this.inChatUsageSummary = options.inChatUsageSummary ?? true;
+    this.guildId = options.guildId;
+    this.sessionGuardConfig = options.sessionGuardConfig;
 
     logger.info('MessageProcessor initialized');
   }
@@ -237,6 +248,7 @@ export class MessageProcessor {
       getAdapter: (platform, requestedAgentId) => this.getAdapter(platform, requestedAgentId),
       buildQueryExecutorDeps: () => this._buildQueryExecutorDeps(),
       getAgentCwd: (id) => this.sessionManager.getAgentPath(id),
+      ...(this.sessionGuardConfig !== undefined ? { sessionGuardConfig: this.sessionGuardConfig } : {}),
     }).run(message, agentId, options);
   }
 
@@ -255,6 +267,7 @@ export class MessageProcessor {
     if (this.queryMetricsRepository !== undefined) deps.queryMetricsRepository = this.queryMetricsRepository;
     if (this.conversationRepository !== undefined) deps.conversationRepository = this.conversationRepository;
     if (this.getSystemPrompt !== undefined) deps.getSystemPrompt = this.getSystemPrompt;
+    if (this.guildId !== undefined) deps.guildId = this.guildId;
     return deps;
   }
 

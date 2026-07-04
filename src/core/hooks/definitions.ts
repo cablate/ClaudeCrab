@@ -12,17 +12,21 @@
  * session-scoped mutable state.
  */
 
-import { HOOK_RUNTIME_CONFIG } from './runtimeConfig.js';
-
-const config = HOOK_RUNTIME_CONFIG;
+import { getHookRuntimeConfig } from './runtimeConfig.js';
 
 export const HOOK_DEFS = {
-  preCompact: {
-    displayName: config.preCompact.displayName,
-    message: config.preCompact.message,
+  get preCompact() {
+    const config = getHookRuntimeConfig();
+    return {
+      displayName: config.preCompact.displayName,
+      message: config.preCompact.message,
+    };
   },
-  contextEconomy: {
-    largeReadPreflight: config.contextEconomy.largeReadPreflight,
-    mainContextBlockedTools: config.contextEconomy.mainContextBlockedTools,
+  get contextEconomy() {
+    const config = getHookRuntimeConfig();
+    return {
+      largeReadPreflight: config.contextEconomy.largeReadPreflight,
+      mainContextBlockedTools: config.contextEconomy.mainContextBlockedTools,
+    };
   },
 } as const;

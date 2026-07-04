@@ -168,6 +168,9 @@ export interface DiscordAdapterConfig extends AdapterConfig {
   /** Discord channel ID this adapter listens to */
   channelId: string;
 
+  /** Discord owner user ID for thread notifications */
+  ownerUserId?: string;
+
   /** Security configuration */
   securityConfig?: AdapterSecurityConfig;
 
