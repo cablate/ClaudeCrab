@@ -32,6 +32,7 @@ const SUPPORTED_SDK_VERSION = '0.2.119';
 const SDK_DIR = path.resolve(process.env.CLAUDECAB_SDK_PATCH_DIR || process.env.SDK_PATCH_DIR || DEFAULT_SDK_DIR);
 const IS_DEFAULT_TARGET = SDK_DIR === path.resolve(DEFAULT_SDK_DIR);
 const SDK_PATH = path.join(SDK_DIR, 'sdk.mjs');
+const CHECK_ONLY = process.argv.includes('--check');
 // Ephemeral pre-patch backup (next to sdk.mjs). Wiped by `rm -rf node_modules`.
 const BACKUP_PATH = SDK_PATH + '.pre-patch';
 
@@ -141,6 +142,9 @@ function main() {
   // 1. Read sdk.mjs
   if (!fs.existsSync(SDK_PATH)) {
     console.log('[patch-sdk-v2] sdk.mjs not found, skipping (SDK not installed)');
+    if (CHECK_ONLY) {
+      process.exit(1);
+    }
     return;
   }
 
@@ -165,6 +169,11 @@ function main() {
   if (state.isFullyPatched) {
     console.log('[patch-sdk-v2] Already fully patched, skipping.');
     return;
+  }
+  if (CHECK_ONLY) {
+    console.error(`[patch-sdk-v2] ERROR: SDK is not fully patched. Applied: ${state.applied.join(', ') || '(none)'}`);
+    console.error('[patch-sdk-v2] Run npm install or node scripts/patch-sdk-v2.cjs before setup:verify.');
+    process.exit(1);
   }
   const isPatchableMixedState = state.applied.length + state.unpatched.length === PATCHES.length;
   if (state.isPartial && !isPatchableMixedState) {

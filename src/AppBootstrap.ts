@@ -104,7 +104,11 @@ export class AppBootstrap {
       sttProvider
     );
 
-    await this.orchestrator.startAll();
+    if (this.config.discord.enabled) {
+      await this.orchestrator.startAll();
+    } else {
+      logger.info('Discord disabled - skipping agent Discord adapters');
+    }
 
     if (this.config.schedule.enabled && this.orchestrator !== null) {
       const schedule = await initializeScheduleSystem({

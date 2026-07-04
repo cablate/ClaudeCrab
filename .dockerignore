@@ -4,6 +4,13 @@ node_modules
 # Build output
 dist
 
+# Runtime and local state
+data
+temp
+Python
+claudecab.pid
+claudecab.runtime.json
+
 # Git
 .git
 .gitignore
@@ -23,6 +30,11 @@ dist
 logs
 *.log
 npm-debug.log*
+
+# Local/private agents are mounted at runtime, not baked into the image
+agents/*
+!agents/example
+!agents/example/**
 
 # Test files
 tests
@@ -44,3 +56,7 @@ Thumbs.db
 
 # Claude Code files
 .claude
+.agents
+.codex
+.codegraph
+.serena

@@ -1,90 +1,42 @@
-# ClaudeCab Dockerfile
-# Multi-stage build for optimized production image
+ARG NODE_VERSION=20
 
-# =============================================================================
-# Stage 1: Build
-# =============================================================================
-FROM node:20-alpine AS builder
+FROM node:${NODE_VERSION}-bookworm-slim AS deps
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++
+COPY package.json package-lock.json ./
+COPY scripts/patch-sdk-v2.cjs ./scripts/patch-sdk-v2.cjs
 
-# Copy package files
-COPY package*.json ./
-
-# Install all dependencies (including devDependencies for build)
 RUN npm ci
 
-# Copy source code
+FROM deps AS build
+
 COPY tsconfig.json ./
-COPY src/ ./src/
+COPY src ./src
 
-# Build TypeScript
 RUN npm run build
+RUN npm prune --omit=dev
+RUN node -e "const fs=require('node:fs');const path=require('node:path');const root='node_modules/@anthropic-ai';const keep='claude-agent-sdk-'+process.platform+'-'+process.arch;for(const name of fs.readdirSync(root)){if(/^claude-agent-sdk-/.test(name)&&name!==keep){fs.rmSync(path.join(root,name),{recursive:true,force:true});}}"
 
-# Remove devDependencies
-RUN npm prune --production
-
-# =============================================================================
-# Stage 2: Production
-# =============================================================================
-FROM node:20-alpine AS production
+FROM node:${NODE_VERSION}-bookworm-slim AS production
 
 WORKDIR /app
 
-# Add labels
-LABEL maintainer="ClaudeCab Team"
-LABEL description="Discord conversation workbench powered by Claude Agent SDK"
-LABEL version="1.2.0"
+ENV NODE_ENV=production
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S claudecab && \
-    adduser -S -u 1001 -G claudecab claudecab
+RUN groupadd --gid 1001 claudecab \
+  && useradd --uid 1001 --gid claudecab --shell /usr/sbin/nologin --create-home claudecab
 
-# Install runtime dependencies only
-RUN apk add --no-cache tini
+COPY --from=build --chown=claudecab:claudecab /app/dist ./dist
+COPY --from=build --chown=claudecab:claudecab /app/node_modules ./node_modules
+COPY --from=build --chown=claudecab:claudecab /app/package.json ./package.json
 
-# Copy built application
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+RUN mkdir -p /app/agents /app/data /app/logs \
+  && chown claudecab:claudecab /app/agents /app/data /app/logs
 
-# Create agents directory
-RUN mkdir -p /app/agents && chown -R claudecab:claudecab /app
-
-# Switch to non-root user
 USER claudecab
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD node -e "console.log('healthy')" || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "const net=require('node:net');const s=net.connect(47823,'127.0.0.1');s.on('connect',()=>process.exit(0));s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),1000).unref();"
 
-# Use tini as init system
-ENTRYPOINT ["/sbin/tini", "--"]
-
-# Start application
 CMD ["node", "dist/index.js"]
-
-# =============================================================================
-# Stage 3: Development (optional)
-# =============================================================================
-FROM node:20-alpine AS development
-
-WORKDIR /app
-
-# Install development tools
-RUN apk add --no-cache python3 make g++
-
-# Copy package files
-COPY package*.json ./
-
-# Install all dependencies
-RUN npm ci
-
-# Copy source
-COPY . .
-
-# Development command
-CMD ["npm", "run", "dev"]

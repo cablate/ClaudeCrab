@@ -39,6 +39,8 @@ Discord channel/thread
 
 ## 最小安裝
 
+完整安裝與驗證流程以 [docs/SETUP.md](docs/SETUP.md) 為準，包含 Docker、Claude Code CLI、SDK patch、Discord 實連驗證、以及 DeepSeek / 第三方 provider 設定。
+
 需求：
 
 - Node.js 20+
