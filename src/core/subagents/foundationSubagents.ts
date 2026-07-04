@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import type { AgentDefinition, PermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import type { AgentDefinition, PermissionMode } from '../sdk/index.js';
 import type { Model } from '../../types/agent.js';
 import { resolveFoundationDir } from '../agentPaths.js';
 

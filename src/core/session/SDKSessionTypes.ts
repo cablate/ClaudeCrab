@@ -8,7 +8,7 @@
  *   - SDKSessionManager (owns the sessions Map)
  */
 
-import type { SDKSession, McpSdkServerConfigWithInstance, AgentDefinition, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKSession, McpSdkServerConfigWithInstance, AgentDefinition, SDKMessage } from '../sdk/index.js';
 import type { ExecuteQueryOptions, QueryModelUsage } from '../query/types.js';
 import type { ConversationRuntimeContext } from '../../types/runtimeContext.js';
 import type { SubAgentMessageManager } from '../query/SubAgentMessageManager.js';

@@ -4,7 +4,7 @@
  * 讓 Agent 透過 MCP tool 明確傳送檔案給使用者。
  * 自動偵測副檔名選擇最適合的傳送方式（圖片/音檔/文件）。
  */
-import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, tool } from '../core/sdk/index.js';
 import { z } from 'zod';
 import type { BaseAdapter } from '../adapters/BaseAdapter.js';
 import { logger } from '../utils/logger.js';

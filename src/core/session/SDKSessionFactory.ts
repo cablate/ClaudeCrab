@@ -14,7 +14,7 @@ import path from 'node:path';
 import {
   unstable_v2_createSession,
   unstable_v2_resumeSession,
-} from '@anthropic-ai/claude-agent-sdk';
+} from '../sdk/index.js';
 import type { LoadedAgent } from '../../types/agent.js';
 import type { ExecuteQueryOptions } from '../query/types.js';
 import { logger } from '../../utils/logger.js';

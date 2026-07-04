@@ -1,4 +1,4 @@
-import type { Options, McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
+import type { Options, McpSdkServerConfigWithInstance } from '../sdk/index.js';
 import type { ToolEvent } from '../../types/message.js';
 import type { ConversationRuntimeContext } from '../../types/runtimeContext.js';
 import type { SubAgentEvent } from './SubAgentMessageManager.js';

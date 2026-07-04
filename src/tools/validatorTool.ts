@@ -6,7 +6,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, tool } from '../core/sdk/index.js';
 import { z } from 'zod';
 import { logger } from '../utils/logger.js';
 

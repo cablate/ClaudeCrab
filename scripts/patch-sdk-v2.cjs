@@ -2,7 +2,7 @@
 /**
  * patch-sdk-v2.cjs — Patch @anthropic-ai/claude-agent-sdk V2 createSession
  *
- * Target SDK version: 0.2.119+ (upstream fixed settingSources + cwd natively in 0.2.110).
+ * Target SDK version: 0.2.119 (upstream fixed settingSources + cwd natively in 0.2.110).
  *
  * Remaining holes patched here:
  *   - extraArgs, thinkingConfig, maxTurns, maxBudgetUsd (still hardcoded empty/void in cQ)
@@ -26,6 +26,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const DEFAULT_SDK_DIR = path.join(__dirname, '..', 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
+const SUPPORTED_SDK_VERSION = '0.2.119';
 // Use CLAUDECAB_SDK_PATCH_DIR (or SDK_PATCH_DIR) for sandbox/lab verification.
 // Default stays production node_modules because package.json postinstall depends on it.
 const SDK_DIR = path.resolve(process.env.CLAUDECAB_SDK_PATCH_DIR || process.env.SDK_PATCH_DIR || DEFAULT_SDK_DIR);
@@ -115,6 +116,14 @@ function readSdkVersion() {
   }
 }
 
+function assertSupportedSdkVersion(version) {
+  if (version === SUPPORTED_SDK_VERSION) return;
+  console.error(`[patch-sdk-v2] ERROR: Unsupported SDK version ${version}.`);
+  console.error(`[patch-sdk-v2] This patch is pinned to @anthropic-ai/claude-agent-sdk@${SUPPORTED_SDK_VERSION}.`);
+  console.error('[patch-sdk-v2] Follow docs/SDK_TOUCHPOINTS.md and docs/sop-sdk-cli-upgrade.md before changing SDK versions.');
+  process.exit(1);
+}
+
 function patchState(source) {
   const applied = PATCHES.filter(patch => source.includes(patch.replace)).map(patch => patch.id);
   const unpatched = PATCHES
@@ -140,6 +149,7 @@ function main() {
   const original = fs.readFileSync(SDK_PATH, 'utf-8');
   const version = readSdkVersion();
   console.log(`[patch-sdk-v2] Target SDK version: ${version}`);
+  assertSupportedSdkVersion(version);
 
   // 2. Verify anchor exists
   const anchorStr = 'Cannot send to closed session';

@@ -15,14 +15,17 @@ ClaudeCab still patches `@anthropic-ai/claude-agent-sdk` after install because t
 
 ## Upgrade Flow
 
-1. Check the installed and target SDK versions.
+1. Read `docs/SDK_TOUCHPOINTS.md` and review every listed touchpoint before
+   changing package versions or patch anchors.
+
+2. Check the installed and target SDK versions.
 
    ```bash
    npm list @anthropic-ai/claude-agent-sdk --depth=0
    npm view @anthropic-ai/claude-agent-sdk version
    ```
 
-2. Test the target SDK in a sandbox before touching production `node_modules`.
+3. Test the target SDK in a sandbox before touching production `node_modules`.
 
    ```bash
    mkdir -p .cache/sdk-patch-lab
@@ -31,23 +34,23 @@ ClaudeCab still patches `@anthropic-ai/claude-agent-sdk` after install because t
    npm i @anthropic-ai/claude-agent-sdk@<version> --ignore-scripts
    ```
 
-3. Run the patch script against the sandbox package.
+4. Run the patch script against the sandbox package.
 
    ```bash
    CLAUDECAB_SDK_PATCH_DIR=.cache/sdk-patch-lab/node_modules/@anthropic-ai/claude-agent-sdk node scripts/patch-sdk-v2.cjs
    ```
 
-4. If an anchor fails, update only the `PATCHES` entries in
+5. If an anchor fails, update only the `PATCHES` entries in
    `scripts/patch-sdk-v2.cjs`. Keep every patch anchor exact and verify each target
    string appears once.
 
-5. Install the real dependency and let `postinstall` patch it.
+6. Install the real dependency and let `postinstall` patch it.
 
    ```bash
    npm i @anthropic-ai/claude-agent-sdk@<version>
    ```
 
-6. Verify the app.
+7. Verify the app.
 
    ```bash
    npm run typecheck

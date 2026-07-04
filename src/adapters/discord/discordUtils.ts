@@ -1,4 +1,4 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query } from '../../core/sdk/index.js';
 import { ConfigTransformer } from '../../core/lib/ConfigTransformer.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';

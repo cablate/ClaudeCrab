@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SDK 類型轉接層
  * 從 @anthropic-ai/claude-agent-sdk 導入並 re-export
  * 方便 ClaudeCab 內部使用和追蹤
@@ -15,7 +15,7 @@ export type {
   PermissionUpdateDestination,
   PermissionRuleValue,
   CanUseTool,
-} from '@anthropic-ai/claude-agent-sdk';
+} from '../core/sdk/index.js';
 
 // =============================================================================
 // Hook 系統
@@ -51,7 +51,7 @@ export type {
   SetupHookSpecificOutput,
   SubagentStartHookSpecificOutput,
   PermissionRequestHookSpecificOutput,
-} from '@anthropic-ai/claude-agent-sdk';
+} from '../core/sdk/index.js';
 
 // =============================================================================
 // 會話系統
@@ -60,7 +60,7 @@ export type {
   ExitReason,
   ConfigScope,
   SettingSource,
-} from '@anthropic-ai/claude-agent-sdk';
+} from '../core/sdk/index.js';
 
 // =============================================================================
 // 訊息類型
@@ -82,12 +82,12 @@ export type {
   SDKMemoryRecallMessage,
   SDKStatusMessage,
   SDKMirrorErrorMessage,
-} from '@anthropic-ai/claude-agent-sdk';
+} from '../core/sdk/index.js';
 
 // =============================================================================
 // 常數
 // =============================================================================
-export { HOOK_EVENTS, EXIT_REASONS } from '@anthropic-ai/claude-agent-sdk';
+export { HOOK_EVENTS, EXIT_REASONS } from '../core/sdk/index.js';
 
 // =============================================================================
 // AskUserQuestion 類型（SDK 未暴露）

@@ -1,4 +1,4 @@
-import type { McpSdkServerConfigWithInstance, Options } from '@anthropic-ai/claude-agent-sdk';
+import type { McpSdkServerConfigWithInstance, Options } from '../sdk/index.js';
 import type { LoadedAgent } from '../../types/agent.js';
 import type { QueryResult, ExecuteQueryOptions } from './types.js';
 import type { SDKSessionManager } from '../session/SDKSessionManager.js';
