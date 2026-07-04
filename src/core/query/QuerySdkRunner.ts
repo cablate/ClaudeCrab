@@ -141,7 +141,7 @@ function handleV2Error(options: QuerySdkRunnerOptions, v2Error: unknown): never 
   options.sdkSessionManager.destroySession(options.sessionId);
 
   const fallbackDisabledError = new Error(
-    `V2 persistent session failed and V1 fallback is disabled to prevent duplicate high-cost query. Original error: ${errMsg}`
+    errMsg
   );
   const typedError = fallbackDisabledError as Error & {
     _v1FallbackDisabled: true;

@@ -10,6 +10,12 @@ import { resolveCliPath } from '../../utils/cliPath.js';
 import { loadFoundationSubagents } from '../subagents/foundationSubagents.js';
 import type { ExtendedSessionOptions } from './SDKSessionTypes.js';
 
+const DEFAULT_MODEL_ENV_BY_ALIAS: Partial<Record<Model, string>> = {
+  opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  sonnet: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  haiku: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+};
+
 export interface BuiltSessionOptions {
   sessionOptions: ExtendedSessionOptions;
   resumeSessionId: string | undefined;
@@ -35,9 +41,10 @@ export async function buildSessionOptions(
     redirectedConfigDir,
     options.cwd ?? agent.path,
   );
+  const modelResolver = (model: Model | string): string => resolveModelForSettings(model, settingsEnv);
 
   const sessionOptions: ExtendedSessionOptions = {
-    model: ConfigTransformer.resolveModel(options.model ?? options.additionalOptions?.model ?? agent.config.model ?? 'sonnet' as Model),
+    model: modelResolver(options.model ?? options.additionalOptions?.model ?? agent.config.model ?? 'sonnet' as Model),
     cwd: options.cwd,
     permissionMode: 'default',
     settingSources: options.settingSources ?? ['project', 'local'],
@@ -57,7 +64,7 @@ export async function buildSessionOptions(
     agentProgressSummaries: true,
     forwardSubagentText: false,
     agents: {
-      ...loadFoundationSubagents(ConfigTransformer.resolveModel),
+      ...loadFoundationSubagents(modelResolver),
       ...(options.additionalOptions?.agents ?? {}),
     },
   };
@@ -96,6 +103,15 @@ export async function buildSessionOptions(
   }
 
   return { sessionOptions, resumeSessionId };
+}
+
+function resolveModelForSettings(model: Model | string, settingsEnv: Record<string, string>): string {
+  const defaultEnvKey = DEFAULT_MODEL_ENV_BY_ALIAS[model as Model];
+  if (defaultEnvKey !== undefined) {
+    const providerDefault = settingsEnv[defaultEnvKey]?.trim();
+    if (providerDefault) return providerDefault;
+  }
+  return ConfigTransformer.resolveModel(model);
 }
 
 async function loadAgentSettingsEnv(agentPath: string): Promise<Record<string, string>> {
@@ -157,9 +173,11 @@ async function applyCliPathOverride(sessionId: string, sessionOptions: ExtendedS
   if (!resolved) {
     logger.error(
       { sessionId, configured: customCliPath, event_type: EventType.SDK_CLI_MISSING },
-      `CLAUDE_CLI_PATH "${customCliPath}" does not exist and no alternate Claude Code CLI found nearby`
+      `CLAUDE_CLI_PATH "${customCliPath}" is invalid and no fallback Claude Code CLI was found`
     );
-    throw new Error(`Claude Code CLI not found at ${customCliPath} or known alternate locations`);
+    throw new Error(
+      `Claude Code CLI override is invalid: ${customCliPath}. Clear CLAUDE_CLI_PATH to use the SDK-bundled CLI, or set it to a working Claude Code executable such as claude.cmd.`
+    );
   }
 
   sessionOptions.pathToClaudeCodeExecutable = resolved.path;

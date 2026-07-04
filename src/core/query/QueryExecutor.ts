@@ -37,6 +37,58 @@ import { persistConversation, reportQueryUsageAnomaly } from './QueryPostProcess
 
 const qeLogger = logger.child({ module: 'QueryExecutor' });
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function hasRetryDisabledMarker(error: Error): boolean {
+  return (
+    '_resumeRetryDisabled' in error ||
+    '_emptyStreamRetryDisabled' in error ||
+    '_zombieRetryDisabled' in error
+  );
+}
+
+function isResumeIdentityError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('resume') ||
+    normalized.includes('no conversation found') ||
+    normalized.includes('conversation not found') ||
+    normalized.includes('session not found') ||
+    (normalized.includes('session') && normalized.includes('not found')) ||
+    (normalized.includes('session') && normalized.includes('expired')) ||
+    normalized.includes('tool_use ids must be unique')
+  );
+}
+
+function canRetryBrokenResumeAsFresh(params: {
+  queryStartedWithResume: boolean;
+  continuationState: string | undefined;
+  error: unknown;
+}): boolean {
+  const { queryStartedWithResume, continuationState, error } = params;
+  if (!queryStartedWithResume || continuationState === 'pending' || !(error instanceof Error)) {
+    return false;
+  }
+
+  return hasRetryDisabledMarker(error) || isResumeIdentityError(error.message);
+}
+
+function isCancelledError(error: unknown): boolean {
+  return (
+    (error instanceof Error && '_cancelled' in error) ||
+    (error instanceof Error && error.name === 'AbortError') ||
+    (error instanceof Error && error.message.includes('aborted by user')) ||
+    (
+      typeof error === 'object' &&
+      error !== null &&
+      'value' in error &&
+      String((error as { value: unknown }).value).includes('aborted by user')
+    )
+  );
+}
+
 /**
  * Dependencies injected into QueryExecutor
  */
@@ -192,51 +244,43 @@ export async function executeQueryWithSDK(
     const queryStartedWithResume =
       typeof internalSession.sdkSessionId === 'string' && internalSession.sdkSessionId.length > 0;
 
-    // Execute query. Resume failures are fail-closed to avoid automatic duplicate sends.
-    let result: QueryResult;
-    try {
-      result = await executeSdkQueryWithRetry({
-        sessionId,
-        sdkPrompt,
-        agent,
-        platform,
-        chatId,
-        userId,
-        systemPrompt,
-        sdkSessionManager,
-        resumeId: internalSession.sdkSessionId,
-        continuationState: internalSession.continuationState ?? undefined,
-        runtimeContext,
-        ...(agent.config.settings?.maxTurns !== undefined
-          ? { maxTurns: agent.config.settings.maxTurns }
-          : {}),
-        mcpServers,
-        allowedTools,
-        canUseTool,
-        onIntermediateMessage: onIntermediateMessageV2,
-        onToolEvent,
-        onSubAgentEvent: async (event) => {
-          await subAgentManager?.handle(event);
-        },
-        onHookEvent: async (event) => {
-          await hookManager?.handle(event);
-        },
-        ...(subAgentManager ? { subAgentManager } : {}),
-        clearIntermediateMessages: () => {
-          state.intermediateMessages.length = 0;
-        },
-        preserveSdkSessionId: (sdkSessionId) => {
-          sessionManager.setSdkSessionId(platform, agentId, userId, sdkSessionId);
-        },
-      });
-    } catch (error) {
-      const isCancelled =
-        (error instanceof Error && '_cancelled' in error) ||
-        (error instanceof Error && error.name === 'AbortError') ||
-        (error instanceof Error && error.message.includes('aborted by user')) ||
-        (typeof error === 'object' && error !== null && 'value' in error &&
-          String((error as { value: unknown }).value).includes('aborted by user'));
-      if (isCancelled) {
+    const runSdkQuery = (resumeId: string | undefined): Promise<QueryResult> => executeSdkQueryWithRetry({
+      sessionId,
+      sdkPrompt,
+      agent,
+      platform,
+      chatId,
+      userId,
+      systemPrompt,
+      sdkSessionManager,
+      resumeId,
+      continuationState: internalSession.continuationState ?? undefined,
+      runtimeContext,
+      ...(agent.config.settings?.maxTurns !== undefined
+        ? { maxTurns: agent.config.settings.maxTurns }
+        : {}),
+      mcpServers,
+      allowedTools,
+      canUseTool,
+      onIntermediateMessage: onIntermediateMessageV2,
+      onToolEvent,
+      onSubAgentEvent: async (event) => {
+        await subAgentManager?.handle(event);
+      },
+      onHookEvent: async (event) => {
+        await hookManager?.handle(event);
+      },
+      ...(subAgentManager ? { subAgentManager } : {}),
+      clearIntermediateMessages: () => {
+        state.intermediateMessages.length = 0;
+      },
+      preserveSdkSessionId: (sdkSessionId) => {
+        sessionManager.setSdkSessionId(platform, agentId, userId, sdkSessionId);
+      },
+    });
+
+    const handleQueryError = async (error: unknown): Promise<''> => {
+      if (isCancelledError(error)) {
         qeLogger.info({ sessionId, sdkSessionId: internalSession.sdkSessionId }, 'Query cancelled; returning empty response and preserving sdkSessionId');
         return '';
       }
@@ -254,10 +298,8 @@ export async function executeQueryWithSDK(
         return '';
       }
 
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      const isV2RetryDisabled =
-        error instanceof Error &&
-        ('_resumeRetryDisabled' in error || '_zombieRetryDisabled' in error || '_emptyStreamRetryDisabled' in error);
+      const errorMsg = getErrorMessage(error);
+      const isV2RetryDisabled = error instanceof Error && hasRetryDisabledMarker(error);
       if (isV2RetryDisabled) {
         const savedSdkSessionId = (error as Error & { _sdkSessionId?: string })._sdkSessionId;
         if (savedSdkSessionId !== undefined) {
@@ -279,22 +321,20 @@ export async function executeQueryWithSDK(
           { sessionId, sdkSessionId: internalSession.sdkSessionId, error: errorMsg },
           'V2 session failed; V1 fallback disabled'
         );
+        const userMessage = errorMsg.includes('Claude Code CLI override is invalid')
+          ? `Claude Code CLI config is invalid; V2 session cannot start.\n\n${errorMsg}\n\nFix or clear CLAUDE_CLI_PATH, then restart ClaudeCab.`
+          : `V2 session failed. V1 fallback is disabled to prevent duplicate high-cost query.\n\nReason: ${errorMsg}`;
         await adapter.sendMessage(
           chatId,
-          `V2 session failed. V1 fallback is disabled to prevent duplicate high-cost query.\n\nReason: ${errorMsg}`
+          userMessage
         );
         return '';
       }
 
-      const isResumeError =
-        errorMsg.includes('session') ||
-        errorMsg.includes('resume') ||
-        errorMsg.includes('not found') ||
-        errorMsg.includes('expired') ||
-        errorMsg.includes('tool_use ids must be unique');
+      const isResumeError = isResumeIdentityError(errorMsg);
 
       if (internalSession.sdkSessionId !== undefined && isResumeError) {
-        // Schedule thread first handoff: fail explicitly, don't silently start new conversation
+        // Schedule thread first handoff: fail explicitly, don't silently start new conversation.
         if (internalSession.continuationState === 'pending') {
           qeLogger.warn(
             { sessionId, sdkSessionId: internalSession.sdkSessionId, error: errorMsg },
@@ -315,8 +355,47 @@ export async function executeQueryWithSDK(
           'V2 session resume failed. Automatic fresh-session retry is disabled to prevent duplicate high-cost query. Please resend after checking context if needed.'
         );
         return '';
-      } else {
-        throw error;
+      }
+
+      throw error;
+    };
+
+    // Execute query. Broken manual resumes get one fresh-session recovery;
+    // schedule handoff resumes remain fail-closed to avoid losing context.
+    let result: QueryResult;
+    try {
+      result = await runSdkQuery(internalSession.sdkSessionId);
+    } catch (error) {
+      const canRecoverFresh = canRetryBrokenResumeAsFresh({
+        queryStartedWithResume,
+        continuationState: internalSession.continuationState ?? undefined,
+        error,
+      });
+
+      if (!canRecoverFresh) {
+        return await handleQueryError(error);
+      }
+
+      const brokenSdkSessionId = internalSession.sdkSessionId;
+      sessionManager.setSdkSessionId(platform, agentId, userId, undefined);
+      state.intermediateMessages.length = 0;
+      qeLogger.warn(
+        { sessionId, brokenSdkSessionId, error: getErrorMessage(error) },
+        'V2 resume failed or returned no usable response; cleared sdkSessionId and retrying with a fresh SDK session'
+      );
+
+      try {
+        result = await runSdkQuery(undefined);
+      } catch (freshError) {
+        qeLogger.warn(
+          {
+            sessionId,
+            brokenSdkSessionId,
+            error: getErrorMessage(freshError),
+          },
+          'Fresh SDK session retry after broken resume also failed'
+        );
+        return await handleQueryError(freshError);
       }
     }
 
@@ -384,5 +463,3 @@ export async function executeQueryWithSDK(
     }
   }
 }
-
-
