@@ -437,7 +437,7 @@ start.ts supervisor
 - `src/schedule/`: YAML schedule loading、cron registration、execution、output formatting、thread mapping。
 - `src/persistence/`: SQLite repositories 與 migrations。
 
-完整架構請看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+完整架構請看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；文件入口請看 [docs/README.md](docs/README.md)。
 
 ## 常見問題
 

@@ -1,7 +1,7 @@
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import type { ScheduleSpec } from './schemas.js';
 import type { CronScheduler } from './CronScheduler.js';
-import type { ScheduleExecutionRecord, ScheduleRepository } from '../persistence/ScheduleRepository.js';
+import type { ScheduleRepository } from '../persistence/ScheduleRepository.js';
 import { logger } from '../utils/logger.js';
 import { EventType } from '../utils/events.js';
 
