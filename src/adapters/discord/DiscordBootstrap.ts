@@ -102,7 +102,6 @@ export async function initializeDiscordServices(
     const orchestratorCommandDeps = orchestrator !== null
       ? {
           getBotStatus: (agentId: string) => orchestrator.getBotStatusForAgent(agentId),
-          reloadAgent: (agentId: string) => orchestrator.reloadAgent(agentId),
         }
       : {};
 

@@ -21,7 +21,6 @@ export interface SlashCommandDependencies {
   ownerUserId?: string;
   guildId?: string;
   getBotStatus?: (agentId: string) => 'running' | 'stopped' | 'error' | 'no-token';
-  reloadAgent?: (agentId: string) => Promise<void>;
 }
 
 export function resolveEffectiveUserId(userId: string, channelId: string, isThread: boolean): string {
@@ -116,12 +115,9 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
       ) as SlashCommandBuilder,
     new SlashCommandBuilder()
       .setName('model')
-      .setDescription('查詢 / 切換模型')
+      .setDescription('查詢模型設定')
       .addStringOption(opt =>
         opt.setName('agent').setDescription('Agent ID').setRequired(false),
-      )
-      .addStringOption(opt =>
-        opt.setName('to').setDescription('切換到的模型'),
       ) as SlashCommandBuilder,
     new SlashCommandBuilder()
       .setName('cost')
@@ -138,7 +134,7 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) as SlashCommandBuilder,
     new SlashCommandBuilder()
       .setName('sync')
-      .setDescription('重新載入 agent 配置（需要管理員權限）')
+      .setDescription('同步當前 session 的子代理進度（需要管理員權限）')
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) as SlashCommandBuilder,
     new SlashCommandBuilder()
       .setName('restart')

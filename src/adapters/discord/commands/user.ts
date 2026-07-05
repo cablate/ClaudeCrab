@@ -1,7 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
-import { applyModelChange } from '../../commands/index.js';
 
 export async function handleHelp(interaction: ChatInputCommandInteraction): Promise<void> {
   const embed = new EmbedBuilder()
@@ -11,7 +10,7 @@ export async function handleHelp(interaction: ChatInputCommandInteraction): Prom
       '`/help` — 顯示此說明',
       '`/status` — 顯示所有 Agent 狀態',
       '`/reset [agent]` — 重置對話記錄',
-      '`/model [agent] [to]` — 查看或切換模型',
+      '`/model [agent]` — 查看模型設定',
       '`/cost` — 花費摘要',
       '`/stop [agent]` — 停止執行中的回應',
     ].join('\n'))
@@ -75,6 +74,13 @@ export async function handleModel(
 ): Promise<void> {
   const agentId = interaction.options.getString('agent');
   const targetModel = interaction.options.getString('to');
+  if (targetModel !== null) {
+    await interaction.reply({
+      content: '❌ Discord 指令不允許修改模型或其他設定。請透過 repo 設定檔、部署流程或 setup/deploy doctor 變更設定後再重啟或 reload。',
+      ephemeral: true,
+    });
+    return;
+  }
   if (agentId === null && targetModel === null) {
     const lines = deps.agentLoader.list().map(id => {
       const agent = deps.agentLoader.get(id);
@@ -83,26 +89,6 @@ export async function handleModel(
       return `**${name}** → \`${model}\``;
     });
     await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧠 模型配置').setDescription(lines.join('\n')).setColor(0x5865F2)], ephemeral: true });
-    return;
-  }
-  if (targetModel !== null) {
-    const targetAgent = agentId ?? deps.agentLoader.list()[0];
-    if (targetAgent === undefined) {
-      await interaction.reply({ content: '❌ 找不到 Agent', ephemeral: true });
-      return;
-    }
-    try {
-      const result = await applyModelChange(targetAgent, targetModel, deps.agentLoader);
-      if (result.success) {
-        const MODEL_LABELS: Record<string, string> = { opus: '🟣 Opus', sonnet: '🔵 Sonnet', haiku: '🟢 Haiku' };
-        await interaction.reply({ content: `✅ **${targetAgent}** 模型已切換為 ${MODEL_LABELS[targetModel] ?? targetModel}`, ephemeral: true });
-      } else {
-        await interaction.reply({ content: `❌ 切換失敗：${result.error}`, ephemeral: true });
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      await interaction.reply({ content: `❌ 切換失敗：${msg}`, ephemeral: true });
-    }
     return;
   }
   const agent = agentId ? deps.agentLoader.get(agentId) : undefined;

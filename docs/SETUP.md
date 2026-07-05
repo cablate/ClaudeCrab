@@ -202,6 +202,27 @@ npm run setup:verify
 
 `setup:verify` 不會送 Discord 訊息。
 
+## 7.1 設定變更入口
+
+Discord bot 端不提供設定寫入入口。Slash command 可以查狀態、看模型、停止 query、重置 session，但不能修改 `.env`、`agent.json`、`.claude/settings.local.json`、schedule YAML 或任何 runtime 設定，也不能作為雲端 secret manager。
+
+設定變更請走：
+
+- `.env` 或雲端平台 secret/env 設定
+- `agents/<id>/agent.json`
+- `agents/<id>/.claude/settings.local.json`
+- `agents/<id>/schedules/*.yaml`
+- `npm run setup:check` / `npm run setup:verify`
+
+變更後是否需要重啟：
+
+| 設定 | 是否需要重啟 |
+|---|---|
+| `.env`、Docker/雲端 env、DB path、主 Bot token、guild/client id | 需要 |
+| `agent.json` 的 Discord token/channel | 建議重啟；未來若提供 CLI reload，應由部署端執行，不從 Discord 執行 |
+| `.claude/settings.local.json` 的 provider/model/env | 建議重啟或關閉既有 SDK session 後再測 |
+| `schedules/*.yaml` | 不需要，系統會 watch 並同步 |
+
 ## 8. Discord 實連驗證
 
 只有 token/channel 已填好、且你接受會真的送出測試訊息時才執行：

@@ -24,6 +24,7 @@ In scope:
 - `npm run setup:verify` validates local prerequisites without contacting Discord or sending messages.
 - `npm run discord:check` remains the explicit real Discord connectivity check.
 - Docker files describe a supported container path with explicit limits and required volumes/env.
+- Discord slash commands are not a configuration write surface.
 
 Out of scope:
 
@@ -31,6 +32,7 @@ Out of scope:
 - Rotating secrets or inspecting a real `.env`.
 - Running live Discord checks during automated verify.
 - Guaranteeing every Anthropic-compatible proxy works; setup only documents the expected env shape.
+- Modifying `.env`, `agent.json`, `.claude/settings.local.json`, or cloud secrets through Discord bot commands.
 
 ## Consumers And Entrypoints
 
@@ -60,6 +62,7 @@ Out of scope:
 - `setup:verify` must not post Discord messages.
 - `discord:check` may send a test Discord message and, when `--thread` is passed, create a thread.
 - Docker build may run `npm ci`, which runs the SDK patch postinstall.
+- Discord slash commands may show status or session/runtime diagnostics, but must not write configuration files or cloud secrets.
 
 ## Invariants
 
@@ -69,6 +72,7 @@ Out of scope:
 - DB verification uses a disposable path, not configured production `DB_PATH`.
 - Real credentials stay in `.env` or per-agent `.claude/settings.local.json`, never in tracked docs.
 - Per-agent provider env takes precedence in documentation for Anthropic-compatible services to avoid polluting host OAuth credentials.
+- Configuration writes happen through repo files, deployment environment variables, CLI/deploy tooling, or cloud platform settings, not through the Discord bot.
 
 ## Acceptance Examples
 
