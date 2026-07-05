@@ -8,6 +8,7 @@ import type { ChatInputCommandInteraction } from 'discord.js';
 import {
   CLAUDE_CONTEXT_WINDOW_TOKENS, formatDuration, formatQueryMetricAnomaly,
   fitSessionDescription,
+  requireOperator,
   type SlashCommandDependencies, type QueryMetricRow,
 } from './_shared.js';
 import { parseSessionKey } from '../../../types/session.js';
@@ -18,11 +19,7 @@ export async function handleSessions(
   interaction: ChatInputCommandInteraction,
   deps: SlashCommandDependencies,
 ): Promise<void> {
-  const ownerId = deps.ownerUserId;
-  if (!ownerId || interaction.user.id !== ownerId) {
-    await interaction.reply({ content: '❌ 僅 admin 可用', ephemeral: true });
-    return;
-  }
+  if (!(await requireOperator(interaction, deps))) return;
   if (!deps.sdkSessionManager) {
     await interaction.reply({ content: '❌ SDKSessionManager 不可用', ephemeral: true });
     return;

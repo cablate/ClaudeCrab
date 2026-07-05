@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, REST, Routes, PermissionFlagsBits } from 'discord.js';
+import type { ButtonInteraction, ChatInputCommandInteraction } from 'discord.js';
 import type { AgentLoader } from '../../../core/orchestrator/AgentLoader.js';
 import type { SessionManager } from '../../../core/session/SessionManager.js';
 import type { MessageProcessor } from '../../../core/orchestrator/MessageProcessor.js';
@@ -21,6 +22,28 @@ export interface SlashCommandDependencies {
   ownerUserId?: string;
   guildId?: string;
   getBotStatus?: (agentId: string) => 'running' | 'stopped' | 'error' | 'no-token';
+  reloadAgent?: (agentId: string) => Promise<void>;
+}
+
+export type OperatorInteraction = ChatInputCommandInteraction | ButtonInteraction;
+
+export function isOperatorUser(
+  userId: string,
+  deps: Pick<SlashCommandDependencies, 'ownerUserId'>,
+): boolean {
+  return deps.ownerUserId !== undefined && userId === deps.ownerUserId;
+}
+
+export async function requireOperator(
+  interaction: OperatorInteraction,
+  deps: Pick<SlashCommandDependencies, 'ownerUserId'>,
+): Promise<boolean> {
+  if (isOperatorUser(interaction.user.id, deps)) return true;
+  await interaction.reply({
+    content: '此操作只允許 ClaudeCab operator 使用。請在 DISCORD_OWNER_USER_ID 設定授權使用者。',
+    ephemeral: true,
+  });
+  return false;
 }
 
 export function resolveEffectiveUserId(userId: string, channelId: string, isThread: boolean): string {
@@ -115,9 +138,12 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
       ) as SlashCommandBuilder,
     new SlashCommandBuilder()
       .setName('model')
-      .setDescription('查詢模型設定')
+      .setDescription('查詢 / 切換模型')
       .addStringOption(opt =>
         opt.setName('agent').setDescription('Agent ID').setRequired(false),
+      )
+      .addStringOption(opt =>
+        opt.setName('to').setDescription('切換到的模型'),
       ) as SlashCommandBuilder,
     new SlashCommandBuilder()
       .setName('cost')

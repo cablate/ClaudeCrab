@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
-import { log, formatQueryMetricAnomaly, type SlashCommandDependencies, type QueryMetricRow } from './_shared.js';
+import { log, formatQueryMetricAnomaly, requireOperator, type SlashCommandDependencies, type QueryMetricRow } from './_shared.js';
 
 export async function handleCache(
   interaction: ChatInputCommandInteraction,
@@ -87,11 +87,7 @@ export async function handleCache(
   }
 
   if (sub === 'flush') {
-    const ownerId = deps.ownerUserId;
-    if (!ownerId || interaction.user.id !== ownerId) {
-      await interaction.reply({ content: '❌ 僅 admin 可用', ephemeral: true });
-      return;
-    }
+    if (!(await requireOperator(interaction, deps))) return;
     if (deps.sdkSessionManager === undefined) {
       await interaction.reply({ content: '❌ SDKSessionManager 不可用', ephemeral: true });
       return;

@@ -18,6 +18,7 @@ import type {
 } from 'discord.js';
 import type { DiscordAdapter } from '../DiscordAdapter.js';
 import { handleSlashCommand, type SlashCommandDependencies } from './DiscordSlashCommands.js';
+import { requireOperator } from './commands/_shared.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
 
@@ -148,16 +149,16 @@ export class DiscordInteractionHandler {
   private async handleSessionButton(interaction: ButtonInteraction): Promise<void> {
     const customId = interaction.customId;
 
-    // Admin gate — BEFORE deferUpdate so we can send ephemeral reply
-    const ownerId = this.slashCommandDeps?.ownerUserId;
-    if (!ownerId || interaction.user.id !== ownerId) {
+    // Operator gate — BEFORE deferUpdate so we can send ephemeral reply
+    if (this.slashCommandDeps === null) {
       try {
-        await interaction.reply({ content: '❌ 僅 admin 可用', ephemeral: true });
+        await interaction.reply({ content: '指令依賴尚未初始化。', ephemeral: true });
       } catch (e) {
-        log.debug({ err: e, customId }, 'sess: admin gate reply failed');
+        log.debug({ err: e, customId }, 'sess: operator gate reply failed');
       }
       return;
     }
+    if (!(await requireOperator(interaction, this.slashCommandDeps))) return;
 
     const sdkSessionManager = this.slashCommandDeps?.sdkSessionManager;
     if (!sdkSessionManager) {

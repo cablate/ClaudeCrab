@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
-import { resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
+import { requireOperator, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
+import { applyModelChange } from '../../commands/index.js';
 
 export async function handleHelp(interaction: ChatInputCommandInteraction): Promise<void> {
   const embed = new EmbedBuilder()
@@ -10,7 +11,7 @@ export async function handleHelp(interaction: ChatInputCommandInteraction): Prom
       '`/help` — 顯示此說明',
       '`/status` — 顯示所有 Agent 狀態',
       '`/reset [agent]` — 重置對話記錄',
-      '`/model [agent]` — 查看模型設定',
+      '`/model [agent] [to]` — 查看或切換模型（切換限 operator）',
       '`/cost` — 花費摘要',
       '`/stop [agent]` — 停止執行中的回應',
     ].join('\n'))
@@ -75,10 +76,24 @@ export async function handleModel(
   const agentId = interaction.options.getString('agent');
   const targetModel = interaction.options.getString('to');
   if (targetModel !== null) {
-    await interaction.reply({
-      content: '❌ Discord 指令不允許修改模型或其他設定。請透過 repo 設定檔、部署流程或 setup/deploy doctor 變更設定後再重啟或 reload。',
-      ephemeral: true,
-    });
+    if (!(await requireOperator(interaction, deps))) return;
+    const targetAgent = agentId ?? deps.agentLoader.list()[0];
+    if (targetAgent === undefined) {
+      await interaction.reply({ content: '❌ 找不到 Agent', ephemeral: true });
+      return;
+    }
+    try {
+      const result = await applyModelChange(targetAgent, targetModel, deps.agentLoader);
+      if (result.success) {
+        const MODEL_LABELS: Record<string, string> = { opus: '🟣 Opus', sonnet: '🔵 Sonnet', haiku: '🟢 Haiku' };
+        await interaction.reply({ content: `✅ **${targetAgent}** 模型已切換為 ${MODEL_LABELS[targetModel] ?? targetModel}`, ephemeral: true });
+      } else {
+        await interaction.reply({ content: `❌ 切換失敗：${result.error}`, ephemeral: true });
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      await interaction.reply({ content: `❌ 切換失敗：${msg}`, ephemeral: true });
+    }
     return;
   }
   if (agentId === null && targetModel === null) {

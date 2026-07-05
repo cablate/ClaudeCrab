@@ -204,7 +204,11 @@ npm run setup:verify
 
 ## 7.1 設定變更入口
 
-Discord bot 端不提供設定寫入入口。Slash command 可以查狀態、看模型、停止 query、重置 session，但不能修改 `.env`、`agent.json`、`.claude/settings.local.json`、schedule YAML 或任何 runtime 設定，也不能作為雲端 secret manager。
+Discord bot 對一般使用者不提供設定寫入入口。第三方使用者可以對話、停止自己的 query、重置自己的 session、查詢允許公開的狀態；涉及服務生命週期或資源管理的既有指令必須通過 operator gate。
+
+Operator 由 `DISCORD_OWNER_USER_ID` 指定。MVP 不做細分 scope：被指定的 operator 可以使用敏感維護指令，例如 `/restart`、`/close`、`/sync`、`/sessions`、`/cache flush`、以及既有 `/model [agent] [to]`。未通過 gate 的 Discord 使用者不能修改 `.env`、`agent.json`、`.claude/settings.local.json`、schedule YAML 或 runtime 設定，也不能把 Discord bot 當成雲端 secret manager。
+
+正式設定入口以檔案、部署環境、或未來的小型 admin console 為主；Discord operator 指令只保留為維護捷徑，不作為主要設定後台。
 
 設定變更請走：
 
@@ -219,7 +223,7 @@ Discord bot 端不提供設定寫入入口。Slash command 可以查狀態、看
 | 設定 | 是否需要重啟 |
 |---|---|
 | `.env`、Docker/雲端 env、DB path、主 Bot token、guild/client id | 需要 |
-| `agent.json` 的 Discord token/channel | 建議重啟；未來若提供 CLI reload，應由部署端執行，不從 Discord 執行 |
+| `agent.json` 的 Discord token/channel | 建議重啟；未來若提供 reload，應由 operator 或部署端執行 |
 | `.claude/settings.local.json` 的 provider/model/env | 建議重啟或關閉既有 SDK session 後再測 |
 | `schedules/*.yaml` | 不需要，系統會 watch 並同步 |
 

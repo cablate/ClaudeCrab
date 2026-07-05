@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { buildSlashCommands } from '../src/adapters/discord/commands/_shared.js';
+import { buildSlashCommands, isOperatorUser } from '../src/adapters/discord/commands/_shared.js';
 
 describe('Discord slash command surface', () => {
-  it('keeps model command read-only', () => {
+  it('keeps model query and switch command shape', () => {
     const modelCommand = buildSlashCommands()
       .map((command) => command.toJSON())
       .find((command) => command.name === 'model');
 
     expect(modelCommand).toBeDefined();
-    expect(modelCommand?.description).toBe('查詢模型設定');
-    expect(modelCommand?.options?.map((option) => option.name)).toEqual(['agent']);
+    expect(modelCommand?.description).toBe('查詢 / 切換模型');
+    expect(modelCommand?.options?.map((option) => option.name)).toEqual(['agent', 'to']);
+  });
+
+  it('uses configured Discord owner as the operator gate', () => {
+    expect(isOperatorUser('123', { ownerUserId: '123' })).toBe(true);
+    expect(isOperatorUser('456', { ownerUserId: '123' })).toBe(false);
+    expect(isOperatorUser('123', {})).toBe(false);
   });
 
   it('does not expose agent config reload wording through sync command', () => {

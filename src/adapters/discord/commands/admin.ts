@@ -1,10 +1,12 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
-import { log, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
+import { log, requireOperator, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
 
 export async function handleClose(
   interaction: ChatInputCommandInteraction,
   deps: SlashCommandDependencies,
 ): Promise<void> {
+  if (!(await requireOperator(interaction, deps))) return;
+
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
@@ -32,6 +34,8 @@ export async function handleSync(
   interaction: ChatInputCommandInteraction,
   deps: SlashCommandDependencies,
 ): Promise<void> {
+  if (!(await requireOperator(interaction, deps))) return;
+
   const userId = interaction.user.id;
   const channelId = interaction.channelId;
   const isThread = interaction.channel?.isThread() ?? false;
@@ -66,7 +70,12 @@ export async function handleSync(
   }
 }
 
-export async function handleRestart(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleRestart(
+  interaction: ChatInputCommandInteraction,
+  deps: SlashCommandDependencies,
+): Promise<void> {
+  if (!(await requireOperator(interaction, deps))) return;
+
   await interaction.deferReply({ ephemeral: true });
   log.info({ userId: interaction.user.id }, 'Discord /restart command received');
   await interaction.editReply('🔍 正在檢查程式碼（`npm run build`）...');

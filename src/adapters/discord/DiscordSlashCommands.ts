@@ -37,7 +37,7 @@ export async function handleSlashCommand(
       case 'sync':    await handleSync(interaction, deps); break;
       case 'ctx':     await handleCtx(interaction, deps); break;
       case 'cache':   await handleCache(interaction, deps); break;
-      case 'restart': await handleRestart(interaction); break;
+      case 'restart': await handleRestart(interaction, deps); break;
       case 'sessions': await handleSessions(interaction, deps); break;
       default:
         await interaction.reply({ content: `未知指令：/${commandName}`, ephemeral: true });
