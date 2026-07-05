@@ -25,6 +25,7 @@ import { DiscordAdapter } from './adapters/DiscordAdapter.js';
 import { DiscordDashboard } from './adapters/discord/services/DiscordDashboard.js';
 import { initializeDiscordServices, notifyCrashRecovery } from './adapters/discord/DiscordBootstrap.js';
 import { configureAgentPaths } from './core/agentPaths.js';
+import { AdminServer } from './admin/AdminServer.js';
 
 const TYPING_INDICATOR_INTERVAL_MS = 5000;
 
@@ -42,6 +43,7 @@ export class AppBootstrap {
   private discordSystemAdapter: DiscordAdapter | null = null;
   private scheduleExecutor: ScheduleExecutor | null = null;
   private scheduleThreadMap: ScheduleThreadMap | null = null;
+  private adminServer: AdminServer | null = null;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -127,6 +129,7 @@ export class AppBootstrap {
     }
 
     await this.initializeDiscordServices(agentLoader, persistence, messageProcessor, sessionManager);
+    await this.initializeAdminServer(agentLoader);
 
     if (this.scheduleExecutor !== null) {
       this.scheduleExecutor.wirePostInit({
@@ -171,6 +174,11 @@ export class AppBootstrap {
       if (this.scheduleManager !== null) {
         this.scheduleManager.dispose();
         logger.info('Schedule manager disposed');
+      }
+
+      if (this.adminServer !== null) {
+        await this.adminServer.stop();
+        this.adminServer = null;
       }
 
       if (this.orchestrator !== null) {
@@ -389,6 +397,18 @@ export class AppBootstrap {
     if (services.ops.cacheAnomalyReportTimer !== undefined) this.cacheAnomalyReportTimer = services.ops.cacheAnomalyReportTimer;
   }
 
+  private async initializeAdminServer(agentLoader: AgentLoader): Promise<void> {
+    if (!this.config.admin.enabled) return;
+
+    const adminServer = new AdminServer({
+      config: this.config,
+      agentLoader,
+      getBotStatus: (agentId) => this.orchestrator?.getBotStatusForAgent(agentId) ?? 'no-token',
+    });
+    await adminServer.start();
+    this.adminServer = adminServer;
+  }
+
   private logStartupSummary(agentLoader: AgentLoader): void {
     const runningAdapters = this.orchestrator?.getRunningAdapters() ?? [];
     logger.info(
@@ -398,6 +418,7 @@ export class AppBootstrap {
         adapters: runningAdapters.map((a) => `${a.platform}::${a.agentId}`),
         persistenceEnabled: this.config.persistence.enabled,
         scheduleEnabled: this.config.schedule.enabled,
+        adminConsoleEnabled: this.config.admin.enabled,
       },
       'ClaudeCab initialized successfully'
     );

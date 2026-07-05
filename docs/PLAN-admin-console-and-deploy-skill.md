@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 owner_surface: infrastructure
 last_updated: 2026-07-05
 ---
@@ -26,7 +26,7 @@ ClaudeCab 要能安全交給第三方 Discord 使用者使用。Discord 對話�
 
 ### Config plane
 
-- `.env` 與雲端 env：全域 runtime、主 Bot、DB、schedule、session、cache。
+- `.env`、雲端 env、`data/claudecab.local.json`：全域 runtime、主 Bot、DB、schedule、session、cache。
 - `agents/<id>/agent.json`：agent 名稱、Discord token/channel、預設模型、permission mode。
 - `agents/<id>/.claude/settings.local.json`：Claude Code/agent-sdk 實際 provider/model/env。
 - `agents/<id>/schedules/*.yaml`：schedule workflow，已支援 watch reload。
@@ -68,11 +68,11 @@ ClaudeCab 要能安全交給第三方 Discord 使用者使用。Discord 對話�
 建議模組：
 
 - `src/admin/AdminServer.ts`：小型 HTTP server，預設只綁 `127.0.0.1`。
-- `src/admin/AdminAuth.ts`：單一 admin token/password；token 走 config，不硬寫。
+- `src/admin/AdminServer.ts` 內建 bearer token 驗證；token 走 config，不硬寫。
 - `src/admin/AdminConfigService.ts`：讀寫 allowlist 內的設定檔。
-- `src/admin/AdminValidationService.ts`：呼叫既有 setup check/verify、agent config validation。
+- `src/admin/AdminCommandRunner.ts`：呼叫既有 setup check/verify。
 - `src/admin/AdminRestartService.ts`：和 `/restart` 一樣先 build/check，再 `process.exit(0)` 交給 supervisor/container 重啟。
-- `src/admin/public/`：極小 HTML/CSS/JS，不引入大型前端框架。
+- `src/admin/AdminHtml.ts`：embedded 極小 HTML/CSS/JS，不引入大型前端框架，也不需要額外 build/copy assets。
 
 預設安全策略：
 
@@ -122,7 +122,7 @@ ClaudeCab 要能安全交給第三方 Discord 使用者使用。Discord 對話�
 | `/model [agent] [to]` | 部分 | 寫入 agent `.claude/settings.local.json` 後 reload agent config；既有 SDK session 可能要 close 後才完整生效 |
 | `agent.json` display/name/model | 部分 | reload agent config；已啟動 Bot token/channel 變更建議重啟 |
 | Agent Discord token/channel | 否 | 建議重啟或後續做 explicit agent restart |
-| `.env` / cloud env | 否 | 重啟 |
+| `.env` / cloud env / local config overlay | 否 | 重啟 |
 | DB path / main bot token / guild/client id | 否 | 重啟 |
 | session/cache 策略 | 部分 | 新 session 可套用；既有 SDK process 不保證立即更新 |
 
@@ -187,33 +187,36 @@ Troubleshooting 必含：
 
 - 新增 `docs/audit/admin-console-contract.md`。
 - 定義 config allowlist、secret masking、restart contract、dynamic reload rules。
-- 不寫 code。
+- 已完成。
 
 ### ADM-C: Minimal admin server skeleton
 
 - 新增 disabled-by-default admin server。
 - 加 config parsing。
 - 提供 health/status GET。
-- 無設定寫入。
+- 已完成，包含 embedded UI 與 token-protected API。
 
 ### ADM-D: Config editing allowlist
 
-- 支援安全讀寫 `.env` 或 runtime local config 檔案的 allowlist。
+- 支援安全讀寫 runtime local config overlay 的 allowlist。
 - 支援 `agent.json` 常用欄位。
 - 支援 `.claude/settings.local.json` provider/model/env。
 - 所有 secret masked。
+- 已完成。
 
 ### ADM-E: Validation and restart
 
 - 後台可觸發 setup check / selected verify。
 - restart button 使用與 `/restart` 相同策略：先 build/check，再 `process.exit(0)`。
 - 保留 rollback：admin console 可關閉，production start chain 不改。
+- 已完成。
 
 ### ADM-F: Deploy skill
 
-- 建立 `.agents/skills/claudecab-deploy/`。
+- 建立 `docs/skills/claudecab-deploy/`。
 - 加 local/docker/cloud/troubleshooting references。
 - 用現有 setup scripts 作為唯一驗證命令來源。
+- 已完成第一版。
 
 ## 6. Non-goals
 
@@ -226,6 +229,6 @@ Troubleshooting 必含：
 
 ## 7. Open Decisions
 
-- Admin console 設定要直接改 `.env`，還是引入一個 `.claudecab.local.json` 作為可寫 config overlay。
-- Docker/cloud 上 restart button 的語意：container exit 等平台拉起，或只提示 operator 用平台 restart。
+- Admin console 採用 `data/claudecab.local.json` 作為可寫 config overlay，避免 Docker/cloud 無法持久改容器內 `.env`。
+- Docker/cloud 上 restart button 採取與 `/restart` 一致語意：build check 後 process exit，交給 supervisor/container/platform 拉起。
 - 是否把 `/cost`、`/cache status`、`/cache efficiency` 也改成 operator-only，避免第三方看到成本/資源診斷。

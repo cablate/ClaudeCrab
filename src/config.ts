@@ -3,6 +3,7 @@
  * All environment variable parsing happens here to avoid scattered parseInt/defaults.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
 
@@ -80,6 +81,20 @@ export interface AppConfig {
   audit?: {
     /** Whether audit logging is enabled (default: true) */
     enabled?: boolean;
+  };
+  admin: {
+    /** Small operator console for setup/config/restart. Disabled by default. */
+    enabled: boolean;
+    /** Bind host. Defaults to localhost for safety. */
+    host: string;
+    /** Bind port. */
+    port: number;
+    /** Writable local config overlay used by the admin console. */
+    localConfigPath: string;
+    /** Bearer token required for admin API calls. */
+    token?: string;
+    /** Run npm run build before restart. */
+    restartBuildCheckEnabled: boolean;
   };
   sessionGuard: {
     /** Whether session-length-handoff-guard is enabled (default: true) */
@@ -220,6 +235,14 @@ const AppConfigSchema = z.object({
   audit: z.object({
     enabled: z.boolean().optional(),
   }).optional(),
+  admin: z.object({
+    enabled: z.boolean(),
+    host: z.string().min(1),
+    port: z.number().int().min(1).max(65535),
+    localConfigPath: z.string().min(1),
+    token: z.string().optional(),
+    restartBuildCheckEnabled: z.boolean(),
+  }),
   sessionGuard: z.object({
     enabled: z.boolean(),
     tokenThreshold: z.number().int().min(0),
@@ -250,6 +273,7 @@ function addOptional<T extends Record<string, unknown>, K extends string, V>(
 }
 
 function buildRawAppConfig(env: EnvSource, cwd: string): AppConfig {
+  const adminToken = optionalString(env, 'ADMIN_CONSOLE_TOKEN');
   const discordConfig: AppConfig['discord'] = {
     enabled: envFlag(env, 'DISCORD_ENABLED'),
     mainBotToken: env.DISCORD_MAIN_BOT_TOKEN ?? '',
@@ -310,6 +334,14 @@ function buildRawAppConfig(env: EnvSource, cwd: string): AppConfig {
     audit: {
       enabled: envEnabledByDefault(env, 'AUDIT_LOGGING'),
     },
+    admin: {
+      enabled: envFlag(env, 'ADMIN_CONSOLE_ENABLED'),
+      host: env.ADMIN_CONSOLE_HOST ?? '127.0.0.1',
+      port: integerFromEnv(env, 'ADMIN_CONSOLE_PORT', 47_824, 1),
+      localConfigPath: path.resolve(cwd, env.CLAUDECAB_LOCAL_CONFIG_PATH ?? './data/claudecab.local.json'),
+      restartBuildCheckEnabled: envEnabledByDefault(env, 'ADMIN_RESTART_BUILD_CHECK_ENABLED'),
+      ...(adminToken !== undefined ? { token: adminToken } : {}),
+    },
     sessionGuard: {
       enabled: envEnabledByDefault(env, 'SESSION_GUARD_ENABLED'),
       tokenThreshold: integerFromEnv(env, 'SESSION_GUARD_TOKEN_THRESHOLD', 150_000),
@@ -334,9 +366,25 @@ function buildRawAppConfig(env: EnvSource, cwd: string): AppConfig {
  * Called once at startup before any initialization.
  */
 export function loadAppConfig(env: EnvSource = process.env, cwd: string = process.cwd()): AppConfig {
-  const config = buildRawAppConfig(env, cwd);
+  const config = buildRawAppConfig(mergeLocalConfig(env, cwd), cwd);
   AppConfigSchema.parse(config);
   return config;
+}
+
+function mergeLocalConfig(env: EnvSource, cwd: string): EnvSource {
+  const localPath = path.resolve(cwd, env.CLAUDECAB_LOCAL_CONFIG_PATH ?? './data/claudecab.local.json');
+  if (!existsSync(localPath)) return env;
+  const parsed = JSON.parse(readFileSync(localPath, 'utf-8')) as unknown;
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`Local config overlay must be a JSON object: ${localPath}`);
+  }
+  const overlay: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      overlay[key] = String(value);
+    }
+  }
+  return { ...env, ...overlay };
 }
 
 export function validateAppConfigForRuntime(config: AppConfig): RuntimeConfigValidation {
@@ -355,6 +403,16 @@ export function validateAppConfigForRuntime(config: AppConfig): RuntimeConfigVal
         path: 'discord.mainBotClientId',
         message: 'Discord 啟用時必須設定主 Bot client ID，slash command 註冊會用到。',
         envVars: ['DISCORD_MAIN_BOT_CLIENT_ID'],
+      });
+    }
+  }
+
+  if (config.admin.enabled) {
+    if (config.admin.token === undefined || config.admin.token.length < 16) {
+      issues.push({
+        path: 'admin.token',
+        message: 'Admin console enabled but ADMIN_CONSOLE_TOKEN is missing or shorter than 16 characters.',
+        envVars: ['ADMIN_CONSOLE_TOKEN'],
       });
     }
   }

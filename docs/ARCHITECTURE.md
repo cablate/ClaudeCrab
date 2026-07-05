@@ -17,11 +17,12 @@ The live product surface is:
 - SQLite persistence for sessions, conversations, query metrics, rate-limit snapshots, and schedule executions.
 - Prompt-cache keepalive, context telemetry, cost reporting, and cache anomaly diagnostics.
 - Built-in MCP tools for file sending and workspace validation.
+- Disabled-by-default operator admin console for setup, config, validation, and restart.
 
 Not current product surfaces:
 
 - Telegram.
-- WebUI.
+- Public WebUI.
 - Autonomous social or initiative routing.
 - Old BudgetService, TaskService, TTSService, ActivityReporter, or task-sync services.
 
@@ -46,6 +47,9 @@ flowchart TD
   Stream --> Sender["StreamResponseRouter / DiscordSender"]
   Bootstrap --> Schedule["ScheduleManager / ScheduleExecutor"]
   Schedule --> Query
+  Bootstrap --> Admin["AdminServer :47824 (disabled by default)"]
+  Admin --> LocalConfig["data/claudecab.local.json"]
+  Admin --> AgentFiles["agent.json / settings.local.json"]
 ```
 
 ## Key Flows
@@ -56,6 +60,7 @@ flowchart TD
 2. `src/index.ts` loads `.env`, acquires the instance lock, installs crash handlers, and starts `AppBootstrap`.
 3. `AppBootstrap` wires security, audit, agent loading, persistence, session managers, message processing, adapters, schedule system, and Discord system services.
 4. `PlatformOrchestrator.startAll()` starts Discord adapters for loaded agents with `discordBotToken` and `discordChannelId`.
+5. When `ADMIN_CONSOLE_ENABLED=true`, `AdminServer` starts on the configured host/port and exposes token-protected setup/config/restart APIs.
 
 ### Message Processing
 
@@ -85,6 +90,7 @@ Live profiles are external:
 - `AGENTS_DIR/<agent-id>/.mcp.json`
 - `AGENTS_DIR/<agent-id>/schedules/*.yaml`
 - `AGENTS_DIR/_foundation/...`
+- `CLAUDECAB_LOCAL_CONFIG_PATH` (default `./data/claudecab.local.json`) for admin-console global overrides.
 
 Foundation runtime assets resolve through `AGENTS_DIR/_foundation`, not repo-local `agents/_foundation`.
 

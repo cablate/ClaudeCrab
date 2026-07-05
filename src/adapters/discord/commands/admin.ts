@@ -1,5 +1,6 @@
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { log, requireOperator, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
+import { requestProcessRestart } from '../../../admin/AdminRestartService.js';
 
 export async function handleClose(
   interaction: ChatInputCommandInteraction,
@@ -79,19 +80,15 @@ export async function handleRestart(
   await interaction.deferReply({ ephemeral: true });
   log.info({ userId: interaction.user.id }, 'Discord /restart command received');
   await interaction.editReply('🔍 正在檢查程式碼（`npm run build`）...');
-  const { exec } = await import('child_process');
-  const { promisify } = await import('util');
-  const execAsync = promisify(exec);
-  try {
-    await execAsync('npm run build', { cwd: process.cwd(), timeout: 120000 });
-  } catch (error) {
-    const err = error as { stderr?: string; stdout?: string };
-    const errorOutput = (err.stderr ?? err.stdout ?? 'Unknown error').slice(0, 1500);
-    log.error({ error: errorOutput }, 'Build failed, aborting restart');
+  const result = await requestProcessRestart({
+    source: 'discord',
+    userId: interaction.user.id,
+    buildCheckEnabled: true,
+  });
+  if (!result.ok) {
+    const errorOutput = (result.build?.stderr || result.build?.stdout || result.message).slice(0, 1500);
     await interaction.editReply(`❌ Build 失敗，取消重啟：\n\`\`\`\n${errorOutput}\n\`\`\``);
     return;
   }
-  log.info({ userId: interaction.user.id }, 'Build passed, initiating restart');
   await interaction.editReply('✅ Build 通過！🔄 正在重啟 ClaudeCab...\n\n稍後會重新上線！');
-  setTimeout(() => { log.info('Graceful shutdown initiated via Discord /restart'); process.exit(0); }, 1000);
 }

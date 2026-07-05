@@ -28,10 +28,11 @@ Discord channel/thread
 - SQLite persistence，包含 sessions、conversation、query metrics、schedule thread mapping
 - Discord dashboard、cost report、cache anomaly report
 - MCP tools 與 workspace validation
+- 預設關閉的小型 admin console，可供 operator 設定、驗證、重啟
 
 不包含：
 
-- Web UI / public dashboard assets
+- 公開 Web UI / public dashboard assets
 - Telegram
 - TTS 或音效播放
 - 自主社群發文或 initiative routing
@@ -93,6 +94,11 @@ DB_PATH=./data/claudecab.db
 
 # 選填但建議：你的 Discord User ID。schedule 建立 thread 時可通知/加入你。
 DISCORD_OWNER_USER_ID=
+
+# 選填：小型 operator 後台，預設關閉
+ADMIN_CONSOLE_ENABLED=false
+ADMIN_CONSOLE_TOKEN=
+CLAUDECAB_LOCAL_CONFIG_PATH=./data/claudecab.local.json
 ```
 
 填 `agents/example/agent.json`：
@@ -284,8 +290,11 @@ agents/
 | `agents/example/CLAUDE.md` | agent 的基礎指令 | 可先不改 |
 | `agents/example/.claude/settings.local.json` | Claude Code 專案設定與 provider env | OAuth/API key 可先不改；proxy 才改 |
 | `agents/example/.mcp.json` | agent 的 MCP server 設定 | 可先不改 |
+| `data/claudecab.local.json` | admin console 寫入的全域 local override | 可先不改 |
 
 ## 給 AI 的安裝指令
+
+可追蹤的部署 skill package 放在 `docs/skills/claudecab-deploy/`。如果你的 AI 工具支援 skills，可以把這個資料夾安裝到該工具的 skill 目錄；不支援時，直接要求 AI 先讀 `docs/skills/claudecab-deploy/SKILL.md`。
 
 如果你要請 AI assistant 幫你設定 ClaudeCab，把下面整段貼給它：
 
@@ -294,6 +303,8 @@ agents/
 
 請先閱讀：
 - README.md
+- docs/SETUP.md
+- docs/skills/claudecab-deploy/SKILL.md
 - .env.example
 - agents/example/agent.json
 - agents/example/.claude/settings.local.json
@@ -301,6 +312,7 @@ agents/
 請遵守：
 - 只修改必要設定檔，不重構程式碼。
 - 優先修改 .env、agents/example/agent.json。
+- 如果使用 admin console 修改全域 runtime 設定，應寫入 data/claudecab.local.json，重啟後才會套用。
 - 只有在我要使用 DeepSeek、第三方 proxy、或 Anthropic-compatible endpoint 時，才修改 agents/example/.claude/settings.local.json 的 env。
 - 不要修改 src/**、package.json、docs/**。
 - 不要 commit token、API key、OAuth credential 或任何 secret。

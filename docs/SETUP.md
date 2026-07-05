@@ -35,6 +35,8 @@ claude --version
 
 如果 `claude` 指令不存在，先安裝 Claude Code CLI，並在安裝後重新開 terminal。Claude Code 2.1.119+ 使用平台 native binary，缺平台包時可能出現 CLI 找不到或 SDK spawn 失敗；`npm run setup:verify` 會檢查這件事。
 
+如果要讓 AI assistant 幫你部署，先讓它讀 `docs/skills/claudecab-deploy/SKILL.md`。這個資料夾是可追蹤的 skill package，裡面包含 config matrix、admin console、Docker/cloud troubleshooting。
+
 ## 2. Clone 與安裝
 
 ```bash
@@ -213,6 +215,7 @@ Operator 由 `DISCORD_OWNER_USER_ID` 指定。MVP 不做細分 scope：被指定
 設定變更請走：
 
 - `.env` 或雲端平台 secret/env 設定
+- `data/claudecab.local.json`（admin console 使用的 local config overlay，重啟後會覆蓋同名 env）
 - `agents/<id>/agent.json`
 - `agents/<id>/.claude/settings.local.json`
 - `agents/<id>/schedules/*.yaml`
@@ -226,6 +229,42 @@ Operator 由 `DISCORD_OWNER_USER_ID` 指定。MVP 不做細分 scope：被指定
 | `agent.json` 的 Discord token/channel | 建議重啟；未來若提供 reload，應由 operator 或部署端執行 |
 | `.claude/settings.local.json` 的 provider/model/env | 建議重啟或關閉既有 SDK session 後再測 |
 | `schedules/*.yaml` | 不需要，系統會 watch 並同步 |
+
+## 7.2 小型 Admin Console
+
+Admin console 是部署者/維運者使用的後台，不是 Discord 使用者功能。預設關閉。
+
+啟用：
+
+```env
+ADMIN_CONSOLE_ENABLED=true
+ADMIN_CONSOLE_HOST=127.0.0.1
+ADMIN_CONSOLE_PORT=47824
+ADMIN_CONSOLE_TOKEN=replace-with-a-long-random-token
+CLAUDECAB_LOCAL_CONFIG_PATH=./data/claudecab.local.json
+```
+
+啟動後開啟：
+
+```text
+http://127.0.0.1:47824
+```
+
+可做的事：
+
+- 查看 runtime / agent 狀態。
+- 編輯 allowlist 內的全域設定，寫入 `data/claudecab.local.json`。
+- 編輯 agent 的 `agent.json` 常用欄位。
+- 編輯 agent 的 `.claude/settings.local.json` model/provider env。
+- 執行 setup check / setup verify。
+- 按 restart，行為等同 `/restart`：先 build check，成功後 process exit，交給 supervisor/container 拉起。
+
+安全規則：
+
+- API 需要 `ADMIN_CONSOLE_TOKEN`，GET config 不會回傳 secret 明文。
+- 預設只綁 `127.0.0.1`。如果要對外，請放在 reverse proxy / tunnel / cloud auth 後面。
+- 不提供任意檔案編輯，只能改 allowlist 欄位。
+- Docker/cloud 上平台 env 不一定能由 container 內部改寫；需要可持久化且可重啟套用的設定，使用 `data/claudecab.local.json` 或平台自己的 secret/env 管理。
 
 ## 8. Discord 實連驗證
 
