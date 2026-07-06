@@ -21,7 +21,7 @@ claudecab.runtime.json
 *.swp
 *.swo
 
-# Environment files (should be passed via docker-compose or -e flags)
+# Environment files (mounted or passed at runtime; never baked into the image)
 .env
 .env.local
 .env.*.local

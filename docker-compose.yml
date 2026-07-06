@@ -7,13 +7,12 @@ services:
     container_name: claudecab
     init: true
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       NODE_ENV: production
       AGENTS_DIR: /app/agents
       DB_PATH: /app/data/claudecab.db
     volumes:
+      - ./.env:/app/.env:ro
       - ./agents:/app/agents
       - ./data:/app/data
       - ./logs:/app/logs
@@ -44,13 +43,12 @@ services:
     init: true
     profiles:
       - dev
-    env_file:
-      - .env
     environment:
       NODE_ENV: development
       AGENTS_DIR: /app/agents
       DB_PATH: /app/data/claudecab.db
     volumes:
+      - ./.env:/app/.env:ro
       - ./src:/app/src
       - ./scripts:/app/scripts
       - ./tests:/app/tests

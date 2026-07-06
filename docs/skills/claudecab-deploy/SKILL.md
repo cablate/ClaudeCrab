@@ -12,6 +12,7 @@ Use this skill when a user wants an AI assistant to install, configure, deploy, 
 - Read `AGENTS.md`, `README.md`, and `docs/SETUP.md` before editing settings.
 - Do not refactor application code during deployment unless the user explicitly asks for code changes.
 - Do not print full secrets in chat, logs, commit messages, or generated reports.
+- Do not paste full `docker compose config` output; it may include expanded secrets on some Compose setups.
 - Do not use normal Discord chat as a settings surface.
 - Use the admin console, local config overlay, `.env`, cloud env/secrets, `agent.json`, or `.claude/settings.local.json` for configuration.
 - Run checks before telling the user setup is done.
@@ -51,7 +52,7 @@ Use this skill when a user wants an AI assistant to install, configure, deploy, 
    - dev: `npm run dev`
    - direct: `npm run start:direct`
    - supervised Windows/runtime: `npm start`
-   - Docker: `docker compose up --build`
+   - Docker: confirm `.env` exists, then `docker compose up --build`
 
 7. Report only:
    - files changed;

@@ -320,6 +320,8 @@ Docker 是支援路徑，但不取代 Windows production supervisor。第一次�
 - `data/`
 - `logs/`
 
+`docker-compose.yml` 會把本機 `.env` 掛到 container 的 `/app/.env`，讓 ClaudeCab 在 runtime 讀取。不要改回 `env_file`，否則 `docker compose config` 可能把 token/key 展開到終端輸出，排錯時很容易外洩。
+
 啟動：
 
 ```bash
@@ -347,6 +349,7 @@ docker compose down
 Docker 注意事項：
 
 - container 內不會自動讀到主機 Claude Code OAuth。Docker 使用時建議用 `.env` 或 agent `.claude/settings.local.json` 提供 API key / provider key。
+- `.env` 是 bind mount，不會被 bake 進 image；請不要把 `docker compose config` 的完整輸出貼到公開地方。
 - `agents/`、`data/`、`logs/` 會掛載為 volume，避免重建 container 後遺失 agent 設定與 SQLite DB。
 - 若要用第三方 provider，仍建議放 agent `.claude/settings.local.json`，不要把所有 provider key 放全域 `.env`。
 - Docker build 會跑 `npm ci` 與 postinstall SDK patch。
