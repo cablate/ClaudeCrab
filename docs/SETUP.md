@@ -200,7 +200,7 @@ npm run setup:verify
 - Claude Code CLI / npm shim / 平台 binary 狀態
 - 暫存 SQLite DB 可初始化
 - TypeScript typecheck
-- build
+- 隔離 TypeScript build（輸出到 `.tmp/build-check`，不覆寫 production `dist/`）
 
 `setup:verify` 不會送 Discord 訊息。
 
@@ -210,7 +210,7 @@ Discord bot 對一般使用者不提供設定寫入入口。第三方使用者�
 
 Operator 由 `DISCORD_OWNER_USER_ID` 指定。MVP 不做細分 scope：被指定的 operator 可以使用敏感維護指令，例如 `/restart`、`/close`、`/sync`、`/sessions`、`/cache flush`、以及既有 `/model [agent] [to]`。未通過 gate 的 Discord 使用者不能修改 `.env`、`agent.json`、`.claude/settings.local.json`、schedule YAML 或 runtime 設定，也不能把 Discord bot 當成雲端 secret manager。
 
-正式設定入口以檔案、部署環境、或未來的小型 admin console 為主；Discord operator 指令只保留為維護捷徑，不作為主要設定後台。
+正式設定入口以檔案、部署環境、或小型 admin console 為主；Discord operator 指令只保留為維護捷徑，不作為主要設定後台。
 
 設定變更請走：
 

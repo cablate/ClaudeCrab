@@ -269,7 +269,8 @@ export async function executeQueryWithSDK(
       onIntermediateMessage: onIntermediateMessageV2,
       onToolEvent,
       onSubAgentEvent: async (event) => {
-        await subAgentManager?.handle(event);
+        const delivered = await subAgentManager?.handle(event);
+        if (delivered) state.subAgentMessageDelivered = true;
       },
       onHookEvent: async (event) => {
         await hookManager?.handle(event);

@@ -2,21 +2,28 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AgentConfigSchema } from '../types/agent.js';
 
-type FieldType = 'string' | 'number' | 'boolean' | 'model' | 'permissionMode';
+import type { FieldDefinition, FieldType } from './AdminConfigFields.js';
+import {
+  AGENT_FIELDS,
+  AGENT_SETTINGS_FIELDS,
+  CLAUDE_SETTINGS_FIELDS,
+  GLOBAL_FIELDS,
+  PERMISSION_MODE_VALUES,
+  PROVIDER_ENV_FIELDS,
+} from './AdminConfigFields.js';
 
-interface FieldDefinition {
-  key: string;
-  label: string;
-  type: FieldType;
-  secret?: boolean;
-  restartRequired?: boolean;
-}
+export type { FieldType } from './AdminConfigFields.js';
 
 export interface AdminFieldSnapshot {
   key: string;
   label: string;
+  type: FieldType;
+  group: string;
+  help: string;
+  placeholder: string;
   value: string | number | boolean | null;
   set: boolean;
+  required: boolean;
   secret: boolean;
   restartRequired: boolean;
 }
@@ -50,67 +57,17 @@ export interface AdminUpdateResult {
   sessionCloseRecommended: boolean;
 }
 
-const GLOBAL_FIELDS: FieldDefinition[] = [
-  { key: 'DISCORD_ENABLED', label: 'Discord enabled', type: 'boolean', restartRequired: true },
-  { key: 'DISCORD_MAIN_BOT_TOKEN', label: 'Main bot token', type: 'string', secret: true, restartRequired: true },
-  { key: 'DISCORD_MAIN_BOT_CLIENT_ID', label: 'Main bot client ID', type: 'string', restartRequired: true },
-  { key: 'DISCORD_GUILD_ID', label: 'Discord guild ID', type: 'string', restartRequired: true },
-  { key: 'DISCORD_OWNER_USER_ID', label: 'Operator user ID', type: 'string' },
-  { key: 'AGENTS_DIR', label: 'Agents directory', type: 'string', restartRequired: true },
-  { key: 'ENABLE_PERSISTENCE', label: 'Persistence enabled', type: 'boolean', restartRequired: true },
-  { key: 'DB_PATH', label: 'Database path', type: 'string', restartRequired: true },
-  { key: 'ANTHROPIC_API_KEY', label: 'Global Anthropic API key', type: 'string', secret: true, restartRequired: true },
-  { key: 'ANTHROPIC_BASE_URL', label: 'Global provider base URL', type: 'string', restartRequired: true },
-  { key: 'SCHEDULE_ENABLED', label: 'Schedule enabled', type: 'boolean', restartRequired: true },
-  { key: 'SCHEDULE_CATCHUP_ENABLED', label: 'Schedule catch-up enabled', type: 'boolean', restartRequired: true },
-  { key: 'SESSION_IDLE_CLOSE_MS', label: 'Session idle close ms', type: 'number', restartRequired: true },
-  { key: 'SESSION_EPHEMERAL', label: 'Ephemeral SDK sessions', type: 'boolean', restartRequired: true },
-  { key: 'CACHE_KEEPALIVE_ENABLED', label: 'Cache keepalive enabled', type: 'boolean', restartRequired: true },
-  { key: 'SESSION_GUARD_ENABLED', label: 'Session guard enabled', type: 'boolean', restartRequired: true },
-  { key: 'ALLOWED_USERS', label: 'Allowed Discord users', type: 'string' },
-  { key: 'ADMIN_CONSOLE_ENABLED', label: 'Admin console enabled', type: 'boolean', restartRequired: true },
-  { key: 'ADMIN_CONSOLE_HOST', label: 'Admin console host', type: 'string', restartRequired: true },
-  { key: 'ADMIN_CONSOLE_PORT', label: 'Admin console port', type: 'number', restartRequired: true },
-  { key: 'ADMIN_CONSOLE_TOKEN', label: 'Admin console token', type: 'string', secret: true, restartRequired: true },
-  { key: 'CLAUDECAB_LOCAL_CONFIG_PATH', label: 'Local config path', type: 'string', restartRequired: true },
-];
-
-const AGENT_FIELDS: FieldDefinition[] = [
-  { key: 'name', label: 'Name', type: 'string' },
-  { key: 'description', label: 'Description', type: 'string' },
-  { key: 'model', label: 'Default model', type: 'model' },
-  { key: 'discordBotToken', label: 'Agent bot token', type: 'string', secret: true, restartRequired: true },
-  { key: 'discordChannelId', label: 'Discord channel ID', type: 'string', restartRequired: true },
-];
-
-const AGENT_SETTINGS_FIELDS: FieldDefinition[] = [
-  { key: 'permissionMode', label: 'Permission mode', type: 'permissionMode' },
-  { key: 'maxTurns', label: 'Max turns', type: 'number' },
-  { key: 'maxBudgetUsd', label: 'Max budget USD', type: 'number' },
-];
-
-const CLAUDE_SETTINGS_FIELDS: FieldDefinition[] = [
-  { key: 'model', label: 'SDK model', type: 'model' },
-];
-
-const PROVIDER_ENV_FIELDS: FieldDefinition[] = [
-  { key: 'ANTHROPIC_API_KEY', label: 'Agent API key', type: 'string', secret: true },
-  { key: 'ANTHROPIC_AUTH_TOKEN', label: 'Agent auth token', type: 'string', secret: true },
-  { key: 'ANTHROPIC_BASE_URL', label: 'Agent provider base URL', type: 'string' },
-];
-
-const MODEL_VALUES = new Set(['sonnet', 'opus', 'haiku']);
-const PERMISSION_MODE_VALUES = new Set(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']);
-
 export class AdminConfigService {
   private readonly cwd: string;
   private readonly agentsDir: string;
   private readonly localConfigPath: string;
 
   constructor(options: { cwd: string; agentsDir: string; localConfigPath: string }) {
-    this.cwd = options.cwd;
-    this.agentsDir = path.resolve(options.cwd, options.agentsDir);
-    this.localConfigPath = options.localConfigPath;
+    this.cwd = path.resolve(options.cwd);
+    this.agentsDir = path.resolve(this.cwd, options.agentsDir);
+    this.localConfigPath = path.isAbsolute(options.localConfigPath)
+      ? path.normalize(options.localConfigPath)
+      : path.resolve(this.cwd, options.localConfigPath);
   }
 
   async getSnapshot(): Promise<AdminConfigSnapshot> {
@@ -135,14 +92,25 @@ export class AdminConfigService {
 
     for (const [key, value] of Object.entries(values)) {
       const field = getField(GLOBAL_FIELDS, key);
+      if (value === null || value === '') {
+        if (!Object.prototype.hasOwnProperty.call(current, key)) continue;
+        delete current[key];
+        updated.push(key);
+        restartRequired ||= field.restartRequired === true;
+        continue;
+      }
+
       const normalized = normalizeValue(value, field);
+      if (current[key] === normalized) continue;
       current[key] = normalized;
       updated.push(key);
       restartRequired ||= field.restartRequired === true;
     }
 
-    await fs.mkdir(path.dirname(this.localConfigPath), { recursive: true });
-    await fs.writeFile(this.localConfigPath, `${JSON.stringify(current, null, 2)}\n`, 'utf-8');
+    if (updated.length > 0) {
+      await fs.mkdir(path.dirname(this.localConfigPath), { recursive: true });
+      await fs.writeFile(this.localConfigPath, `${JSON.stringify(current, null, 2)}\n`, 'utf-8');
+    }
     return { updated, restartRequired, sessionCloseRecommended: false };
   }
 
@@ -155,11 +123,19 @@ export class AdminConfigService {
     const updated: string[] = [];
     let restartRequired = false;
     let sessionCloseRecommended = false;
+    let settingsTouched = false;
 
     if (update.agent !== undefined) {
       const values = normalizeUpdateRecord(update.agent, AGENT_FIELDS);
       for (const [key, value] of Object.entries(values)) {
         const field = getField(AGENT_FIELDS, key);
+        if ((value === null || value === '') && field.required !== true) {
+          if (!Object.prototype.hasOwnProperty.call(agentConfig, key)) continue;
+          delete agentConfig[key];
+          updated.push(`agent.${key}`);
+          restartRequired ||= field.restartRequired === true;
+          continue;
+        }
         agentConfig[key] = normalizeValue(value, field);
         updated.push(`agent.${key}`);
         restartRequired ||= field.restartRequired === true;
@@ -171,11 +147,26 @@ export class AdminConfigService {
       for (const [key, value] of Object.entries(values)) {
         const field = getField([...AGENT_SETTINGS_FIELDS, ...CLAUDE_SETTINGS_FIELDS], key);
         if (key === 'model') {
+          if (value === null || value === '') {
+            if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
+            delete settings[key];
+            settingsTouched = true;
+            sessionCloseRecommended = true;
+            updated.push(`settings.${key}`);
+            continue;
+          }
           settings[key] = normalizeValue(value, field);
+          settingsTouched = true;
           sessionCloseRecommended = true;
           updated.push(`settings.${key}`);
         } else {
           const currentSettings = ensureRecord(agentConfig, 'settings');
+          if (value === null || value === '') {
+            if (!Object.prototype.hasOwnProperty.call(currentSettings, key)) continue;
+            delete currentSettings[key];
+            updated.push(`agent.settings.${key}`);
+            continue;
+          }
           currentSettings[key] = normalizeValue(value, field);
           updated.push(`agent.settings.${key}`);
         }
@@ -187,9 +178,21 @@ export class AdminConfigService {
       const env = ensureRecord(settings, 'env');
       for (const [key, value] of Object.entries(values)) {
         const field = getField(PROVIDER_ENV_FIELDS, key);
+        if (value === null || value === '') {
+          if (!Object.prototype.hasOwnProperty.call(env, key)) continue;
+          delete env[key];
+          settingsTouched = true;
+          updated.push(`settings.env.${key}`);
+          sessionCloseRecommended = true;
+          continue;
+        }
         env[key] = normalizeValue(value, field);
+        settingsTouched = true;
         updated.push(`settings.env.${key}`);
         sessionCloseRecommended = true;
+      }
+      if (Object.keys(env).length === 0) {
+        delete settings.env;
       }
     }
 
@@ -200,7 +203,7 @@ export class AdminConfigService {
     }
 
     await fs.writeFile(agentPath, `${JSON.stringify(agentConfig, null, 2)}\n`, 'utf-8');
-    if (Object.keys(settings).length > 0) {
+    if (settingsTouched || Object.keys(settings).length > 0) {
       await fs.mkdir(path.dirname(settingsPath), { recursive: true });
       await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf-8');
     }
@@ -266,8 +269,13 @@ function snapshotField(field: FieldDefinition, rawValue: unknown): AdminFieldSna
   return {
     key: field.key,
     label: field.label,
+    type: field.type,
+    group: field.group,
+    help: field.help,
+    placeholder: field.placeholder ?? '',
     value: field.secret === true ? (set ? '********' : null) : normalizeSnapshotValue(rawValue),
     set,
+    required: field.required === true,
     secret: field.secret === true,
     restartRequired: field.restartRequired === true,
   };
@@ -305,9 +313,6 @@ function normalizeValue(value: string | number | boolean | null, field: FieldDef
     return parsed;
   }
   const text = String(value);
-  if (field.type === 'model' && text !== '' && !MODEL_VALUES.has(text)) {
-    throw new Error(`${field.key} must be one of: ${[...MODEL_VALUES].join(', ')}.`);
-  }
   if (field.type === 'permissionMode' && text !== '' && !PERMISSION_MODE_VALUES.has(text)) {
     throw new Error(`${field.key} must be one of: ${[...PERMISSION_MODE_VALUES].join(', ')}.`);
   }
@@ -331,7 +336,7 @@ function ensureRecord(target: Record<string, unknown>, key: string): Record<stri
 }
 
 async function readJsonRecord(filePath: string): Promise<Record<string, unknown>> {
-  const parsed = JSON.parse(await fs.readFile(filePath, 'utf-8')) as unknown;
+  const parsed = JSON.parse(stripBom(await fs.readFile(filePath, 'utf-8'))) as unknown;
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new Error(`${filePath} must be a JSON object.`);
   }
@@ -351,4 +356,8 @@ function toRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
 }

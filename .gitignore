@@ -51,6 +51,7 @@ coverage/
 # Temporary files
 tmp/
 temp/
+.tmp/
 
 # Serena MCP
 .serena/

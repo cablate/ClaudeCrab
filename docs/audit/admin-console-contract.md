@@ -24,6 +24,8 @@ In scope:
 - Token-protected API for setup status, allowlisted config reads/writes, validation, and restart.
 - Secret masking for all config reads.
 - Agent config editing for `agent.json` and `.claude/settings.local.json`.
+- `.claude/settings.local.json` model is a free-form runtime model string, not limited to Claude aliases.
+- Agent provider env editing is limited to generic Claude Code/provider keys: API key/auth token/base URL, alias defaults, and sub-agent model.
 - Global local config overlay editing for allowlisted setup/runtime keys.
 - Restart action equivalent to the existing `/restart` maintenance path: build check, then process exit so the supervisor/container can restart.
 
@@ -101,9 +103,9 @@ Then admin console settings are not reachable through normal chat
 ```
 
 ```gherkin
-Given an operator changes an agent model through PUT /api/agents/example
+Given an operator changes an agent runtime model through PUT /api/agents/example
 When the request passes validation
-Then agent.json or settings.local.json is updated
+Then `.claude/settings.local.json` is updated
 And the agent config is reloaded
 And the response states whether restart or session close is recommended
 ```

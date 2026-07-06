@@ -37,7 +37,7 @@ function main(): void {
     { label: 'Claude CLI check', run: () => printCliCheck(runClaudeCliCheck(process.cwd())) },
     { label: 'temporary database init', run: () => runTempDatabaseCheck() },
     { label: 'typecheck', args: ['run', 'typecheck'] },
-    { label: 'build', args: ['run', 'build'] },
+    { label: 'isolated build', run: () => runIsolatedBuildCheck(process.cwd()) },
   ];
 
   for (const step of steps) {
@@ -147,6 +147,36 @@ export function runTempDatabaseCheck(): string {
     return dbPath;
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+}
+
+export function runIsolatedBuildCheck(cwd: string): void {
+  const tmpRoot = path.join(cwd, '.tmp');
+  const outDir = path.join(tmpRoot, 'build-check');
+  const buildInfo = path.join(tmpRoot, 'build-check.tsbuildinfo');
+
+  rmSync(outDir, { recursive: true, force: true });
+  rmSync(buildInfo, { force: true });
+  try {
+    const result = runNpm([
+      'exec',
+      'tsc',
+      '--',
+      '--outDir',
+      path.relative(cwd, outDir),
+      '--tsBuildInfoFile',
+      path.relative(cwd, buildInfo),
+    ]);
+    if (result.error) {
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      throw new Error('isolated TypeScript build failed.');
+    }
+    console.log(`ok isolated build output: ${path.relative(cwd, outDir).replaceAll('\\', '/')}`);
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
+    rmSync(buildInfo, { force: true });
   }
 }
 

@@ -41,6 +41,7 @@ export interface StreamState {
   intermediateMessages: string[];
   failedMessages: string[];
   lastSentMessageId: string | undefined;
+  subAgentMessageDelivered: boolean;
   toolUseReacted: boolean;
   deliveredAssistantTexts: Set<string>;
 }
@@ -53,6 +54,7 @@ export function createStreamState(): StreamState {
     intermediateMessages: [],
     failedMessages: [],
     lastSentMessageId: undefined,
+    subAgentMessageDelivered: false,
     toolUseReacted: false,
     deliveredAssistantTexts: new Set(),
   };
@@ -80,7 +82,8 @@ export function buildQueryManagers(
   subAgentManager: SubAgentMessageManager | null;
   hookManager: HookMessageManager | null;
 } {
-  const statusCapable = isStatusCapable(adapter) && showStatusMessages;
+  const adapterCapable = isStatusCapable(adapter);
+  const statusCapable = adapterCapable && showStatusMessages;
 
   const statusManager = statusCapable
     ? new StatusMessageManager(adapter, chatId, {
@@ -91,7 +94,7 @@ export function buildQueryManagers(
 
   // Reuse existing sub-agent manager if this chat already has a V2 session
   const existingSubAgentManager = sdkSessionManager.getSubAgentManager(sessionId);
-  const subAgentManager = existingSubAgentManager ?? (statusCapable ? new SubAgentMessageManager(adapter, chatId) : null);
+  const subAgentManager = existingSubAgentManager ?? (adapterCapable ? new SubAgentMessageManager(adapter, chatId) : null);
 
   const hookManager = statusCapable ? new HookMessageManager(adapter, chatId) : null;
 
@@ -254,7 +257,11 @@ export async function deliverFinalResponse(
   }
 
   // Silent failure detection: query completed but user received nothing.
-  if (state.lastSentMessageId === undefined && state.intermediateMessages.length === 0) {
+  if (
+    state.lastSentMessageId === undefined &&
+    state.intermediateMessages.length === 0 &&
+    !state.subAgentMessageDelivered
+  ) {
     srrLogger.warn(
       { sessionId, chatId, agentId, numTurns: result.numTurns, responseLength: result.response.length },
       'Silent failure detected: query completed but no messages delivered to user'

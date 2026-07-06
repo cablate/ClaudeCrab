@@ -21,7 +21,7 @@ In scope:
 
 - New operator can follow `docs/SETUP.md` from clone to local verification.
 - `npm run setup:check` validates static configuration shape.
-- `npm run setup:verify` validates local prerequisites without contacting Discord or sending messages.
+- `npm run setup:verify` validates local prerequisites without contacting Discord, sending messages, or overwriting production `dist/`.
 - `npm run discord:check` remains the explicit real Discord connectivity check.
 - Docker files describe a supported container path with explicit limits and required volumes/env.
 - Discord slash commands are not a configuration write surface for normal users; sensitive maintenance actions must pass the operator gate.
@@ -58,7 +58,8 @@ Out of scope:
 
 - `setup:check` prints `ok` / `warn` / `error` rows and exits non-zero on errors.
 - `setup:verify` prints step sections and exits non-zero on the first failed prerequisite.
-- `setup:verify` may read package metadata and create/delete a temporary DB under the OS temp directory, but must not write the production DB.
+- `setup:verify` may read package metadata, create/delete a temporary DB under the OS temp directory, and create/delete isolated TypeScript build output under `.tmp/build-check`.
+- `setup:verify` must not write the production DB or production `dist/` output.
 - `setup:verify` must not post Discord messages.
 - `discord:check` may send a test Discord message and, when `--thread` is passed, create a thread.
 - Docker build may run `npm ci`, which runs the SDK patch postinstall.
@@ -72,14 +73,14 @@ Out of scope:
 - DB verification uses a disposable path, not configured production `DB_PATH`.
 - Real credentials stay in `.env` or per-agent `.claude/settings.local.json`, never in tracked docs.
 - Per-agent provider env takes precedence in documentation for Anthropic-compatible services to avoid polluting host OAuth credentials.
-- Configuration writes primarily happen through repo files, deployment environment variables, CLI/deploy tooling, cloud platform settings, or the planned admin console. Any retained Discord maintenance shortcut must be operator-only.
+- Configuration writes primarily happen through repo files, deployment environment variables, CLI/deploy tooling, cloud platform settings, or the admin console. Any retained Discord maintenance shortcut must be operator-only.
 
 ## Acceptance Examples
 
 ```gherkin
 Given a clean checkout with dependencies installed
 When the operator runs `npm run setup:verify -- --template`
-Then setup check, example schedule check, SDK patch check, Claude CLI check, temp DB check, typecheck, and build are executed
+Then setup check, example schedule check, SDK patch check, Claude CLI check, temp DB check, typecheck, and isolated build are executed
 And no Discord message is sent
 ```
 
@@ -101,7 +102,7 @@ And missing env or agent config fails loudly instead of silently using private m
 | Contract item | Evidence |
 |---|---|
 | Template setup remains valid | `npm run setup:check -- --template` |
-| Full local verify does not require real secrets | `npm run setup:verify -- --template` |
+| Full local verify does not require real secrets or touch production `dist/` | `npm run setup:verify -- --template` |
 | SDK patch status can be checked without mutation | `node scripts/patch-sdk-v2.cjs --check` |
 | Setup doctor logic covered | `tests/setupCheck.test.ts`, setup verify tests added in WP-E |
 | Docker path syntax/build intent | `docker compose config` when Docker is available, otherwise static file review plus documented gap |

@@ -8,6 +8,7 @@
  * the sub-agent progresses through its lifecycle stages.
  */
 
+import { readFile } from 'node:fs/promises';
 import type { BaseAdapter } from '../../adapters/BaseAdapter.js';
 import { logger } from '../../utils/logger.js';
 
@@ -24,6 +25,7 @@ export interface SubAgentEvent {
   summary?: string;
   result?: string;
   error?: string;
+  outputFile?: string;
 }
 
 /** Internal record for a tracked sub-agent */
@@ -56,9 +58,9 @@ export class SubAgentMessageManager {
    * Handle a sub-agent event from the Task tool stream.
    * Creates/updates the Discord message for this sub-agent.
    */
-  async handle(event: SubAgentEvent): Promise<void> {
-    if (this.disposed) return;
-    const { toolUseId, lifecycle, summary, result, error } = event;
+  async handle(event: SubAgentEvent): Promise<boolean> {
+    if (this.disposed) return false;
+    const { toolUseId, lifecycle, summary, error } = event;
 
     let record = this.agents.get(toolUseId);
     if (!record) {
@@ -78,19 +80,30 @@ export class SubAgentMessageManager {
 
     if (summary) record.summary = summary;
 
+    const fileResult = await readTaskOutputFile(event.outputFile);
+    const result = fileResult ?? event.result;
     const content = this.formatMessage(record, lifecycle, result, error);
 
     try {
       if (record.discordMessageId) {
-        await this.adapter.editMessage(this.chatId, record.discordMessageId, content);
+        const editResult = await this.adapter.editMessage(this.chatId, record.discordMessageId, content);
+        if (editResult.success) return true;
+        const fallbackResult = await this.adapter.sendMessage(this.chatId, content);
+        if (fallbackResult.success && fallbackResult.messageId) {
+          record.discordMessageId = fallbackResult.messageId;
+        }
+        return fallbackResult.success;
       } else {
         const sendResult = await this.adapter.sendMessage(this.chatId, content);
         if (sendResult.success && sendResult.messageId) {
           record.discordMessageId = sendResult.messageId;
+          return true;
         }
+        return sendResult.success;
       }
     } catch (err) {
       mLogger.warn({ toolUseId, lifecycle, err }, 'Failed to update sub-agent Discord message');
+      return false;
     }
   }
 
@@ -150,24 +163,43 @@ export class SubAgentMessageManager {
     result?: string,
     error?: string,
   ): string {
-    const emoji = lifecycle === 'completed' ? '✅' :
-      lifecycle === 'failed' ? '❌' :
-      lifecycle === 'progress' ? '🔄' : '🚀';
+    const status = lifecycle === 'completed' ? '完成' :
+      lifecycle === 'failed' ? '失敗' :
+      lifecycle === 'progress' ? '執行中' : '已開始';
 
-    let msg = `${emoji} **Sub-Agent**`;
+    let msg = `**子代理 ${status}**`;
 
     if (record.summary) {
       msg += `\n${record.summary}`;
     }
 
     if (lifecycle === 'completed' && result) {
-      msg += `\n\`\`\`\n${result.substring(0, 500)}\n\`\`\``;
+      const rendered = result.trim();
+      if (rendered.length > 0 && rendered !== record.summary.trim()) {
+        msg += `\n\n${truncateForDiscord(rendered, 1600)}`;
+      }
     }
 
     if (lifecycle === 'failed' && error) {
-      msg += `\n⚠️ ${error.substring(0, 200)}`;
+      msg += `\n錯誤：${error.substring(0, 200)}`;
     }
 
-    return msg;
+    return truncateForDiscord(msg, 1900);
   }
+}
+
+async function readTaskOutputFile(outputFile: string | undefined): Promise<string | undefined> {
+  if (!outputFile) return undefined;
+  try {
+    const content = await readFile(outputFile, 'utf-8');
+    return content.trim().length > 0 ? content : undefined;
+  } catch (err) {
+    mLogger.debug({ outputFile, err }, 'Task output file could not be read');
+    return undefined;
+  }
+}
+
+function truncateForDiscord(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 20)}\n...（已截斷）`;
 }

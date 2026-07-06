@@ -1,6 +1,7 @@
 import type { SDKMessage } from '../../types/sdk.js';
 import type { ExecuteQueryOptions } from './types.js';
 import { extractAssistantText } from './StreamHelpers.js';
+import { extractSubAgentEvent } from './SubAgentEventParser.js';
 import type { ManagedSession } from '../session/SDKSessionTypes.js';
 import { getCachedQueryIterator } from '../session/SDKSessionInternals.js';
 import { logger } from '../../utils/logger.js';
@@ -59,6 +60,12 @@ export async function drainPostResultMessages(params: {
     quietDeadline = Date.now() + POST_RESULT_DRAIN_QUIET_MS;
 
     const drainText = extractAssistantText(drainMsg);
+    const subAgentEvent = extractSubAgentEvent(drainMsg);
+    if (subAgentEvent && options.onSubAgentEvent) {
+      await options.onSubAgentEvent(subAgentEvent);
+      incrementIntermediateCount();
+    }
+
     if (drainText.length > 0) {
       if (options.onIntermediateMessage) {
         await options.onIntermediateMessage(drainText);

@@ -39,6 +39,8 @@ type SystemStreamMessage = SDKMessage & {
   type: 'system';
   subtype?: string;
   session_id?: string;
+  status?: unknown;
+  error?: unknown;
   hook_event?: unknown;
   hook_name?: unknown;
   outcome?: unknown;
@@ -47,9 +49,7 @@ type SystemStreamMessage = SDKMessage & {
   attempt?: unknown;
   max_retries?: unknown;
   delay_ms?: unknown;
-  status?: unknown;
   memory_paths?: unknown;
-  error?: unknown;
 };
 
 type RateLimitStreamMessage = SDKMessage & {

@@ -3,7 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { getBundledCliCandidates, runClaudeCliCheck, runTempDatabaseCheck } from '../scripts/setup-verify.ts';
+import {
+  getBundledCliCandidates,
+  runClaudeCliCheck,
+  runIsolatedBuildCheck,
+  runTempDatabaseCheck,
+} from '../scripts/setup-verify.ts';
 
 const tempRoots: string[] = [];
 
@@ -48,4 +53,11 @@ describe('setup-verify helpers', () => {
     expect(existsSync(dbPath)).toBe(false);
     expect(existsSync(path.dirname(dbPath))).toBe(false);
   });
+
+  it('runs build verification without writing dist output', () => {
+    runIsolatedBuildCheck(process.cwd());
+
+    expect(existsSync(path.join(process.cwd(), '.tmp', 'build-check'))).toBe(false);
+    expect(existsSync(path.join(process.cwd(), '.tmp', 'build-check.tsbuildinfo'))).toBe(false);
+  }, 30_000);
 });

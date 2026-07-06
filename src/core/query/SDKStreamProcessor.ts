@@ -20,6 +20,7 @@ import {
   handleSystemMessage,
   type PerTurnUsageSample,
 } from './SDKStreamEventHandlers.js';
+import { extractSubAgentEvent } from './SubAgentEventParser.js';
 import { drainPostResultMessages } from './SDKStreamDrain.js';
 import type { ManagedSession } from '../session/SDKSessionTypes.js';
 import type { RateLimitRepository } from '../../persistence/RateLimitRepository.js';
@@ -45,6 +46,7 @@ export async function processStream(
   let numTurns = 0;
   let durationMs = 0;
   let intermediateCount = 0;
+  let subAgentEventCount = 0;
   let usage: QueryUsage | undefined;
   let totalCostUsd: number | undefined;
   let modelUsage: Record<string, QueryModelUsage> | undefined;
@@ -117,6 +119,12 @@ export async function processStream(
     if (!streamReady && message.type !== 'system') {
       logger.debug({ sessionId, msgIndex: streamMsgIndex - 1, msgType: message.type, elapsed }, 'Skipping stale replay message');
       continue;
+    }
+
+    const subAgentEvent = extractSubAgentEvent(message);
+    if (streamReady && subAgentEvent && options.onSubAgentEvent) {
+      await options.onSubAgentEvent(subAgentEvent);
+      subAgentEventCount++;
     }
 
     const messageText = extractAssistantText(message);
@@ -250,7 +258,7 @@ export async function processStream(
     sdkSessionId: managed.sdkSessionId,
     numTurns,
     durationMs,
-    intermediateMessageCount: intermediateCount,
+    intermediateMessageCount: intermediateCount + subAgentEventCount,
   };
   if (usage) queryResult.usage = usage;
   if (managed.lastTurnContextTokens !== undefined) queryResult.contextTokens = managed.lastTurnContextTokens;
