@@ -4,7 +4,7 @@
 
 ## 專案是什麼
 
-基於 `@anthropic-ai/claude-agent-sdk` 的多代理 Discord/Telegram bot 框架，跑在 Windows 上。核心概念「目錄即代理」：`agents/` 每個子目錄是獨立的 Claude Code 專案。Production 由 Task Scheduler + VBS + `start.ts` supervisor 啟動，不綁 terminal session。
+基於 `@anthropic-ai/claude-agent-sdk` 的 Discord-first 多代理 bot 框架，跑在 Windows 上。核心概念「目錄即代理」：`agents/` 每個子目錄是獨立的 Claude Code 專案。Production 由 Task Scheduler + VBS + `start.ts` supervisor 啟動，不綁 terminal session。
 
 ## 硬規則（違反即重做，無例外）
 
