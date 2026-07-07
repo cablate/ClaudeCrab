@@ -9,8 +9,6 @@
  *   - V2 session creation via unstable_v2_createSession / unstable_v2_resumeSession
  */
 
-import { stat } from 'node:fs/promises';
-import path from 'node:path';
 import {
   unstable_v2_createSession,
   unstable_v2_resumeSession,
@@ -20,27 +18,10 @@ import type { ExecuteQueryOptions } from '../query/types.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
 import { HOOK_DEFS } from '../hooks/definitions.js';
-import { extractHookAgentContext, extractHookReadInput } from '../hooks/payload.js';
 import type { ManagedSession, ExtendedSessionOptions } from './SDKSessionTypes.js';
 import { buildSessionOptions } from './SDKSessionOptions.js';
 
 export type { ManagedSession, ExtendedSessionOptions };
-
-function createPreToolDeny(permissionDecisionReason: string, additionalContext?: string) {
-  return {
-    continue: true,
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse' as const,
-      permissionDecision: 'deny' as const,
-      permissionDecisionReason,
-      ...(additionalContext !== undefined ? { additionalContext } : {}),
-    },
-  };
-}
-
-function formatKiB(bytes: number): string {
-  return `${Math.ceil(bytes / 1024)}KB`;
-}
 
 function mergeHookConfig(
   base: Record<string, unknown>,
@@ -57,35 +38,27 @@ function mergeHookConfig(
   return merged;
 }
 
-async function evaluateLargeReadPreflight(
-  input: unknown,
-  cwd: string,
-): Promise<{ readonly message: string; readonly reason: string } | undefined> {
-  const config = HOOK_DEFS.contextEconomy.largeReadPreflight;
-  if (!config.enabled) return undefined;
-
-  const readInput = extractHookReadInput(input);
-  if (readInput.filePath === undefined || readInput.bounded) return undefined;
-
-  const absolutePath = path.isAbsolute(readInput.filePath)
-    ? readInput.filePath
-    : path.resolve(cwd, readInput.filePath);
-
-  let fileStat;
-  try {
-    fileStat = await stat(absolutePath);
-  } catch {
-    return undefined;
+function providerDiagnostics(sessionOptions: ExtendedSessionOptions): Record<string, unknown> {
+  const env = sessionOptions.env ?? {};
+  const baseUrl = env.ANTHROPIC_BASE_URL;
+  let baseUrlHost: string | undefined;
+  if (typeof baseUrl === 'string' && baseUrl.trim().length > 0) {
+    try {
+      baseUrlHost = new URL(baseUrl).host;
+    } catch {
+      baseUrlHost = '<invalid-url>';
+    }
   }
 
-  if (!fileStat.isFile() || fileStat.size <= config.maxUnboundedBytes) {
-    return undefined;
-  }
-
-  const message = `${config.message}: ${formatKiB(fileStat.size)} > ${formatKiB(config.maxUnboundedBytes)}`;
-  const reason = `Large unbounded Read blocked: ${formatKiB(fileStat.size)} file exceeds ${formatKiB(config.maxUnboundedBytes)} preflight limit. Use offset/limit or Grep first.`;
-
-  return { message, reason };
+  return {
+    hasAnthropicApiKey: typeof env.ANTHROPIC_API_KEY === 'string' && env.ANTHROPIC_API_KEY.length > 0,
+    hasAnthropicAuthToken: typeof env.ANTHROPIC_AUTH_TOKEN === 'string' && env.ANTHROPIC_AUTH_TOKEN.length > 0,
+    hasAnthropicBaseUrl: typeof baseUrl === 'string' && baseUrl.length > 0,
+    ...(baseUrlHost !== undefined ? { anthropicBaseUrlHost: baseUrlHost } : {}),
+    ...(typeof env.CLAUDE_CONFIG_DIR === 'string' && env.CLAUDE_CONFIG_DIR.length > 0
+      ? { claudeConfigDir: env.CLAUDE_CONFIG_DIR }
+      : {}),
+  };
 }
 
 /**
@@ -114,7 +87,7 @@ export async function createManagedSession(
     session: null as unknown as ManagedSession['session'],
     sdkSessionId: resumeSessionId ?? '',
     agentId: agent.id,
-    model: sessionOptions.model,
+    model: sessionOptions.model ?? 'claude-code-settings',
     cwd: options.cwd,
     ...(options.runtimeContext !== undefined ? { runtimeContext: options.runtimeContext } : {}),
     createdAt: Date.now(),
@@ -128,49 +101,6 @@ export async function createManagedSession(
 
   // Hooks close over `managed` (session-scoped mutable state)
   const builtInHooks: Record<string, unknown> = {
-    PreToolUse: [
-      {
-        matcher: 'Read',
-        hooks: [async (input: unknown) => {
-          const agentContext = extractHookAgentContext(input);
-          if (agentContext.isSubagent) return { continue: true };
-          const largeReadPreflight = await evaluateLargeReadPreflight(input, options.cwd);
-          if (largeReadPreflight !== undefined) {
-            logger.warn(
-              {
-                sessionId,
-                event_type: EventType.CONTEXT_ECONOMY_BLOCK,
-                toolName: 'Read',
-                reason: largeReadPreflight.reason,
-              },
-              'Context economy denied large unbounded Read'
-            );
-            return createPreToolDeny(largeReadPreflight.reason);
-          }
-          return { continue: true };
-        }],
-      },
-      ...(HOOK_DEFS.contextEconomy.mainContextBlockedTools.enabled
-        ? HOOK_DEFS.contextEconomy.mainContextBlockedTools.tools.map((toolName) => ({
-            matcher: toolName,
-            hooks: [(input: unknown) => {
-              const agentContext = extractHookAgentContext(input);
-              if (agentContext.isSubagent) return Promise.resolve({ continue: true });
-              logger.warn(
-                {
-                  sessionId,
-                  event_type: EventType.CONTEXT_ECONOMY_BLOCK,
-                  toolName,
-                },
-                'Context economy denied main-context web tool'
-              );
-              return Promise.resolve(createPreToolDeny(
-                `Main-context ${toolName} is blocked by Context Economy. Delegate broad web/source discovery to Agent with subagent_type="scout".`,
-              ));
-            }],
-          }))
-        : []),
-    ],
     PreCompact: [{
       matcher: '',
       hooks: [(input: unknown) => {
@@ -273,6 +203,7 @@ export async function createManagedSession(
             definition.model ?? 'inherit',
           ]),
         ),
+        provider: providerDiagnostics(sessionOptions),
         hasMcpServers: sessionOptions.mcpServers ? Object.keys(sessionOptions.mcpServers).length : 0,
       },
     },

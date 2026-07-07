@@ -16,10 +16,8 @@ import { SessionManager } from '../session/SessionManager.js';
 import type { QueryResult } from './types.js';
 import { SDKSessionManager } from '../session/SDKSessionManager.js';
 import { InteractionHandler } from '../interaction/InteractionHandler.js';
-import { decoratePromptWithConfiguredDecorations, getPromptDecorationDecision } from './PromptDecorator.js';
 import { deliverUsageSummary } from './UsageCardFormatter.js';
 import { logger } from '../../utils/logger.js';
-import { EventType } from '../../utils/events.js';
 import { ProcessingError } from '../../types/errors.js';
 import { executeSdkQueryWithRetry } from './QuerySdkRunner.js';
 import { buildMcpSetup } from '../../McpToolSetup.js';
@@ -182,27 +180,7 @@ export async function executeQueryWithSDK(
   const interactionHandler = new InteractionHandler(adapter, chatId, 120_000);
   const canUseTool = interactionHandler.buildCanUseTool();
 
-  const promptDecoration = getPromptDecorationDecision(prompt);
-  const sdkPrompt = decoratePromptWithConfiguredDecorations(prompt);
-  const promptDecorationApplied = sdkPrompt !== prompt;
-  qeLogger.info(
-    {
-      event_type: EventType.PROMPT_DECORATION,
-      sessionId,
-      agentId,
-      chatId,
-      userId,
-      applied: promptDecorationApplied,
-      shouldDecorate: promptDecoration.shouldDecorate,
-      skipReason: promptDecoration.reason,
-      promptLength: promptDecoration.promptLength,
-      originalPromptLength: prompt.length,
-      decoratedPromptLength: sdkPrompt.length,
-      decorationKeys: promptDecoration.keys,
-      decorationTags: promptDecoration.tagNames,
-    },
-    promptDecorationApplied ? 'Query prompt decoration applied' : 'Query prompt decoration skipped'
-  );
+  const sdkPrompt = prompt;
 
   // Build MCP tool configuration for this query
   const mcpCtx: import('../../McpToolSetup.js').McpSetupContext = {
@@ -260,9 +238,6 @@ export async function executeQueryWithSDK(
       resumeId,
       continuationState: internalSession.continuationState ?? undefined,
       runtimeContext,
-      ...(agent.config.settings?.maxTurns !== undefined
-        ? { maxTurns: agent.config.settings.maxTurns }
-        : {}),
       mcpServers,
       allowedTools,
       canUseTool,

@@ -125,10 +125,8 @@ export const EventType = {
   SCHEDULE_WATCHER_ERROR: 'schedule.watcher_error',
 
   // context_economy.* - main-context tool guardrails (deny blocks)
-  CONTEXT_ECONOMY_BLOCK: 'context_economy.block',
 
   // prompt.* - runtime prompt mutation/decoration observability
-  PROMPT_DECORATION: 'prompt.decoration',
 
   // adapter.discord.* - Discord service events (reuse adapter.* prefix)
   ADAPTER_DISCORD_DASHBOARD_STARTED: 'adapter.discord_dashboard_started',

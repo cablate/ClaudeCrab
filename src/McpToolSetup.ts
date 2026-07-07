@@ -9,10 +9,6 @@ import {
   createSendFileMcpServer,
   getSendFileToolNames,
 } from './tools/sendFileTool.js';
-import {
-  createValidatorMcpServer,
-  getValidatorToolNames,
-} from './tools/validatorTool.js';
 import type { BaseAdapter } from './adapters/BaseAdapter.js';
 
 export interface McpSetupContext {
@@ -31,8 +27,7 @@ export interface McpSetupContext {
 export interface McpSetupResult {
   mcpServers: Record<
     string,
-    | ReturnType<typeof createSendFileMcpServer>
-    | ReturnType<typeof createValidatorMcpServer>
+    ReturnType<typeof createSendFileMcpServer>
   >;
   allowedTools: string[];
 }
@@ -51,11 +46,6 @@ export function buildMcpSetup(
   const sendFileServer = createSendFileMcpServer(adapter, ctx.chatId);
   mcpServers['file-send'] = sendFileServer;
   allowedTools.push(...getSendFileToolNames());
-
-  // Workspace validation (always available; read-only governance tool)
-  const validatorServer = createValidatorMcpServer();
-  mcpServers['validator'] = validatorServer;
-  allowedTools.push(...getValidatorToolNames());
 
   return { mcpServers, allowedTools };
 }

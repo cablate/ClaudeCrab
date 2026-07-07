@@ -5,9 +5,7 @@
  * - System-level Discord adapter (main bot, not per-agent)
  * - Slash command registration
  * - InteractionHandler for button/command routing
- * - DiscordDashboard
- * - DiscordCostReport (daily cron)
- * - DiscordCacheAnomalyReport (daily cron)
+ * - Optional Discord ops services (dashboard, cost report, cache anomaly report)
  */
 
 import { DiscordAdapter } from '../DiscordAdapter.js';
@@ -90,7 +88,7 @@ export async function initializeDiscordServices(
     return null;
   }
 
-  const result: DiscordServices = { systemAdapter: discordAdapter, ops: {} };
+  const result: DiscordServices = { systemAdapter: discordAdapter, ops: { stop: () => {} } };
 
   logger.info('Initializing Discord services...');
 

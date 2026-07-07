@@ -259,15 +259,6 @@ export const ADMIN_HTML = `<!doctype html>
         select.value = field.value === true ? 'true' : field.value === false ? 'false' : '';
         return select;
       }
-      if (field.type === 'permissionMode') {
-        const select = document.createElement('select');
-        appendOption(select, '', '不設定');
-        for (const value of ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']) {
-          appendOption(select, value, value);
-        }
-        select.value = String(field.value || '');
-        return select;
-      }
       const input = document.createElement('input');
       input.type = field.secret ? 'password' : field.type === 'number' ? 'number' : 'text';
       input.value = field.secret ? '' : String(field.value ?? '');

@@ -1,6 +1,6 @@
 # ClaudeCab Architecture
 
-Last updated: 2026-06-19
+Last updated: 2026-07-06
 
 This document is the current architecture entry point. Legacy planning notes that mentioned removed systems are intentionally excluded from the public repository.
 
@@ -12,12 +12,17 @@ The live product surface is:
 
 - Discord agent bots loaded from `AGENTS_DIR`.
 - Claude Agent SDK V2 persistent sessions.
-- Discord slash commands and operational dashboards.
+- Discord slash commands.
 - YAML schedules that can continue in Discord threads.
 - SQLite persistence for sessions, conversations, query metrics, rate-limit snapshots, and schedule executions.
-- Prompt-cache keepalive, context telemetry, cost reporting, and cache anomaly diagnostics.
-- Built-in MCP tools for file sending and workspace validation.
+- Prompt-cache keepalive and context telemetry.
+- Built-in MCP file sending back to Discord.
 - Disabled-by-default operator admin console for setup, config, validation, and restart.
+
+Optional operator surfaces:
+
+- Discord ops diagnostics: dashboard, cost report, and cache anomaly report.
+- Speech-to-text and local sound notifications.
 
 Not current product surfaces:
 
@@ -25,6 +30,7 @@ Not current product surfaces:
 - Public WebUI.
 - Autonomous social or initiative routing.
 - Old BudgetService, TaskService, TTSService, ActivityReporter, or task-sync services.
+- Legacy policy injection and prompt decoration layers.
 
 ## Runtime Layout
 
@@ -68,7 +74,7 @@ flowchart TD
 2. `DiscordMessageHandler` converts it to a unified message.
 3. `MessageProcessor` creates correlation context and calls `ConversationPipeline`.
 4. `ConversationPipeline` handles deduplication, session creation, per-session locking, session guard, and state transitions.
-5. `QueryExecutor` builds prompt decoration, MCP tools, interaction bridges, SDK options, usage reporting, persistence, and final delivery.
+5. `QueryExecutor` builds MCP tools, interaction bridges, SDK options, usage reporting, persistence, and final delivery.
 6. `SDKSessionManager` executes through a persistent Claude SDK session.
 7. `SDKStreamProcessor` consumes SDK stream events and routes assistant text, tool events, hook events, sub-agent events, usage, and context telemetry.
 
@@ -89,10 +95,9 @@ Live profiles are external:
 - `AGENTS_DIR/<agent-id>/.claude/settings.local.json`
 - `AGENTS_DIR/<agent-id>/.mcp.json`
 - `AGENTS_DIR/<agent-id>/schedules/*.yaml`
-- `AGENTS_DIR/_foundation/...`
 - `CLAUDECAB_LOCAL_CONFIG_PATH` (default `./data/claudecab.local.json`) for admin-console global overrides.
 
-Foundation runtime assets resolve through `AGENTS_DIR/_foundation`, not repo-local `agents/_foundation`.
+Directories whose names start with `_` are treated as disabled/template agent directories and are not loaded.
 
 ## Complexity Hotspots
 
@@ -101,16 +106,15 @@ The largest and riskiest modules are:
 - `src/core/query/QueryExecutor.ts`: cross-cutting query orchestration.
 - `src/core/query/SDKStreamProcessor.ts`: SDK stream parsing mixed with side effects.
 - `src/adapters/DiscordAdapter.ts`: broad Discord facade.
-- `src/core/orchestrator/AgentLoader.ts`: profile, workspace, prompt, MCP, and runtime asset loading.
+- `src/core/orchestrator/AgentLoader.ts`: profile, workspace, prompt, hooks, and MCP loading.
 
 Refactor these only after characterization tests are in place.
 
 Current characterization coverage started on 2026-06-19:
 
-- Foundation runtime asset resolution from `AGENTS_DIR/_foundation`.
 - `AgentLoader` scan/load behavior.
 - `ScheduleLoader` schema and canonical ID behavior.
-- Built-in MCP setup for file-send and validator tools.
+- Built-in MCP setup for the file-send tool.
 - `SessionGuard` prompt decisions and repeated length-guard suppression.
 
 ## Quality Commands

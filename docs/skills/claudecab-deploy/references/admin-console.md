@@ -1,8 +1,8 @@
 # ClaudeCab Admin Console
 
-The admin console is a minimal operator surface. It is not a public dashboard and not a Discord user feature.
+Admin console 是最小 operator 後台，不是公開 dashboard，也不是 Discord 使用者功能。
 
-## Enable
+## 啟用
 
 ```env
 ADMIN_CONSOLE_ENABLED=true
@@ -18,27 +18,27 @@ Open:
 http://127.0.0.1:47824
 ```
 
-## What It Can Do
+## 可做的事
 
-- Read masked global config.
-- Write allowlisted global overrides to `data/claudecab.local.json`.
-- Read/write allowlisted `agent.json` fields.
-- Read/write allowlisted `.claude/settings.local.json` model and provider env fields.
-- Run setup check / setup verify.
-- Request restart after build check.
+- 讀取遮罩後的全域設定。
+- 寫入 allowlist 內的全域覆寫到 `data/claudecab.local.json`。
+- 讀寫 allowlist 內的 `agent.json` 欄位。
+- 讀寫 allowlist 內的 `.claude/settings.local.json` model/provider env。
+- 執行 setup check / setup verify。
+- build check 通過後 request restart。
 
-## Safety
+## 安全規則
 
-- API requires `Authorization: Bearer <ADMIN_CONSOLE_TOKEN>`.
-- Secret fields are never returned in clear text.
-- Unknown fields are rejected.
-- Agent path traversal is rejected.
-- Default host is localhost.
+- API 需要 `Authorization: Bearer <ADMIN_CONSOLE_TOKEN>`。
+- secret 欄位不回傳明文。
+- unknown fields 會被拒絕。
+- agent path traversal 會被拒絕。
+- 預設只綁 localhost。
 
-## Docker / Cloud Notes
+## Docker / Cloud 注意事項
 
-Container and cloud env variables usually cannot be permanently edited from inside the running process. For runtime-adjustable global values, the console writes `CLAUDECAB_LOCAL_CONFIG_PATH`.
+Container 與 cloud env 通常不能從 running process 內永久改寫。需要 runtime 可調整的全域值時，admin console 會寫入 `CLAUDECAB_LOCAL_CONFIG_PATH`。
 
-Mount `./data:/app/data` or equivalent so `claudecab.local.json` survives restarts.
+請掛載 `./data:/app/data` 或等效 volume，讓 `claudecab.local.json` 重啟後仍存在。
 
-If the platform injects the same env var at every boot, local overlay wins inside ClaudeCab because `src/config.ts` merges the local overlay after environment values.
+如果平台每次啟動都注入同名 env，ClaudeCab 內部會以 local overlay 為準，因為 `src/config.ts` 會在 env 之後合併 local overlay。

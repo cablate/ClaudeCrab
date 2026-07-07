@@ -12,7 +12,6 @@ async function createRoot(): Promise<string> {
   await mkdir(path.join(root, 'agents', 'example', '.claude'), { recursive: true });
   await writeFile(path.join(root, 'agents', 'example', 'agent.json'), JSON.stringify({
     name: 'Example',
-    model: 'sonnet',
     discordBotToken: 'old-agent-token',
     discordChannelId: '123456789012345678',
   }, null, 2), 'utf-8');
@@ -164,7 +163,8 @@ describe('AdminConfigService', () => {
 
     expect(result.sessionCloseRecommended).toBe(true);
     expect(agent.name).toBe('Updated');
-    expect(agent.model).toBe('sonnet');
+    expect(agent).not.toHaveProperty('model');
+    expect(agent).not.toHaveProperty('settings');
     expect(settings.model).toBe('glm-5.2[1m]');
     expect(settings.env?.ANTHROPIC_BASE_URL).toBe('https://provider.example.com');
     expect(settings.env?.ANTHROPIC_API_KEY).toBe('agent-secret');

@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { CLAUDE_CONTEXT_WINDOW_TOKENS, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
 import { restoreContextFromJsonl } from '../../../core/session/SDKContextRestore.js';
+import { readAgentRuntimeModel } from '../../commands/index.js';
 
 export async function handleCtx(
   interaction: ChatInputCommandInteraction,
@@ -29,7 +30,7 @@ export async function handleCtx(
     await interaction.reply({ content: '❌ Agent 不存在', ephemeral: true }); return;
   }
   const agentName = agent.config.name || agentId;
-  const model = agent.config.model ?? 'sonnet';
+  const model = await readAgentRuntimeModel(agent) ?? 'Claude Code settings';
   const ctxLimits: Record<string, number> = { opus: CLAUDE_CONTEXT_WINDOW_TOKENS, sonnet: CLAUDE_CONTEXT_WINDOW_TOKENS, haiku: CLAUDE_CONTEXT_WINDOW_TOKENS };
   const ctxLimit = ctxLimits[model] ?? CLAUDE_CONTEXT_WINDOW_TOKENS;
 

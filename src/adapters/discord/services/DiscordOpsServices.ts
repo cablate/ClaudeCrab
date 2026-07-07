@@ -24,33 +24,40 @@ export interface DiscordOpsDeps {
 }
 
 export interface DiscordOpsServices {
-  dashboardService?: DiscordDashboard;
-  costReportTimer?: ReturnType<typeof setInterval>;
-  cacheAnomalyReportTimer?: ReturnType<typeof setInterval>;
+  stop(): void;
 }
 
 export async function initializeDiscordOpsServices(deps: DiscordOpsDeps): Promise<DiscordOpsServices> {
-  const result: DiscordOpsServices = {};
+  const stopCallbacks: Array<() => void> = [];
 
   const dashboard = await startDashboard(deps).catch((error) => {
     logger.error({ error }, 'Dashboard service failed to start');
     return undefined;
   });
   if (dashboard !== undefined) {
-    result.dashboardService = dashboard;
+    stopCallbacks.push(() => {
+      dashboard.stop();
+      logger.info('Dashboard service stopped');
+    });
   }
 
   const costReportTimer = startCostReportTimer(deps);
   if (costReportTimer !== undefined) {
-    result.costReportTimer = costReportTimer;
+    stopCallbacks.push(() => clearInterval(costReportTimer));
   }
 
   const cacheAnomalyReportTimer = startCacheAnomalyReportTimer(deps);
   if (cacheAnomalyReportTimer !== undefined) {
-    result.cacheAnomalyReportTimer = cacheAnomalyReportTimer;
+    stopCallbacks.push(() => clearInterval(cacheAnomalyReportTimer));
   }
 
-  return result;
+  return {
+    stop() {
+      for (const stop of stopCallbacks.splice(0)) {
+        stop();
+      }
+    },
+  };
 }
 
 async function startDashboard(deps: DiscordOpsDeps): Promise<DiscordDashboard | undefined> {

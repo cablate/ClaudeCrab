@@ -34,7 +34,7 @@ class FakeAdapter extends BaseAdapter {
 }
 
 describe('buildMcpSetup', () => {
-  it('wires the built-in MCP servers and allowed tool names', () => {
+  it('wires only the core file-send MCP server', () => {
     const adapter = new FakeAdapter({ platform: 'discord', agentId: 'coder' });
 
     const setup = buildMcpSetup(adapter, {
@@ -44,10 +44,9 @@ describe('buildMcpSetup', () => {
       platform: 'discord',
     });
 
-    expect(Object.keys(setup.mcpServers).sort()).toEqual(['file-send', 'validator']);
+    expect(Object.keys(setup.mcpServers).sort()).toEqual(['file-send']);
     expect(setup.allowedTools).toEqual([
       'send_file',
-      'mcp__validator__run_agent_workspace_validation',
     ]);
   });
 });

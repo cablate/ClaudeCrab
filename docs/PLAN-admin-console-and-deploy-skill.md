@@ -27,8 +27,8 @@ ClaudeCab 要能安全交給第三方 Discord 使用者使用。Discord 對話�
 ### Config plane
 
 - `.env`、雲端 env、`data/claudecab.local.json`：全域 runtime、主 Bot、DB、schedule、session、cache。
-- `agents/<id>/agent.json`：agent 名稱、Discord token/channel、預設模型、permission mode。
-- `agents/<id>/.claude/settings.local.json`：Claude Code/agent-sdk 實際 provider/model/env。
+- `agents/<id>/agent.json`：agent 名稱、描述、Discord token/channel、display metadata；不放 model/provider/permission/runtime 設定。
+- `agents/<id>/.claude/settings.local.json`：Claude Code/agent-sdk 實際 provider/model/env/permissions。
 - `agents/<id>/schedules/*.yaml`：schedule workflow，已支援 watch reload。
 
 ### Setup support
@@ -101,7 +101,7 @@ ClaudeCab 要能安全交給第三方 Discord 使用者使用。Discord 對話�
    - admin console bind/auth 狀態
 
 3. Agents
-   - `agent.json` 常用欄位
+   - `agent.json` 的名稱、描述、Discord token/channel
    - `.claude/settings.local.json` provider/model/env 常用欄位
    - token/key 欄位 masked
    - agent-level validation
@@ -120,7 +120,7 @@ ClaudeCab 要能安全交給第三方 Discord 使用者使用。Discord 對話�
 |---|---:|---|
 | `schedules/*.yaml` | 是 | 已 watch reload |
 | `/model [agent] [to]` | 部分 | 寫入 agent `.claude/settings.local.json` 後 reload agent config；既有 SDK session 可能要 close 後才完整生效 |
-| `agent.json` display/name/model | 部分 | reload agent config；已啟動 Bot token/channel 變更建議重啟 |
+| `agent.json` display/name/channel/token | 部分 | reload agent config；已啟動 Bot token/channel 變更建議重啟 |
 | Agent Discord token/channel | 否 | 建議重啟或後續做 explicit agent restart |
 | `.env` / cloud env / local config overlay | 否 | 重啟 |
 | DB path / main bot token / guild/client id | 否 | 重啟 |
@@ -199,7 +199,7 @@ Troubleshooting 必含：
 ### ADM-D: Config editing allowlist
 
 - 支援安全讀寫 runtime local config overlay 的 allowlist。
-- 支援 `agent.json` 常用欄位。
+- 支援 `agent.json` 的名稱、描述、Discord token/channel。
 - 支援 `.claude/settings.local.json` provider/model/env。
 - 所有 secret masked。
 - 已完成。

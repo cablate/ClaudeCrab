@@ -48,7 +48,6 @@ async function writeBaseProject(root: string, overrides: {
 
   await writeJson(path.join(root, 'agents', 'example', 'agent.json'), {
     name: 'Example',
-    model: 'sonnet',
     discordBotToken: 'agent.real.token',
     discordChannelId: '323456789012345678',
     ...(overrides.agent ?? {}),
@@ -98,6 +97,20 @@ describe('setup-check', () => {
 
     expect(result.errorCount).toBe(0);
     expect(result.warningCount).toBeGreaterThan(0);
+  });
+
+  it('rejects legacy agent.json model settings', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root, {
+      agent: {
+        model: 'sonnet',
+      },
+    });
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.errorCount).toBeGreaterThan(0);
+    expect(result.checks.some((check) => check.area === 'agent.json' && check.message.includes('model belongs in .claude/settings.local.json'))).toBe(true);
   });
 
   it('rejects shared main bot and agent bot tokens', async () => {
@@ -231,7 +244,7 @@ describe('setup-check', () => {
         '',
       ].join('\n'),
       settings: {
-        model: 'sonnet',
+        model: 'deepseek-v4-flash[1m]',
         env: {
           ANTHROPIC_API_KEY: 'provider-key',
           ANTHROPIC_BASE_URL: 'https://proxy.example.com',
@@ -242,10 +255,37 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBe(0);
-    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('CLAUDE_CONFIG_DIR'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('Claude Code will read it'))).toBe(true);
   });
 
-  it('rejects agent-level proxy base URL without an API key', async () => {
+  it('accepts agent-level auth token provider credentials', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root, {
+      env: [
+        'DISCORD_ENABLED=true',
+        'DISCORD_MAIN_BOT_TOKEN=main.real.token',
+        'DISCORD_MAIN_BOT_CLIENT_ID=123456789012345678',
+        'DISCORD_GUILD_ID=223456789012345678',
+        'AGENTS_DIR=./agents',
+        'ANTHROPIC_API_KEY=',
+        '',
+      ].join('\n'),
+      settings: {
+        model: 'glm-5.2[1m]',
+        env: {
+          ANTHROPIC_AUTH_TOKEN: 'provider-auth-secret',
+          ANTHROPIC_BASE_URL: 'https://proxy.example.com',
+        },
+      },
+    });
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.errorCount).toBe(0);
+    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('ANTHROPIC_AUTH_TOKEN'))).toBe(true);
+  });
+
+  it('rejects agent-level proxy base URL without a credential', async () => {
     const root = await createTempRoot();
     await writeBaseProject(root, {
       env: [
@@ -268,6 +308,6 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('agent env has no ANTHROPIC_API_KEY'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN'))).toBe(true);
   });
 });

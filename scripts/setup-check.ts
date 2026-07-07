@@ -34,7 +34,16 @@ const PLACEHOLDER_PATTERNS = [
 ];
 
 const DISCORD_TOKEN_HINT = /[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}/;
-const SUPPORTED_MODELS = ['sonnet', 'opus', 'haiku'];
+const AGENT_JSON_RUNTIME_FIELDS = [
+  'model',
+  'allowedTools',
+  'disallowedTools',
+  'systemPrompt',
+  'systemPromptFile',
+  'maxTokens',
+  'maxThinkingTokens',
+  'settings',
+];
 
 export function runSetupCheck(options: SetupCheckOptions = {}): SetupCheckResult {
   const args = options.args ?? [];
@@ -160,12 +169,13 @@ function checkAgentConfig(
   requireJsonString(agentConfig, 'discordChannelId', checks, 'agent.json', isDiscordId, templateMode);
   checkDiscordBotSeparation(env, agentConfig, checks, templateMode);
 
-  if (typeof agentConfig.model === 'string') {
-    if (!SUPPORTED_MODELS.includes(agentConfig.model)) {
-      checks.push({ level: 'error', area: 'agent.json', message: `model must be one of: ${SUPPORTED_MODELS.join(', ')}.` });
-    }
-  } else {
-    checks.push({ level: 'warn', area: 'agent.json', message: 'model is not set; runtime defaults will apply.' });
+  for (const field of AGENT_JSON_RUNTIME_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(agentConfig, field)) continue;
+    checks.push({
+      level: 'error',
+      area: 'agent.json',
+      message: `${field} belongs in .claude/settings.local.json or the dedicated runtime config. Remove agent.json ${field} to avoid conflicting runtime settings.`,
+    });
   }
 }
 
@@ -174,8 +184,8 @@ function checkClaudeSettings(settings: Record<string, unknown>, checks: Check[])
   if (envValue !== undefined && (typeof envValue !== 'object' || envValue === null || Array.isArray(envValue))) {
     checks.push({ level: 'error', area: '.claude/settings.local.json', message: 'env must be an object.' });
   }
-  if (typeof settings.model === 'string' && !SUPPORTED_MODELS.includes(settings.model)) {
-    checks.push({ level: 'error', area: '.claude/settings.local.json', message: `model must be one of: ${SUPPORTED_MODELS.join(', ')}.` });
+  if (settings.model !== undefined && (typeof settings.model !== 'string' || settings.model.trim() === '')) {
+    checks.push({ level: 'error', area: '.claude/settings.local.json', message: 'model must be a non-empty string when set.' });
   }
 }
 
@@ -413,19 +423,28 @@ function checkAuthMode(
     ? settings.env as Record<string, unknown>
     : {};
   const agentApiKey = typeof agentEnv.ANTHROPIC_API_KEY === 'string' ? agentEnv.ANTHROPIC_API_KEY : '';
+  const agentAuthToken = typeof agentEnv.ANTHROPIC_AUTH_TOKEN === 'string' ? agentEnv.ANTHROPIC_AUTH_TOKEN : '';
   const agentBaseUrl = typeof agentEnv.ANTHROPIC_BASE_URL === 'string' ? agentEnv.ANTHROPIC_BASE_URL : '';
 
-  if (!isPlaceholder(agentApiKey)) {
+  if (!isPlaceholder(agentApiKey) || !isPlaceholder(agentAuthToken)) {
+    const credentialName = !isPlaceholder(agentApiKey) ? 'ANTHROPIC_API_KEY' : 'ANTHROPIC_AUTH_TOKEN';
     checks.push({
       level: 'ok',
       area: 'auth',
-      message: 'Agent-level ANTHROPIC_API_KEY is set; ClaudeCab will redirect CLAUDE_CONFIG_DIR for this agent.',
+      message: `Agent-level ${credentialName} is set; Claude Code will read it from this agent settings file.`,
     });
     if (isPlaceholder(agentBaseUrl)) {
       checks.push({
         level: 'warn',
         area: 'auth',
-        message: 'Agent-level API key is set without ANTHROPIC_BASE_URL. This is fine for Anthropic, but proxy/provider setups usually need a base URL.',
+        message: 'Agent-level credential is set without ANTHROPIC_BASE_URL. This is fine for Anthropic API key mode, but proxy/provider setups usually need a base URL.',
+      });
+    }
+    if (!isPlaceholder(agentApiKey) && !isPlaceholder(agentAuthToken)) {
+      checks.push({
+        level: 'warn',
+        area: 'auth',
+        message: 'Both agent ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are set. Keep only the credential type your provider expects.',
       });
     }
     return;
@@ -435,7 +454,7 @@ function checkAuthMode(
     checks.push({
       level: 'error',
       area: 'auth',
-      message: 'Agent-level ANTHROPIC_BASE_URL is set but agent env has no ANTHROPIC_API_KEY.',
+      message: 'Agent-level ANTHROPIC_BASE_URL is set but agent env has no ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN.',
     });
     return;
   }

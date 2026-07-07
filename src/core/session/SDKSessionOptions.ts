@@ -7,7 +7,6 @@ import type { ExecuteQueryOptions } from '../query/types.js';
 import { logger } from '../../utils/logger.js';
 import { EventType } from '../../utils/events.js';
 import { resolveCliPath } from '../../utils/cliPath.js';
-import { loadFoundationSubagents } from '../subagents/foundationSubagents.js';
 import type { ExtendedSessionOptions } from './SDKSessionTypes.js';
 
 const DEFAULT_MODEL_ENV_BY_ALIAS: Partial<Record<Model, string>> = {
@@ -21,12 +20,18 @@ export interface BuiltSessionOptions {
   resumeSessionId: string | undefined;
 }
 
+interface AgentClaudeSettings {
+  model?: string;
+  env: Record<string, string>;
+}
+
 export async function buildSessionOptions(
   sessionId: string,
   agent: LoadedAgent,
   options: ExecuteQueryOptions,
 ): Promise<BuiltSessionOptions> {
-  const settingsEnv = await loadAgentSettingsEnv(agent.path);
+  const settings = await loadAgentClaudeSettings(agent.path);
+  const settingsEnv = settings.env;
   const wantsApiKeyAuth = typeof settingsEnv.ANTHROPIC_API_KEY === 'string' && settingsEnv.ANTHROPIC_API_KEY.length > 0;
   const wantsAgentConfigDir = wantsApiKeyAuth || (
     typeof settingsEnv.ANTHROPIC_AUTH_TOKEN === 'string'
@@ -42,9 +47,13 @@ export async function buildSessionOptions(
     options.cwd ?? agent.path,
   );
   const modelResolver = (model: Model | string): string => resolveModelForSettings(model, settingsEnv);
+  const requestedModel = options.model
+    ?? options.additionalOptions?.model
+    ?? settings.model
+    ?? 'sonnet' as Model;
 
   const sessionOptions: ExtendedSessionOptions = {
-    model: modelResolver(options.model ?? options.additionalOptions?.model ?? agent.config.model ?? 'sonnet' as Model),
+    model: modelResolver(requestedModel),
     cwd: options.cwd,
     permissionMode: 'default',
     settingSources: options.settingSources ?? ['project', 'local'],
@@ -56,18 +65,18 @@ export async function buildSessionOptions(
       ...(wantsAgentConfigDir
         ? {
             ...(wantsApiKeyAuth ? { ANTHROPIC_AUTH_TOKEN: '' } : {}),
-            ...(redirectedConfigDir ? { CLAUDE_CONFIG_DIR: redirectedConfigDir } : {}),
+            ...(redirectedConfigDir !== undefined ? { CLAUDE_CONFIG_DIR: redirectedConfigDir } : {}),
           }
         : {}),
     },
     includeHookEvents: true,
     agentProgressSummaries: true,
     forwardSubagentText: false,
-    agents: {
-      ...loadFoundationSubagents(modelResolver),
-      ...(options.additionalOptions?.agents ?? {}),
-    },
   };
+
+  if (options.additionalOptions?.agents !== undefined) {
+    sessionOptions.agents = options.additionalOptions.agents;
+  }
 
   const abortController = options.abortController ?? options.additionalOptions?.abortController;
   if (abortController !== undefined) {
@@ -114,23 +123,26 @@ function resolveModelForSettings(model: Model | string, settingsEnv: Record<stri
   return ConfigTransformer.resolveModel(model);
 }
 
-async function loadAgentSettingsEnv(agentPath: string): Promise<Record<string, string>> {
+async function loadAgentClaudeSettings(agentPath: string): Promise<AgentClaudeSettings> {
   const settingsPath = path.join(agentPath, '.claude', 'settings.local.json');
   try {
     const content = await readFile(settingsPath, 'utf-8');
     const parsed = JSON.parse(content) as Record<string, unknown>;
+    const model = typeof parsed.model === 'string' && parsed.model.trim().length > 0
+      ? parsed.model.trim()
+      : undefined;
     const env = parsed.env;
+    const out: Record<string, string> = {};
     if (env && typeof env === 'object' && !Array.isArray(env)) {
-      const out: Record<string, string> = {};
       for (const [key, value] of Object.entries(env as Record<string, unknown>)) {
         if (typeof value === 'string') out[key] = value;
       }
-      return out;
     }
+    return { ...(model !== undefined ? { model } : {}), env: out };
   } catch {
-    // Missing or invalid settings env is non-fatal.
+    // Missing or invalid local Claude settings are non-fatal.
   }
-  return {};
+  return { env: {} };
 }
 
 async function resolveResumeSessionId(

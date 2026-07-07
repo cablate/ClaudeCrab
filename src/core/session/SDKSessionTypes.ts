@@ -18,7 +18,7 @@ import type { SubAgentMessageManager } from '../query/SubAgentMessageManager.js'
  * The patch adds settingSources / systemPrompt / mcpServers / etc.
  */
 export interface PatchedSessionOptions {
-  model: string;
+  model?: string;
   cwd?: string;
   abortController?: AbortController;
   permissionMode?: string;
@@ -33,7 +33,7 @@ export interface PatchedSessionOptions {
   persistSession?: boolean;
   extraArgs?: Record<string, unknown>;
   additionalDirectories?: string[];
-  /** Programmatic subagent definitions forwarded to SDK initialize payload. */
+  /** Optional programmatic subagent definitions forwarded to SDK initialize payload. */
   agents?: Record<string, AgentDefinition>;
   /** Optional main-session skill allowlist. Subagents use AgentDefinition.skills. */
   skills?: string[];
@@ -71,7 +71,7 @@ export interface ManagedSession {
   session: SDKSession;
   sdkSessionId: string;
   agentId: string;
-  /** Resolved main-session model ID (e.g. "claude-opus-4-6-20250506"). */
+  /** Explicit model override, or "claude-code-settings" when Claude Code settings choose it. */
   model: string;
   cwd: string;
   runtimeContext?: ConversationRuntimeContext;

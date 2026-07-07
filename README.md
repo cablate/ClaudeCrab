@@ -26,21 +26,23 @@ Discord channel/thread
 - idle session cleanup 與 prompt-cache keepalive。
 - YAML schedules，可輸出 Discord message/thread。
 - SQLite persistence：sessions、conversation、query metrics、schedule thread mapping。
-- Discord dashboard、cost report、cache anomaly report。
-- MCP tool setup 與 workspace validation。
+- 可選的 Discord ops 診斷：dashboard、cost report、cache anomaly report。
+- 內建 `file-send` MCP tool，讓 Claude Code 可把檔案送回 Discord。
 - 預設關閉的小型 admin console，供 operator 設定、驗證、重啟。
 
 目前不包含：
 
 - 公開 Web UI / public dashboard assets。
 - Telegram。
-- TTS 或音效播放。
+- 語音轉文字與本機音效不是核心功能；需要時可透過 opt-in 設定啟用。
 - 自主社群發文或 initiative routing。
 - 舊 task、budget、activity services。
 
 ## 快速開始
 
 完整安裝、Docker、Cloud、DeepSeek / proxy/provider 設定請看 [docs/SETUP.md](docs/SETUP.md)。README 只保留最短路徑。
+
+如果你要把整包交給 AI assistant 協助部署，請讓它先讀 [docs/skills/claudecab-deploy/SKILL.md](docs/skills/claudecab-deploy/SKILL.md)。
 
 需求：
 
@@ -78,9 +80,7 @@ Copy-Item .env.example .env
 2. 填 `agents/example/agent.json`：
    - `discordBotToken`
    - `discordChannelId`
-   - `model`
-   - `settings.permissionMode`
-3. 如果使用 DeepSeek / proxy / 第三方 provider，優先填 `agents/example/.claude/settings.local.json` 的 `env.ANTHROPIC_API_KEY` 與 `env.ANTHROPIC_BASE_URL`。
+3. 填 `agents/example/.claude/settings.local.json` 的 `model`。如果使用 DeepSeek / proxy / 第三方 provider，優先填同一份檔案的 `env.ANTHROPIC_API_KEY` 或 `env.ANTHROPIC_AUTH_TOKEN`，以及 `env.ANTHROPIC_BASE_URL`。
 
 驗證：
 
@@ -112,9 +112,9 @@ npm start
 
 ## Claude 認證模式
 
-ClaudeCab 依序使用：
+Claude Code 會依照 agent 工作目錄讀取 `.claude/settings.local.json` 與主機認證。常見順序是：
 
-1. agent 的 `.claude/settings.local.json` 裡的 `env.ANTHROPIC_API_KEY`
+1. agent 的 `.claude/settings.local.json` 裡的 `env.ANTHROPIC_API_KEY` 或 `env.ANTHROPIC_AUTH_TOKEN`
 2. `.env` 的 `ANTHROPIC_API_KEY`
 3. 主機 Claude Code OAuth，也就是 `claude login`
 
@@ -124,7 +124,7 @@ ClaudeCab 依序使用：
 |---|---|
 | Claude Code 訂閱 / OAuth | 部署機器跑 `claude login`，不要設定 `ANTHROPIC_BASE_URL`。 |
 | Anthropic API key | 可放 `.env`，或放 agent `.claude/settings.local.json`。 |
-| DeepSeek / proxy / Anthropic-compatible provider | 優先放 agent `.claude/settings.local.json`，避免污染主機 OAuth。 |
+| DeepSeek / proxy / Anthropic-compatible provider | 優先放 agent `.claude/settings.local.json`，使用 provider 需要的 `ANTHROPIC_API_KEY` 或 `ANTHROPIC_AUTH_TOKEN`，避免污染主機 OAuth。 |
 
 ## 文件入口
 
@@ -136,6 +136,8 @@ ClaudeCab 依序使用：
 | [docs/SDK_TOUCHPOINTS.md](docs/SDK_TOUCHPOINTS.md) | 動 SDK、CLI、session、query、hook、sub-agent 前必讀。 |
 | [docs/skills/claudecab-deploy/SKILL.md](docs/skills/claudecab-deploy/SKILL.md) | 給 AI assistant 部署 ClaudeCab 的 skill 指引。 |
 | [AGENTS.md](AGENTS.md) | 本 repo 的 AI agent 治理規範，開工前必讀。 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 貢獻規則與 PR 前檢查。 |
+| [SECURITY.md](SECURITY.md) | 安全回報與部署安全注意事項。 |
 
 ## 常用指令
 
@@ -174,4 +176,4 @@ npm run test:run
 
 ## License
 
-MIT
+AGPL-3.0-or-later. See [LICENSE](LICENSE).

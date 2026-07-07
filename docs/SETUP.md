@@ -7,7 +7,7 @@
 | 決策 | 建議 | 說明 |
 |---|---|---|
 | 執行方式 | 本機開發先用 `npm run dev` | Windows production 才需要 `npm start` / supervisor。 |
-| Claude 認證 | Claude Code 訂閱用 `claude login` | API key 或第三方 provider 才填 `ANTHROPIC_API_KEY`。 |
+| Claude 認證 | Claude Code 訂閱用 `claude login` | API key 或第三方 provider 才填 `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`。 |
 | Discord bot | 測試可先共用，正式建議主 Bot / Agent Bot 分開 | 主 Bot 管 slash command，Agent Bot 收發 agent 對話。 |
 
 ## 1. 前置需求
@@ -117,25 +117,21 @@ Discord ID 複製方式：
 {
   "name": "Example",
   "description": "Starter Discord agent profile",
-  "model": "sonnet",
   "discordBotToken": "your-agent-bot-token",
-  "discordChannelId": "target-channel-id",
-  "settings": {
-    "permissionMode": "default",
-    "maxTurns": 20
-  }
+  "discordChannelId": "target-channel-id"
 }
 ```
 
 `discordBotToken` 是 Bot Token，不是 Discord ID。`discordChannelId` 是 numeric channel ID。
+`agent.json` 只放 ClaudeCab 顯示與 Discord 連線設定；Claude Code 的模型、provider、權限與 env 放 `.claude/settings.local.json`。
 
 第一次測試可以讓主 Bot 和 Agent Bot 使用同一個 bot token；正式使用建議分開，避免 slash command/system message 和 agent 對話互相干擾。
 
 ## 6. Claude / Provider 認證
 
-ClaudeCab 依序使用：
+ClaudeCab 會把 agent 目錄當成 Claude Code 專案工作目錄；Claude Code / agent-sdk 會讀取該目錄下的 `.claude/settings.local.json`。常見認證來源是：
 
-1. agent 的 `.claude/settings.local.json` 裡的 `env.ANTHROPIC_API_KEY`
+1. agent 的 `.claude/settings.local.json` 裡的 `env.ANTHROPIC_API_KEY` 或 `env.ANTHROPIC_AUTH_TOKEN`
 2. `.env` 的 `ANTHROPIC_API_KEY`
 3. 主機 Claude Code OAuth，也就是 `claude login`
 
@@ -168,13 +164,15 @@ ANTHROPIC_BASE_URL=
     "deny": []
   },
   "env": {
-    "ANTHROPIC_API_KEY": "your-provider-key",
+    "ANTHROPIC_API_KEY": "your-provider-key-or-leave-empty-if-using-auth-token",
     "ANTHROPIC_BASE_URL": "https://your-provider-endpoint"
   }
 }
 ```
 
-當 ClaudeCab 偵測到 agent 層 `ANTHROPIC_API_KEY`，會把 `CLAUDE_CONFIG_DIR` 指到該 agent 的 `.claude` 目錄，並清掉 `ANTHROPIC_AUTH_TOKEN`，避免 Claude Code 誤讀主機 OAuth 憑證。
+部分 provider 使用 `ANTHROPIC_AUTH_TOKEN` 而不是 `ANTHROPIC_API_KEY`；兩者擇一即可，不要同時亂填。
+
+ClaudeCab 會以這份檔案的 `model` 與 provider env 組裝 SDK session；`agent.json` 不再放 model，避免同一個 agent 有兩個互相覆蓋的模型來源。修改 provider 或 model 後，建議關閉既有 SDK session 或重啟後再測一次。
 
 ## 7. 靜態驗證
 
@@ -309,6 +307,16 @@ npm start
 2. Agent Bot 在 Discord 顯示上線。
 3. 到 agent 的 `discordChannelId` channel 發一則文字訊息，Agent Bot 有回覆。
 
+### Windows 背景啟動
+
+Windows production 可以用 Task Scheduler 指向：
+
+```text
+scripts/run-hidden.vbs
+```
+
+這個 VBS 會從自己的位置解析 repo root，隱藏啟動 `npm start`，再交給 `start.ts` supervisor 管理 child process。不要用全域 `taskkill /IM node.exe` 停服務；需要停止時請從 Task Scheduler 停 task，或精準指定 `claudecab.runtime.json` 裡的 PID。
+
 ## 10. Docker
 
 Docker 是支援路徑，但不取代 Windows production supervisor。第一次部署建議先完成本機 `setup:verify`，再跑 Docker。
@@ -348,7 +356,7 @@ docker compose down
 
 Docker 注意事項：
 
-- container 內不會自動讀到主機 Claude Code OAuth。Docker 使用時建議用 `.env` 或 agent `.claude/settings.local.json` 提供 API key / provider key。
+- container 內不會自動讀到主機 Claude Code OAuth。Docker 使用時建議用 `.env` 或 agent `.claude/settings.local.json` 提供 API key / auth token / provider key。
 - `.env` 是 bind mount，不會被 bake 進 image；請不要把 `docker compose config` 的完整輸出貼到公開地方。
 - `agents/`、`data/`、`logs/` 會掛載為 volume，避免重建 container 後遺失 agent 設定與 SQLite DB。
 - 若要用第三方 provider，仍建議放 agent `.claude/settings.local.json`，不要把所有 provider key 放全域 `.env`。
@@ -403,7 +411,7 @@ npm run setup:verify
 先區分認證模式：
 
 - OAuth：確認部署機器跑過 `claude login`，且 `.env` 沒設定 `ANTHROPIC_BASE_URL`。
-- API key/provider：確認 `ANTHROPIC_API_KEY` 存在，proxy 通常也需要 `ANTHROPIC_BASE_URL`。
+- API key/provider：確認 `ANTHROPIC_API_KEY` 或 `ANTHROPIC_AUTH_TOKEN` 存在，proxy 通常也需要 `ANTHROPIC_BASE_URL`。
 - 多 agent/provider：優先把 key/base URL 放 agent `.claude/settings.local.json`。
 
 ### Schedule 建 thread 但你沒有收到通知

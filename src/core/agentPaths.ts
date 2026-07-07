@@ -9,7 +9,3 @@ export function configureAgentPaths(agentsDir: string): void {
 export function resolveAgentsDir(cwd: string = process.cwd()): string {
   return configuredAgentsDir ?? path.resolve(cwd, 'agents');
 }
-
-export function resolveFoundationDir(): string {
-  return path.join(resolveAgentsDir(), '_foundation');
-}

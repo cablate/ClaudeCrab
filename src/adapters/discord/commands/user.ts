@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { requireOperator, resolveEffectiveUserId, type SlashCommandDependencies } from './_shared.js';
-import { applyModelChange } from '../../commands/index.js';
+import { applyModelChange, readAgentRuntimeModel } from '../../commands/index.js';
 
 export async function handleHelp(interaction: ChatInputCommandInteraction): Promise<void> {
   const embed = new EmbedBuilder()
@@ -30,7 +30,7 @@ export async function handleStatus(
     if (agent === undefined) continue;
     const name = agent.config.name || agentId;
     const emoji = agent.config.display?.avatar ?? '🤖';
-    const model = agent.config.model ?? 'sonnet';
+    const model = await readAgentRuntimeModel(agent) ?? 'Claude Code settings';
     const dcStatus = deps.getBotStatus?.(agentId) ?? 'no-token';
     const dcIcon = dcStatus === 'running' ? '🟢' : dcStatus === 'no-token' ? '⚫' : '🔴';
     lines.push(`${emoji} **${name}** (${model}) — DC ${dcIcon}`);
@@ -97,12 +97,14 @@ export async function handleModel(
     return;
   }
   if (agentId === null && targetModel === null) {
-    const lines = deps.agentLoader.list().map(id => {
+    const lines: string[] = [];
+    for (const id of deps.agentLoader.list()) {
       const agent = deps.agentLoader.get(id);
+      if (agent === undefined) continue;
       const name = agent?.config.name ?? id;
-      const model = agent?.config.model ?? 'sonnet';
-      return `**${name}** → \`${model}\``;
-    });
+      const model = await readAgentRuntimeModel(agent) ?? 'Claude Code settings';
+      lines.push(`**${name}** → \`${model}\``);
+    }
     await interaction.reply({ embeds: [new EmbedBuilder().setTitle('🧠 模型配置').setDescription(lines.join('\n')).setColor(0x5865F2)], ephemeral: true });
     return;
   }
@@ -111,7 +113,8 @@ export async function handleModel(
     await interaction.reply({ content: `❌ Agent "${agentId}" 不存在`, ephemeral: true });
     return;
   }
-  await interaction.reply({ content: `🧠 **${agent.config.name ?? agentId}** → \`${agent.config.model ?? 'sonnet'}\``, ephemeral: true });
+  const model = await readAgentRuntimeModel(agent) ?? 'Claude Code settings';
+  await interaction.reply({ content: `🧠 **${agent.config.name ?? agentId}** → \`${model}\``, ephemeral: true });
 }
 
 export async function handleCost(

@@ -2,38 +2,19 @@
 import type { AgentHooks } from './hooks.js';
 
 /**
- * Permission mode for agent operations
- */
-export const PermissionModeSchema = z.enum([
-  'default',
-  'acceptEdits',
-  'bypassPermissions',
-  'plan',
-  'dontAsk',
-]);
-
-export type PermissionMode = z.infer<typeof PermissionModeSchema>;
-
-/**
- * Model options available for agents
+ * Runtime model aliases used across ClaudeCab (settings.local.json `model`
+ * field and SDK option resolution). NOT agent.json fields — agent.json only
+ * carries ClaudeCab metadata and platform wiring.
  */
 export const ModelSchema = z.enum(['sonnet', 'opus', 'haiku']);
 
 export type Model = z.infer<typeof ModelSchema>;
 
 
-const AgentSettingsSchema = z.object({
-  maxHistoryLength: z.number().int().positive().optional(),
-  permissionMode: PermissionModeSchema.optional(),
-  maxTurns: z.number().int().positive().optional(),
-  maxBudgetUsd: z.number().positive().optional(),
-  /** Extended thinking config (passed through to SDK V2 session). */
-  thinking: z.object({ type: z.string() }).optional(),
-});
-
 /**
  * agent.json Schema
- * Defines the configuration structure for an agent
+ * Defines ClaudeCab-facing agent metadata and platform wiring.
+ * Claude Code / SDK runtime settings belong in .claude/settings.local.json.
  */
 /** Display configuration for live page visuals */
 const DisplaySchema = z.object({
@@ -49,19 +30,6 @@ export const AgentConfigSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   version: z.string().optional(),
-
-  // Model configuration
-  model: ModelSchema.optional(),
-  maxTokens: z.number().int().positive().optional(),
-  maxThinkingTokens: z.number().int().positive().optional(),
-
-  // Prompt configuration
-  systemPrompt: z.string().optional(),
-  systemPromptFile: z.string().optional(),
-
-  // Tool configuration
-  allowedTools: z.array(z.string()).optional(),
-  disallowedTools: z.array(z.string()).optional(),
 
   // MCP configuration
   mcpConfigFile: z.string().optional(),
@@ -82,9 +50,6 @@ export const AgentConfigSchema = z.object({
 
   // Display configuration (live page visuals)
   display: DisplaySchema.optional(),
-
-  // Additional settings
-  settings: AgentSettingsSchema.optional(),
 });
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

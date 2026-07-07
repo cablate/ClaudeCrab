@@ -1,4 +1,4 @@
-export type FieldType = 'string' | 'number' | 'boolean' | 'permissionMode';
+export type FieldType = 'string' | 'number' | 'boolean';
 
 export interface FieldDefinition {
   key: string;
@@ -143,15 +143,13 @@ export const AGENT_FIELDS: FieldDefinition[] = [
   },
 ];
 
-export const AGENT_SETTINGS_FIELDS: FieldDefinition[] = [];
-
 export const CLAUDE_SETTINGS_FIELDS: FieldDefinition[] = [
   {
     key: 'model',
     label: '實際執行模型',
     type: 'string',
     group: 'Claude Code / SDK 執行設定（.claude/settings.local.json）',
-    help: '寫入 settings.local.json 的 model，會覆蓋 agent.json。可填 sonnet/opus/haiku，也可填 provider 實際模型 ID，例如 deepseek-v4-flash[1m]。既有對話可能要關閉 SDK session 或等新 session 才會使用。',
+    help: '寫入 settings.local.json 的 model，這是 agent 實際執行模型的唯一設定來源。可填 sonnet/opus/haiku，也可填 provider 實際模型 ID，例如 deepseek-v4-flash[1m]。既有對話可能要關閉 SDK session 或等新 session 才會使用。',
     placeholder: 'sonnet、opus、haiku 或 provider 模型 ID',
   },
 ];
@@ -188,7 +186,7 @@ export const PROVIDER_ENV_FIELDS: FieldDefinition[] = [
     label: 'Opus alias 對應模型',
     type: 'string',
     group: '模型 alias 對應（settings.local.json env）',
-    help: '當 agent.json 或 schedule 填 opus 時，實際轉成這個 provider 模型。只有 provider 不認得 Claude alias 時才需要。',
+    help: '當 settings model 或 schedule 填 opus 時，實際轉成這個 provider 模型。只有 provider 不認得 Claude alias 時才需要。',
     placeholder: '例如 deepseek-v4 或 claude-opus-4-1',
   },
   {
@@ -196,7 +194,7 @@ export const PROVIDER_ENV_FIELDS: FieldDefinition[] = [
     label: 'Sonnet alias 對應模型',
     type: 'string',
     group: '模型 alias 對應（settings.local.json env）',
-    help: '當 agent.json 或 schedule 填 sonnet 時，實際轉成這個 provider 模型。',
+    help: '當 settings model 或 schedule 填 sonnet 時，實際轉成這個 provider 模型。',
     placeholder: '例如 glm-5.2[1m]',
   },
   {
@@ -204,7 +202,7 @@ export const PROVIDER_ENV_FIELDS: FieldDefinition[] = [
     label: 'Haiku alias 對應模型',
     type: 'string',
     group: '模型 alias 對應（settings.local.json env）',
-    help: '當 agent.json 或 schedule 填 haiku 時，實際轉成這個 provider 模型。',
+    help: '當 settings model 或 schedule 填 haiku 時，實際轉成這個 provider 模型。',
     placeholder: '例如 deepseek-v4-flash',
   },
   {
@@ -216,5 +214,3 @@ export const PROVIDER_ENV_FIELDS: FieldDefinition[] = [
     placeholder: '例如 deepseek-v4-flash[1m]',
   },
 ];
-
-export const PERMISSION_MODE_VALUES = new Set(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk']);

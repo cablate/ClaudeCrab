@@ -5,10 +5,8 @@ import { AgentConfigSchema } from '../types/agent.js';
 import type { FieldDefinition, FieldType } from './AdminConfigFields.js';
 import {
   AGENT_FIELDS,
-  AGENT_SETTINGS_FIELDS,
   CLAUDE_SETTINGS_FIELDS,
   GLOBAL_FIELDS,
-  PERMISSION_MODE_VALUES,
   PROVIDER_ENV_FIELDS,
 } from './AdminConfigFields.js';
 
@@ -143,33 +141,21 @@ export class AdminConfigService {
     }
 
     if (update.settings !== undefined) {
-      const values = normalizeUpdateRecord(update.settings, [...AGENT_SETTINGS_FIELDS, ...CLAUDE_SETTINGS_FIELDS]);
+      const values = normalizeUpdateRecord(update.settings, CLAUDE_SETTINGS_FIELDS);
       for (const [key, value] of Object.entries(values)) {
-        const field = getField([...AGENT_SETTINGS_FIELDS, ...CLAUDE_SETTINGS_FIELDS], key);
-        if (key === 'model') {
-          if (value === null || value === '') {
-            if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
-            delete settings[key];
-            settingsTouched = true;
-            sessionCloseRecommended = true;
-            updated.push(`settings.${key}`);
-            continue;
-          }
-          settings[key] = normalizeValue(value, field);
+        const field = getField(CLAUDE_SETTINGS_FIELDS, key);
+        if (value === null || value === '') {
+          if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
+          delete settings[key];
           settingsTouched = true;
           sessionCloseRecommended = true;
           updated.push(`settings.${key}`);
-        } else {
-          const currentSettings = ensureRecord(agentConfig, 'settings');
-          if (value === null || value === '') {
-            if (!Object.prototype.hasOwnProperty.call(currentSettings, key)) continue;
-            delete currentSettings[key];
-            updated.push(`agent.settings.${key}`);
-            continue;
-          }
-          currentSettings[key] = normalizeValue(value, field);
-          updated.push(`agent.settings.${key}`);
+          continue;
         }
+        settings[key] = normalizeValue(value, field);
+        settingsTouched = true;
+        sessionCloseRecommended = true;
+        updated.push(`settings.${key}`);
       }
     }
 
@@ -236,17 +222,13 @@ export class AdminConfigService {
     const agentDir = this.resolveAgentDir(agentId);
     const agentConfig = await readJsonRecord(path.join(agentDir, 'agent.json'));
     const settings = await readOptionalJsonRecord(path.join(agentDir, '.claude', 'settings.local.json'));
-    const agentSettings = toRecord(agentConfig.settings);
     const providerEnv = toRecord(settings.env);
 
     return {
       id: agentId,
       name: typeof agentConfig.name === 'string' ? agentConfig.name : null,
       agent: AGENT_FIELDS.map((field) => snapshotField(field, agentConfig[field.key] ?? null)),
-      settings: [
-        ...AGENT_SETTINGS_FIELDS.map((field) => snapshotField(field, agentSettings[field.key] ?? null)),
-        ...CLAUDE_SETTINGS_FIELDS.map((field) => snapshotField(field, settings[field.key] ?? null)),
-      ],
+      settings: CLAUDE_SETTINGS_FIELDS.map((field) => snapshotField(field, settings[field.key] ?? null)),
       providerEnv: PROVIDER_ENV_FIELDS.map((field) => snapshotField(field, providerEnv[field.key] ?? null)),
     };
   }
@@ -313,9 +295,6 @@ function normalizeValue(value: string | number | boolean | null, field: FieldDef
     return parsed;
   }
   const text = String(value);
-  if (field.type === 'permissionMode' && text !== '' && !PERMISSION_MODE_VALUES.has(text)) {
-    throw new Error(`${field.key} must be one of: ${[...PERMISSION_MODE_VALUES].join(', ')}.`);
-  }
   return text;
 }
 

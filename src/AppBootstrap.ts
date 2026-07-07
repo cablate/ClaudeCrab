@@ -22,8 +22,8 @@ import { initializeScheduleSystem } from './schedule/ScheduleBootstrap.js';
 import type { AppConfig } from './config.js';
 import { createSTTProvider, type STTProvider } from './core/stt/index.js';
 import { DiscordAdapter } from './adapters/DiscordAdapter.js';
-import { DiscordDashboard } from './adapters/discord/services/DiscordDashboard.js';
 import { initializeDiscordServices, notifyCrashRecovery } from './adapters/discord/DiscordBootstrap.js';
+import type { DiscordOpsServices } from './adapters/discord/services/DiscordOpsServices.js';
 import { configureAgentPaths } from './core/agentPaths.js';
 import { AdminServer } from './admin/AdminServer.js';
 
@@ -37,9 +37,7 @@ export class AppBootstrap {
   private messageProcessor: MessageProcessor | null = null;
   private databaseManager: DatabaseManager | null = null;
   private scheduleManager: ScheduleManager | null = null;
-  private dashboardService: DiscordDashboard | null = null;
-  private costReportTimer: ReturnType<typeof setInterval> | null = null;
-  private cacheAnomalyReportTimer: ReturnType<typeof setInterval> | null = null;
+  private discordOpsServices: DiscordOpsServices | null = null;
   private discordSystemAdapter: DiscordAdapter | null = null;
   private scheduleExecutor: ScheduleExecutor | null = null;
   private scheduleThreadMap: ScheduleThreadMap | null = null;
@@ -157,18 +155,10 @@ export class AppBootstrap {
     );
 
     try {
-      if (this.costReportTimer !== null) {
-        clearInterval(this.costReportTimer);
-        this.costReportTimer = null;
-      }
-      if (this.cacheAnomalyReportTimer !== null) {
-        clearInterval(this.cacheAnomalyReportTimer);
-        this.cacheAnomalyReportTimer = null;
-      }
-
-      if (this.dashboardService !== null) {
-        this.dashboardService.stop();
-        logger.info('Dashboard service stopped');
+      if (this.discordOpsServices !== null) {
+        this.discordOpsServices.stop();
+        this.discordOpsServices = null;
+        logger.info('Discord ops services stopped');
       }
 
       if (this.scheduleManager !== null) {
@@ -392,9 +382,7 @@ export class AppBootstrap {
     }
 
     this.discordSystemAdapter = services.systemAdapter;
-    if (services.ops.dashboardService !== undefined) this.dashboardService = services.ops.dashboardService;
-    if (services.ops.costReportTimer !== undefined) this.costReportTimer = services.ops.costReportTimer;
-    if (services.ops.cacheAnomalyReportTimer !== undefined) this.cacheAnomalyReportTimer = services.ops.cacheAnomalyReportTimer;
+    this.discordOpsServices = services.ops;
   }
 
   private async initializeAdminServer(agentLoader: AgentLoader): Promise<void> {

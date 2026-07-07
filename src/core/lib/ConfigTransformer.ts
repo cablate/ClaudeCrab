@@ -12,17 +12,6 @@ const MODEL_MAP: Record<Model, string> = {
 };
 
 /**
- * SDK Permission mode mapping
- */
-const PERMISSION_MODE_MAP = {
-  default: 'default',
-  acceptEdits: 'acceptEdits',
-  bypassPermissions: 'bypassPermissions',
-  plan: 'plan',
-  dontAsk: 'dontAsk',
-} as const;
-
-/**
  * Options for the Claude Agent SDK
  * Based on SDK's query() options
  */
@@ -80,7 +69,7 @@ export class ConfigTransformer {
    * Convert a LoadedAgent to SDK options
    */
   static toSDKOptions(agent: LoadedAgent): SDKOptions {
-    const { config, systemPrompt, mcpServers } = agent;
+    const { systemPrompt, mcpServers } = agent;
 
     const options: SDKOptions = {};
 
@@ -91,44 +80,6 @@ export class ConfigTransformer {
         preset: 'claude_code' as const,
         append: systemPrompt,
       };
-    }
-
-    // Model
-    if (config.model !== undefined) {
-      options.model = ConfigTransformer.resolveModel(config.model);
-    }
-
-    // Token limits
-    if (config.maxTokens !== undefined) {
-      options.maxTokens = config.maxTokens;
-    }
-
-    if (config.maxThinkingTokens !== undefined) {
-      options.maxThinkingTokens = config.maxThinkingTokens;
-    }
-
-    // Tools
-    if (config.allowedTools !== undefined && config.allowedTools.length > 0) {
-      options.allowedTools = config.allowedTools;
-    }
-
-    if (
-      config.disallowedTools !== undefined &&
-      config.disallowedTools.length > 0
-    ) {
-      options.disallowedTools = config.disallowedTools;
-    }
-
-    // Settings
-    if (config.settings !== undefined) {
-      if (config.settings.permissionMode !== undefined) {
-        options.permissionMode =
-          PERMISSION_MODE_MAP[config.settings.permissionMode];
-      }
-
-      if (config.settings.maxTurns !== undefined) {
-        options.maxTurns = config.settings.maxTurns;
-      }
     }
 
     // MCP servers

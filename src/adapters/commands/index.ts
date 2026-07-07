@@ -1,6 +1,19 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { LoadedAgent } from '../../types/agent.js';
 import type { AgentLoader } from '../../core/orchestrator/AgentLoader.js';
+
+export async function readAgentRuntimeModel(agent: LoadedAgent): Promise<string | undefined> {
+  const settingsPath = path.join(agent.path, '.claude', 'settings.local.json');
+  try {
+    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf-8')) as Record<string, unknown>;
+    return typeof settings.model === 'string' && settings.model.trim().length > 0
+      ? settings.model
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export async function applyModelChange(
   agentId: string,
@@ -25,7 +38,7 @@ export async function applyModelChange(
 
   settings.model = model;
   await fs.mkdir(settingsDir, { recursive: true });
-  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+  await fs.writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf-8');
   await agentLoader.loadAgent(agentId);
 
   return { success: true };
