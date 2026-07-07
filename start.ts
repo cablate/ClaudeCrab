@@ -18,12 +18,14 @@ const LOG_DIR = resolve(import.meta.dirname, 'logs');
 const OUT_LOG = resolve(LOG_DIR, 'supervisor-out.log');
 const ERR_LOG = resolve(LOG_DIR, 'supervisor-error.log');
 
-const PID_FILE = resolve(import.meta.dirname, 'claudecab.pid');
-const STATE_FILE = resolve(import.meta.dirname, 'claudecab.runtime.json');
-const CONTROL_FILE = resolve(import.meta.dirname, 'claudecab.control.json');
+const DATA_DIR = resolve(import.meta.dirname, 'data');
+const PID_FILE = resolve(DATA_DIR, 'claudecab.pid');
+const STATE_FILE = resolve(DATA_DIR, 'claudecab.runtime.json');
+const CONTROL_FILE = resolve(DATA_DIR, 'claudecab.control.json');
 const supervisorStartedAt = new Date().toISOString();
 
 mkdirSync(LOG_DIR, { recursive: true });
+mkdirSync(DATA_DIR, { recursive: true });
 
 // Guard: prevent duplicate instances
 if (existsSync(PID_FILE)) {
