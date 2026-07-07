@@ -13,6 +13,7 @@ import { DiscordInteractionHandler } from './DiscordInteractionHandler.js';
 import { registerSlashCommands } from './DiscordSlashCommands.js';
 import { initializeDiscordOpsServices, type DiscordOpsServices } from './services/DiscordOpsServices.js';
 import { logger } from '../../utils/logger.js';
+import { getDisplayTimezone } from '../../utils/timezone.js';
 
 import type { AgentLoader } from '../../core/orchestrator/AgentLoader.js';
 import type { MessageProcessor } from '../../core/orchestrator/MessageProcessor.js';
@@ -173,7 +174,7 @@ export async function notifyCrashRecovery(
     const channelId = channels.systemLog || channels.alerts || channels.dashboard;
     if (!channelId) return;
 
-    const timeStr = new Date(info.time).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+    const timeStr = new Date(info.time).toLocaleString('zh-TW', { timeZone: getDisplayTimezone() });
     await adapter.sendToChannel(
       channelId,
       [`ClaudeCab recovered from a previous crash.`, `Time: ${timeStr}`, `Error: ${info.error}`].join('\n')

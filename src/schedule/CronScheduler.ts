@@ -63,7 +63,7 @@ export class CronScheduler {
         await this.executeSchedule(spec.id);
       },
       {
-        timezone: spec.trigger.timezone || 'Asia/Taipei',
+        timezone: spec.trigger.timezone || 'UTC',
       }
     );
 

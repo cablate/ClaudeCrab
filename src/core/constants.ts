@@ -1,6 +1,7 @@
 import { format, subDays } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { toZonedTime } from 'date-fns-tz';
+import { getDisplayTimezone } from '../utils/timezone.js';
 
 /**
  * Hook-related constants
@@ -14,8 +15,6 @@ const MEMORY_CHECKPOINT_CONTEXT = `【記憶（靜默）】遵循 memory-system 
 1. 上輪有漏記？→ 根據規範寫入對應檔案
 2. 處理用戶訊息並回覆
 3. 結束前靜默檢查，不要輸出檢查過程`;
-
-const TAIPEI_TZ = 'Asia/Taipei';
 
 /**
  * Startup protocol reminder for new sessions.
@@ -39,7 +38,7 @@ const SKILL_REMINDER_CONTEXT = `【Skill 檢查】這輪任務有適用的 skill
 
 /**
  * Build the complete prompt context with current time.
- * Time is displayed in Asia/Taipei timezone.
+ * Time is displayed in the configured display timezone (DISPLAY_TIMEZONE, default UTC).
  */
 export function buildPromptContext(
   chatId?: string,
@@ -47,7 +46,7 @@ export function buildPromptContext(
   /** Platform identifier (defaults to 'discord') */
   platform?: string
 ): string {
-  const now = toZonedTime(new Date(), TAIPEI_TZ);
+  const now = toZonedTime(new Date(), getDisplayTimezone());
   const yesterday = subDays(now, 1);
 
   const todayDate = format(now, 'yyyy-MM-dd');

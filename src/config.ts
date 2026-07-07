@@ -6,12 +6,15 @@
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
+import { setDisplayTimezone } from './utils/timezone.js';
 
 /**
  * Application configuration loaded from environment variables.
  */
 export interface AppConfig {
   agentsDir: string;
+  /** IANA timezone used for human-facing time display (dashboard, crash notices, prompt context). Defaults to UTC. */
+  displayTimezone: string;
   persistence: {
     enabled: boolean;
     dbPath: string;
@@ -183,6 +186,7 @@ const CacheKeepaliveSchema = z.object({
 
 const AppConfigSchema = z.object({
   agentsDir: z.string().min(1),
+  displayTimezone: z.string().min(1),
   persistence: z.object({
     enabled: z.boolean(),
     dbPath: z.string().min(1),
@@ -301,6 +305,7 @@ function buildRawAppConfig(env: EnvSource, cwd: string): AppConfig {
 
   return {
     agentsDir: env.AGENTS_DIR ?? path.resolve(cwd, 'agents'),
+    displayTimezone: optionalString(env, 'DISPLAY_TIMEZONE') ?? 'UTC',
     persistence: {
       enabled: envFlag(env, 'ENABLE_PERSISTENCE'),
       dbPath: env.DB_PATH ?? './data/claudecab.db',
@@ -368,6 +373,7 @@ function buildRawAppConfig(env: EnvSource, cwd: string): AppConfig {
 export function loadAppConfig(env: EnvSource = process.env, cwd: string = process.cwd()): AppConfig {
   const config = buildRawAppConfig(mergeLocalConfig(env, cwd), cwd);
   AppConfigSchema.parse(config);
+  setDisplayTimezone(config.displayTimezone);
   return config;
 }
 

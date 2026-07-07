@@ -153,7 +153,7 @@ function getTodayScheduledAt(spec: ScheduleSpec, now: Date): DailyScheduleTime |
   const hour = Number.parseInt(match[2] ?? '', 10);
   if (minute < 0 || minute > 59 || hour < 0 || hour > 23) return null;
 
-  const timezone = spec.trigger.timezone || 'Asia/Taipei';
+  const timezone = spec.trigger.timezone || 'UTC';
   const zonedNow = toZonedTime(now, timezone);
   const localScheduleDateTime = new Date(
     zonedNow.getFullYear(),

@@ -77,6 +77,14 @@ ENABLE_PERSISTENCE=true
 DB_PATH=./data/claudecab.db
 ```
 
+顯示時區（dashboard、crash 通知、prompt context 的時間顯示）預設 `UTC`。改成本地時區，例如：
+
+```env
+DISPLAY_TIMEZONE=Asia/Taipei
+```
+
+各 schedule 的「觸發時區」是在 schedule YAML 自己指定（預設 UTC），與 `DISPLAY_TIMEZONE` 無關。
+
 使用 Claude Code OAuth / 訂閱時，保持：
 
 ```env

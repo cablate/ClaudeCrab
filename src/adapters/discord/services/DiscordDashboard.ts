@@ -15,6 +15,7 @@ import type { RateLimitRepository } from '../../../persistence/RateLimitReposito
 import type { AgentLoader } from '../../../core/orchestrator/AgentLoader.js';
 import { logger } from '../../../utils/logger.js';
 import { EventType } from '../../../utils/events.js';
+import { getDisplayTimezone } from '../../../utils/timezone.js';
 
 const log = logger.child({ module: 'DiscordDashboard' });
 
@@ -142,7 +143,7 @@ export class DiscordDashboard {
    */
   private buildEmbeds(): EmbedBuilder[] {
     const now = new Date();
-    const timeStr = now.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
+    const timeStr = now.toLocaleString('zh-TW', { timeZone: getDisplayTimezone(), hour12: false });
 
     const embed = new EmbedBuilder()
       .setAuthor({ name: 'ClaudeCab HQ' })

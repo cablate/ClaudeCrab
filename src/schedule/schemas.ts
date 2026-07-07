@@ -18,7 +18,7 @@ export const TriggerSchema = z.object({
   interval: z.number().positive().optional(),
   at: z.string().optional(),       // ISO datetime for 'once'
   datetime: z.string().optional(), // Alias for 'at' (common agent mistake)
-  timezone: z.string().default('Asia/Taipei'),
+  timezone: z.string().default('UTC'),
 }).transform(({ datetime, ...rest }) => {
   // Normalize: merge 'datetime' into 'at'
   if (datetime && !rest.at) {
