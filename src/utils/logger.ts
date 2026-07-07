@@ -123,10 +123,10 @@ const devOptions: LoggerOptions = {
  * - Each restart gets its own base file: claudecab.{start-datetime}.log
  * - Within a long-running session: rolls at 10MB or daily, keep 30 files
  *
- * NO stdout target. Reason: on Windows, PM2 captures start.ts's stdout into
- * supervisor-out.log, AND — despite start.ts spawning the child with
- * `stdio: ['ignore', 'ignore', 'pipe']` — child-process stdout still leaks
- * into that same file (Windows/PM2 console-inheritance quirk). Writing pino
+ * NO stdout target. Reason: on Windows, the supervisor captures start.ts's
+ * stdout into supervisor-out.log, AND — despite start.ts spawning the child
+ * with `stdio: ['ignore', 'ignore', 'pipe']` — child-process stdout still
+ * leaks into that same file (Windows console-inheritance quirk). Writing pino
  * to stdout therefore cross-contaminated supervisor-out.log with 10k+
  * application JSON entries. Routing pino exclusively to the rotated file
  * keeps the two streams cleanly separated:

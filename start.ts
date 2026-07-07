@@ -137,11 +137,6 @@ function startChild() {
       setTimeout(startChild, backoff);
     }
   });
-
-  // Send ready signal for PM2 compatibility (ignored when not under PM2)
-  if (typeof process.send === 'function') {
-    setTimeout(() => process.send?.('ready'), 5000);
-  }
 }
 
 function readControlCommand(): 'stop' | 'restart' | null {

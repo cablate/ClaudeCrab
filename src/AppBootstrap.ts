@@ -137,11 +137,6 @@ export class AppBootstrap {
 
     this.logStartupSummary(agentLoader);
 
-    if (typeof process.send === 'function') {
-      process.send('ready');
-      logger.info('PM2 ready signal sent');
-    }
-
     if (this.discordSystemAdapter !== null) {
       void notifyCrashRecovery(this.discordSystemAdapter, this.config.discord.channels);
     }

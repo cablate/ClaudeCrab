@@ -38,7 +38,7 @@ if (process.platform === 'win32') {
   });
 }
 
-// Global error handlers — prevent silent crashes under PM2
+// Global error handlers — prevent silent crashes under the supervisor
 process.on('unhandledRejection', (reason) => {
   logger.fatal({ err: reason }, 'Unhandled promise rejection');
 });
