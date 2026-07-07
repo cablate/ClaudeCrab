@@ -143,7 +143,6 @@ export class ScheduleExecutor {
                               hookEventName: 'UserPromptSubmit' as const,
                               additionalContext: buildPromptContext(
                                 contextTarget?.chatId ?? '',
-                                true,
                                 contextTarget?.platform ?? 'discord'
                               ),
                             },
