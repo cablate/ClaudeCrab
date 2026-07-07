@@ -6,7 +6,6 @@ import type { SDKSessionManager } from '../core/session/SDKSessionManager.js';
 import type { QueryExecutorDeps, QueryExecuteOptions } from '../core/query/QueryExecutor.js';
 import { EventType } from '../utils/events.js';
 import { logger } from '../utils/logger.js';
-import { playSound } from '../utils/localSound.js';
 import { sendErrorToUser } from '../core/query/ResponseSender.js';
 import { executeQueryWithSDK, type QueryRequest } from '../core/query/QueryExecutor.js';
 import { checkSessionGuard, type SessionGuardConfig } from '../core/session/SessionGuard.js';
@@ -183,7 +182,6 @@ export class ConversationPipeline {
       );
 
       this.deps.sessionManager.updateState(platform, agentId, effectiveUserId, 'idle');
-      playSound('C:\\Windows\\Media\\Ring01.wav').catch(() => {});
 
       return {
         success: true,
