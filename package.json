@@ -47,13 +47,13 @@
     "chokidar": "^5.0.0",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
-    "discord.js": "^14.25.1",
+    "discord.js": "^14.26.4",
     "dotenv": "^17.2.3",
     "node-cron": "^4.2.1",
     "pino": "^10.3.0",
     "pino-roll": "^4.0.0",
-    "uuid": "^13.0.0",
-    "yaml": "^2.8.2",
+    "uuid": "^13.0.2",
+    "yaml": "^2.9.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -85,5 +85,9 @@
   "bugs": {
     "url": "https://github.com/cablate/ClaudeCrab/issues"
   },
-  "homepage": "https://github.com/cablate/ClaudeCrab#readme"
+  "homepage": "https://github.com/cablate/ClaudeCrab#readme",
+  "overrides": {
+    "undici": "6.27.0",
+    "ws": "8.21.0"
+  }
 }
