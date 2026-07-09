@@ -25,9 +25,9 @@ export async function handleClose(
   }
   const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
   if (session !== undefined && deps.messageProcessor.closeSession(session.sessionId)) {
-    await interaction.reply({ content: '🔒 V2 session 已關閉。對話紀錄保留，下次訊息會建立新 session。', ephemeral: true });
+    await interaction.reply({ content: '🔒 session 已關閉。對話紀錄保留，下次訊息會建立新 session。', ephemeral: true });
   } else {
-    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 V2 session。', ephemeral: true });
+    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 session。', ephemeral: true });
   }
 }
 
@@ -54,12 +54,12 @@ export async function handleSync(
   }
   const session = deps.sessionManager.getSession('discord', agentId, effectiveUserId);
   if (session === undefined) {
-    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 V2 session。', ephemeral: true });
+    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 session。', ephemeral: true });
     return;
   }
   const result = await deps.messageProcessor.syncSubAgentUpdates(session.sessionId);
   if (result === null) {
-    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 V2 session。', ephemeral: true });
+    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 session。', ephemeral: true });
     return;
   }
   if (result.routed > 0) {

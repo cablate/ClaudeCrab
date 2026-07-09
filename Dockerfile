@@ -34,6 +34,12 @@ COPY --from=build --chown=claudecab:claudecab /app/package.json ./package.json
 RUN mkdir -p /app/agents /app/data /app/logs \
   && chown claudecab:claudecab /app/agents /app/data /app/logs
 
+# Install Claude Code CLI globally so operators can run `claude login` inside the
+# container (e.g. `docker exec -it claudecab claude login`) for OAuth. The SDK's
+# own bundled CLI runs queries; this global CLI only provides the login flow and
+# writes credentials to /home/claudecab/.claude (persisted via named volume).
+RUN npm install -g @anthropic-ai/claude-code
+
 USER claudecab
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \

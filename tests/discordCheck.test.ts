@@ -62,7 +62,7 @@ describe('discord-check', () => {
       agentId: 'example',
       agentsDir: path.join(root, 'agents'),
       createThread: false,
-    })).toThrow(/no usable discordBotToken/);
+    })).toThrow(/沒有可用的 discordBotToken/);
   });
 
   it('rejects Discord IDs pasted into token fields', async () => {
@@ -76,7 +76,7 @@ describe('discord-check', () => {
       agentId: 'example',
       agentsDir: path.join(root, 'agents'),
       createThread: false,
-    })).toThrow(/looks like a Discord ID/);
+    })).toThrow(/看起來像 Discord ID/);
   });
 
   it('rejects invalid channel IDs', async () => {
@@ -90,20 +90,20 @@ describe('discord-check', () => {
       agentId: 'example',
       agentsDir: path.join(root, 'agents'),
       createThread: false,
-    })).toThrow(/valid numeric discordChannelId/);
+    })).toThrow(/有效的數字 discordChannelId/);
   });
 
   it('explains invalid token errors', () => {
     const message = describeDiscordRestError(Object.assign(new Error('401 Unauthorized'), { status: 401 }));
 
-    expect(message).toContain('verify agent discordBotToken');
+    expect(message).toContain('確認 agent discordBotToken');
     expect(message).toContain('Bot Token');
   });
 
   it('explains missing permission errors', () => {
     const message = describeDiscordRestError(Object.assign(new Error('Missing Permissions'), { status: 403, code: 50013 }));
 
-    expect(message).toContain('Agent Bot is invited');
+    expect(message).toContain('Agent Bot 已加入');
     expect(message).toContain('Send Messages in Threads');
   });
 
@@ -111,6 +111,6 @@ describe('discord-check', () => {
     const message = describeDiscordRestError(Object.assign(new Error('Unknown Channel'), { status: 404, code: 10003 }));
 
     expect(message).toContain('discordChannelId');
-    expect(message).toContain('numeric channel ID');
+    expect(message).toContain('數字 channel ID');
   });
 });

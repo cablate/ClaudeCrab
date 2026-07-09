@@ -87,6 +87,12 @@
   },
   "homepage": "https://github.com/cablate/ClaudeCrab#readme",
   "overrides": {
+    "express-rate-limit": "8.5.2",
+    "fast-uri": "4.1.0",
+    "hono": "4.12.28",
+    "ip-address": "10.2.0",
+    "path-to-regexp": "8.4.2",
+    "qs": "6.15.3",
     "undici": "6.27.0",
     "ws": "8.21.0"
   }

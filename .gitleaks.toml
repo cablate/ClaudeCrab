@@ -1,0 +1,20 @@
+title = "ClaudeCab gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Discord snowflake IDs used as test fixtures"
+condition = "AND"
+paths = [
+  '''tests/(setupCheck|discordCheck|adminConfigService)\.test\.ts''',
+]
+regexes = [
+  '''[0-9]{17,20}''',
+]
+
+[[allowlists]]
+description = "Historical admin console token parser fixture"
+commits = [
+  "b98953a1ae5bff553d01ba1572ad89c862c1d81c",
+]

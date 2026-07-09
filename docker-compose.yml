@@ -16,6 +16,7 @@ services:
       - ./agents:/app/agents
       - ./data:/app/data
       - ./logs:/app/logs
+      - claudecab-auth:/home/claudecab/.claude
     healthcheck:
       test:
         [
@@ -59,3 +60,6 @@ services:
       - ./package.json:/app/package.json:ro
       - ./package-lock.json:/app/package-lock.json:ro
     command: npm run dev
+
+volumes:
+  claudecab-auth:

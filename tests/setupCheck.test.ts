@@ -81,7 +81,7 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root, nodeVersion: '18.20.0' });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === 'node' && check.message.includes('Node.js 20+ is required'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'node' && check.message.includes('需要 Node.js 20 以上'))).toBe(true);
   });
 
   it('allows placeholders in template mode', async () => {
@@ -110,7 +110,7 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === 'agent.json' && check.message.includes('model belongs in .claude/settings.local.json'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'agent.json' && check.message.includes('model 應放在 .claude/settings.local.json'))).toBe(true);
   });
 
   it('rejects shared main bot and agent bot tokens', async () => {
@@ -122,7 +122,7 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === 'discord' && check.message.includes('equals agent discordBotToken'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'discord' && check.message.includes('與 agent discordBotToken 相同'))).toBe(true);
   });
 
   it('rejects missing AGENTS_DIR instead of silently falling back', async () => {
@@ -141,7 +141,7 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === '.env' && check.message.includes('AGENTS_DIR is required'))).toBe(true);
+    expect(result.checks.some((check) => check.area === '.env' && check.message.includes('AGENTS_DIR 為必填'))).toBe(true);
   });
 
   it('rejects Discord IDs pasted into bot token fields', async () => {
@@ -162,8 +162,8 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThanOrEqual(2);
-    expect(result.checks.some((check) => check.message.includes('DISCORD_MAIN_BOT_TOKEN looks like a Discord ID'))).toBe(true);
-    expect(result.checks.some((check) => check.message.includes('agent discordBotToken looks like a Discord ID'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('DISCORD_MAIN_BOT_TOKEN 看起來像 Discord ID'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('agent discordBotToken 看起來像 Discord ID'))).toBe(true);
   });
 
   it('rejects Discord ID fields that were mixed together', async () => {
@@ -184,9 +184,9 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.message.includes('Client ID is the application ID'))).toBe(true);
-    expect(result.checks.some((check) => check.message.includes('Server ID and channel ID are different'))).toBe(true);
-    expect(result.checks.some((check) => check.message.includes('Application ID and channel ID are different'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('Client ID 是 application ID'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('Server ID 與 channel ID 是不同的值'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('Application ID 與 channel ID 是不同的值'))).toBe(true);
   });
 
   it('rejects malformed Discord owner user IDs', async () => {
@@ -207,7 +207,7 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.message.includes('DISCORD_OWNER_USER_ID must be a numeric Discord user ID'))).toBe(true);
+    expect(result.checks.some((check) => check.message.includes('必須是數字 Discord user ID'))).toBe(true);
   });
 
   it('rejects OAuth-style config with base URL but no API key', async () => {
@@ -228,7 +228,7 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('OAuth mode'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('OAuth 模式'))).toBe(true);
   });
 
   it('accepts agent-level proxy credentials and reports config isolation', async () => {
@@ -255,7 +255,7 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBe(0);
-    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('Claude Code will read it'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('Claude Code 會從此 agent 設定檔讀取'))).toBe(true);
   });
 
   it('accepts agent-level auth token provider credentials', async () => {
@@ -308,6 +308,6 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'auth' && check.message.includes('ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN'))).toBe(true);
   });
 });

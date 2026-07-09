@@ -27,7 +27,7 @@ export async function handleSessions(
 
   const summaries = deps.sdkSessionManager.getSessionSummaries();
   if (summaries.length === 0) {
-    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 V2 session。', ephemeral: true });
+    await interaction.reply({ content: 'ℹ️ 目前沒有活躍的 session。', ephemeral: true });
     return;
   }
 
@@ -110,7 +110,7 @@ export async function handleSessions(
 
   const description = fitSessionDescription(lines, 15, 3900);
   const embed = new EmbedBuilder()
-    .setTitle(`🖥️ V2 Sessions（${summaries.length} 個活躍）`)
+    .setTitle(`🖥️ Sessions（${summaries.length} 個活躍）`)
     .setDescription(description)
     .setColor(0x5865F2)
     .setTimestamp();

@@ -22,10 +22,16 @@ npm run test:run
 npm run setup:check -- --template
 ```
 
+If Docker is available, also run the same secret scan used by CI:
+
+```bash
+docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:latest detect --source=/repo --config=/repo/.gitleaks.toml --no-banner --redact
+```
+
 For setup, SDK, CLI, schedule, or Discord behavior changes, also update the relevant docs:
 
 - `README.md`
 - `docs/SETUP.md`
 - `docs/ARCHITECTURE.md`
 - `docs/SDK_TOUCHPOINTS.md`
-- `docs/skills/claudecab-deploy/SKILL.md`
+- `.claude/skills/claudecab-deploy/SKILL.md`

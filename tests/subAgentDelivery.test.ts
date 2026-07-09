@@ -79,7 +79,7 @@ describe('sub-agent delivery', () => {
     } as unknown as SDKMessage;
 
     expect(extractSubAgentEvent(message)).toEqual({
-      toolUseId: 'tool-1',
+      toolUseId: 'task-1',
       taskId: 'task-1',
       lifecycle: 'completed',
       summary: '研究完成',
@@ -88,7 +88,25 @@ describe('sub-agent delivery', () => {
     });
   });
 
-  it('edits the sub-agent message with completed output file content', async () => {
+  it('groups sub-agent progress by task id instead of inner tool id', () => {
+    const message = {
+      type: 'system',
+      subtype: 'task_progress',
+      task_id: 'task-parent',
+      tool_use_id: 'inner-glob-tool',
+      status: 'running',
+      description: 'Finding knowledge/story-wiki/debriefs/*/',
+    } as unknown as SDKMessage;
+
+    expect(extractSubAgentEvent(message)).toEqual({
+      toolUseId: 'task-parent',
+      taskId: 'task-parent',
+      lifecycle: 'progress',
+      summary: 'Finding knowledge/story-wiki/debriefs/*/',
+    });
+  });
+
+  it('edits one aggregate sub-agent message with completed output preview', async () => {
     const outputFile = await tempFile('這是派出去的 agent 完整結果');
     const adapter = new FakeAdapter({ platform: 'discord', agentId: 'general' });
     const manager = new SubAgentMessageManager(adapter, 'chat-1');
@@ -106,11 +124,54 @@ describe('sub-agent delivery', () => {
     });
 
     expect(delivered).toBe(true);
-    expect(adapter.sent[0]?.text).toContain('子代理 已開始');
+    expect(adapter.sent[0]?.text).toContain('背景任務執行中');
     expect(adapter.edited[0]?.messageId).toBe('message-1');
-    expect(adapter.edited[0]?.text).toContain('子代理 完成');
+    expect(adapter.edited[0]?.text).toContain('背景任務完成');
     expect(adapter.edited[0]?.text).toContain('這是派出去的 agent 完整結果');
     await expect(readFile(outputFile, 'utf-8')).resolves.toContain('完整結果');
+  });
+
+  it('aggregates different sub-agents into the same editable message', async () => {
+    const adapter = new FakeAdapter({ platform: 'discord', agentId: 'general' });
+    const manager = new SubAgentMessageManager(adapter, 'chat-1');
+
+    await manager.handle({
+      toolUseId: 'tool-1',
+      lifecycle: 'started',
+      summary: 'Finding memory/2026-06-*.md',
+    });
+    await manager.handle({
+      toolUseId: 'tool-2',
+      lifecycle: 'started',
+      summary: 'Searching for 潘亦兆|潘|Pan|pan',
+    });
+
+    expect(adapter.sent).toHaveLength(1);
+    expect(adapter.edited).toHaveLength(1);
+    expect(adapter.edited[0]?.messageId).toBe('message-1');
+    expect(adapter.edited[0]?.text).toContain('Finding memory/2026-06-*.md');
+    expect(adapter.edited[0]?.text).toContain('Searching for 潘亦兆|潘|Pan|pan');
+  });
+
+  it('starts a new aggregate message after the previous query is finalized', async () => {
+    const adapter = new FakeAdapter({ platform: 'discord', agentId: 'general' });
+    const manager = new SubAgentMessageManager(adapter, 'chat-1');
+
+    await manager.handle({
+      toolUseId: 'tool-1',
+      lifecycle: 'started',
+      summary: '第一輪背景任務',
+    });
+    await manager.finalizeAll();
+    await manager.handle({
+      toolUseId: 'tool-2',
+      lifecycle: 'started',
+      summary: '第二輪背景任務',
+    });
+
+    expect(adapter.sent).toHaveLength(2);
+    expect(adapter.sent[1]?.text).toContain('第二輪背景任務');
+    expect(adapter.sent[1]?.text).not.toContain('第一輪背景任務');
   });
 
   it('does not emit silent-failure text when a sub-agent message was delivered', async () => {

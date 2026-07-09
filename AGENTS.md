@@ -53,8 +53,8 @@
 | `docs/SDK_TOUCHPOINTS.md` | 動任何 SDK 相關程式碼前（建立前暫以 `docs/sop-sdk-cli-upgrade.md` 代替） |
 | `docs/sop-sdk-cli-upgrade.md` | 升級 SDK/CLI 前 |
 | `docs/SETUP.md` | 架設環境（建立前暫以 README + `npm run setup:check` 代替） |
-| `docs/PLAN-cleanup-and-governance.md` | 執行淨化與治理工作包時（完成後會歸檔） |
 | `docs/LOGGING.md` | 查 log、加 log 前 |
+| `docs/OPEN_SOURCE_READINESS.md` | 開源發布前檢查、CI/security/release gate |
 
 ## SDK 雷區摘要（詳情見 SDK_TOUCHPOINTS / SOP）
 

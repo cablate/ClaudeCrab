@@ -11,7 +11,7 @@ ClaudeCab is a Discord-first Claude Agent SDK runtime.
 The live product surface is:
 
 - Discord agent bots loaded from `AGENTS_DIR`.
-- Claude Agent SDK V2 persistent sessions.
+- Claude Agent SDK persistent sessions（可恢復的長駐對話）.
 - Discord slash commands.
 - YAML schedules that can continue in Discord threads.
 - SQLite persistence for sessions, conversations, query metrics, rate-limit snapshots, and schedule executions.

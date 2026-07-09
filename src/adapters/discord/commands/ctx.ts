@@ -86,11 +86,11 @@ export async function handleCtx(
   let cacheStatus: string;
   if (sessionStats !== null) {
     const ageMs = sessionStats.ageMs;
-    if (ageMs < 5 * 60 * 1000) cacheStatus = '🟢 熱（V2 process 存活，cache 有效）';
+    if (ageMs < 5 * 60 * 1000) cacheStatus = '🟢 熱（process 存活，cache 有效）';
     else if (ageMs < 15 * 60 * 1000) cacheStatus = '🟡 溫（process 存活但 cache 可能部分過期）';
     else cacheStatus = '🔴 冷（process 閒置超過 15 分鐘）';
   } else {
-    cacheStatus = '⚫ 無 V2 session（下次對話會建新 process）';
+    cacheStatus = '⚫ 無 session（下次對話會建新 process）';
   }
 
   let cacheHitPct = 0;
@@ -112,7 +112,7 @@ export async function handleCtx(
       { name: '🔄 Cache', value: cacheStatus, inline: false },
       { name: '📈 最近一次查詢', value: cacheDetail, inline: false },
       { name: '📊 Session 累計', value: `${sessionQueryCount} 次查詢 · ${(sessionTotalOutput / 1000).toFixed(1)}K output · $${sessionTotalCost.toFixed(3)}`, inline: true },
-      { name: '⚙️ V2 Process', value: sessionStats !== null ? `🟢 存活（${sessionStats.messageCount} msg）` : '⚫ 無', inline: true },
+      { name: '⚙️ Process', value: sessionStats !== null ? `🟢 存活（${sessionStats.messageCount} msg）` : '⚫ 無', inline: true },
     )
     .setFooter({ text: `${model} · ${isThread ? 'thread' : 'main'} · ${channelId}` })
     .setTimestamp();

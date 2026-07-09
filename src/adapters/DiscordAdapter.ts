@@ -56,6 +56,7 @@ import {
   sendStatusMessage as senderSendStatusMessage,
   sendSubtitleMessage as senderSendSubtitleMessage,
   updateStatusMessage as senderUpdateStatusMessage,
+  editMessage as senderEditMessage,
   sendEmbed as senderSendEmbed,
   editEmbed as senderEditEmbed,
   sendToChannel as senderSendToChannel,
@@ -266,6 +267,14 @@ export class DiscordAdapter extends BaseAdapter<DiscordAdapterConfig> {
     text: string
   ): Promise<boolean> {
     return senderUpdateStatusMessage(this.senderDeps, chatId, messageId, text);
+  }
+
+  override async editMessage(
+    chatId: string,
+    messageId: string,
+    text: string,
+  ): Promise<SendResult> {
+    return senderEditMessage(this.senderDeps, chatId, messageId, text);
   }
 
   async sendTypingIndicator(chatId: string): Promise<void> {

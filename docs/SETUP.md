@@ -26,6 +26,8 @@ node --version
 npm --version
 ```
 
+> ClaudeCab 依賴 `better-sqlite3`（native module）。多數平台有 prebuilt binary，`npm install` 會直接套用；若 Node 版本過新或平台罕見而觸發現場編譯，Windows 需 Python + C++ Build Tools，macOS/Linux 需 `make` + `python3`。遇到編譯失敗時，改用 Node 20 LTS 通常能對到 prebuilt。
+
 Claude Code 訂閱模式要先在部署機器登入：
 
 ```bash
@@ -35,7 +37,7 @@ claude --version
 
 如果 `claude` 指令不存在，先安裝 Claude Code CLI，並在安裝後重新開 terminal。Claude Code 2.1.119+ 使用平台 native binary，缺平台包時可能出現 CLI 找不到或 SDK spawn 失敗；`npm run setup:verify` 會檢查這件事。
 
-如果要讓 AI assistant 幫你部署，先讓它讀 `docs/skills/claudecab-deploy/SKILL.md`。這個資料夾是可追蹤的 skill package，裡面包含 config matrix、admin console、Docker/cloud troubleshooting。
+如果要讓 AI assistant 幫你部署，先讓它讀 `.claude/skills/claudecab-deploy/SKILL.md`。這個資料夾是可追蹤的 skill package，裡面包含 config matrix、admin console、Docker/cloud troubleshooting。
 
 ## 2. Clone 與安裝
 
@@ -145,11 +147,26 @@ ClaudeCab 會把 agent 目錄當成 Claude Code 專案工作目錄；Claude Code
 
 ### Claude Code 訂閱 / OAuth
 
-`.env` 不填 `ANTHROPIC_API_KEY`，也不要設定 `ANTHROPIC_BASE_URL`。部署機器先跑：
+OAuth 模式的前提（缺一不可，全新部署最常在這裡卡）：
+
+- **需要 Claude Pro / Max 訂閱**。沒有訂閱無法完成 `claude login`；沒訂閱請改用「Anthropic API key」模式，不需要登入。
+- **需要在部署機器另外全域安裝 Claude Code CLI**（ClaudeCab 不會幫你裝）：
+
+  ```bash
+  npm install -g @anthropic-ai/claude-code
+  ```
+
+  ClaudeCab 的 SDK 自帶用來跑 query 的 CLI binary，但 OAuth 登入憑證是由這個獨立的 Claude Code CLI 產生，存在部署機器的 `~/.claude/credentials.json`。
+
+安裝完 Claude Code CLI 後，在部署機器跑（會開瀏覽器完成登入）：
 
 ```bash
 claude login
 ```
+
+`.env` 不填 `ANTHROPIC_API_KEY`，也不要設定 `ANTHROPIC_BASE_URL`。
+
+> SSH / Docker / 雲端等無瀏覽器環境跑 `claude login` 的替代方案，見 [.claude/skills/claudecab-deploy/references/troubleshooting.md](../.claude/skills/claudecab-deploy/references/troubleshooting.md) 的 Headless 段。
 
 ### Anthropic API key
 
@@ -181,6 +198,8 @@ ANTHROPIC_BASE_URL=
 部分 provider 使用 `ANTHROPIC_AUTH_TOKEN` 而不是 `ANTHROPIC_API_KEY`；兩者擇一即可，不要同時亂填。
 
 ClaudeCab 會以這份檔案的 `model` 與 provider env 組裝 SDK session；`agent.json` 不再放 model，避免同一個 agent 有兩個互相覆蓋的模型來源。修改 provider 或 model 後，建議關閉既有 SDK session 或重啟後再測一次。
+
+`permissions` 規則、可用 model 名稱、MCP server 設定的完整 schema 以 Claude Code 官方文件為準，設定前先查 [docs/CLAUDE-SETTINGS.md](CLAUDE-SETTINGS.md) 裡的官方文件連結，不要憑記憶猜欄位。
 
 ## 7. 靜態驗證
 
@@ -296,18 +315,25 @@ npm run discord:check -- --agent example --thread
 
 ## 9. 啟動
 
-開發：
+開發（即時跑原始碼）：
 
 ```bash
 npm run dev
 ```
 
-正式本機啟動：
+正式本機啟動（supervisor 管理、自動重啟）：
 
 ```bash
-npm run build
 npm start
 ```
+
+直接跑 runtime（不走 supervisor）：
+
+```bash
+npm run start:direct
+```
+
+> `npm start` / `start:direct` 都以 tsx 直接執行 `src/index.ts`，**不需要先 `npm run build`**。`npm run build` 產生的 `dist/` 只有 Docker 部署（`node dist/index.js`）會用到。
 
 啟動成功後檢查：
 
@@ -364,7 +390,7 @@ docker compose down
 
 Docker 注意事項：
 
-- container 內不會自動讀到主機 Claude Code OAuth。Docker 使用時建議用 `.env` 或 agent `.claude/settings.local.json` 提供 API key / auth token / provider key。
+- container 內 OAuth：production image 已全域裝 Claude Code CLI，可 `docker exec -it claudecab claude login` 在 container 內完成 OAuth，憑證寫入 `/home/claudecab/.claude` 並由 `claudecab-auth` volume 持久化。但互動式 login 仍需能把瀏覽器授權回流到 container 的環境（SSH port forward 或本機桌面）；headless 環境建議直接用 API key / auth token / provider key 放 `.env` 或 agent `.claude/settings.local.json`。
 - `.env` 是 bind mount，不會被 bake 進 image；請不要把 `docker compose config` 的完整輸出貼到公開地方。
 - `agents/`、`data/`、`logs/` 會掛載為 volume，避免重建 container 後遺失 agent 設定與 SQLite DB。
 - 若要用第三方 provider，仍建議放 agent `.claude/settings.local.json`，不要把所有 provider key 放全域 `.env`。

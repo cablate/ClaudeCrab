@@ -183,7 +183,7 @@ export function buildSlashCommands(): SlashCommandBuilder[] {
           .addStringOption(opt => opt.setName('session').setDescription('SessionId 前 8 碼或完整').setRequired(true))) as SlashCommandBuilder,
     new SlashCommandBuilder()
       .setName('sessions')
-      .setDescription('列出 V2 session 摘要'),
+      .setDescription('列出 session 摘要'),
   ];
 }
 

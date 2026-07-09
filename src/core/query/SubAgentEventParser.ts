@@ -37,8 +37,8 @@ export function extractSubAgentEvent(message: SDKMessage): SubAgentEvent | null 
 
   const taskId = stringValue(systemMsg.task_id);
   const toolUseId =
-    stringValue(systemMsg.tool_use_id) ??
     taskId ??
+    stringValue(systemMsg.tool_use_id) ??
     stringValue(systemMsg.uuid) ??
     `task:${Date.now()}`;
 

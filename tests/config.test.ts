@@ -45,7 +45,7 @@ describe('AppConfig', () => {
       SESSION_IDLE_CLOSE_MS: '1234',
       CACHE_KEEPALIVE_DETECTED_TTL_RATIO: '0.5',
       ADMIN_CONSOLE_ENABLED: 'true',
-      ADMIN_CONSOLE_TOKEN: '1234567890abcdef',
+      ADMIN_CONSOLE_TOKEN: 'fixture-admin-console-token',
       ADMIN_CONSOLE_PORT: '49999',
     }, 'C:/project');
 
@@ -57,7 +57,7 @@ describe('AppConfig', () => {
     expect(config.session.idleCloseMs).toBe(1234);
     expect(config.cacheKeepalive.detectedTTLRatio).toBe(0.5);
     expect(config.admin.enabled).toBe(true);
-    expect(config.admin.token).toBe('1234567890abcdef');
+    expect(config.admin.token).toBe('fixture-admin-console-token');
     expect(config.admin.port).toBe(49_999);
   });
 

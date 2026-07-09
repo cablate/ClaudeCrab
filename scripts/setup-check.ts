@@ -70,9 +70,9 @@ export function runSetupCheck(options: SetupCheckOptions = {}): SetupCheckResult
   const claudeMdPath = path.join(agentPath, 'CLAUDE.md');
 
   if (!existsSync(agentsDirPath) || !statSync(agentsDirPath).isDirectory()) {
-    checks.push({ level: 'error', area: 'agents', message: `AGENTS_DIR does not exist or is not a directory: ${agentsDir}` });
+    checks.push({ level: 'error', area: 'agents', message: `AGENTS_DIR 不存在或不是目錄：${agentsDir}` });
   } else {
-    checks.push({ level: 'ok', area: 'agents', message: `AGENTS_DIR exists: ${agentsDir}` });
+    checks.push({ level: 'ok', area: 'agents', message: `AGENTS_DIR 存在：${agentsDir}` });
   }
 
   const agentConfig = readJsonRecord(cwd, agentJsonPath, checks, 'agent.json');
@@ -89,7 +89,7 @@ export function runSetupCheck(options: SetupCheckOptions = {}): SetupCheckResult
     checks.push({
       level: 'warn',
       area: 'CLAUDE.md',
-      message: `${relative(cwd, claudeMdPath)} is missing; the agent will run without a project instruction file.`,
+      message: `${relative(cwd, claudeMdPath)} 不存在；agent 將在沒有專案指令檔的情況下執行。`,
     });
   }
 
@@ -119,22 +119,22 @@ function checkEnvFiles(
       level: templateMode ? 'warn' : 'error',
       area: '.env',
       message: templateMode
-        ? '.env.example is missing, so template setup cannot be checked.'
-        : '.env is missing. Run "cp .env.example .env", then fill the required values.',
+        ? '.env.example 不存在，無法檢查範本設定。'
+        : '.env 不存在。請執行 "cp .env.example .env"，再填入必要值。',
     });
   } else {
-    checks.push({ level: 'ok', area: '.env', message: `${relative(cwd, envPath)} exists` });
+    checks.push({ level: 'ok', area: '.env', message: `${relative(cwd, envPath)} 存在` });
   }
 
   if (!existsSync(envExamplePath)) {
-    checks.push({ level: 'warn', area: '.env.example', message: '.env.example is missing; new users will not have a setup template.' });
+    checks.push({ level: 'warn', area: '.env.example', message: '.env.example 不存在；新使用者將沒有設定範本。' });
   }
 }
 
 function checkRequiredEnv(env: Record<string, string>, checks: Check[], templateMode: boolean): void {
   requireEnv(env, 'DISCORD_ENABLED', checks, undefined, templateMode);
   if (env.DISCORD_ENABLED !== 'true') {
-    checks.push({ level: 'error', area: '.env', message: 'DISCORD_ENABLED must be true for the Discord runtime to start.' });
+    checks.push({ level: 'error', area: '.env', message: 'DISCORD_ENABLED 必須為 true，Discord runtime 才能啟動。' });
   }
   requireEnv(env, 'DISCORD_MAIN_BOT_TOKEN', checks, undefined, templateMode);
   requireEnv(env, 'DISCORD_MAIN_BOT_CLIENT_ID', checks, isDiscordId, templateMode);
@@ -148,14 +148,14 @@ function checkNodeVersion(nodeVersion: string, checks: Check[]): void {
   const majorText = nodeVersion.split('.')[0] ?? '';
   const major = Number.parseInt(majorText, 10);
   if (!Number.isFinite(major)) {
-    checks.push({ level: 'warn', area: 'node', message: `Could not parse Node.js version: ${nodeVersion}` });
+    checks.push({ level: 'warn', area: 'node', message: `無法解析 Node.js 版本：${nodeVersion}` });
     return;
   }
   if (major < 20) {
-    checks.push({ level: 'error', area: 'node', message: `Node.js 20+ is required. Current version: ${nodeVersion}` });
+    checks.push({ level: 'error', area: 'node', message: `需要 Node.js 20 以上。目前版本：${nodeVersion}` });
     return;
   }
-  checks.push({ level: 'ok', area: 'node', message: `Node.js version is supported: ${nodeVersion}` });
+  checks.push({ level: 'ok', area: 'node', message: `Node.js 版本受支援：${nodeVersion}` });
 }
 
 function checkAgentConfig(
@@ -174,7 +174,7 @@ function checkAgentConfig(
     checks.push({
       level: 'error',
       area: 'agent.json',
-      message: `${field} belongs in .claude/settings.local.json or the dedicated runtime config. Remove agent.json ${field} to avoid conflicting runtime settings.`,
+      message: `${field} 應放在 .claude/settings.local.json 或專用 runtime 設定。請移除 agent.json 的 ${field}，避免 runtime 設定衝突。`,
     });
   }
 }
@@ -182,10 +182,10 @@ function checkAgentConfig(
 function checkClaudeSettings(settings: Record<string, unknown>, checks: Check[]): void {
   const envValue = settings.env;
   if (envValue !== undefined && (typeof envValue !== 'object' || envValue === null || Array.isArray(envValue))) {
-    checks.push({ level: 'error', area: '.claude/settings.local.json', message: 'env must be an object.' });
+    checks.push({ level: 'error', area: '.claude/settings.local.json', message: 'env 必須是物件。' });
   }
   if (settings.model !== undefined && (typeof settings.model !== 'string' || settings.model.trim() === '')) {
-    checks.push({ level: 'error', area: '.claude/settings.local.json', message: 'model must be a non-empty string when set.' });
+    checks.push({ level: 'error', area: '.claude/settings.local.json', message: 'model 若設定，必須是非空字串。' });
   }
 }
 
@@ -198,7 +198,7 @@ function checkDiscordEnvShape(env: Record<string, string>, checks: Check[], temp
     checks.push({
       level: 'error',
       area: 'discord',
-      message: 'DISCORD_MAIN_BOT_TOKEN looks like a Discord ID. Paste the bot token from Developer Portal > Bot > Token.',
+      message: 'DISCORD_MAIN_BOT_TOKEN 看起來像 Discord ID。請改貼 Developer Portal > Bot > Token 的 bot token。',
     });
   }
 
@@ -210,7 +210,7 @@ function checkDiscordEnvShape(env: Record<string, string>, checks: Check[], temp
       checks.push({
         level: 'error',
         area: 'discord',
-        message: `${key} looks like a bot token. Enable Discord Developer Mode and copy the numeric ID instead.`,
+        message: `${key} 看起來像 bot token。請開啟 Discord Developer Mode，改複製數字 ID。`,
       });
     }
   }
@@ -219,7 +219,7 @@ function checkDiscordEnvShape(env: Record<string, string>, checks: Check[], temp
     checks.push({
       level: 'error',
       area: 'discord',
-      message: 'DISCORD_MAIN_BOT_CLIENT_ID equals DISCORD_GUILD_ID. Client ID is the application ID; guild ID is the server ID.',
+      message: 'DISCORD_MAIN_BOT_CLIENT_ID 與 DISCORD_GUILD_ID 相同。Client ID 是 application ID；guild ID 是 server ID。',
     });
   }
 }
@@ -228,7 +228,7 @@ function checkOptionalDiscordOwnerUserId(env: Record<string, string>, checks: Ch
   const ownerUserId = env.DISCORD_OWNER_USER_ID ?? '';
   if (isPlaceholder(ownerUserId)) {
     if (templateMode) {
-      checks.push({ level: 'ok', area: '.env', message: 'DISCORD_OWNER_USER_ID is optional.' });
+      checks.push({ level: 'ok', area: '.env', message: 'DISCORD_OWNER_USER_ID 為選填。' });
     }
     return;
   }
@@ -236,7 +236,7 @@ function checkOptionalDiscordOwnerUserId(env: Record<string, string>, checks: Ch
     checks.push({
       level: 'error',
       area: '.env',
-      message: 'DISCORD_OWNER_USER_ID looks like a bot token. Enable Discord Developer Mode and copy your numeric user ID.',
+      message: 'DISCORD_OWNER_USER_ID 看起來像 bot token。請開啟 Discord Developer Mode，改複製你的數字 user ID。',
     });
     return;
   }
@@ -244,11 +244,11 @@ function checkOptionalDiscordOwnerUserId(env: Record<string, string>, checks: Ch
     checks.push({
       level: 'error',
       area: '.env',
-      message: 'DISCORD_OWNER_USER_ID must be a numeric Discord user ID when set.',
+      message: 'DISCORD_OWNER_USER_ID 若設定，必須是數字 Discord user ID。',
     });
     return;
   }
-  checks.push({ level: 'ok', area: '.env', message: 'DISCORD_OWNER_USER_ID is set' });
+  checks.push({ level: 'ok', area: '.env', message: 'DISCORD_OWNER_USER_ID 已設定' });
 }
 
 function checkDiscordBotSeparation(
@@ -267,43 +267,43 @@ function checkDiscordBotSeparation(
     checks.push({
       level: 'error',
       area: 'discord',
-      message: 'agent discordBotToken looks like a Discord ID. Paste the agent bot token from Developer Portal > Bot > Token.',
+      message: 'agent discordBotToken 看起來像 Discord ID。請改貼 Developer Portal > Bot > Token 的 agent bot token。',
     });
   }
   if (!templateMode && !isPlaceholder(channelId) && DISCORD_TOKEN_HINT.test(channelId)) {
     checks.push({
       level: 'error',
       area: 'discord',
-      message: 'agent discordChannelId looks like a bot token. Enable Discord Developer Mode and copy the numeric channel ID.',
+      message: 'agent discordChannelId 看起來像 bot token。請開啟 Discord Developer Mode，改複製數字 channel ID。',
     });
   }
 
   if (isPlaceholder(mainBotToken) || isPlaceholder(agentBotToken)) {
     if (templateMode) {
-      checks.push({ level: 'ok', area: 'discord', message: 'Template keeps main bot and agent bot tokens as placeholders.' });
+      checks.push({ level: 'ok', area: 'discord', message: '範本將主 bot 與 agent bot token 保留為占位值。' });
     }
   } else if (mainBotToken === agentBotToken) {
     checks.push({
       level: 'error',
       area: 'discord',
-      message: 'DISCORD_MAIN_BOT_TOKEN equals agent discordBotToken. Use separate bots for production, or confirm this is intentional before continuing.',
+      message: 'DISCORD_MAIN_BOT_TOKEN 與 agent discordBotToken 相同。正式環境請使用不同 bot，或確認這是刻意設定再繼續。',
     });
   } else {
-    checks.push({ level: 'ok', area: 'discord', message: 'Main bot token and agent bot token are distinct.' });
+    checks.push({ level: 'ok', area: 'discord', message: '主 bot token 與 agent bot token 不同。' });
   }
 
   if (!isPlaceholder(guildId) && !isPlaceholder(channelId) && guildId === channelId) {
     checks.push({
       level: 'error',
       area: 'discord',
-      message: 'DISCORD_GUILD_ID equals agent discordChannelId. Server ID and channel ID are different values.',
+      message: 'DISCORD_GUILD_ID 與 agent discordChannelId 相同。Server ID 與 channel ID 是不同的值。',
     });
   }
   if (!isPlaceholder(mainClientId) && !isPlaceholder(channelId) && mainClientId === channelId) {
     checks.push({
       level: 'error',
       area: 'discord',
-      message: 'DISCORD_MAIN_BOT_CLIENT_ID equals agent discordChannelId. Application ID and channel ID are different values.',
+      message: 'DISCORD_MAIN_BOT_CLIENT_ID 與 agent discordChannelId 相同。Application ID 與 channel ID 是不同的值。',
     });
   }
 }
@@ -333,21 +333,21 @@ function parseEnv(content: string): Record<string, string> {
 
 function readJsonRecord(cwd: string, filePath: string, checks: Check[], area: string): Record<string, unknown> | undefined {
   if (!existsSync(filePath)) {
-    checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} is missing.` });
+    checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} 不存在。` });
     return undefined;
   }
 
   try {
     const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as unknown;
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} must be a JSON object.` });
+      checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} 必須是 JSON 物件。` });
       return undefined;
     }
-    checks.push({ level: 'ok', area, message: `${relative(cwd, filePath)} is valid JSON` });
+    checks.push({ level: 'ok', area, message: `${relative(cwd, filePath)} 是有效 JSON` });
     return parsed as Record<string, unknown>;
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} has invalid JSON: ${reason}` });
+    checks.push({ level: 'error', area, message: `${relative(cwd, filePath)} JSON 無效：${reason}` });
     return undefined;
   }
 }
@@ -365,8 +365,8 @@ function requireEnv(
       level: allowPlaceholder ? 'warn' : 'error',
       area: '.env',
       message: allowPlaceholder
-        ? `${key} is blank or a placeholder; template mode allows it.`
-        : `${key} is required and cannot be blank or a placeholder.`,
+        ? `${key} 為空或占位值；範本模式允許。`
+        : `${key} 為必填，不能為空或占位值。`,
     });
     return;
   }
@@ -374,11 +374,11 @@ function requireEnv(
     checks.push({
       level: 'error',
       area: '.env',
-      message: `${key} must be a numeric Discord ID. Enable Developer Mode and copy the correct ID.`,
+      message: `${key} 必須是數字 Discord ID。請開啟 Developer Mode 並複製正確的 ID。`,
     });
     return;
   }
-  checks.push({ level: 'ok', area: '.env', message: `${key} is set` });
+  checks.push({ level: 'ok', area: '.env', message: `${key} 已設定` });
 }
 
 function requireJsonString(
@@ -395,8 +395,8 @@ function requireJsonString(
       level: allowPlaceholder ? 'warn' : 'error',
       area,
       message: allowPlaceholder
-        ? `${key} is blank or a placeholder; template mode allows it.`
-        : `${key} is required and cannot be blank or a placeholder.`,
+        ? `${key} 為空或占位值；範本模式允許。`
+        : `${key} 為必填，不能為空或占位值。`,
     });
     return;
   }
@@ -404,11 +404,11 @@ function requireJsonString(
     checks.push({
       level: 'error',
       area,
-      message: `${key} must be a numeric Discord ID. Enable Developer Mode and copy the correct ID.`,
+      message: `${key} 必須是數字 Discord ID。請開啟 Developer Mode 並複製正確的 ID。`,
     });
     return;
   }
-  checks.push({ level: 'ok', area, message: `${key} is set` });
+  checks.push({ level: 'ok', area, message: `${key} 已設定` });
 }
 
 function checkAuthMode(
@@ -431,20 +431,20 @@ function checkAuthMode(
     checks.push({
       level: 'ok',
       area: 'auth',
-      message: `Agent-level ${credentialName} is set; Claude Code will read it from this agent settings file.`,
+      message: `Agent 層級的 ${credentialName} 已設定；Claude Code 會從此 agent 設定檔讀取。`,
     });
     if (isPlaceholder(agentBaseUrl)) {
       checks.push({
         level: 'warn',
         area: 'auth',
-        message: 'Agent-level credential is set without ANTHROPIC_BASE_URL. This is fine for Anthropic API key mode, but proxy/provider setups usually need a base URL.',
+        message: 'Agent 層級憑證已設定但沒有 ANTHROPIC_BASE_URL。Anthropic API key 模式沒問題，但 proxy/provider 通常需要 base URL。',
       });
     }
     if (!isPlaceholder(agentApiKey) && !isPlaceholder(agentAuthToken)) {
       checks.push({
         level: 'warn',
         area: 'auth',
-        message: 'Both agent ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are set. Keep only the credential type your provider expects.',
+        message: '同時設定了 agent ANTHROPIC_API_KEY 與 ANTHROPIC_AUTH_TOKEN。請只保留你的 provider 預期的憑證類型。',
       });
     }
     return;
@@ -454,18 +454,18 @@ function checkAuthMode(
     checks.push({
       level: 'error',
       area: 'auth',
-      message: 'Agent-level ANTHROPIC_BASE_URL is set but agent env has no ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN.',
+      message: 'Agent 層級 ANTHROPIC_BASE_URL 已設定，但 agent env 沒有 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN。',
     });
     return;
   }
 
   if (!isPlaceholder(globalApiKey)) {
-    checks.push({ level: 'ok', area: 'auth', message: 'Global ANTHROPIC_API_KEY is set.' });
+    checks.push({ level: 'ok', area: 'auth', message: '全域 ANTHROPIC_API_KEY 已設定。' });
     if (!isPlaceholder(globalBaseUrl)) {
       checks.push({
         level: 'warn',
         area: 'auth',
-        message: 'Global ANTHROPIC_BASE_URL is set. For per-agent proxy/provider setups, prefer agent .claude/settings.local.json env.',
+        message: '全域 ANTHROPIC_BASE_URL 已設定。各 agent 使用不同 proxy/provider 時，建議改放 agent .claude/settings.local.json 的 env。',
       });
     }
     return;
@@ -475,7 +475,7 @@ function checkAuthMode(
     checks.push({
       level: 'error',
       area: 'auth',
-      message: 'ANTHROPIC_BASE_URL is set but no ANTHROPIC_API_KEY was found. OAuth mode should not set ANTHROPIC_BASE_URL.',
+      message: 'ANTHROPIC_BASE_URL 已設定但找不到 ANTHROPIC_API_KEY。OAuth 模式不應設定 ANTHROPIC_BASE_URL。',
     });
     return;
   }
@@ -484,8 +484,8 @@ function checkAuthMode(
     level: templateMode ? 'ok' : 'warn',
     area: 'auth',
     message: templateMode
-      ? 'Template does not include credentials.'
-      : 'No API key found. This is OK only if the host has already run claude login and OAuth credentials are readable.',
+      ? '範本未包含憑證。'
+      : '找不到 API key。只有當主機已執行過 claude login 且 OAuth 憑證可讀時，這才算正常。',
   });
 }
 
@@ -507,7 +507,7 @@ function printChecks(checks: Check[]): void {
   const errors = checks.filter((check) => check.level === 'error').length;
   const warnings = checks.filter((check) => check.level === 'warn').length;
   console.log('');
-  console.log(`setup-check: ${errors} error(s), ${warnings} warning(s)`);
+  console.log(`setup-check：${errors} 個錯誤，${warnings} 個警告`);
 }
 
 function relative(cwd: string, filePath: string): string {

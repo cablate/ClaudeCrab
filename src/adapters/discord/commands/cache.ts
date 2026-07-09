@@ -21,7 +21,7 @@ export async function handleCache(
     const embed = new EmbedBuilder()
       .setTitle('🧊 Cache 全域快照')
       .setDescription([
-        `**活躍 V2 session**：${cs.active_sessions}`,
+        `**活躍 session**：${cs.active_sessions}`,
         `**SessionManager session**：${sessCount}`,
         `**正在查詢中**：${cs.querying_sessions}`,
         `**平均 cache 命中率**：${effTxt}`,

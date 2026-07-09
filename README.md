@@ -1,5 +1,7 @@
 # ClaudeCab
 
+![ClaudeCab banner](docs/assets/claudecab-banner.png)
+
 ClaudeCab 是一個 Discord-first runtime，讓使用者在 Discord channel/thread 裡透過 `@anthropic-ai/claude-agent-sdk` / Claude Code 和 agent 對話。
 
 它的定位很窄：
@@ -21,7 +23,7 @@ Discord channel/thread
 目前包含：
 
 - 從 `AGENTS_DIR` 載入多個 Discord agents。
-- Claude Agent SDK V2 persistent sessions。
+- Claude Agent SDK persistent sessions（可恢復的長駐對話）。
 - Discord permission / question / exit-plan callbacks。
 - idle session cleanup 與 prompt-cache keepalive。
 - YAML schedules，可輸出 Discord message/thread。
@@ -42,7 +44,7 @@ Discord channel/thread
 
 完整安裝、Docker、Cloud、DeepSeek / proxy/provider 設定請看 [docs/SETUP.md](docs/SETUP.md)。README 只保留最短路徑。
 
-如果你要把整包交給 AI assistant 協助部署，請讓它先讀 [docs/skills/claudecab-deploy/SKILL.md](docs/skills/claudecab-deploy/SKILL.md)。
+如果你要把整包交給 AI assistant 協助部署，請讓它先讀 [.claude/skills/claudecab-deploy/SKILL.md](.claude/skills/claudecab-deploy/SKILL.md)。這是 repo 內唯一預期對外公開的 Claude project skill。
 
 需求：
 
@@ -101,12 +103,13 @@ npm run discord:check -- --agent example
 npm run dev
 ```
 
-正式本機啟動：
+正式本機啟動（supervisor 管理、自動重啟）：
 
 ```bash
-npm run build
 npm start
 ```
+
+`npm start` 跑的是 `start.ts` supervisor，內部以 tsx 直接執行 `src/index.ts`，**不需要先 `npm run build`**。`npm run build` 產生的 `dist/` 只有 Docker 部署會用到。
 
 啟動後到 `discordChannelId` 對應的 channel 發一則文字訊息。Agent Bot 有回覆，才算真的跑通。
 
@@ -134,10 +137,21 @@ Claude Code 會依照 agent 工作目錄讀取 `.claude/settings.local.json` 與
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 模組邊界、啟動流程、訊息流程。 |
 | [docs/LOGGING.md](docs/LOGGING.md) | 查 log、調整 log、排查無回應或排程未觸發。 |
 | [docs/SDK_TOUCHPOINTS.md](docs/SDK_TOUCHPOINTS.md) | 動 SDK、CLI、session、query、hook、sub-agent 前必讀。 |
-| [docs/skills/claudecab-deploy/SKILL.md](docs/skills/claudecab-deploy/SKILL.md) | 給 AI assistant 部署 ClaudeCab 的 skill 指引。 |
+| [docs/CLAUDE-SETTINGS.md](docs/CLAUDE-SETTINGS.md) | agent `.claude/settings.local.json` 設定與官方文件指引。 |
+| [docs/OPEN_SOURCE_READINESS.md](docs/OPEN_SOURCE_READINESS.md) | 開源發布前檢查、CI/security/release gate。 |
+| [.claude/skills/claudecab-deploy/SKILL.md](.claude/skills/claudecab-deploy/SKILL.md) | 給 AI assistant 部署 ClaudeCab 的 skill 指引。 |
 | [AGENTS.md](AGENTS.md) | 本 repo 的 AI agent 治理規範，開工前必讀。 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 貢獻規則與 PR 前檢查。 |
 | [SECURITY.md](SECURITY.md) | 安全回報與部署安全注意事項。 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 公開協作行為準則。 |
+
+## 交給 AI 部署
+
+如果你要把這包交給另一個 AI assistant 架設，直接給它這段：
+
+```text
+請先閱讀 AGENTS.md、README.md、docs/SETUP.md、.claude/skills/claudecab-deploy/SKILL.md，然後依照 setup 文件完成 ClaudeCab 部署。不要輸出或提交 secret，不要用 Discord 聊天改設定；設定只走 .env、agents/<id>/agent.json、agents/<id>/.claude/settings.local.json、schedule YAML 或 admin console/local overlay。完成後執行 npm run setup:check、npm run setup:verify；只有我同意時才執行會送出 Discord 訊息的 npm run discord:check。
+```
 
 ## 常用指令
 
@@ -168,8 +182,8 @@ npm run test:run
 - `logs/`
 - `dist/`
 - `.codegraph/`
-- `.claude/`
-- local agent skills
+- `.claude/` 裡除了 `.claude/skills/claudecab-deploy/**` 以外的內容
+- local agent skills 或私人 Claude Code settings
 - generated databases
 
 預設只追蹤 `agents/example`；你的真實 `agents/*` 會被 `.gitignore` 排除。
