@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible ClaudeCab problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste Discord tokens, Claude/provider keys, `.env`, live `agents/*`, logs with secrets, or database files.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include the command, Discord action, or schedule action that reproduces it.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Discord message handling
+        - Claude Agent SDK session
+        - Setup / installation
+        - Docker / cloud deployment
+        - Schedule
+        - Admin console
+        - Logging / observability
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node.js version, npm version, Claude Code / provider mode.
+      placeholder: |
+        OS:
+        Node:
+        npm:
+        Claude auth mode:
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Checks run
+      description: Paste non-secret output from setup checks.
+      placeholder: |
+        npm run setup:check
+        npm run setup:verify
+        npm run discord:check -- --agent example

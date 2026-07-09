@@ -1,0 +1,107 @@
+# Secrets and local environment
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Runtime state
+data/
+logs/
+*.log
+*.pid
+claudecab.runtime.json
+claudecab.control.json
+npm-debug.log*
+
+# Claude Code project state
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/claudecab-deploy/
+!/.claude/skills/claudecab-deploy/**
+.claude/settings.local.json
+.claude/agent-memory/
+.claude/worktrees/
+.claude/projects/
+.claude/todos/
+.claude/plans/
+
+# Local AI agent/tooling state
+/.agents/
+/.codex/
+/.mcp.json
+/.serena/
+/.spectra/
+.playwright-mcp/
+.codegraph/
+openspec/.vector-search.db*
+
+# Agents: only the public example is tracked
+/agents/*
+!/agents/example/
+!/agents/example/**
+
+# Temporary files and caches
+tmp/
+temp/
+.tmp/
+.cache/
+*.tmp
+*.bak
+__pycache__/
+*.pyc
+*.pyo
+
+# Local verification/media artifacts at repo root
+/*.png
+/*.jpg
+/*.jpeg
+/*.mp3
+/*.wav
+/*.ogg
+/*.m4a
+
+# Internal planning/archive docs not shipped as public guidance
+docs/archive/
+docs/migrations/
+docs/current-architecture-review-*.md
+docs/*_FIX_PLAN.md
+docs/workflow-audit-agent-configs.md
+
+# Legacy/local Web UI static assets are not part of the current runtime
+public/
+
+# Root-level Python embeddable runtime
+Python/
+
+# Upgrade SOP sandboxes
+/.cache/sandbox-sdk-*/
+/.cache/sandbox-cli-*/
+/.cache/b59-*/
+
+# Codex sandbox workspaces
+**/pptx-workshop-deck/
+**/pptx-style-previews/
+
+# Codegraph SDK snapshots
+docs/upgrades/snapshots/
+
+# Windows/macOS/editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+nul
+
+# Mangled path artifacts
+_ProgramOwnProjectClaudeCab*/

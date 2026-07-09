@@ -1,0 +1,266 @@
+/**
+ * Cron Scheduler
+ *
+ * Manages cron-based schedule triggers using node-cron.
+ */
+
+import cron, { type ScheduledTask } from 'node-cron';
+import type { ScheduleSpec } from './schemas.js';
+import type { ScheduleExecutor } from './ScheduleExecutor.js';
+import { logger } from '../utils/logger.js';
+import { EventType } from '../utils/events.js';
+
+interface ScheduledJob {
+  task: ScheduledTask;
+  spec: ScheduleSpec;
+  agentId: string;
+}
+
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+export type OnAutoPauseCallback = (
+  scheduleId: string,
+  agentId: string,
+  spec: ScheduleSpec,
+  failureCount: number
+) => Promise<void>;
+
+export class CronScheduler {
+  private jobs: Map<string, ScheduledJob> = new Map();
+  private runningExecutions: Set<string> = new Set();
+  private consecutiveFailures: Map<string, number> = new Map();
+
+  constructor(
+    private executor: ScheduleExecutor,
+    private onAutoPause?: OnAutoPauseCallback
+  ) {}
+
+  /**
+   * Register a schedule for execution
+   */
+  register(agentId: string, spec: ScheduleSpec): void {
+    // Resolve cron expression from trigger config
+    const cronExpr = this.resolveCronExpression(spec);
+    if (!cronExpr) {
+      return;
+    }
+
+    // Validate cron expression
+    if (!cron.validate(cronExpr)) {
+      logger.error({ event_type: EventType.SCHEDULE_ERROR }, `[CronScheduler] Invalid cron expression for ${spec.id}: ${cronExpr}`);
+      return;
+    }
+
+    // Unregister existing job if any
+    if (this.jobs.has(spec.id)) {
+      this.unregister(spec.id);
+    }
+
+    // Create new scheduled task
+    const task = cron.schedule(
+      cronExpr,
+      async () => {
+        await this.executeSchedule(spec.id);
+      },
+      {
+        timezone: spec.trigger.timezone || 'UTC',
+      }
+    );
+
+    // If not enabled, stop immediately
+    if (!spec.metadata.enabled) {
+      void task.stop();
+    }
+
+    this.jobs.set(spec.id, { task, spec, agentId });
+    const typeLabel = spec.trigger.type !== 'cron' ? ` (${spec.trigger.type} → cron)` : '';
+    logger.info({ event_type: EventType.SCHEDULE_REGISTERED }, `[CronScheduler] Registered schedule: ${spec.id} (${cronExpr})${typeLabel}`);
+  }
+
+  /**
+   * Execute a schedule immediately
+   */
+  async executeNow(scheduleId: string): Promise<void> {
+    await this.executeSchedule(scheduleId);
+  }
+
+  /**
+   * Convert trigger config to a cron expression.
+   * - cron: use as-is
+   * - once: parse `at` datetime → `min hour day month *`
+   * - interval: ms → minutes → `*\/N * * * *` (requires >= 60s)
+   */
+  private resolveCronExpression(spec: ScheduleSpec): string | null {
+    const { trigger } = spec;
+
+    switch (trigger.type) {
+      case 'cron': {
+        if (!trigger.cron) {
+          logger.warn({ event_type: EventType.SCHEDULE_ERROR }, `[CronScheduler] Missing cron expression for: ${spec.id}`);
+          return null;
+        }
+        return trigger.cron;
+      }
+
+      case 'once': {
+        if (!trigger.at) {
+          logger.warn({ event_type: EventType.SCHEDULE_ERROR }, `[CronScheduler] Missing 'at' datetime for once schedule: ${spec.id}`);
+          return null;
+        }
+        const date = new Date(trigger.at);
+        if (isNaN(date.getTime())) {
+          logger.error({ event_type: EventType.SCHEDULE_ERROR }, `[CronScheduler] Invalid datetime for ${spec.id}: ${trigger.at}`);
+          return null;
+        }
+        if (date.getTime() <= Date.now()) {
+          logger.warn({ event_type: EventType.SCHEDULE_SKIPPED }, `[CronScheduler] Once schedule ${spec.id} target time already passed: ${trigger.at}`);
+          return null;
+        }
+        // Convert to cron: minute hour dayOfMonth month *
+        const cronExpr = `${date.getMinutes()} ${date.getHours()} ${date.getDate()} ${date.getMonth() + 1} *`;
+        return cronExpr;
+      }
+
+      case 'interval': {
+        if (!trigger.interval || trigger.interval < 60000) {
+          logger.warn({ event_type: EventType.SCHEDULE_ERROR }, `[CronScheduler] Interval must be >= 60000ms for ${spec.id}, got: ${trigger.interval}`);
+          return null;
+        }
+        const minutes = Math.round(trigger.interval / 60000);
+        if (minutes >= 60) {
+          const hours = Math.round(minutes / 60);
+          return `0 */${hours} * * *`;
+        }
+        return `*/${minutes} * * * *`;
+      }
+
+      default:
+        logger.warn({ event_type: EventType.SCHEDULE_ERROR }, `[CronScheduler] Unsupported trigger type for ${spec.id}: ${(trigger as { type: string }).type}`);
+        return null;
+    }
+  }
+
+  private async executeSchedule(scheduleId: string): Promise<void> {
+    const job = this.jobs.get(scheduleId);
+    if (!job) {
+      logger.warn({ event_type: EventType.SCHEDULE_ERROR }, `[CronScheduler] Schedule not found: ${scheduleId}`);
+      return;
+    }
+
+    // Prevent concurrent executions of the same schedule
+    if (this.runningExecutions.has(scheduleId)) {
+      logger.warn({ event_type: EventType.SCHEDULE_SKIPPED }, `[CronScheduler] Schedule ${scheduleId} is already running, skipping`);
+      return;
+    }
+
+    this.runningExecutions.add(scheduleId);
+
+    try {
+      logger.info({ event_type: EventType.SCHEDULE_FIRED }, `[CronScheduler] Executing schedule: ${scheduleId}`);
+      const result = await this.executor.execute(job.agentId, job.spec);
+
+      if (result.success) {
+        // Reset consecutive failure count on success
+        this.consecutiveFailures.delete(scheduleId);
+      } else {
+        await this.recordFailure(scheduleId, job);
+      }
+    } catch (error) {
+      // executor.execute() should not throw (internal catch), but handle defensively
+      logger.error({ event_type: EventType.SCHEDULE_ERROR, err: error, scheduleId }, '[CronScheduler] Execution failed');
+      await this.recordFailure(scheduleId, job);
+    } finally {
+      this.runningExecutions.delete(scheduleId);
+
+      // Auto-unregister one-time schedules after execution
+      if (job.spec.trigger.type === 'once') {
+        this.unregister(scheduleId);
+        logger.info({ event_type: EventType.SCHEDULE_UNREGISTERED }, `[CronScheduler] Auto-unregistered once schedule: ${scheduleId}`);
+      }
+    }
+  }
+
+  private async recordFailure(scheduleId: string, job: ScheduledJob): Promise<void> {
+    const count = (this.consecutiveFailures.get(scheduleId) ?? 0) + 1;
+    this.consecutiveFailures.set(scheduleId, count);
+
+    if (count < MAX_CONSECUTIVE_FAILURES) return;
+
+    logger.warn({ event_type: EventType.SCHEDULE_AUTO_PAUSED, scheduleId, count },
+      '[CronScheduler] Auto-pausing schedule after consecutive failures');
+    this.pause(scheduleId);
+    if (this.onAutoPause) {
+      await this.onAutoPause(scheduleId, job.agentId, job.spec, count);
+    }
+    this.consecutiveFailures.delete(scheduleId);
+  }
+
+  /**
+   * Unregister a schedule
+   */
+  unregister(scheduleId: string): void {
+    const job = this.jobs.get(scheduleId);
+    if (job) {
+      void job.task.stop();
+      this.jobs.delete(scheduleId);
+      logger.info({ event_type: EventType.SCHEDULE_UNREGISTERED }, `[CronScheduler] Unregistered schedule: ${scheduleId}`);
+    }
+  }
+
+  /**
+   * Pause a schedule
+   */
+  pause(scheduleId: string): boolean {
+    const job = this.jobs.get(scheduleId);
+    if (job) {
+      void job.task.stop();
+      logger.info({ event_type: EventType.SCHEDULE_PAUSED }, `[CronScheduler] Paused schedule: ${scheduleId}`);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get all registered schedule IDs
+   */
+  getRegisteredIds(): string[] {
+    return Array.from(this.jobs.keys());
+  }
+
+  /**
+   * Check if a schedule is registered
+   */
+  isRegistered(scheduleId: string): boolean {
+    return this.jobs.has(scheduleId);
+  }
+
+  /**
+   * Get schedule info
+   */
+  getScheduleInfo(scheduleId: string): { spec: ScheduleSpec; agentId: string } | null {
+    const job = this.jobs.get(scheduleId);
+    if (!job) return null;
+    return { spec: job.spec, agentId: job.agentId };
+  }
+
+  /**
+   * Stop all schedules
+   */
+  stopAll(): void {
+    for (const [id, job] of this.jobs) {
+      void job.task.stop();
+      logger.debug(`[CronScheduler] Stopped schedule: ${id}`);
+    }
+    logger.info({ event_type: EventType.SCHEDULE_MANAGER_DISPOSED }, `[CronScheduler] Stopped all ${this.jobs.size} schedules`);
+  }
+
+  /**
+   * Dispose and clean up
+   */
+  dispose(): void {
+    this.stopAll();
+    this.jobs.clear();
+    this.runningExecutions.clear();
+    logger.info({ event_type: EventType.SCHEDULE_MANAGER_DISPOSED }, '[CronScheduler] Disposed');
+  }
+}

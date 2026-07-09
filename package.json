@@ -1,0 +1,99 @@
+{
+  "name": "claudecab",
+  "version": "1.0.0",
+  "description": "Discord conversation workbench powered by Claude Agent SDK",
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "postinstall": "node scripts/patch-sdk-v2.cjs",
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node --import tsx start.ts",
+    "start:direct": "node --import tsx src/index.ts",
+    "setup:check": "tsx scripts/setup-check.ts",
+    "setup:verify": "tsx scripts/setup-verify.ts",
+    "discord:check": "tsx scripts/discord-check.ts",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "schedule:list": "tsx scripts/schedule-tool.ts list",
+    "schedule:validate": "tsx scripts/schedule-tool.ts validate",
+    "schedule:check": "tsx scripts/schedule-tool.ts check",
+    "schedule:run": "tsx scripts/schedule-tool.ts run",
+    "schedule:trigger": "tsx scripts/schedule-tool.ts trigger",
+    "schedule:discord-test": "tsx scripts/schedule-tool.ts discord-test",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "claude",
+    "discord",
+    "conversation",
+    "bot",
+    "ai"
+  ],
+  "author": "",
+  "license": "AGPL-3.0-or-later",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.2.119",
+    "adm-zip": "^0.5.16",
+    "async-mutex": "^0.5.0",
+    "better-sqlite3": "^12.11.1",
+    "chokidar": "^5.0.0",
+    "date-fns": "^4.1.0",
+    "date-fns-tz": "^3.2.0",
+    "discord.js": "^14.26.4",
+    "dotenv": "^17.2.3",
+    "node-cron": "^4.2.1",
+    "pino": "^10.3.0",
+    "pino-roll": "^4.0.0",
+    "uuid": "^13.0.2",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@inquirer/prompts": "^8.2.0",
+    "@types/adm-zip": "^0.5.7",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.19.11",
+    "@types/node-cron": "^3.0.11",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.1.0",
+    "pino-pretty": "^13.1.3",
+    "prettier": "^3.9.4",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.0",
+    "vitest": "^4.1.10"
+  },
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cablate/ClaudeCrab.git"
+  },
+  "types": "./dist/index.d.ts",
+  "bugs": {
+    "url": "https://github.com/cablate/ClaudeCrab/issues"
+  },
+  "homepage": "https://github.com/cablate/ClaudeCrab#readme",
+  "overrides": {
+    "express-rate-limit": "8.5.2",
+    "fast-uri": "4.1.0",
+    "hono": "4.12.28",
+    "ip-address": "10.2.0",
+    "path-to-regexp": "8.4.2",
+    "qs": "6.15.3",
+    "undici": "6.27.0",
+    "ws": "8.21.0"
+  }
+}

@@ -1,0 +1,260 @@
+import type { UnifiedMessage } from '../types/message.js';
+import type { BaseAdapter } from '../adapters/BaseAdapter.js';
+import type { UserSession } from '../types/session.js';
+import type { SessionManager } from '../core/session/SessionManager.js';
+import type { SDKSessionManager } from '../core/session/SDKSessionManager.js';
+import type { QueryExecutorDeps, QueryExecuteOptions } from '../core/query/QueryExecutor.js';
+import { EventType } from '../utils/events.js';
+import { logger } from '../utils/logger.js';
+import { sendErrorToUser } from '../core/query/ResponseSender.js';
+import { executeQueryWithSDK, type QueryRequest } from '../core/query/QueryExecutor.js';
+import { checkSessionGuard, type SessionGuardConfig } from '../core/session/SessionGuard.js';
+
+export interface ProcessMessageOptions {
+  replyToMessageId?: string;
+}
+
+export interface ProcessingResult {
+  success: boolean;
+  response?: string;
+  error?: string;
+  skipped?: boolean;
+  sessionId?: string;
+}
+
+export interface ConversationPipelineDeps {
+  sessionManager: SessionManager;
+  sdkSessionManager: SDKSessionManager;
+  getAdapter: (platform: 'discord', agentId: string) => BaseAdapter | undefined;
+  buildQueryExecutorDeps: () => QueryExecutorDeps;
+  getAgentCwd?: (agentId: string) => string | undefined;
+  sessionGuardConfig?: SessionGuardConfig;
+}
+
+/**
+ * Orchestrates the Discord conversation path:
+ * dedup -> budget -> session resolve -> guard -> runtime -> delivery -> finalize.
+ */
+export class ConversationPipeline {
+  constructor(private readonly deps: ConversationPipelineDeps) {}
+
+  async run(
+    message: UnifiedMessage,
+    agentId: string,
+    options?: ProcessMessageOptions
+  ): Promise<ProcessingResult> {
+    const platform = message.platform === 'discord' ? 'discord' : undefined;
+    if (platform === undefined) {
+      return { success: false, error: `Unsupported platform: ${message.platform}` };
+    }
+
+    const { userId, text, id: messageId } = message;
+    const effectiveUserId = message.metadata?.sessionUserId ?? userId;
+
+    logger.info(
+      { event_type: EventType.MESSAGE_PROCESSING_START, effectiveUserId, text_len: text.length },
+      'Processing message'
+    );
+
+    if (this.deps.sessionManager.isMessageProcessed(platform, agentId, effectiveUserId, messageId)) {
+      logger.debug({ event_type: EventType.MESSAGE_DUPLICATE_SKIPPED, messageId }, 'Skipping duplicate message');
+      return { success: true, skipped: true };
+    }
+
+    let session: UserSession;
+    try {
+      const inheritedSdkSessionId = message.metadata?.inheritedSdkSessionId as string | undefined;
+      session = await this.deps.sessionManager.getOrCreateSession({
+        platform,
+        userId: effectiveUserId,
+        agentId,
+        ...(inheritedSdkSessionId !== undefined ? { inheritedSdkSessionId } : {}),
+      });
+    } catch (error) {
+      logger.error({ error, platform, userId, agentId }, 'Failed to get/create session');
+      return {
+        success: false,
+        error: `Failed to create session: ${(error as Error).message}`,
+      };
+    }
+
+    const adapter = this.deps.getAdapter(platform, agentId);
+    if (adapter === undefined) {
+      logger.error({ platform, agentId }, 'No adapter found for platform and agent');
+      return {
+        success: false,
+        error: `No adapter for platform: ${platform}, agent: ${agentId}`,
+      };
+    }
+
+    try {
+      const result = await this.deps.sessionManager.withLock(
+        platform,
+        agentId,
+        effectiveUserId,
+        async () => {
+          const lockedArgs: {
+            message: UnifiedMessage;
+            agentId: string;
+            effectiveUserId: string;
+            session: UserSession;
+            adapter: BaseAdapter;
+            options?: ProcessMessageOptions;
+          } = { message, agentId, effectiveUserId, session, adapter };
+          if (options !== undefined) lockedArgs.options = options;
+          return this.runLocked(lockedArgs);
+        }
+      );
+
+      logger.info(
+        { event_type: EventType.MESSAGE_PROCESSING_COMPLETE, skipped: result.skipped === true, success: result.success },
+        'Message processing complete'
+      );
+      return result;
+    } catch (error) {
+      return await this.handleFailure(error, message, agentId, effectiveUserId, session, adapter);
+    }
+  }
+
+  private async runLocked(args: {
+    message: UnifiedMessage;
+    agentId: string;
+    effectiveUserId: string;
+    session: UserSession;
+    adapter: BaseAdapter;
+    options?: ProcessMessageOptions;
+  }): Promise<ProcessingResult> {
+    const { message, agentId, effectiveUserId, session, adapter, options } = args;
+    const platform = 'discord';
+    const { chatId, text, id: messageId } = message;
+
+    if (this.deps.sessionManager.isMessageProcessed(platform, agentId, effectiveUserId, messageId)) {
+      logger.warn(
+        { event_type: EventType.MESSAGE_RACE_PREVENTED, messageId, platform, agentId, effectiveUserId },
+        'Skipping duplicate message (caught inside lock; race condition prevented)'
+      );
+      return { success: true, skipped: true, response: '' };
+    }
+
+    this.deps.sessionManager.markMessageProcessed(platform, agentId, effectiveUserId, messageId);
+
+    const sessionGuardConfig = this.deps.sessionGuardConfig;
+    if (sessionGuardConfig?.enabled) {
+      const agentCwd = this.deps.getAgentCwd?.(agentId);
+      const guardResult = await checkSessionGuard(
+        { sdkSessionManager: this.deps.sdkSessionManager, adapter, chatId: message.chatId, agentCwd },
+        session,
+        sessionGuardConfig
+      );
+      if (guardResult === 'switch') {
+        this.deps.sdkSessionManager.destroySession(session.sessionId);
+        this.deps.sessionManager.setSdkSessionId(platform, agentId, effectiveUserId, undefined);
+        await adapter.sendMessage(
+          message.chatId,
+          'Session destroyed. Send your message again to start a fresh conversation.'
+        );
+        return { success: true, skipped: true, response: '' };
+      }
+      if (guardResult === 'timeout') {
+        return { success: true, skipped: true, response: '' };
+      }
+    }
+
+    this.deps.sessionManager.updateState(platform, agentId, effectiveUserId, 'processing');
+
+    try {
+      const queryOptions = this.buildQueryOptions(message, options);
+      const queryRequest: QueryRequest = {
+        sessionId: session.sessionId,
+        prompt: text,
+        adapter,
+        chatId,
+        platform,
+        agentId,
+        userId: effectiveUserId,
+        ...(queryOptions !== undefined && Object.keys(queryOptions).length > 0
+          ? { options: queryOptions }
+          : {}),
+      };
+      const response = await executeQueryWithSDK(
+        this.deps.buildQueryExecutorDeps(),
+        queryRequest
+      );
+
+      this.deps.sessionManager.updateState(platform, agentId, effectiveUserId, 'idle');
+
+      return {
+        success: true,
+        response,
+        sessionId: session.sessionId,
+      };
+    } catch (error) {
+      this.deps.sessionManager.updateState(platform, agentId, effectiveUserId, 'error');
+      logger.error(
+        { err: error instanceof Error ? error.message : String(error), platform, agentId, effectiveUserId },
+        'ConversationPipeline: message processing failed'
+      );
+      throw error;
+    }
+  }
+
+  private buildQueryOptions(
+    message: UnifiedMessage,
+    options: ProcessMessageOptions | undefined,
+  ): QueryExecuteOptions {
+    const queryOptions: QueryExecuteOptions = {};
+    if (message.metadata?.parentConversationId !== undefined) {
+      queryOptions.parentConversationId = message.metadata.parentConversationId;
+    }
+    if (typeof message.metadata?.sourceMessageChannelId === 'string') {
+      queryOptions.sourceMessageChannelId = message.metadata.sourceMessageChannelId;
+    }
+    if (typeof message.metadata?.guildId === 'string') {
+      queryOptions.guildId = message.metadata.guildId;
+    }
+    if (typeof message.metadata?.taskId === 'string') {
+      queryOptions.taskId = message.metadata.taskId;
+    }
+    if (options?.replyToMessageId) {
+      queryOptions.replyToMessageId = options.replyToMessageId;
+    } else if (message.metadata?.originalMessageId) {
+      queryOptions.replyToMessageId = message.metadata.originalMessageId;
+    }
+    return queryOptions;
+  }
+
+  private async handleFailure(
+    error: unknown,
+    message: UnifiedMessage,
+    agentId: string,
+    effectiveUserId: string,
+    session: UserSession,
+    adapter: BaseAdapter
+  ): Promise<ProcessingResult> {
+    const err = error instanceof Error ? error : new Error(String(error));
+    const errorDetails = {
+      message: err.message,
+      name: err.name,
+      stack: err.stack,
+      ...(typeof error === 'object' && error !== null && 'status' in error
+        ? { status: (error as { status: number }).status }
+        : {}),
+      ...(typeof error === 'object' && error !== null && 'error' in error
+        ? { apiError: (error as { error: unknown }).error }
+        : {}),
+    };
+
+    logger.error(
+      { event_type: EventType.MESSAGE_ERROR, err: errorDetails, platform: 'discord', userId: effectiveUserId, agentId },
+      'Failed to process message'
+    );
+
+    await sendErrorToUser(adapter, message.chatId, err);
+
+    return {
+      success: false,
+      error: err.message,
+      sessionId: session.sessionId,
+    };
+  }
+}

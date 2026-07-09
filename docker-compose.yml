@@ -1,0 +1,65 @@
+services:
+  claudecab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: claudecab
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      AGENTS_DIR: /app/agents
+      DB_PATH: /app/data/claudecab.db
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./agents:/app/agents
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - claudecab-auth:/home/claudecab/.claude
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "const net=require('node:net');const s=net.connect(47823,'127.0.0.1');s.on('connect',()=>process.exit(0));s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),1000).unref();"
+        ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  claudecab-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    container_name: claudecab-dev
+    init: true
+    profiles:
+      - dev
+    environment:
+      NODE_ENV: development
+      AGENTS_DIR: /app/agents
+      DB_PATH: /app/data/claudecab.db
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./tests:/app/tests
+      - ./agents:/app/agents
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - ./package.json:/app/package.json:ro
+      - ./package-lock.json:/app/package-lock.json:ro
+    command: npm run dev
+
+volumes:
+  claudecab-auth:

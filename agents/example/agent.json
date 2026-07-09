@@ -1,0 +1,6 @@
+{
+  "name": "Example",
+  "description": "Starter Discord agent profile",
+  "discordBotToken": "replace-with-agent-bot-token",
+  "discordChannelId": "replace-with-discord-channel-id"
+}
