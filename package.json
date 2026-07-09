@@ -43,7 +43,7 @@
     "@anthropic-ai/claude-agent-sdk": "0.2.119",
     "adm-zip": "^0.5.16",
     "async-mutex": "^0.5.0",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.11.1",
     "chokidar": "^5.0.0",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
