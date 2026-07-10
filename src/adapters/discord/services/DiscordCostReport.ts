@@ -70,7 +70,7 @@ export class DiscordCostReport {
     }
 
     const embed = new EmbedBuilder()
-      .setAuthor({ name: 'ClaudeCab Cost Tracking' })
+      .setAuthor({ name: 'ClaudeCrab Cost Tracking' })
       .setTitle(`Daily Cost Report - ${dateStr}`)
       .setColor(0x57F287)
       .setTimestamp();

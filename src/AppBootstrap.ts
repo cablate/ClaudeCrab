@@ -63,7 +63,7 @@ export class AppBootstrap {
         app_version: '1.2.0',
         cwd: process.cwd(),
       },
-      `ClaudeCab starting - instance ${INSTANCE_ID}`
+      `ClaudeCrab starting - instance ${INSTANCE_ID}`
     );
 
     const securityConfig = loadSecurityConfig(this.config.security);
@@ -403,7 +403,7 @@ export class AppBootstrap {
         scheduleEnabled: this.config.schedule.enabled,
         adminConsoleEnabled: this.config.admin.enabled,
       },
-      'ClaudeCab initialized successfully'
+      'ClaudeCrab initialized successfully'
     );
     logger.info('Bot is now running. Press Ctrl+C to stop.');
   }

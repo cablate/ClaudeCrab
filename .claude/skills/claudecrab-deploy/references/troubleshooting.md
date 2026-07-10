@@ -1,4 +1,4 @@
-# ClaudeCab Troubleshooting
+# ClaudeCrab Troubleshooting
 
 ## Bot starts but Discord does not reply
 
@@ -24,18 +24,18 @@ npm run discord:check -- --agent example
 
 Do not assume the provider is down. First identify the auth mode:
 
-- OAuth: the deploy host must have run `claude login`; `.env` must not set `ANTHROPIC_BASE_URL`.
+- OAuth: the deploy host must have run `claude auth login`; `.env` must not set `ANTHROPIC_BASE_URL`.
 - API key: `ANTHROPIC_API_KEY` must be present.
 - Auth-token provider: `ANTHROPIC_AUTH_TOKEN` must be present.
 - Provider/proxy: prefer setting the provider's `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`, plus `ANTHROPIC_BASE_URL`, in the agent's `.claude/settings.local.json`.
 - Docker does not automatically inherit host Claude Code OAuth.
 
-### Headless / Docker / Cloud cannot run `claude login`
+### Headless / Docker / Cloud cannot run `claude auth login`
 
-`claude login` is interactive OAuth (it opens a browser). On an SSH headless server, a Docker container, or a cloud platform (Fly / Railway / Render, etc.) it usually cannot complete. In these environments **prefer skipping OAuth and use an API key instead**:
+`claude auth login` is interactive OAuth (it opens a browser). On an SSH headless server, a Docker container, or a cloud platform (Fly / Railway / Render, etc.) it usually cannot complete. In these environments **prefer skipping OAuth and use an API key instead**:
 
 - Easiest: use an Anthropic API key or an Anthropic-compatible provider key in `agents/<id>/.claude/settings.local.json` `env`; do not depend on host OAuth (setup details in `docs/CLAUDE-SETTINGS.md`).
-- If you must use a Claude Code subscription: complete `claude login` on a **machine with a browser** first, then move the credentials to the target machine following the Claude Code official docs (https://code.claude.com/docs/en/settings ). Exact steps and supported scope follow the official docs. **Never commit OAuth credentials to git.**
+- If you must use a Claude Code subscription: complete `claude auth login` on a **machine with a browser** first, then move the credentials to the target machine following the Claude Code official docs (https://code.claude.com/docs/en/settings). Exact steps and supported scope follow the official docs. **Never commit OAuth credentials to git.**
 - Docker: the container cannot inherit host OAuth; always use the API-key approach above.
 
 Run:

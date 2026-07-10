@@ -1,8 +1,8 @@
 # Agent 的 `.claude` 設定指引
 
-ClaudeCab 把每個 `agents/<id>/` 當成一個獨立 Claude Code 專案。Claude Code（`claude-agent-sdk`）會以該目錄為工作目錄，讀取底下的 `.claude/` 設定。本文說明 ClaudeCab 會用到哪些設定，以及去哪裡查完整 schema。
+ClaudeCrab 把每個 `agents/<id>/` 當成一個獨立 Claude Code 專案。Claude Code（`claude-agent-sdk`）會以該目錄為工作目錄，讀取底下的 `.claude/` 設定。本文說明 ClaudeCrab 會用到哪些設定，以及去哪裡查完整 schema。
 
-> 如果你是要部署 ClaudeCab 的 AI assistant：**先讀本節，再動設定。**
+> 如果你是要部署 ClaudeCrab 的 AI assistant：**先讀本節，再動設定。**
 
 ## 給 AI 的首要規則
 
@@ -17,11 +17,11 @@ ClaudeCab 把每個 `agents/<id>/` 當成一個獨立 Claude Code 專案。Claud
 
 如果上述連結已搬移，從 https://code.claude.com/docs 進入找對應頁面。
 
-## ClaudeCab 實際依賴的欄位
+## ClaudeCrab 實際依賴的欄位
 
-ClaudeCab 只會主動讀取並組裝以下欄位，其餘欄位原汁原味透傳給 Claude Code（標準 Claude Code 行為，行為細節查官方文件）：
+ClaudeCrab 只會主動讀取並組裝以下欄位，其餘欄位原汁原味透傳給 Claude Code（標準 Claude Code 行為，行為細節查官方文件）：
 
-| 欄位 | ClaudeCab 用途 |
+| 欄位 | ClaudeCrab 用途 |
 |---|---|
 | `model` | 組裝進 SDK session，決定 agent 用的模型。 |
 | `env.ANTHROPIC_API_KEY` / `env.ANTHROPIC_AUTH_TOKEN` | provider 認證；agent 層優先於全域 `.env`。 |
@@ -63,11 +63,11 @@ ClaudeCab 只會主動讀取並組裝以下欄位，其餘欄位原汁原味透�
 
 ## 變更後是否重啟
 
-改 `model` 或 `env` 後，既有 SDK session 不會自動套用新值。請透過 admin console 關閉該 session，或重啟 ClaudeCab 後再測。`permissions` 即時生效（由 Claude Code 處理）。
+改 `model` 或 `env` 後，既有 SDK session 不會自動套用新值。請透過 admin console 關閉該 session，或重啟 ClaudeCrab 後再測。`permissions` 即時生效（由 Claude Code 處理）。
 
 ## `.mcp.json`
 
-`agents/<id>/.mcp.json` 用來讓這個 agent 額外掛 MCP server。ClaudeCab 核心只內建 `file-send` MCP tool；其他 MCP server 的**設定格式與傳輸方式（stdio / SSE / HTTP）查官方文件**：
+`agents/<id>/.mcp.json` 用來讓這個 agent 額外掛 MCP server。ClaudeCrab 核心只內建 `file-send` MCP tool；其他 MCP server 的**設定格式與傳輸方式（stdio / SSE / HTTP）查官方文件**：
 
 https://code.claude.com/docs/en/mcp
 
@@ -82,5 +82,5 @@ https://code.claude.com/docs/en/mcp
 ## 相關文件
 
 - [docs/SETUP.md](SETUP.md) — 認證模式與 provider 設定的完整步驟。
-- [.claude/skills/claudecab-deploy/references/config-matrix.md](../.claude/skills/claudecab-deploy/references/config-matrix.md) — 設定欄位速查與重啟規則。
+- [.claude/skills/claudecrab-deploy/references/config-matrix.md](../.claude/skills/claudecrab-deploy/references/config-matrix.md) — 設定欄位速查與重啟規則。
 - [docs/SDK_TOUCHPOINTS.md](SDK_TOUCHPOINTS.md) — 動 SDK / settings 程式碼前必讀（開發者用）。

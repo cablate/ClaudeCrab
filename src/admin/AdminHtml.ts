@@ -3,7 +3,7 @@ export const ADMIN_HTML = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ClaudeCab 後台</title>
+  <title>ClaudeCrab 後台</title>
   <style>
     :root {
       color-scheme: light;
@@ -172,7 +172,7 @@ export const ADMIN_HTML = `<!doctype html>
 </head>
 <body>
   <header>
-    <h1>ClaudeCab 後台</h1>
+    <h1>ClaudeCrab 後台</h1>
     <div class="toolbar">
       <input id="token" type="password" placeholder="後台登入 token" autocomplete="current-password">
       <button id="connect">連線</button>
@@ -459,7 +459,7 @@ export const ADMIN_HTML = `<!doctype html>
       }
     });
     document.querySelector('#restart').addEventListener('click', async () => {
-      if (!confirm('確定要重啟 ClaudeCab 嗎？')) return;
+      if (!confirm('確定要重啟 ClaudeCrab 嗎？')) return;
       setBusy(true, '正在送出重啟要求...');
       try {
         log(await api('/api/restart', { method: 'POST', body: '{}' }));

@@ -103,7 +103,7 @@ export class SessionManager {
   }
 
   /**
-   * Resolve the stable ClaudeCab session ID without touching lastActiveAt.
+   * Resolve the stable ClaudeCrab session ID without touching lastActiveAt.
    * Includes inactive DB rows so reset can clean orphaned SDK sessions left
    * after SessionManager memory cleanup.
    */

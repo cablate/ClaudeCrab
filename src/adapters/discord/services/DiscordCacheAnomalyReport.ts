@@ -42,7 +42,7 @@ export class DiscordCacheAnomalyReport {
 
     const worstTurn = worstResult.worstTurn;
     const embed = new EmbedBuilder()
-      .setAuthor({ name: 'ClaudeCab Cache Monitor' })
+      .setAuthor({ name: 'ClaudeCrab Cache Monitor' })
       .setTitle(`Cache Anomaly Report - ${today}`)
       .setColor(totalAnomalies >= 10 ? 0xED4245 : totalAnomalies >= 3 ? 0xFEE75C : 0x57F287)
       .setTimestamp();

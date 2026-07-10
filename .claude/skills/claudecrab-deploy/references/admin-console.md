@@ -1,4 +1,4 @@
-# ClaudeCab Admin Console
+# ClaudeCrab Admin Console
 
 The admin console is a minimal operator backend. It is not a public dashboard and not a Discord user feature.
 
@@ -41,4 +41,4 @@ Container and cloud env usually cannot be permanently rewritten from inside the 
 
 Mount `./data:/app/data` (or equivalent volume) so `claudecab.local.json` survives restarts.
 
-If the platform injects the same env name on every start, ClaudeCab still treats the local overlay as authoritative, because `src/config.ts` merges the local overlay after env.
+If the platform injects the same env name on every start, ClaudeCrab still treats the local overlay as authoritative, because `src/config.ts` merges the local overlay after env.

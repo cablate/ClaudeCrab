@@ -1,11 +1,11 @@
 ---
-name: claudecab-deploy
-description: Install, deploy, configure, and troubleshoot ClaudeCab. Use when the user wants to set up ClaudeCab on local Windows, Docker, or a cloud platform; configure the Discord bot, Claude Code OAuth, Anthropic API key, or a third-party provider; enable the admin console or schedules; or diagnose startup, authentication, Discord no-reply, or schedule-not-firing issues.
+name: claudecrab-deploy
+description: Install, deploy, configure, and troubleshoot ClaudeCrab. Use when the user wants to set up ClaudeCrab on local Windows, Docker, or a cloud platform; configure the Discord bot, Claude Code OAuth, Anthropic API key, or a third-party provider; enable the admin console or schedules; or diagnose startup, authentication, Discord no-reply, or schedule-not-firing issues.
 ---
 
-# ClaudeCab Deploy
+# ClaudeCrab Deploy
 
-This skill is the operating rulebook for an AI assistant deploying ClaudeCab. ClaudeCab's scope is narrow: Discord ↔ Claude Agent SDK / Claude Code. Do not expand a deployment task into a project refactor.
+This skill is the operating rulebook for an AI assistant deploying ClaudeCrab. ClaudeCrab's scope is narrow: Discord ↔ Claude Agent SDK / Claude Code. Do not expand a deployment task into a project refactor.
 
 ## Hard rules
 
@@ -23,21 +23,23 @@ This skill is the operating rulebook for an AI assistant deploying ClaudeCab. Cl
 
 1. Determine the deployment target:
    - Local dev: `npm run dev`
-   - Local production: `npm run build` → `npm start`
+   - Local production: `npm start` (the supervisor runs TypeScript directly; no prior build is required)
    - Windows background service: Task Scheduler points at `scripts/run-hidden.vbs`, managed by the `start.ts` supervisor
    - Docker: `docker compose up --build`
    - Cloud container/platform: platform env/secrets + volume
 
 2. Determine the Claude auth mode:
-   - Claude Code subscription / OAuth: run `claude login` on the deploy host; do not set `ANTHROPIC_BASE_URL`.
+   - Claude Code subscription / OAuth: run `claude auth login` on the deploy host; do not set `ANTHROPIC_BASE_URL`.
    - Anthropic API key: set `ANTHROPIC_API_KEY`.
    - DeepSeek / proxy / Anthropic-compatible provider: prefer `agents/<id>/.claude/settings.local.json` with `env.ANTHROPIC_API_KEY` or `env.ANTHROPIC_AUTH_TOKEN`, plus `env.ANTHROPIC_BASE_URL`.
 
 3. Fill required Discord settings:
    - `.env`: `DISCORD_ENABLED`, `DISCORD_MAIN_BOT_TOKEN`, `DISCORD_MAIN_BOT_CLIENT_ID`, `DISCORD_GUILD_ID`, `AGENTS_DIR`
+   - Copy `agents/example` to a new `agents/<id>` directory before adding secrets; custom agent directories are gitignored.
    - `agents/<id>/agent.json`: `discordBotToken`, `discordChannelId`
    - `agents/<id>/.claude/settings.local.json`: `model`, provider env, Claude Code permissions
-   - `DISCORD_OWNER_USER_ID`: operator gate and schedule thread notifications
+   - `DISCORD_OWNER_USER_ID`: schedule thread notifications and operator identity
+   - `ALLOWED_USERS`: strongly recommended on any shared server; empty means every user in the agent channel may invoke Claude
 
 4. Optionally enable the admin console:
    - Off by default.

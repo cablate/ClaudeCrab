@@ -45,7 +45,7 @@ export const GLOBAL_FIELDS: FieldDefinition[] = [
     label: 'Discord Server ID',
     type: 'string',
     group: 'Discord 入口',
-    help: 'ClaudeCab 會把 slash command 註冊到這個 Discord server。',
+    help: 'ClaudeCrab 會把 slash command 註冊到這個 Discord server。',
     placeholder: '例如 123456789012345678',
     restartRequired: true,
   },

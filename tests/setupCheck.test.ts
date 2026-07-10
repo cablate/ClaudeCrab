@@ -74,6 +74,44 @@ describe('setup-check', () => {
     expect(result.checks.some((check) => check.area === 'auth' && check.level === 'ok')).toBe(true);
   });
 
+  it('warns when Discord access is not restricted', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root);
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.checks.some((check) =>
+      check.area === 'security'
+      && check.level === 'warn'
+      && check.message.includes('所有使用者都可呼叫 Claude'),
+    )).toBe(true);
+  });
+
+  it('accepts a Discord user allowlist', async () => {
+    const root = await createTempRoot();
+    await writeBaseProject(root, {
+      env: [
+        'DISCORD_ENABLED=true',
+        'DISCORD_MAIN_BOT_TOKEN=main.real.token',
+        'DISCORD_MAIN_BOT_CLIENT_ID=123456789012345678',
+        'DISCORD_GUILD_ID=223456789012345678',
+        'AGENTS_DIR=./agents',
+        'ANTHROPIC_API_KEY=sk-test',
+        'ALLOWED_USERS=323456789012345678,423456789012345678',
+        '',
+      ].join('\n'),
+    });
+
+    const result = runSetupCheck({ cwd: root });
+
+    expect(result.errorCount).toBe(0);
+    expect(result.checks.some((check) =>
+      check.area === 'security'
+      && check.level === 'ok'
+      && check.message.includes('2 位使用者'),
+    )).toBe(true);
+  });
+
   it('rejects unsupported Node.js versions', async () => {
     const root = await createTempRoot();
     await writeBaseProject(root);

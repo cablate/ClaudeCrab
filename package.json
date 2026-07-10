@@ -1,7 +1,7 @@
 {
-  "name": "claudecab",
+  "name": "claudecrab",
   "version": "1.0.0",
-  "description": "Discord conversation workbench powered by Claude Agent SDK",
+  "description": "Self-hosted Discord runtime for Claude Code agents",
   "type": "module",
   "main": "dist/index.js",
   "engines": {
@@ -32,12 +32,15 @@
   },
   "keywords": [
     "claude",
+    "claude-code",
+    "claude-agent-sdk",
     "discord",
-    "conversation",
-    "bot",
-    "ai"
+    "discord-bot",
+    "ai-agent",
+    "self-hosted",
+    "deepseek"
   ],
-  "author": "",
+  "author": "CabLate",
   "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.119",

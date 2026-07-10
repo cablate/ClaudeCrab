@@ -1,6 +1,6 @@
 # Security Policy
 
-ClaudeCab controls Discord bots, Claude Code credentials, provider API keys, local files, schedules, and SQLite state. Treat every deployment as an operator-owned service.
+ClaudeCrab controls Discord bots, Claude Code credentials, provider API keys, local files, schedules, and SQLite state. Treat every deployment as an operator-owned service.
 
 ## Supported Versions
 

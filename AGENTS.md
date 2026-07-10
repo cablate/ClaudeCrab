@@ -1,4 +1,4 @@
-# ClaudeCab — AI Agent 治理規範（單一事實來源）
+# ClaudeCrab — AI Agent 治理規範（單一事實來源）
 
 任何 AI agent（Claude、Codex、sub-agent）在本 repo 工作前必讀本文件。CLAUDE.md 是本文件的薄指標，規則以本文件為準。
 

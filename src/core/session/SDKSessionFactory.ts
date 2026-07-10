@@ -65,7 +65,7 @@ function providerDiagnostics(sessionOptions: ExtendedSessionOptions): Record<str
  * Create a new persistent V2 session and return a ManagedSession.
  * The `sessions` Map is updated by the caller (SDKSessionManager) after this returns.
  *
- * @param sessionId     ClaudeCab conversation ID (for logging / hook closures)
+ * @param sessionId     ClaudeCrab conversation ID (for logging / hook closures)
  * @param agent         Loaded agent config
  * @param options       ExecuteQueryOptions forwarded from executeQuery
  * @param onCreated     Called synchronously after ManagedSession is constructed so

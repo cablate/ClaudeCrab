@@ -82,7 +82,7 @@ function log(msg: string) {
 function startChild() {
   startTime = Date.now();
   restartRequested = false;
-  log(`Starting ClaudeCab (backoff=${backoff}ms)`);
+  log(`Starting ClaudeCrab (backoff=${backoff}ms)`);
 
   child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
     cwd: resolve(import.meta.dirname),

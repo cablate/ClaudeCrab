@@ -177,7 +177,7 @@ export async function notifyCrashRecovery(
     const timeStr = new Date(info.time).toLocaleString('zh-TW', { timeZone: getDisplayTimezone() });
     await adapter.sendToChannel(
       channelId,
-      [`ClaudeCab recovered from a previous crash.`, `Time: ${timeStr}`, `Error: ${info.error}`].join('\n')
+      [`ClaudeCrab recovered from a previous crash.`, `Time: ${timeStr}`, `Error: ${info.error}`].join('\n')
     );
   } catch (err) {
     logger.error({ err }, 'Failed to send crash recovery notification');

@@ -2,9 +2,9 @@
 import type { AgentHooks } from './hooks.js';
 
 /**
- * Runtime model aliases used across ClaudeCab (settings.local.json `model`
+ * Runtime model aliases used across ClaudeCrab (settings.local.json `model`
  * field and SDK option resolution). NOT agent.json fields — agent.json only
- * carries ClaudeCab metadata and platform wiring.
+ * carries ClaudeCrab metadata and platform wiring.
  */
 export const ModelSchema = z.enum(['sonnet', 'opus', 'haiku']);
 
@@ -13,7 +13,7 @@ export type Model = z.infer<typeof ModelSchema>;
 
 /**
  * agent.json Schema
- * Defines ClaudeCab-facing agent metadata and platform wiring.
+ * Defines ClaudeCrab-facing agent metadata and platform wiring.
  * Claude Code / SDK runtime settings belong in .claude/settings.local.json.
  */
 /** Display configuration for live page visuals */

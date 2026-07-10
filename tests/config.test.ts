@@ -18,9 +18,10 @@ describe('AppConfig', () => {
   });
 
   it('loads defaults from an injected env and cwd', () => {
-    const config = loadAppConfig({}, 'C:/project');
+    const cwd = path.resolve('project');
+    const config = loadAppConfig({}, cwd);
 
-    expect(config.agentsDir).toBe('C:\\project\\agents');
+    expect(config.agentsDir).toBe(path.resolve(cwd, 'agents'));
     expect(config.persistence.enabled).toBe(false);
     expect(config.discord.enabled).toBe(false);
     expect(config.admin.enabled).toBe(false);

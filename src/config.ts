@@ -441,5 +441,5 @@ export function formatRuntimeConfigIssues(issues: RuntimeConfigIssue[]): string 
     const envList = issue.envVars.join(', ');
     return `- ${issue.path}: ${issue.message} 請設定 ${envList}`;
   });
-  return ['ClaudeCab configuration is incomplete:', ...lines].join('\n');
+  return ['ClaudeCrab configuration is incomplete:', ...lines].join('\n');
 }

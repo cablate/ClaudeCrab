@@ -90,5 +90,5 @@ export async function handleRestart(
     await interaction.editReply(`❌ Build 失敗，取消重啟：\n\`\`\`\n${errorOutput}\n\`\`\``);
     return;
   }
-  await interaction.editReply('✅ Build 通過！🔄 正在重啟 ClaudeCab...\n\n稍後會重新上線！');
+  await interaction.editReply('✅ Build 通過！🔄 正在重啟 ClaudeCrab...\n\n稍後會重新上線！');
 }

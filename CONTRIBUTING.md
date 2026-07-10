@@ -1,6 +1,6 @@
 # Contributing
 
-ClaudeCab intentionally keeps core small: Discord adapters, Claude Agent SDK sessions, schedules, persistence, setup validation, and operator tooling.
+ClaudeCrab intentionally keeps core small: Discord adapters, Claude Agent SDK sessions, schedules, persistence, setup validation, and operator tooling.
 
 ## Rules
 
@@ -34,4 +34,4 @@ For setup, SDK, CLI, schedule, or Discord behavior changes, also update the rele
 - `docs/SETUP.md`
 - `docs/ARCHITECTURE.md`
 - `docs/SDK_TOUCHPOINTS.md`
-- `.claude/skills/claudecab-deploy/SKILL.md`
+- `.claude/skills/claudecrab-deploy/SKILL.md`

@@ -1,4 +1,4 @@
-# ClaudeCab Config Matrix
+# ClaudeCrab Config Matrix
 
 ## Required
 
@@ -9,7 +9,7 @@
 | `DISCORD_MAIN_BOT_CLIENT_ID` | `.env` / cloud env | Discord Application ID, not the guild ID. |
 | `DISCORD_GUILD_ID` | `.env` / cloud env | Discord server ID. |
 | `AGENTS_DIR` | `.env` / cloud env | Agents directory, default `./agents`. |
-| `discordBotToken` | `agents/<id>/agent.json` | Agent bot token. May match the main bot for testing; use separate bots for production. |
+| `discordBotToken` | `agents/<id>/agent.json` | Agent bot token. Must differ from the main bot token. |
 | `discordChannelId` | `agents/<id>/agent.json` | Discord channel ID the agent listens on. |
 
 ## Operator and admin
@@ -17,6 +17,7 @@
 | Setting | Location | Notes |
 |---|---|---|
 | `DISCORD_OWNER_USER_ID` | `.env` / local overlay | Operator gate, sensitive maintenance commands, schedule notifications. |
+| `ALLOWED_USERS` | `.env` / local overlay | Comma-separated Discord user IDs. Empty means every user in the agent channel may invoke Claude. |
 | `ADMIN_CONSOLE_ENABLED` | `.env` / local overlay | Default `false`. |
 | `ADMIN_CONSOLE_TOKEN` | `.env` / local overlay | Required when the admin console is enabled; use a long random string. |
 | `ADMIN_CONSOLE_HOST` | `.env` / local overlay | Default `127.0.0.1`. Add auth/proxy before binding externally. |
@@ -27,7 +28,7 @@
 
 | Mode | Where to set | Required values |
 |---|---|---|
-| Claude Code OAuth | Deploy host | Run `claude login`; leave `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` empty. |
+| Claude Code OAuth | Deploy host | Run `claude auth login`; leave `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` empty. |
 | Anthropic API key | `.env`, cloud secret, agent settings | `ANTHROPIC_API_KEY`; usually no base URL needed. |
 | DeepSeek / proxy / provider | Prefer `agents/<id>/.claude/settings.local.json` | `env.ANTHROPIC_API_KEY` or `env.ANTHROPIC_AUTH_TOKEN`, plus `env.ANTHROPIC_BASE_URL`. |
 

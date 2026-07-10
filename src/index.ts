@@ -7,7 +7,7 @@ import { AppBootstrap } from './AppBootstrap.js';
 import { CRASH_MARKER_PATH } from './constants.js';
 
 // Instance lock: bind localhost port to prevent duplicate bot instances.
-// If another ClaudeCab is already running, EADDRINUSE fires and we exit(1)
+// If another ClaudeCrab is already running, EADDRINUSE fires and we exit(1)
 // before any Discord connection is made. The OS releases the port
 // automatically when the process dies, so no stale-lock cleanup is needed.
 const INSTANCE_LOCK_PORT = 47823;
@@ -16,7 +16,7 @@ lockServer.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     logger.fatal(
       { event_type: 'instance.lock_failed', port: INSTANCE_LOCK_PORT, reason: 'EADDRINUSE' },
-      'Another ClaudeCab instance is already running (instance lock port in use). Exiting to prevent duplicate message processing.'
+      'Another ClaudeCrab instance is already running (instance lock port in use). Exiting to prevent duplicate message processing.'
     );
     process.exit(1);
   }
@@ -66,7 +66,7 @@ const app = new AppBootstrap(config);
 
 app.start().catch((error: unknown) => {
   const err = error instanceof Error ? error : new Error(String(error));
-  logger.fatal({ err, message: err.message }, 'Failed to start ClaudeCab');
+  logger.fatal({ err, message: err.message }, 'Failed to start ClaudeCrab');
   process.exit(1);
 });
 

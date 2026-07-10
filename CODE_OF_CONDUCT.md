@@ -1,12 +1,12 @@
 # Code of Conduct
 
-ClaudeCab is an open-source project for operators who want to run Claude Code / Claude Agent SDK through Discord.
+ClaudeCrab is an open-source project for operators who want to run Claude Code / Claude Agent SDK through Discord.
 
 ## Expected Behavior
 
 - Be respectful and practical.
 - Assume good intent, but keep technical claims evidence-based.
-- Keep issues and pull requests focused on ClaudeCab runtime, setup, security, and documentation.
+- Keep issues and pull requests focused on ClaudeCrab runtime, setup, security, and documentation.
 - Do not post secrets, tokens, private logs, private agent folders, or user data.
 
 ## Unacceptable Behavior

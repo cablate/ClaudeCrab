@@ -40,7 +40,7 @@ export async function requireOperator(
 ): Promise<boolean> {
   if (isOperatorUser(interaction.user.id, deps)) return true;
   await interaction.reply({
-    content: '此操作只允許 ClaudeCab operator 使用。請在 DISCORD_OWNER_USER_ID 設定授權使用者。',
+    content: '此操作只允許 ClaudeCrab operator 使用。請在 DISCORD_OWNER_USER_ID 設定授權使用者。',
     ephemeral: true,
   });
   return false;

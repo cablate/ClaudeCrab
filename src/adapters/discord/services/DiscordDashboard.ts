@@ -1,5 +1,5 @@
 /**
- * DiscordDashboard — Discord Embed-based dashboard for ClaudeCab HQ.
+ * DiscordDashboard — Discord Embed-based dashboard for ClaudeCrab HQ.
  *
  * Maintains a single pinned Embed message in #dashboard channel.
  * Updates via message.edit() (not send) to avoid spamming.
@@ -146,7 +146,7 @@ export class DiscordDashboard {
     const timeStr = now.toLocaleString('zh-TW', { timeZone: getDisplayTimezone(), hour12: false });
 
     const embed = new EmbedBuilder()
-      .setAuthor({ name: 'ClaudeCab HQ' })
+      .setAuthor({ name: 'ClaudeCrab HQ' })
       .setTitle('\u6230\u60C5\u5BA4')
       .setColor(0x5865F2)
       .setTimestamp()

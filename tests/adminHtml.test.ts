@@ -3,7 +3,7 @@ import { ADMIN_HTML } from '../src/admin/AdminHtml.ts';
 
 describe('ADMIN_HTML', () => {
   it('contains the admin shell and parseable client script', () => {
-    expect(ADMIN_HTML).toContain('ClaudeCab 後台');
+    expect(ADMIN_HTML).toContain('ClaudeCrab 後台');
     expect(ADMIN_HTML).toContain('全域部署設定');
     expect(ADMIN_HTML).toContain('儲存全域設定');
     expect(ADMIN_HTML).not.toContain('Save global config');

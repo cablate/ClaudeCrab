@@ -1,4 +1,4 @@
-# ClaudeCab Logging Conventions
+# ClaudeCrab Logging Conventions
 
 **For every new or modified log call, follow this document.** Current automated linting is `npm run lint`; there is no separate log-specific lint script in this repository.
 

@@ -142,6 +142,7 @@ function checkRequiredEnv(env: Record<string, string>, checks: Check[], template
   requireEnv(env, 'AGENTS_DIR', checks, undefined, templateMode);
   checkDiscordEnvShape(env, checks, templateMode);
   checkOptionalDiscordOwnerUserId(env, checks, templateMode);
+  checkAllowedUsers(env, checks, templateMode);
 }
 
 function checkNodeVersion(nodeVersion: string, checks: Check[]): void {
@@ -249,6 +250,37 @@ function checkOptionalDiscordOwnerUserId(env: Record<string, string>, checks: Ch
     return;
   }
   checks.push({ level: 'ok', area: '.env', message: 'DISCORD_OWNER_USER_ID 已設定' });
+}
+
+function checkAllowedUsers(env: Record<string, string>, checks: Check[], templateMode: boolean): void {
+  const value = env.ALLOWED_USERS?.trim() ?? '';
+  if (value === '') {
+    checks.push({
+      level: templateMode ? 'ok' : 'warn',
+      area: 'security',
+      message: templateMode
+        ? 'ALLOWED_USERS 為選填；公開或多人 Discord server 強烈建議設定。'
+        : 'ALLOWED_USERS 未設定，目前 agent channel 內所有使用者都可呼叫 Claude。公開或多人 server 請填入允許的 Discord user ID。',
+    });
+    return;
+  }
+
+  const userIds = value.split(',').map((item) => item.trim()).filter(Boolean);
+  const invalid = userIds.filter((userId) => !isDiscordId(userId));
+  if (invalid.length > 0) {
+    checks.push({
+      level: 'error',
+      area: 'security',
+      message: `ALLOWED_USERS 必須是以逗號分隔的 Discord user ID；目前有 ${invalid.length} 筆格式錯誤。`,
+    });
+    return;
+  }
+
+  checks.push({
+    level: 'ok',
+    area: 'security',
+    message: `ALLOWED_USERS 已限制為 ${userIds.length} 位使用者。`,
+  });
 }
 
 function checkDiscordBotSeparation(

@@ -1,5 +1,5 @@
 /**
- * Base error class for ClaudeCab
+ * Legacy-named base error class kept for API compatibility with v1.0.0.
  * All custom errors should extend this class
  */
 export class ClaudeCabError extends Error {

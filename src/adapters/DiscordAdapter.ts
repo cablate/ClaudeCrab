@@ -1,5 +1,5 @@
 /**
- * DiscordAdapter — Discord platform adapter for ClaudeCab.
+ * DiscordAdapter — Discord platform adapter for ClaudeCrab.
  *
  * Multi-bot architecture: each agent has its own Discord bot (own token, name, avatar).
  * Each adapter creates and manages its own discord.js Client.

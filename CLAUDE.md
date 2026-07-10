@@ -1,4 +1,4 @@
-# ClaudeCab
+# ClaudeCrab
 
 **本專案的完整治理規範在 [AGENTS.md](AGENTS.md)，為單一事實來源。開工前必讀並遵循，本檔只是指標。**
 

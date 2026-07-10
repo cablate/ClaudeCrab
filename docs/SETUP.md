@@ -1,13 +1,13 @@
-# ClaudeCab 安裝與驗證
+# ClaudeCrab 安裝與驗證
 
-本文是 ClaudeCab 的 canonical 安裝文件。README 只保留專案介紹與快速入口；實際架設、驗證、Docker 路徑以本文為準。
+本文是 ClaudeCrab 的 canonical 安裝文件。README 只保留專案介紹與快速入口；實際架設、驗證、Docker 路徑以本文為準。
 
 ## 0. 你要先決定的三件事
 
 | 決策 | 建議 | 說明 |
 |---|---|---|
 | 執行方式 | 本機開發先用 `npm run dev` | Windows production 才需要 `npm start` / supervisor。 |
-| Claude 認證 | Claude Code 訂閱用 `claude login` | API key 或第三方 provider 才填 `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`。 |
+| Claude 認證 | Claude Code 訂閱用 `claude auth login` | API key 或第三方 provider 才填 `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`。 |
 | Discord bot | 測試可先共用，正式建議主 Bot / Agent Bot 分開 | 主 Bot 管 slash command，Agent Bot 收發 agent 對話。 |
 
 ## 1. 前置需求
@@ -26,28 +26,28 @@ node --version
 npm --version
 ```
 
-> ClaudeCab 依賴 `better-sqlite3`（native module）。多數平台有 prebuilt binary，`npm install` 會直接套用；若 Node 版本過新或平台罕見而觸發現場編譯，Windows 需 Python + C++ Build Tools，macOS/Linux 需 `make` + `python3`。遇到編譯失敗時，改用 Node 20 LTS 通常能對到 prebuilt。
+> ClaudeCrab 依賴 `better-sqlite3`（native module）。多數平台有 prebuilt binary，`npm install` 會直接套用；若 Node 版本過新或平台罕見而觸發現場編譯，Windows 需 Python + C++ Build Tools，macOS/Linux 需 `make` + `python3`。遇到編譯失敗時，改用 Node 20 LTS 通常能對到 prebuilt。
 
 Claude Code 訂閱模式要先在部署機器登入：
 
 ```bash
-claude login
+claude auth login
 claude --version
 ```
 
 如果 `claude` 指令不存在，先安裝 Claude Code CLI，並在安裝後重新開 terminal。Claude Code 2.1.119+ 使用平台 native binary，缺平台包時可能出現 CLI 找不到或 SDK spawn 失敗；`npm run setup:verify` 會檢查這件事。
 
-如果要讓 AI assistant 幫你部署，先讓它讀 `.claude/skills/claudecab-deploy/SKILL.md`。這個資料夾是可追蹤的 skill package，裡面包含 config matrix、admin console、Docker/cloud troubleshooting。
+如果要讓 AI assistant 幫你部署，先讓它讀 `.claude/skills/claudecrab-deploy/SKILL.md`。這個資料夾是可追蹤的 skill package，裡面包含 config matrix、admin console、Docker/cloud troubleshooting。
 
 ## 2. Clone 與安裝
 
 ```bash
-git clone https://github.com/cablate/ClaudeCrab.git ClaudeCab
-cd ClaudeCab
+git clone https://github.com/cablate/ClaudeCrab.git
+cd ClaudeCrab
 npm install
 ```
 
-GitHub repository 目前叫 `ClaudeCrab`，本機資料夾建議叫 `ClaudeCab`，避免後續路徑混淆。
+公開專案名稱與建議的本機資料夾名稱都是 `ClaudeCrab`。底層部分檔名與 env key 保留 `claudecab` 字樣，以維持既有部署相容性。
 
 `npm install` 會執行 `postinstall`，也就是 `scripts/patch-sdk-v2.cjs`。這會檢查並 patch `@anthropic-ai/claude-agent-sdk@0.2.119`。SDK 升級前請先讀 `docs/SDK_TOUCHPOINTS.md`。
 
@@ -77,6 +77,9 @@ AGENTS_DIR=./agents
 
 ENABLE_PERSISTENCE=true
 DB_PATH=./data/claudecab.db
+
+# Shared server 強烈建議填寫；逗號分隔多個 Discord user ID。
+ALLOWED_USERS=your-discord-user-id
 ```
 
 顯示時區（dashboard、crash 通知、prompt context 的時間顯示）預設 `UTC`。改成本地時區，例如：
@@ -121,7 +124,19 @@ Discord ID 複製方式：
 
 ## 5. 設定 agent
 
-開啟 `agents/example/agent.json`：
+先複製公開範例，避免把 secret 寫進 Git 追蹤的 `agents/example`：
+
+```bash
+cp -R agents/example agents/my-agent
+```
+
+Windows PowerShell：
+
+```powershell
+Copy-Item agents/example agents/my-agent -Recurse
+```
+
+接著開啟 `agents/my-agent/agent.json`：
 
 ```json
 {
@@ -133,40 +148,40 @@ Discord ID 複製方式：
 ```
 
 `discordBotToken` 是 Bot Token，不是 Discord ID。`discordChannelId` 是 numeric channel ID。
-`agent.json` 只放 ClaudeCab 顯示與 Discord 連線設定；Claude Code 的模型、provider、權限與 env 放 `.claude/settings.local.json`。
+`agent.json` 只放 ClaudeCrab 顯示與 Discord 連線設定；Claude Code 的模型、provider、權限與 env 放 `.claude/settings.local.json`。
 
-第一次測試可以讓主 Bot 和 Agent Bot 使用同一個 bot token；正式使用建議分開，避免 slash command/system message 和 agent 對話互相干擾。
+主 Bot 和 Agent Bot 必須使用不同 token，避免 slash command/system message 和 agent 對話互相干擾；`npm run setup:check` 會檢查這件事。
 
 ## 6. Claude / Provider 認證
 
-ClaudeCab 會把 agent 目錄當成 Claude Code 專案工作目錄；Claude Code / agent-sdk 會讀取該目錄下的 `.claude/settings.local.json`。常見認證來源是：
+ClaudeCrab 會把 agent 目錄當成 Claude Code 專案工作目錄；Claude Code / agent-sdk 會讀取該目錄下的 `.claude/settings.local.json`。常見認證來源是：
 
 1. agent 的 `.claude/settings.local.json` 裡的 `env.ANTHROPIC_API_KEY` 或 `env.ANTHROPIC_AUTH_TOKEN`
 2. `.env` 的 `ANTHROPIC_API_KEY`
-3. 主機 Claude Code OAuth，也就是 `claude login`
+3. 主機 Claude Code OAuth，也就是 `claude auth login`
 
 ### Claude Code 訂閱 / OAuth
 
 OAuth 模式的前提（缺一不可，全新部署最常在這裡卡）：
 
-- **需要 Claude Pro / Max 訂閱**。沒有訂閱無法完成 `claude login`；沒訂閱請改用「Anthropic API key」模式，不需要登入。
-- **需要在部署機器另外全域安裝 Claude Code CLI**（ClaudeCab 不會幫你裝）：
+- **需要 Claude Pro / Max 訂閱**。沒有訂閱無法完成 `claude auth login`；沒訂閱請改用「Anthropic API key」模式，不需要登入。
+- **需要在部署機器另外全域安裝 Claude Code CLI**（ClaudeCrab 不會幫你裝）：
 
   ```bash
   npm install -g @anthropic-ai/claude-code
   ```
 
-  ClaudeCab 的 SDK 自帶用來跑 query 的 CLI binary，但 OAuth 登入憑證是由這個獨立的 Claude Code CLI 產生，存在部署機器的 `~/.claude/credentials.json`。
+  ClaudeCrab 的 SDK 自帶用來跑 query 的 CLI binary，但 OAuth 登入憑證是由這個獨立的 Claude Code CLI 產生，存在部署機器的 `~/.claude/credentials.json`。
 
 安裝完 Claude Code CLI 後，在部署機器跑（會開瀏覽器完成登入）：
 
 ```bash
-claude login
+claude auth login
 ```
 
 `.env` 不填 `ANTHROPIC_API_KEY`，也不要設定 `ANTHROPIC_BASE_URL`。
 
-> SSH / Docker / 雲端等無瀏覽器環境跑 `claude login` 的替代方案，見 [.claude/skills/claudecab-deploy/references/troubleshooting.md](../.claude/skills/claudecab-deploy/references/troubleshooting.md) 的 Headless 段。
+> SSH / Docker / 雲端等無瀏覽器環境跑 `claude auth login` 的替代方案，見 [.claude/skills/claudecrab-deploy/references/troubleshooting.md](../.claude/skills/claudecrab-deploy/references/troubleshooting.md) 的 Headless 段。
 
 ### Anthropic API key
 
@@ -179,7 +194,7 @@ ANTHROPIC_BASE_URL=
 
 ### DeepSeek / 第三方 proxy / Anthropic-compatible provider
 
-建議放 agent 層，不要放全域 `.env`。修改 `agents/example/.claude/settings.local.json`：
+建議放 agent 層，不要放全域 `.env`。修改 `agents/my-agent/.claude/settings.local.json`：
 
 ```json
 {
@@ -197,7 +212,7 @@ ANTHROPIC_BASE_URL=
 
 部分 provider 使用 `ANTHROPIC_AUTH_TOKEN` 而不是 `ANTHROPIC_API_KEY`；兩者擇一即可，不要同時亂填。
 
-ClaudeCab 會以這份檔案的 `model` 與 provider env 組裝 SDK session；`agent.json` 不再放 model，避免同一個 agent 有兩個互相覆蓋的模型來源。修改 provider 或 model 後，建議關閉既有 SDK session 或重啟後再測一次。
+ClaudeCrab 會以這份檔案的 `model` 與 provider env 組裝 SDK session；`agent.json` 不再放 model，避免同一個 agent 有兩個互相覆蓋的模型來源。修改 provider 或 model 後，建議關閉既有 SDK session 或重啟後再測一次。
 
 `permissions` 規則、可用 model 名稱、MCP server 設定的完整 schema 以 Claude Code 官方文件為準，設定前先查 [docs/CLAUDE-SETTINGS.md](CLAUDE-SETTINGS.md) 裡的官方文件連結，不要憑記憶猜欄位。
 
@@ -213,7 +228,7 @@ npm run setup:verify -- --template
 真實設定驗證：
 
 ```bash
-npm run setup:check
+npm run setup:check -- --agent my-agent
 npm run setup:verify
 ```
 
@@ -296,13 +311,13 @@ http://127.0.0.1:47824
 只有 token/channel 已填好、且你接受會真的送出測試訊息時才執行：
 
 ```bash
-npm run discord:check -- --agent example
+npm run discord:check -- --agent my-agent
 ```
 
 要連 thread 建立權限一起測：
 
 ```bash
-npm run discord:check -- --agent example --thread
+npm run discord:check -- --agent my-agent --thread
 ```
 
 常見錯誤：
@@ -362,7 +377,7 @@ Docker 是支援路徑，但不取代 Windows production supervisor。第一次�
 - `data/`
 - `logs/`
 
-`docker-compose.yml` 會把本機 `.env` 掛到 container 的 `/app/.env`，讓 ClaudeCab 在 runtime 讀取。不要改回 `env_file`，否則 `docker compose config` 可能把 token/key 展開到終端輸出，排錯時很容易外洩。
+`docker-compose.yml` 會把本機 `.env` 掛到 container 的 `/app/.env`，讓 ClaudeCrab 在 runtime 讀取。不要改回 `env_file`，否則 `docker compose config` 可能把 token/key 展開到終端輸出，排錯時很容易外洩。
 
 啟動：
 
@@ -390,7 +405,7 @@ docker compose down
 
 Docker 注意事項：
 
-- container 內 OAuth：production image 已全域裝 Claude Code CLI，可 `docker exec -it claudecab claude login` 在 container 內完成 OAuth，憑證寫入 `/home/claudecab/.claude` 並由 `claudecab-auth` volume 持久化。但互動式 login 仍需能把瀏覽器授權回流到 container 的環境（SSH port forward 或本機桌面）；headless 環境建議直接用 API key / auth token / provider key 放 `.env` 或 agent `.claude/settings.local.json`。
+- container 內 OAuth：production image 將 SDK 內建、版本相符的 Claude Code CLI 連到 `claude` 指令，可 `docker exec -it claudecab claude auth login` 在 container 內完成 OAuth，憑證寫入 `/home/claudecab/.claude` 並由 `claudecab-auth` volume 持久化。但互動式 login 仍需能把瀏覽器授權回流到 container 的環境（SSH port forward 或本機桌面）；headless 環境建議直接用 API key / auth token / provider key 放 `.env` 或 agent `.claude/settings.local.json`。
 - `.env` 是 bind mount，不會被 bake 進 image；請不要把 `docker compose config` 的完整輸出貼到公開地方。
 - `agents/`、`data/`、`logs/` 會掛載為 volume，避免重建 container 後遺失 agent 設定與 SQLite DB。
 - 若要用第三方 provider，仍建議放 agent `.claude/settings.local.json`，不要把所有 provider key 放全域 `.env`。
@@ -407,14 +422,14 @@ docker run --rm -d --name claudecab-smoke \
   -e ENABLE_PERSISTENCE=true \
   -e AGENTS_DIR=/app/agents \
   -e DB_PATH=/app/data/smoke.db \
-  -v "$PWD/agents/example:/app/agents/example:ro" \
+  -v "$PWD/agents/my-agent:/app/agents/my-agent:ro" \
   claudecab:local
 docker ps --filter name=claudecab-smoke
 docker exec claudecab-smoke sh -c 'find /app/data /app/logs -maxdepth 1 -type f -print; tail -n 40 /app/logs/*.log'
 docker stop claudecab-smoke
 ```
 
-這個 smoke 只確認 container 可啟動、DB/log 可寫、instance lock healthcheck 可通過；不會驗證 Discord token 或 Claude 認證。真實 Discord 仍用 `npm run discord:check -- --agent example` 驗證。
+這個 smoke 只確認 container 可啟動、DB/log 可寫、instance lock healthcheck 可通過；不會驗證 Discord token 或 Claude 認證。真實 Discord 仍用 `npm run discord:check -- --agent my-agent` 驗證。
 
 ## 11. 最常見問題
 
@@ -423,8 +438,8 @@ docker stop claudecab-smoke
 先確認：
 
 ```bash
-npm run setup:check
-npm run discord:check -- --agent example
+npm run setup:check -- --agent my-agent
+npm run discord:check -- --agent my-agent
 ```
 
 再確認 Discord Developer Portal 的 Message Content Intent 已開，且 bot 對該 channel 有 View Channels、Send Messages、Read Message History 權限。
@@ -444,7 +459,7 @@ npm run setup:verify
 
 先區分認證模式：
 
-- OAuth：確認部署機器跑過 `claude login`，且 `.env` 沒設定 `ANTHROPIC_BASE_URL`。
+- OAuth：確認部署機器跑過 `claude auth login`，且 `.env` 沒設定 `ANTHROPIC_BASE_URL`。
 - API key/provider：確認 `ANTHROPIC_API_KEY` 或 `ANTHROPIC_AUTH_TOKEN` 存在，proxy 通常也需要 `ANTHROPIC_BASE_URL`。
 - 多 agent/provider：優先把 key/base URL 放 agent `.claude/settings.local.json`。
 

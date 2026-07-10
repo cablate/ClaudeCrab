@@ -1,6 +1,6 @@
 # SDK Patch Maintenance SOP
 
-ClaudeCab still patches `@anthropic-ai/claude-agent-sdk` after install because the V2
+ClaudeCrab still patches `@anthropic-ai/claude-agent-sdk` after install because the V2
 `createSession` path does not forward every option this project needs.
 
 ## Current Contract

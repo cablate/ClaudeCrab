@@ -4,6 +4,11 @@ FROM node:${NODE_VERSION}-bookworm-slim AS deps
 
 WORKDIR /app
 
+# better-sqlite3 needs native build tools when no prebuilt matches the Node ABI.
+# slim images lack python3/make/g++; install them so node-gyp can fall back.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 COPY scripts/patch-sdk-v2.cjs ./scripts/patch-sdk-v2.cjs
 
@@ -34,11 +39,10 @@ COPY --from=build --chown=claudecab:claudecab /app/package.json ./package.json
 RUN mkdir -p /app/agents /app/data /app/logs \
   && chown claudecab:claudecab /app/agents /app/data /app/logs
 
-# Install Claude Code CLI globally so operators can run `claude login` inside the
-# container (e.g. `docker exec -it claudecab claude login`) for OAuth. The SDK's
-# own bundled CLI runs queries; this global CLI only provides the login flow and
-# writes credentials to /home/claudecab/.claude (persisted via named volume).
-RUN npm install -g @anthropic-ai/claude-code
+# Reuse the SDK-matched bundled CLI for `claude auth login` instead of installing a
+# second 200+ MB CLI copy. The symlink follows the target platform architecture.
+# OAuth credentials are written to /home/claudecab/.claude (persist this volume).
+RUN node -e "const fs=require('node:fs');const cli='/app/node_modules/@anthropic-ai/claude-agent-sdk-'+process.platform+'-'+process.arch+'/claude';fs.accessSync(cli,fs.constants.X_OK);fs.symlinkSync(cli,'/usr/local/bin/claude')"
 
 USER claudecab
 

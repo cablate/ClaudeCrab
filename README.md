@@ -1,193 +1,164 @@
-# ClaudeCab
+# ClaudeCrab
 
-![ClaudeCab banner](docs/assets/claudecab-banner.png)
+![ClaudeCrab banner](docs/assets/claudecrab-banner.webp)
 
-ClaudeCab 是一個 Discord-first runtime，讓使用者在 Discord channel/thread 裡透過 `@anthropic-ai/claude-agent-sdk` / Claude Code 和 agent 對話。
+**把 Claude Code 帶進 Discord。** ClaudeCrab 是一個 self-hosted、Discord-first 的 Claude Agent SDK runtime，讓 Discord channel / thread 成為可持續、可恢復的 agent 對話工作區。
 
-它的定位很窄：
-
-- 讓 Claude Code 訂閱、Anthropic API key，或 Anthropic-compatible provider 可以透過 Discord 使用。
-- 把 Discord channel/thread 對話映射成可持續 resume 的 Claude session。
-- 讓每個 `agents/<id>/` 都是一個獨立 Claude Code 專案，也就是「目錄即代理」。
+[![CI](https://github.com/cablate/ClaudeCrab/actions/workflows/ci.yml/badge.svg)](https://github.com/cablate/ClaudeCrab/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/cablate/ClaudeCrab/actions/workflows/codeql.yml/badge.svg)](https://github.com/cablate/ClaudeCrab/actions/workflows/codeql.yml)
+[![Secret Scan](https://github.com/cablate/ClaudeCrab/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/cablate/ClaudeCrab/actions/workflows/secret-scan.yml)
+[![Release](https://img.shields.io/github/v/release/cablate/ClaudeCrab)](https://github.com/cablate/ClaudeCrab/releases)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-orange.svg)](LICENSE)
 
 ```text
-Discord channel/thread
-  -> Agent Bot
-  -> ClaudeCab
-  -> Claude Agent SDK / Claude Code
-  -> Discord reply
+Discord channel / thread
+        ↓
+   ClaudeCrab
+        ↓
+Claude Agent SDK / Claude Code
+        ↓
+你的 agent 專案、工具與模型服務
 ```
 
-## 功能範圍
+## 為什麼是 ClaudeCrab
 
-目前包含：
+- **Discord thread 就是長期對話。** 每個 thread 對應可 resume 的 Claude session，不必一直守在終端機前。
+- **目錄就是 agent。** 每個 `agents/<id>/` 都是獨立 Claude Code 專案，可擁有自己的 `CLAUDE.md`、`.claude/`、MCP、權限與 provider。
+- **使用自己的認證。** 支援 Claude Code OAuth、Anthropic API key，以及 Anthropic-compatible provider / proxy。
+- **資料留在自己的主機。** Bot、SQLite、logs、agent workspace 與 secrets 都由 operator 管理。
+- **不只轉發文字。** 支援 permission / question / exit-plan 互動、檔案回傳、排程、session cleanup 與可選的管理介面。
 
-- 從 `AGENTS_DIR` 載入多個 Discord agents。
-- Claude Agent SDK persistent sessions（可恢復的長駐對話）。
-- Discord permission / question / exit-plan callbacks。
-- idle session cleanup 與 prompt-cache keepalive。
-- YAML schedules，可輸出 Discord message/thread。
-- SQLite persistence：sessions、conversation、query metrics、schedule thread mapping。
-- 可選的 Discord ops 診斷：dashboard、cost report、cache anomaly report。
-- 內建 `file-send` MCP tool，讓 Claude Code 可把檔案送回 Discord。
-- 預設關閉的小型 admin console，供 operator 設定、驗證、重啟。
+適合想把個人或團隊 Claude Code agent 放進 Discord、需要長時間工作流、或要把整包交給 AI assistant 自動部署的人。不適合拿來做公開 SaaS、多租戶控制台，或讓一般 Discord 使用者直接修改系統設定。
 
-目前不包含：
+## 功能
 
-- 公開 Web UI / public dashboard assets。
-- Telegram。
-- 語音轉文字與本機音效不是核心功能；需要時可透過 opt-in 設定啟用。
-- 自主社群發文或 initiative routing。
-- 舊 task、budget、activity services。
+| 能力 | 用途 |
+|---|---|
+| 多 agent 載入 | 從 `AGENTS_DIR` 啟動多個獨立 Discord agent。 |
+| Persistent sessions | 保存並恢復 Discord thread 對應的 Claude session。 |
+| Claude Code 互動 | 在 Discord 處理 permission、question、exit-plan 與中止操作。 |
+| YAML schedules | 定時執行 agent，將結果送到 Discord message 或 thread。 |
+| SQLite persistence | 保存 session、conversation、query metrics 與 schedule thread mapping。 |
+| 資源管理 | idle session cleanup、prompt-cache keepalive、timeout 與 session guard。 |
+| 檔案傳送 | 內建 `file-send` MCP tool，讓 agent 把產物送回 Discord。 |
+| Operator tools | 可選的 admin console、dashboard、cost 與 cache anomaly 診斷。 |
 
-## 快速開始
+## 5 分鐘開始
 
-完整安裝、Docker、Cloud、DeepSeek / proxy/provider 設定請看 [docs/SETUP.md](docs/SETUP.md)。README 只保留最短路徑。
-
-如果你要把整包交給 AI assistant 協助部署，請讓它先讀 [.claude/skills/claudecab-deploy/SKILL.md](.claude/skills/claudecab-deploy/SKILL.md)。這是 repo 內唯一預期對外公開的 Claude project skill。
-
-需求：
-
-- Node.js 20+
-- npm
-- Git
-- 一個 Discord server
-- Discord Developer Portal 裡至少一個 bot
-- Claude Code OAuth、Anthropic API key，或 Anthropic-compatible provider key
-
-安裝：
+需求：Node.js 20+、npm、Git、一個 Discord server，以及 Claude Code OAuth / Anthropic API key / 相容 provider key 三者之一。
 
 ```bash
-git clone https://github.com/cablate/ClaudeCrab.git ClaudeCab
-cd ClaudeCab
+git clone https://github.com/cablate/ClaudeCrab.git
+cd ClaudeCrab
 npm install
 cp .env.example .env
+cp -R agents/example agents/my-agent
 ```
 
 Windows PowerShell：
 
 ```powershell
 Copy-Item .env.example .env
+Copy-Item agents/example agents/my-agent -Recurse
 ```
 
-最小設定：
+接著只填三個地方：
 
-1. 填 `.env`：
-   - `DISCORD_ENABLED=true`
-   - `DISCORD_MAIN_BOT_TOKEN`
-   - `DISCORD_MAIN_BOT_CLIENT_ID`
-   - `DISCORD_GUILD_ID`
-   - `AGENTS_DIR=./agents`
-   - Claude 認證模式需要的 key 或 OAuth
-2. 填 `agents/example/agent.json`：
-   - `discordBotToken`
-   - `discordChannelId`
-3. 填 `agents/example/.claude/settings.local.json` 的 `model`。如果使用 DeepSeek / proxy / 第三方 provider，優先填同一份檔案的 `env.ANTHROPIC_API_KEY` 或 `env.ANTHROPIC_AUTH_TOKEN`，以及 `env.ANTHROPIC_BASE_URL`。
+1. `.env`：Discord 主 Bot、Guild、認證模式與 `AGENTS_DIR`。
+2. `agents/my-agent/agent.json`：Agent Bot token 與目標 channel。
+3. `agents/my-agent/.claude/settings.local.json`：模型、權限，以及需要時的 provider env。
 
-驗證：
+> 不要直接把 secret 填進 `agents/example`。`agents/my-agent` 這類自訂目錄已被 `.gitignore` 排除。公開或多人 server 請設定 `.env` 的 `ALLOWED_USERS`；留空代表 agent channel 內所有人都能呼叫 Claude。
+
+驗證設定：
 
 ```bash
-npm run setup:check
+npm run setup:check -- --agent my-agent
 npm run setup:verify
 ```
 
-Discord 實連測試會真的送出訊息，token/channel 填好後再執行：
-
-```bash
-npm run discord:check -- --agent example
-```
-
-啟動：
+啟動開發模式：
 
 ```bash
 npm run dev
 ```
 
-正式本機啟動（supervisor 管理、自動重啟）：
+正式本機啟動使用 supervisor，自動重啟意外退出的 runtime：
 
 ```bash
 npm start
 ```
 
-`npm start` 跑的是 `start.ts` supervisor，內部以 tsx 直接執行 `src/index.ts`，**不需要先 `npm run build`**。`npm run build` 產生的 `dist/` 只有 Docker 部署會用到。
+`npm start` 不需要先 build；Docker image 才使用 `dist/`。完整 Discord Portal、OAuth、Docker、Cloud 與 provider 設定請看 [安裝指南](docs/SETUP.md)。
 
-啟動後到 `discordChannelId` 對應的 channel 發一則文字訊息。Agent Bot 有回覆，才算真的跑通。
+## 認證與模型服務
 
-## Claude 認證模式
+| 模式 | 設定位置 | 注意事項 |
+|---|---|---|
+| Claude Code 訂閱 / OAuth | 部署主機執行 `claude auth login` | 不要同時設定 `ANTHROPIC_BASE_URL`。 |
+| Anthropic API key | `.env` 或 agent 的 `.claude/settings.local.json` | 多 agent 使用不同 key 時放 agent 目錄。 |
+| DeepSeek / proxy / 相容 provider | agent 的 `.claude/settings.local.json` | 設定 provider 需要的 key / token 與 `ANTHROPIC_BASE_URL`，避免污染主機 OAuth。 |
 
-Claude Code 會依照 agent 工作目錄讀取 `.claude/settings.local.json` 與主機認證。常見順序是：
+ClaudeCrab 刻意讓 Claude Code 原生讀取 agent 目錄內的 `.claude` 設定。`agent.json` 只保存 Discord 與顯示資訊，不重複管理模型、skills、hooks 或 MCP。
 
-1. agent 的 `.claude/settings.local.json` 裡的 `env.ANTHROPIC_API_KEY` 或 `env.ANTHROPIC_AUTH_TOKEN`
-2. `.env` 的 `ANTHROPIC_API_KEY`
-3. 主機 Claude Code OAuth，也就是 `claude login`
+## Docker / Cloud
 
-建議：
+```bash
+docker compose up --build -d
+docker compose logs -f claudecab
+```
 
-| 模式 | 做法 |
-|---|---|
-| Claude Code 訂閱 / OAuth | 部署機器跑 `claude login`，不要設定 `ANTHROPIC_BASE_URL`。 |
-| Anthropic API key | 可放 `.env`，或放 agent `.claude/settings.local.json`。 |
-| DeepSeek / proxy / Anthropic-compatible provider | 優先放 agent `.claude/settings.local.json`，使用 provider 需要的 `ANTHROPIC_API_KEY` 或 `ANTHROPIC_AUTH_TOKEN`，避免污染主機 OAuth。 |
-
-## 文件入口
-
-| 文件 | 用途 |
-|---|---|
-| [docs/SETUP.md](docs/SETUP.md) | 從 clone 到本機/Docker/Cloud 跑起來的完整步驟。 |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 模組邊界、啟動流程、訊息流程。 |
-| [docs/LOGGING.md](docs/LOGGING.md) | 查 log、調整 log、排查無回應或排程未觸發。 |
-| [docs/SDK_TOUCHPOINTS.md](docs/SDK_TOUCHPOINTS.md) | 動 SDK、CLI、session、query、hook、sub-agent 前必讀。 |
-| [docs/CLAUDE-SETTINGS.md](docs/CLAUDE-SETTINGS.md) | agent `.claude/settings.local.json` 設定與官方文件指引。 |
-| [docs/OPEN_SOURCE_READINESS.md](docs/OPEN_SOURCE_READINESS.md) | 開源發布前檢查、CI/security/release gate。 |
-| [.claude/skills/claudecab-deploy/SKILL.md](.claude/skills/claudecab-deploy/SKILL.md) | 給 AI assistant 部署 ClaudeCab 的 skill 指引。 |
-| [AGENTS.md](AGENTS.md) | 本 repo 的 AI agent 治理規範，開工前必讀。 |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | 貢獻規則與 PR 前檢查。 |
-| [SECURITY.md](SECURITY.md) | 安全回報與部署安全注意事項。 |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 公開協作行為準則。 |
+Container 部署請持久化 `/app/data`；使用 OAuth 時也要持久化 `/home/claudecab/.claude`。雲端環境通常以 API key / provider token 比瀏覽器式 OAuth 更容易維運。細節與 headless troubleshooting 見 [docs/SETUP.md](docs/SETUP.md)。
 
 ## 交給 AI 部署
 
-如果你要把這包交給另一個 AI assistant 架設，直接給它這段：
+Repo 內附一個公開部署 skill：[`.claude/skills/claudecrab-deploy/SKILL.md`](.claude/skills/claudecrab-deploy/SKILL.md)。把下面這段交給能操作終端機的 AI assistant：
 
 ```text
-請先閱讀 AGENTS.md、README.md、docs/SETUP.md、.claude/skills/claudecab-deploy/SKILL.md，然後依照 setup 文件完成 ClaudeCab 部署。不要輸出或提交 secret，不要用 Discord 聊天改設定；設定只走 .env、agents/<id>/agent.json、agents/<id>/.claude/settings.local.json、schedule YAML 或 admin console/local overlay。完成後執行 npm run setup:check、npm run setup:verify；只有我同意時才執行會送出 Discord 訊息的 npm run discord:check。
+請先閱讀 AGENTS.md、README.md、docs/SETUP.md 與 .claude/skills/claudecrab-deploy/SKILL.md，依照文件部署 ClaudeCrab。先複製 agents/example 成新的 agent 目錄，不要把 secret 寫進可追蹤的範例。不要輸出或提交 secret，也不要透過 Discord 聊天修改設定。完成後執行 npm run setup:check -- --agent <id>、npm run setup:verify；只有在我明確同意後，才能執行會送出真實 Discord 訊息的 npm run discord:check。
 ```
+
+## 安全邊界
+
+- 一般 Discord 使用者不能修改部署設定；設定只走 `.env`、cloud secrets、admin console/local overlay、agent 專案與 schedule YAML。
+- Admin console 預設關閉；啟用時預設只綁 `127.0.0.1` 並要求 token。
+- `ALLOWED_USERS` 留空代表允許 agent channel 內所有人，shared server 應明確設定 allowlist。
+- 不要提交 `.env`、真實 agent 目錄、OAuth credential、logs、SQLite DB 或 `.claude` 私人狀態。
+- `npm run discord:check` 會送出真實 Discord 訊息；其他 setup 驗證不會。
+
+安全問題請依 [SECURITY.md](SECURITY.md) 私下回報，不要在公開 issue 貼 token、log 全文或私人 agent 內容。
+
+## 文件
+
+| 文件 | 用途 |
+|---|---|
+| [安裝與驗證](docs/SETUP.md) | 本機、Windows background、Docker、Cloud、OAuth 與 provider。 |
+| [Claude Code 設定](docs/CLAUDE-SETTINGS.md) | `.claude/settings.local.json`、model、permissions、MCP。 |
+| [架構](docs/ARCHITECTURE.md) | 啟動、Discord 訊息、session、schedule 與 persistence 流程。 |
+| [Logging](docs/LOGGING.md) | 查無回應、認證、排程與 crash。 |
+| [SDK Touchpoints](docs/SDK_TOUCHPOINTS.md) | 修改 SDK / CLI / session / stream 前必讀。 |
+| [開源發布檢查](docs/OPEN_SOURCE_READINESS.md) | CI、security、release gate 與已知限制。 |
+| [貢獻指南](CONTRIBUTING.md) | 開發規則、測試與 PR 要求。 |
 
 ## 常用指令
 
 ```bash
-npm run setup:check
+npm run setup:check -- --agent my-agent
 npm run setup:verify
-npm run discord:check -- --agent example
+npm run discord:check -- --agent my-agent
 npm run schedule:validate
-npm run schedule:check -- agents/example/schedules/example-daily-check.yaml --strict
+npm run schedule:check -- agents/my-agent/schedules/example-daily-check.yaml --strict
 npm run typecheck
 npm run lint
 npm run test:run
 ```
 
-`setup:verify` 不會送 Discord 訊息，且使用隔離 build，不覆寫 production `dist/`。
-`discord:check` 會送真實 Discord 測試訊息。
+## 專案狀態
 
-## Repository Hygiene
+ClaudeCrab 已有第一個公開 release，但仍是一個需要 operator 自行持有 Discord 與 Claude/provider 認證的 self-hosted 專案。SDK session 層目前仍鎖定經過 patch 與驗證的版本；升級前必須依 [SDK 升級 SOP](docs/sop-sdk-cli-upgrade.md) 做完整 canary，不接受自動大版本升級。
 
-這個 repository 只應包含 ClaudeCab runtime、公開範例、測試與文件。
-
-不應提交：
-
-- `.env`
-- 真實 Discord token / API key / OAuth credential
-- 真實 live agent folders
-- `data/`
-- `logs/`
-- `dist/`
-- `.codegraph/`
-- `.claude/` 裡除了 `.claude/skills/claudecab-deploy/**` 以外的內容
-- local agent skills 或私人 Claude Code settings
-- generated databases
-
-預設只追蹤 `agents/example`；你的真實 `agents/*` 會被 `.gitignore` 排除。
+如果 ClaudeCrab 讓你少開一個遠端桌面、少守一個終端機，歡迎 Star、分享實際部署方式，或提交可重現的 issue。
 
 ## License
 
-AGPL-3.0-or-later. See [LICENSE](LICENSE).
+[AGPL-3.0-or-later](LICENSE)。你可以使用、修改與自架；若透過網路提供修改後的服務，請依 AGPL 提供對應原始碼。

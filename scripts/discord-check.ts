@@ -35,7 +35,7 @@ export async function runDiscordCheck(config: ResolvedDiscordCheckConfig): Promi
   const rest = new REST({ version: '10' }).setToken(agent.discordBotToken);
   const now = new Date().toISOString();
   const content = [
-    'ClaudeCab Discord 設定檢查',
+    'ClaudeCrab Discord 設定檢查',
     `agent: ${agentId}`,
     `time: ${now}`,
   ].join('\n');
@@ -58,7 +58,7 @@ export async function runDiscordCheck(config: ResolvedDiscordCheckConfig): Promi
     });
     const threadId = getDiscordId(thread, 'thread');
     await rest.post(Routes.channelMessages(threadId), {
-      body: { content: 'ClaudeCab Discord thread 設定檢查成功。' },
+      body: { content: 'ClaudeCrab Discord thread 設定檢查成功。' },
     });
     console.log(`ok threadId=${threadId}`);
   }

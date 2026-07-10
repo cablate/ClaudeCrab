@@ -307,7 +307,7 @@ export class MessageProcessor {
     }
 
     // Destroy V2 persistent session (kills cli.js process) before clearing session key.
-    // IMPORTANT: SDKSessionManager.sessions is keyed by ClaudeCab sessionId, NOT sdkSessionId.
+    // IMPORTANT: SDKSessionManager.sessions is keyed by ClaudeCrab sessionId, NOT sdkSessionId.
     this.sdkSessionManager.destroySession(sessionId);
 
     // Soft-delete session in memory + DB (survives restart).
@@ -336,7 +336,7 @@ export class MessageProcessor {
 
     if (internalSession?.sdkSessionId !== undefined) {
       // Only destroy V2 process; keep sdkSessionId so next message can resume.
-      // IMPORTANT: SDKSessionManager.sessions is keyed by ClaudeCab sessionId, NOT sdkSessionId.
+      // IMPORTANT: SDKSessionManager.sessions is keyed by ClaudeCrab sessionId, NOT sdkSessionId.
       this.sdkSessionManager.destroySession(sessionId);
       // sdkSessionId is preserved; next query will use resume: sdkSessionId and continue the conversation.
       logger.info({ sessionId, sdkSessionId: internalSession.sdkSessionId }, 'V2 process closed (sdkSessionId preserved for resume)');

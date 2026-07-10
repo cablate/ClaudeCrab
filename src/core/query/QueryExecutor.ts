@@ -273,7 +273,7 @@ export async function executeQueryWithSDK(
         );
         await adapter.sendMessage(
           chatId,
-          '排程對話的 session 無法恢復。ClaudeCab 不會自動開啟新對話以免遺失上下文，請確認上下文後重新發送訊息。'
+          '排程對話的 session 無法恢復。ClaudeCrab 不會自動開啟新對話以免遺失上下文，請確認上下文後重新發送訊息。'
         );
         return '';
       }
@@ -302,7 +302,7 @@ export async function executeQueryWithSDK(
           'V2 session failed; V1 fallback disabled'
         );
         const userMessage = errorMsg.includes('Claude Code CLI override is invalid')
-          ? `Claude Code CLI 設定無效，session 無法啟動。\n\n${errorMsg}\n\n請修正或清除 CLAUDE_CLI_PATH，再重啟 ClaudeCab。`
+          ? `Claude Code CLI 設定無效，session 無法啟動。\n\n${errorMsg}\n\n請修正或清除 CLAUDE_CLI_PATH，再重啟 ClaudeCrab。`
           : `處理你的訊息時 session 發生錯誤。為避免重複消耗，不自動重試。\n\n原因：${errorMsg}`;
         await adapter.sendMessage(
           chatId,
@@ -322,7 +322,7 @@ export async function executeQueryWithSDK(
           );
           await adapter.sendMessage(
             chatId,
-            '排程對話的 session 無法恢復。ClaudeCab 不會自動開啟新對話以免遺失上下文，請確認上下文後重新發送訊息。'
+            '排程對話的 session 無法恢復。ClaudeCrab 不會自動開啟新對話以免遺失上下文，請確認上下文後重新發送訊息。'
           );
           return '';
         }

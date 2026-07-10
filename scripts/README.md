@@ -1,4 +1,4 @@
-# ClaudeCab Scripts
+# ClaudeCrab Scripts
 
 | script | npm command | 用途 |
 |---|---|---|

@@ -1,4 +1,4 @@
-# ClaudeCab Architecture
+# ClaudeCrab Architecture
 
 Last updated: 2026-07-06
 
@@ -6,7 +6,7 @@ This document is the current architecture entry point. Legacy planning notes tha
 
 ## Current Boundary
 
-ClaudeCab is a Discord-first Claude Agent SDK runtime.
+ClaudeCrab is a Discord-first Claude Agent SDK runtime.
 
 The live product surface is:
 
