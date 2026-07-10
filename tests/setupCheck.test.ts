@@ -93,11 +93,11 @@ describe('setup-check', () => {
       env: [
         'DISCORD_ENABLED=true',
         'DISCORD_MAIN_BOT_TOKEN=main.real.token',
-        'DISCORD_MAIN_BOT_CLIENT_ID=123456789012345678',
-        'DISCORD_GUILD_ID=223456789012345678',
+        `DISCORD_MAIN_BOT_CLIENT_ID=${'1'.repeat(18)}`,
+        `DISCORD_GUILD_ID=${'2'.repeat(18)}`,
         'AGENTS_DIR=./agents',
         'ANTHROPIC_API_KEY=sk-test',
-        'ALLOWED_USERS=323456789012345678,423456789012345678',
+        `ALLOWED_USERS=${'3'.repeat(18)},${'4'.repeat(18)}`,
         '',
       ].join('\n'),
     });
