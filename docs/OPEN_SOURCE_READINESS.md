@@ -19,14 +19,14 @@ ClaudeCrab 的公開發布基準。這份文件記錄「repo 看起來完整」�
 | AI deployment skill | Ready | 公開 skill 位於 `.claude/skills/claudecrab-deploy/`。 |
 | Safe example flow | Ready | 使用者先複製 `agents/example` 到被 gitignore 的自訂 agent 目錄，再加入 secret。 |
 | Access warning | Ready | `.env.example` 與 `setup:check` 都說明 `ALLOWED_USERS` 留空會允許 channel 內所有人。 |
-| CI | Pending remote rerun | Workflow 覆蓋 Node 20/22、audit、setup、typecheck、lint、tests 與 Docker build；跨平台測試與 Docker native build 修正需在下一次 push 驗證。 |
-| Static analysis | Pending remote rerun | CodeQL workflow 已存在；上一輪因 GitHub code scanning 尚未啟用而失敗，需在 default branch 重新執行確認。 |
-| Secret scanning | Pending remote rerun | 本機 full-history gitleaks 通過；workflow 已明確指定 `.gitleaks.toml`，避免把測試 snowflake 誤判成 secret。 |
+| CI | Ready | Default branch 的 Node 20/22、audit、setup、typecheck、lint、tests 與 Docker build 已全綠。 |
+| Static analysis | Ready | Default branch 的 CodeQL JavaScript / TypeScript analysis 已成功。 |
+| Secret scanning | Ready | 本機 full-history gitleaks 與 default branch Secret Scan 都通過；workflow 明確指定 `.gitleaks.toml`。 |
 | Dependency updates | Ready | Dependabot 覆蓋 npm 與 GitHub Actions。 |
 | Dependency audit | Needs SDK migration | Production high-severity advisories 已清除；`claude-agent-sdk@0.2.119` 的 transitive moderate advisory 只能依 SDK upgrade SOP 處理。 |
 | Community health | Ready | `SECURITY.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、issue / PR templates 都存在。 |
-| Release | Ready | GitHub 已發布 `v1.0.0`；後續 release 應附 migration note、known issues 與驗證結果。 |
-| Repository metadata | Needs owner action | GitHub description、topics、social preview 與 default-branch protection 仍需確認。 |
+| Release | Ready | GitHub 已發布 `v1.0.0`；`v1.0.1` 整理正式名稱、安裝安全、CI 與 Docker image。 |
+| Repository metadata | Partial | GitHub description 與 topics 已設定；social preview 與 default-branch protection 仍需 owner 確認。 |
 | Real Discord canary | Needs operator | 自動測試不會使用真實 token；公開宣傳前仍需 fresh clone + 真實 Discord thread 對話 canary。 |
 
 ## Release Gate

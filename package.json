@@ -1,6 +1,6 @@
 {
   "name": "claudecrab",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Self-hosted Discord runtime for Claude Code agents",
   "type": "module",
   "main": "dist/index.js",
