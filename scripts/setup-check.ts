@@ -152,8 +152,8 @@ function checkNodeVersion(nodeVersion: string, checks: Check[]): void {
     checks.push({ level: 'warn', area: 'node', message: `無法解析 Node.js 版本：${nodeVersion}` });
     return;
   }
-  if (major < 20) {
-    checks.push({ level: 'error', area: 'node', message: `需要 Node.js 20 以上。目前版本：${nodeVersion}` });
+  if (major < 22) {
+    checks.push({ level: 'error', area: 'node', message: `需要 Node.js 22 以上。目前版本：${nodeVersion}` });
     return;
   }
   checks.push({ level: 'ok', area: 'node', message: `Node.js 版本受支援：${nodeVersion}` });

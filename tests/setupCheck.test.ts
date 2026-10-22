@@ -119,7 +119,7 @@ describe('setup-check', () => {
     const result = runSetupCheck({ cwd: root, nodeVersion: '18.20.0' });
 
     expect(result.errorCount).toBeGreaterThan(0);
-    expect(result.checks.some((check) => check.area === 'node' && check.message.includes('需要 Node.js 20 以上'))).toBe(true);
+    expect(result.checks.some((check) => check.area === 'node' && check.message.includes('需要 Node.js 22 以上'))).toBe(true);
   });
 
   it('allows placeholders in template mode', async () => {

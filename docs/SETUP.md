@@ -12,7 +12,7 @@
 
 ## 1. 前置需求
 
-- Node.js 20+
+- Node.js 22+
 - npm
 - Git
 - 一個 Discord server
@@ -26,7 +26,7 @@ node --version
 npm --version
 ```
 
-> ClaudeCrab 依賴 `better-sqlite3`（native module）。多數平台有 prebuilt binary，`npm install` 會直接套用；若 Node 版本過新或平台罕見而觸發現場編譯，Windows 需 Python + C++ Build Tools，macOS/Linux 需 `make` + `python3`。遇到編譯失敗時，改用 Node 20 LTS 通常能對到 prebuilt。
+> ClaudeCrab 依賴 `better-sqlite3`（native module）。多數平台有 prebuilt binary，`npm install` 會直接套用；若 Node 版本過新或平台罕見而觸發現場編譯，Windows 需 Python + C++ Build Tools，macOS/Linux 需 `make` + `python3`。遇到編譯失敗時，改用 Node 22 LTS 通常能對到 prebuilt。
 
 Claude Code 訂閱模式要先在部署機器登入：
 

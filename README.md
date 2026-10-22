@@ -45,7 +45,7 @@ Claude Agent SDK / Claude Code
 
 ## 5 分鐘開始
 
-需求：Node.js 20+、npm、Git、一個 Discord server，以及 Claude Code OAuth / Anthropic API key / 相容 provider key 三者之一。
+需求：Node.js 22+、npm、Git、一個 Discord server，以及 Claude Code OAuth / Anthropic API key / 相容 provider key 三者之一。
 
 ```bash
 git clone https://github.com/cablate/ClaudeCrab.git
