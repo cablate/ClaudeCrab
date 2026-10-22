@@ -19,7 +19,7 @@ ClaudeCrab 的公開發布基準。這份文件記錄「repo 看起來完整」�
 | AI deployment skill | Ready | 公開 skill 位於 `.claude/skills/claudecrab-deploy/`。 |
 | Safe example flow | Ready | 使用者先複製 `agents/example` 到被 gitignore 的自訂 agent 目錄，再加入 secret。 |
 | Access warning | Ready | `.env.example` 與 `setup:check` 都說明 `ALLOWED_USERS` 留空會允許 channel 內所有人。 |
-| CI | Ready | Default branch 的 Node 20/22、audit、setup、typecheck、lint、tests 與 Docker build 已全綠。 |
+| CI | Ready | Default branch 的 Node 22/24、audit、setup、typecheck、lint、tests 與 Docker build 已全綠。 |
 | Static analysis | Ready | Default branch 的 CodeQL JavaScript / TypeScript analysis 已成功。 |
 | Secret scanning | Ready | 本機 full-history gitleaks 與 default branch Secret Scan 都通過；workflow 明確指定 `.gitleaks.toml`。 |
 | Dependency updates | Ready | Dependabot 覆蓋 npm 與 GitHub Actions。 |
